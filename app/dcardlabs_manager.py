@@ -2781,11 +2781,11 @@ def _ebay_required_aspects(template_key="football"):
         required = []
         for h in headers:
             raw = str(h or "").strip()
-            if raw.startswith("*") and raw not in {headers[0]}:
-                # Core fields are handled separately in the UI.
-                key = re.sub(r"[^a-z0-9äöüß]+", "", raw.lstrip("*").lower())
-                if key in {"category", "categoryid", "title", "conditionid", "action"}:
-                    continue
+            body = raw.lstrip("*")
+            # Only real item-specific aspect columns (C:/CD:/CDA:) are aspects.
+            # Core File Exchange fields (*Description, *Format, *StartPrice, ...)
+            # are validated separately in the UI and must not be treated as aspects.
+            if raw.startswith("*") and re.match(r"^(cda|cd|c):", body, re.I) and raw not in {headers[0]}:
                 required.append(raw)
         # eBay explicitly states the required aspects in an Info row.
         for row in rows[7:10]:
@@ -2803,7 +2803,8 @@ def _ebay_required_aspects(template_key="football"):
 
 def _ebay_required_aspect_value(aspect, card):
     """Resolve an eBay required aspect to the corresponding card value."""
-    a = re.sub(r"[^a-z0-9äöüß]+", "", str(aspect or "").lower())
+    body = re.sub(r"^(cda|cd|c):", "", str(aspect or "").lstrip("*").strip(), flags=re.I)
+    a = re.sub(r"[^a-z0-9äöüß]+", "", body.lower())
     mapping = {
         "sportart": "category",
         "franchise": "theme",
