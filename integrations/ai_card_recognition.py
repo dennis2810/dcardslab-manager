@@ -15,8 +15,14 @@ all-empty result with a status message - it never raises - so a scanning
 session still completes and cards can be filled in manually.
 """
 import base64
+import io
 import os
 from pathlib import Path
+
+_MAX_EDGE = 1568  # Anthropic's documented vision "sweet spot" - larger images
+                   # are downscaled server-side anyway before the model sees
+                   # them, so resizing client-side only cuts upload time and
+                   # payload size, it does not lose recognition quality.
 
 EMPTY_FIELDS = {
     "title": "", "category": "", "theme": "", "manufacturer": "",
@@ -71,11 +77,32 @@ PROMPT = (
 def _image_block(path):
     path = Path(path)
     media_type = _MEDIA_TYPES.get(path.suffix.lower(), "image/jpeg")
-    data = base64.standard_b64encode(path.read_bytes()).decode("utf-8")
-    return {
-        "type": "image",
-        "source": {"type": "base64", "media_type": media_type, "data": data},
-    }
+
+    # Full-resolution scanner output (often several thousand px / multiple MB)
+    # takes noticeably longer to upload than a card photo needs to be legible.
+    # Resize when Pillow is available (it already is - used elsewhere in the
+    # app for thumbnails); fall back to sending the original bytes untouched
+    # if Pillow is missing or the image can't be decoded, so this never turns
+    # a working scan into a failing one.
+    try:
+        from PIL import Image
+        img = Image.open(path)
+        img = img.convert("RGB")
+        if max(img.size) > _MAX_EDGE:
+            img.thumbnail((_MAX_EDGE, _MAX_EDGE), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        data = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
+        }
+    except Exception:
+        data = base64.standard_b64encode(path.read_bytes()).decode("utf-8")
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": data},
+        }
 
 
 def ai_recognition_status():
@@ -136,12 +163,15 @@ def recognize_card(front_path=None, back_path=None):
 
     try:
         # Explicit bounded timeout: the SDK default (10 minutes) would leave
-        # the caller (a synchronous, single-threaded scan loop over up to 9
-        # cards) looking hung for a very long time on a stalled connection
-        # instead of failing this one card gracefully.
-        client = anthropic.Anthropic(timeout=60.0)
+        # a stalled connection looking hung for far longer than a user would
+        # ever wait, instead of failing this one card gracefully.
+        client = anthropic.Anthropic(timeout=90.0)
         response = client.messages.parse(
-            model="claude-opus-5",
+            # Sonnet, not Opus: this is a straightforward "read the printed
+            # text off a photo" extraction, not a task that needs Opus-level
+            # reasoning - Sonnet is noticeably faster and cheaper per card
+            # with no meaningful accuracy loss for this.
+            model="claude-sonnet-5",
             max_tokens=2048,
             messages=[{"role": "user", "content": content}],
             output_format=CardRecognition,

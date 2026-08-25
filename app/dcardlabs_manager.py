@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from datetime import datetime
 import sys
-import sqlite3, csv, re, json, shutil, hashlib, os, zipfile, tempfile, logging, threading, time, urllib.request, urllib.error
+import sqlite3, csv, re, json, shutil, hashlib, os, zipfile, tempfile, logging, threading, time, urllib.request, urllib.error, concurrent.futures
 import cv2
 
 try:
@@ -1005,18 +1005,23 @@ def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr, progres
     from ai_card_recognition import recognize_card
 
     back_map = {int(p.stem): p for p in back_files}
-    pairs = []
     sorted_fronts = sorted(front_files, key=lambda p: int(p.stem))
     total = len(sorted_fronts)
 
-    for i, fp in enumerate(sorted_fronts, start=1):
-        if progress:
-            progress(i, total)
+    jobs = []
+    for fp in sorted_fronts:
         number = int(fp.stem)
         bp = back_map.get(number)
         if bp is None:
             raise RuntimeError(f"Rückseite für Karte {number:03d} fehlt.")
+        jobs.append((number, fp, bp))
 
+    done_lock = threading.Lock()
+    done_count = 0
+
+    def process_one(job):
+        nonlocal done_count
+        number, fp, bp = job
         recognition = recognize_card(
             front_path=fp if do_ocr else None,
             back_path=bp if do_back_ocr else None,
@@ -1048,7 +1053,7 @@ def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr, progres
         shutil.copy2(fp, front_dst)
         shutil.copy2(bp, back_dst)
 
-        pairs.append({
+        pair = {
             "number": number, "title": title, "ocr_status": ocr_status,
             "ocr_confidence": confidence, "ocr_raw": recognition["raw"],
             "front": str(front_dst.resolve()), "back": str(back_dst.resolve()),
@@ -1060,8 +1065,23 @@ def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr, progres
             "back_print_run": back_ocr.get("print_run", ""),
             "back_ocr_status": back_ocr.get("status", ""),
             **meta,
-        })
+        }
 
+        with done_lock:
+            done_count += 1
+            if progress:
+                progress(done_count, total)
+        return number, pair
+
+    # recognize_card() is a network round-trip (Claude API), not CPU work, so
+    # running a handful of cards concurrently cuts wall-clock time roughly by
+    # the worker count instead of paying for 9 round-trips back to back.
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        for number, pair in pool.map(process_one, jobs):
+            results[number] = pair
+
+    pairs = [results[number] for number, _fp, _bp in jobs]
     if len(pairs) != 9:
         raise RuntimeError(f"{len(pairs)} statt 9 Kartenpaare.")
     return pairs
