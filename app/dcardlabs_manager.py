@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from datetime import datetime
 import sys
-import sqlite3, csv, re, json, shutil, hashlib, os, zipfile, tempfile, logging, threading, time
+import sqlite3, csv, re, json, shutil, hashlib, os, zipfile, tempfile, logging, threading, time, urllib.request, urllib.error
 import cv2
 
 try:
@@ -29,7 +29,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "integrations"))
 
 import scanner_v0_8_dynamic as scanner
 
-APP = "DCardLabs SANDBOX v1.10.2-r9 – Testumgebung"
+APP = "DCardLabs SANDBOX v1.10.2-r9 v8.5 – eBay Publish"
+EBAY_OAUTH_SERVER_URL = os.environ.get("DCARDSLAB_EBAY_SERVER_URL", "http://192.168.2.94:8080").rstrip("/")
 BASE = PROJECT_ROOT
 DB = BASE / "dcardlabs.db"
 IMAGE_ROOT = BASE / "images" / "cards"
@@ -323,6 +324,8 @@ def db():
         ("sale_price", "REAL", "0"),
         ("ebay_fees", "REAL", "0"),
         ("ebay_order_id", "TEXT", "''"),
+        ("ebay_offer_id", "TEXT", "''"),
+        ("ebay_listing_id", "TEXT", "''"),
     ]:
         if name not in ebay_cols:
             c.execute(f"ALTER TABLE ebay_listings ADD COLUMN {name} {typ} DEFAULT {default}")
@@ -505,7 +508,7 @@ def restore_backup(path):
         try: src.backup(dst)
         finally: dst.close(); src.close()
     else:
-        tmp=Path(shutil.mkdtemp(prefix="dcard_restore_"))
+        tmp=Path(tempfile.mkdtemp(prefix="dcard_restore_"))
         try:
             with zipfile.ZipFile(path) as z: z.extractall(tmp)
             source=tmp/"dcardlabs.db"
@@ -1326,6 +1329,87 @@ def add_manual_purchase(data):
         c.close()
 
 
+def update_inventory_entry(inventory_id, card_id, quantity, condition, location, notes):
+    """Update one inventory record without changing the card master data."""
+    c = db()
+    try:
+        card = c.execute("SELECT card_id FROM cards WHERE card_id=?", (int(card_id),)).fetchone()
+        if not card:
+            raise ValueError(f"Karte mit ID {card_id} existiert nicht.")
+        quantity = int(quantity or 1)
+        if quantity < 1:
+            raise ValueError("Die Menge muss mindestens 1 sein.")
+        c.execute(
+            """UPDATE inventory SET card_id=?, quantity=?, condition=?, location=?, notes=?
+               WHERE inventory_id=?""",
+            (int(card_id), quantity, condition or "", location or "", notes or "", int(inventory_id))
+        )
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
+
+
+def open_inventory_editor(parent, inventory_id, on_saved=None):
+    """Edit an existing inventory row, especially location and notes."""
+    win = tk.Toplevel(parent)
+    win.title(f"Inventar bearbeiten – #{inventory_id}")
+    fit_dialog(win, 620, 380, min_width=560, min_height=340)
+    win.transient(parent)
+    win.grab_set()
+    frm = ttk.Frame(win, padding=14)
+    frm.pack(fill="both", expand=True)
+    frm.columnconfigure(1, weight=1)
+
+    c = db()
+    row = c.execute(
+        """SELECT i.card_id, c.title, i.quantity, i.condition, i.location, i.notes
+           FROM inventory i JOIN cards c ON c.card_id=i.card_id
+           WHERE i.inventory_id=?""", (int(inventory_id),)
+    ).fetchone()
+    c.close()
+    if not row:
+        messagebox.showerror("Inventar", f"Inventareintrag #{inventory_id} wurde nicht gefunden.", parent=win)
+        win.destroy()
+        return
+
+    ttk.Label(frm, text="Karte").grid(row=0, column=0, sticky="w", padx=(0,10), pady=5)
+    ttk.Label(frm, text=f"#{row[0]} – {row[1]}").grid(row=0, column=1, sticky="w", pady=5)
+    entries={}
+    for r,(label,key) in enumerate([
+        ("Menge","quantity"),("Zustand","condition"),("Lagerort","location"),("Notizen","notes")
+    ], start=1):
+        ttk.Label(frm,text=label).grid(row=r,column=0,sticky="w",padx=(0,10),pady=5)
+        w=tk.Text(frm,height=4) if key=="notes" else ttk.Entry(frm)
+        w.grid(row=r,column=1,sticky="ew",pady=5)
+        entries[key]=w
+
+    def setv(key,val):
+        w=entries[key]
+        if isinstance(w,tk.Text):
+            w.insert("1.0", "" if val is None else str(val))
+        else:
+            w.insert(0, "" if val is None else str(val))
+    def getv(key):
+        w=entries[key]
+        return w.get("1.0","end").strip() if isinstance(w,tk.Text) else w.get().strip()
+    setv("quantity",row[2]); setv("condition",row[3]); setv("location",row[4]); setv("notes",row[5])
+
+    def save():
+        try:
+            update_inventory_entry(inventory_id,row[0],getv("quantity"),getv("condition"),getv("location"),getv("notes"))
+            if on_saved: on_saved()
+            win.destroy()
+        except Exception as exc:
+            messagebox.showerror("Inventar",str(exc),parent=win)
+    bottom=ttk.Frame(win,padding=(14,8)); bottom.pack(side="bottom",fill="x")
+    ttk.Button(bottom,text="Speichern",command=save).pack(side="right",padx=5)
+    ttk.Button(bottom,text="Abbrechen",command=win.destroy).pack(side="right",padx=5)
+    win.bind("<Return>", lambda e: save())
+
+
 def open_manual_inventory_dialog(parent=None, on_saved=None):
     import tkinter as tk
     from tkinter import ttk, messagebox
@@ -1371,6 +1455,55 @@ def open_manual_inventory_dialog(parent=None, on_saved=None):
         win.transient(parent)
         win.grab_set()
     return win
+
+
+def update_purchase(purchase_id, data):
+    c = db()
+    try:
+        def money(v):
+            try: return float(str(v).replace(",", ".")) if str(v).strip() else 0
+            except (TypeError, ValueError): return 0
+        c.execute(
+            """UPDATE purchases SET purchase_date=?, platform=?, seller=?, card_count=?,
+               purchase_price=?, shipping=?, total_price=?, notes=? WHERE purchase_id=?""",
+            (data.get("purchase_date", ""), data.get("platform", ""), data.get("seller", ""),
+             int(data.get("card_count", 1) or 1), money(data.get("purchase_price")),
+             money(data.get("shipping")), money(data.get("total_price")), data.get("notes", ""), int(purchase_id))
+        )
+        c.commit()
+    except Exception:
+        c.rollback(); raise
+    finally:
+        c.close()
+
+
+def open_purchase_editor(parent, purchase_id, on_saved=None):
+    win=tk.Toplevel(parent); win.title(f"Kauf bearbeiten – #{purchase_id}")
+    fit_dialog(win,620,470,min_width=560,min_height=420); win.transient(parent); win.grab_set()
+    frm=ttk.Frame(win,padding=14); frm.pack(fill="both",expand=True); frm.columnconfigure(1,weight=1)
+    c=db(); row=c.execute("SELECT purchase_date,platform,seller,card_count,purchase_price,shipping,total_price,notes FROM purchases WHERE purchase_id=?",(int(purchase_id),)).fetchone(); c.close()
+    if not row:
+        messagebox.showerror("Kauf",f"Kauf #{purchase_id} wurde nicht gefunden.",parent=win); win.destroy(); return
+    fields=[("Kaufdatum","purchase_date"),("Plattform / Quelle","platform"),("Verkäufer","seller"),("Anzahl Karten","card_count"),("Kaufpreis","purchase_price"),("Versand","shipping"),("Gesamtpreis","total_price"),("Notizen","notes")]
+    entries={}
+    for r,(label,key) in enumerate(fields):
+        ttk.Label(frm,text=label).grid(row=r,column=0,sticky="w",padx=(0,10),pady=5)
+        w=tk.Text(frm,height=4) if key=="notes" else ttk.Entry(frm)
+        w.grid(row=r,column=1,sticky="ew",pady=5); entries[key]=w
+        val=row[r]
+        if isinstance(w,tk.Text): w.insert("1.0", "" if val is None else str(val))
+        else: w.insert(0, "" if val is None else str(val))
+    def get(key):
+        w=entries[key]; return w.get("1.0","end").strip() if isinstance(w,tk.Text) else w.get().strip()
+    def save():
+        try:
+            update_purchase(purchase_id,{k:get(k) for _,k in fields})
+            if on_saved: on_saved()
+            win.destroy()
+        except Exception as exc: messagebox.showerror("Kauf",str(exc),parent=win)
+    bottom=ttk.Frame(win,padding=(14,8)); bottom.pack(side="bottom",fill="x")
+    ttk.Button(bottom,text="Speichern",command=save).pack(side="right",padx=5)
+    ttk.Button(bottom,text="Abbrechen",command=win.destroy).pack(side="right",padx=5)
 
 
 def open_manual_purchase_dialog(parent=None, on_saved=None):
@@ -2575,16 +2708,241 @@ def link_card_to_purchase(purchase_id, card_id, allocated_cost=0, quantity=1, no
         c.close()
 
 
+def ebay_sandbox_create_offer(card_id, title, description, condition_id, price,
+                              listing_format, category_id, sku):
+    """Create/update an eBay Sandbox inventory item and unpublished offer via the OAuth server."""
+    card = ebay_get_card(card_id) or {}
+    quantity = _ebay_inventory_quantity(int(card_id))
+    if quantity < 1:
+        raise ValueError("Die Karte hat keine verfügbare Inventarmenge.")
+
+    aspects = {"Kategorie": [str(card.get("category") or "Sammelkarte")]}
+    for label, key in (("Thema / Franchise", "theme"), ("Team / Verein", "team"),
+                       ("Hersteller", "manufacturer"), ("Set / Serie", "set_name"),
+                       ("Saison / Jahr", "season_year"), ("Kartennummer", "card_number"),
+                       ("Sprache", "language")):
+        value = str(card.get(key) or "").strip()
+        if value:
+            aspects[label] = [value]
+
+    payload = {
+        "sku": sku or f"DC-{int(card_id):06d}",
+        "title": str(title or "").strip()[:80],
+        "description": str(description or "").strip(),
+        "condition": "NEW",
+        "quantity": int(quantity),
+        "marketplace_id": "EBAY_DE",
+        "format": "FIXED_PRICE" if listing_format == "Festpreis" else "AUCTION",
+        "category_id": str(category_id or "").strip(),
+        "price": float(price),
+        "currency": "EUR",
+        "aspects": aspects,
+    }
+    if payload["price"] <= 0:
+        raise ValueError("Bitte zuerst einen Preis größer als 0 eingeben.")
+    if not payload["category_id"].isdigit():
+        raise ValueError("Die eBay Kategorie-ID ist ungültig.")
+
+    req = urllib.request.Request(
+        EBAY_OAUTH_SERVER_URL + "/api/ebay/offer/test-create",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        status = exc.code
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Der eBay-OAuth-Server ist nicht erreichbar ({EBAY_OAUTH_SERVER_URL}).\n\n{exc}") from exc
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = {"success": False, "error": raw}
+    # eBay error 25002 means that an offer for this SKU already exists.
+    # The response contains the existing offerId; recover and persist it.
+    if status != 200 or not result.get("success"):
+        detail = result.get("error") or result.get("offer", {}).get("response") or raw
+        existing_offer_id = ""
+        try:
+            payload = json.loads(detail) if isinstance(detail, str) else detail
+            for err in payload.get("errors", []) if isinstance(payload, dict) else []:
+                for param in err.get("parameters", []) or []:
+                    if str(param.get("name", "")).lower() == "offerid":
+                        existing_offer_id = str(param.get("value") or "").strip()
+                        break
+                if existing_offer_id:
+                    break
+        except Exception:
+            pass
+        if existing_offer_id:
+            result = {"success": True, "existing": True, "offer": {"offer_id": existing_offer_id},
+                      "message": "Das eBay-Angebot existiert bereits; die vorhandene Offer-ID wurde übernommen."}
+        else:
+            raise RuntimeError(f"eBay Sandbox: Offer konnte nicht erstellt werden.\n\n{detail}")
+
+    offer_id = str(result.get("offer", {}).get("offer_id") or "").strip()
+    if not offer_id:
+        raise RuntimeError("eBay hat keine Offer-ID zurückgegeben.")
+
+    now = datetime.now().isoformat(timespec="seconds")
+    c = db()
+    try:
+        c.execute("UPDATE ebay_listings SET ebay_offer_id=?, status=?, updated_at=? WHERE card_id=?",
+                  (offer_id, "Offer erstellt", now, int(card_id)))
+        c.commit()
+    finally:
+        c.close()
+    return result
+
+
+def ebay_sandbox_get_offer(offer_id):
+    """Read an existing unpublished/published eBay Sandbox offer."""
+    offer_id = str(offer_id or "").strip()
+    if not offer_id:
+        raise ValueError("Keine eBay Offer-ID vorhanden.")
+
+    req = urllib.request.Request(
+        EBAY_OAUTH_SERVER_URL + "/api/ebay/offer/" + urllib.parse.quote(offer_id, safe=""),
+        method="GET",
+        headers={"Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        status = exc.code
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Der eBay-OAuth-Server ist nicht erreichbar ({EBAY_OAUTH_SERVER_URL}).\n\n{exc}"
+        ) from exc
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = {"success": False, "error": raw}
+    if status != 200 or not result.get("success"):
+        detail = result.get("error") or result.get("response") or raw
+        raise RuntimeError(f"eBay Sandbox: Offer konnte nicht gelesen werden.\n\n{detail}")
+    return result
+
+
+def ebay_sandbox_publish_offer(offer_id):
+    """Publish an existing eBay Sandbox offer and return the new listing ID."""
+    offer_id = str(offer_id or "").strip()
+    if not offer_id:
+        raise ValueError("Keine eBay Offer-ID vorhanden.")
+
+    req = urllib.request.Request(
+        EBAY_OAUTH_SERVER_URL + "/api/ebay/offer/" + urllib.parse.quote(offer_id, safe="") + "/publish",
+        data=b"",
+        method="POST",
+        headers={"Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        status = exc.code
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Der eBay-OAuth-Server ist nicht erreichbar ({EBAY_OAUTH_SERVER_URL}).\n\n{exc}"
+        ) from exc
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = {"success": False, "error": raw}
+
+    if status != 200 or not result.get("success"):
+        error_text = str(result.get("error") or "").strip()
+        response = result.get("response")
+        if isinstance(response, (dict, list)):
+            response_text = json.dumps(response, ensure_ascii=False, indent=2)
+        else:
+            response_text = str(response or "").strip()
+        if error_text and response_text:
+            detail = error_text + "\n\neBay-Antwort:\n" + response_text
+        else:
+            detail = error_text or response_text or raw
+        raise RuntimeError(f"eBay Sandbox: Offer konnte nicht veröffentlicht werden.\n\n{detail}")
+
+    listing_id = str(
+        result.get("listing_id")
+        or result.get("listingId")
+        or (result.get("publish") or {}).get("listing_id")
+        or (result.get("publish") or {}).get("listingId")
+        or ""
+    ).strip()
+    if not listing_id:
+        raise RuntimeError("eBay hat beim Publish keine Listing-ID zurückgegeben.")
+
+    return result, listing_id
+
+
+def ebay_publish_check(card_id, title, description, condition, price,
+                       listing_format, category_id, sku, offer_id=""):
+    """Run a safe pre-publish validation without publishing anything."""
+    checks = []
+    def check(label, ok, detail):
+        checks.append((bool(ok), label, detail))
+
+    title = str(title or "").strip()
+    description = str(description or "").strip()
+    condition = str(condition or "").strip()
+    category_id = str(category_id or "").strip()
+    sku = str(sku or "").strip()
+    offer_id = str(offer_id or "").strip()
+
+    check("Titel", bool(title), "vorhanden" if title else "fehlt")
+    check("Beschreibung", bool(description), "vorhanden" if description else "fehlt")
+    try:
+        numeric_price = float(str(price or "0").replace(",", "."))
+    except Exception:
+        numeric_price = 0
+    check("Preis", numeric_price > 0, f"{numeric_price:.2f} €" if numeric_price > 0 else "ungültig")
+    check("Zustand", bool(condition), "vorhanden" if condition else "fehlt")
+    check("Angebotsformat", listing_format in ("Festpreis", "Auktion"), listing_format or "fehlt")
+    check("eBay Kategorie-ID", category_id.isdigit(), category_id or "ungültig/fehlt")
+    check("SKU / Lagerkennung", bool(sku), sku or "fehlt")
+
+    c = db()
+    try:
+        row = c.execute(
+            "SELECT front_image, back_image FROM cards WHERE card_id=?", (int(card_id),)
+        ).fetchone()
+    finally:
+        c.close()
+    front_ok = bool(row and image_path_from_ref(row[0]))
+    back_ok = bool(row and image_path_from_ref(row[1]))
+    check("Vorderseitenbild", front_ok, "vorhanden" if front_ok else "fehlt")
+    check("Rückseitenbild", back_ok, "vorhanden" if back_ok else "fehlt")
+    check("Offer-ID", bool(offer_id), offer_id if offer_id else "noch nicht erstellt")
+
+    # The three Business Policies are intentionally not treated as local
+    # failures because their availability depends on the eBay account and
+    # can be temporarily unavailable in Sandbox.
+    checks.append((None, "Business Policies", "werden beim eBay-Publish serverseitig geprüft"))
+    return checks
+
 def ebay_save_draft(card_id, title, description, condition, price,
-                    listing_format, category, sku, status="Entwurf"):
+                    listing_format, category, sku, status="Entwurf", template_key="football"):
     now=datetime.now().isoformat(timespec="seconds")
     c=db()
     try:
         c.execute(
             """INSERT INTO ebay_listings
                (card_id,title,description,condition,price,listing_format,
-                category,sku,status,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                category,sku,status,template_key,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(card_id) DO UPDATE SET
                  title=excluded.title,
                  description=excluded.description,
@@ -2594,15 +2952,95 @@ def ebay_save_draft(card_id, title, description, condition, price,
                  category=excluded.category,
                  sku=excluded.sku,
                  status=excluded.status,
+                 template_key=excluded.template_key,
                  updated_at=excluded.updated_at""",
             (card_id,title,description,condition,price,listing_format,
-             category,sku,status,now,now)
+             category,sku,status,template_key or "football",now,now)
         )
         c.commit()
     finally:
         c.close()
 
 
+
+
+def ebay_export_from_template(parent):
+    """Create an eBay Draft CSV (Action=Draft) for the selected/current drafts."""
+    try:
+        template_path = _ebay_default_template_path()
+        target = filedialog.askdirectory(title="Zielordner für eBay-Importdatei auswählen", parent=parent)
+        if not target:
+            return
+        c = db()
+        drafts = c.execute(
+            """SELECT e.card_id,e.title,e.description,e.condition,e.price,e.listing_format,
+                      e.category,e.sku,e.template_key,c.front_image,c.back_image,c.category,
+                      c.team,c.manufacturer,c.set_name,c.season_year,c.card_number,c.card_type,
+                      c.variant,c.language,c.theme
+               FROM ebay_listings e JOIN cards c ON c.card_id=e.card_id
+               ORDER BY e.listing_id ASC"""
+        ).fetchall()
+        settings = c.execute("SELECT category_id FROM ebay_settings WHERE settings_id=1").fetchone()
+        c.close()
+        if not drafts:
+            messagebox.showinfo("eBay-Importdatei", "Es gibt noch keine eBay-Entwürfe.", parent=parent)
+            return
+
+        rows, header_idx, headers = _ebay_template_rows_from_csv(template_path)
+        hm = _ebay_template_header_map(headers)
+        hidx = {h:i for i,h in enumerate(headers)}
+        base = [""] * len(headers)
+        out_rows = rows[:header_idx+1]
+        written = 0
+        for d in drafts:
+            (card_id,title,desc,cond,price,fmt,ecat,sku,template_key,front_ref,back_ref,
+             ccat,team,mfr,setname,season,cnum,ctype,variant,lang,theme) = d
+            category = str(ecat or "").strip() if str(ecat or "").strip().isdigit() else str((settings or ["47140"])[0])
+            row = list(base)
+            def put(field, value):
+                col = hm.get(field)
+                if col is not None and value not in (None, ""):
+                    row[hidx[col]] = value
+            cfg = _ebay_template_catalog().get(template_key or "football") or _ebay_template_catalog()["football"]
+            put("action", "Draft")
+            put("sku", sku or f"DC-{card_id:06d}")
+            put("category", category)
+            put("title", str(title or "")[:80])
+            put("startprice", price if price not in (None, "") else "")
+            put("quantity", _ebay_inventory_quantity(card_id))
+            cond_id = str(cond or "") if str(cond or "").isdigit() else str(ebay_get_settings()["condition_ungraded_id"])
+            put("condition", cond_id)
+            put("card_condition", _ebay_card_condition_value(cond))
+            put("description", _ebay_standard_description(desc))
+            put("format", _ebay_format_value(fmt or "FixedPrice"))
+            put("sport", cfg.get("sport", ""))
+            put("manufacturer", mfr)
+            put("player", title)
+            put("franchise", theme or setname or title)
+            put("team", team)
+            put("season", season)
+            put("cardname", ctype or variant)
+            put("cardnumber", cnum)
+            put("producttype", "Trading Card")
+            put("language", lang or "Deutsch")
+            put("location", "Köln")
+            out_rows.append(row)
+            written += 1
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir = Path(target) / f"DCardLabs_eBay_Import_{stamp}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_path = out_dir / "DCardLabs_eBay_Import.csv"
+        with output_path.open("w", newline="", encoding="utf-8-sig") as f:
+            csv.writer(f, delimiter=";", lineterminator="\n").writerows(out_rows)
+        messagebox.showinfo(
+            "eBay-Importdatei",
+            f"eBay-Importdatei erstellt.\n\nEntwürfe: {written}\n\n{output_path}",
+            parent=parent
+        )
+    except Exception as exc:
+        log_exception("eBay-Importdatei fehlgeschlagen", exc)
+        messagebox.showerror("eBay-Importdatei", f"Die Importdatei konnte nicht erstellt werden:\n\n{exc}\n\nDetails: {LOG_FILE}", parent=parent)
 
 
 def ebay_export_bundle(parent):
@@ -2781,11 +3219,16 @@ def _ebay_required_aspects(template_key="football"):
         required = []
         for h in headers:
             raw = str(h or "").strip()
-            body = raw.lstrip("*")
-            # Only real item-specific aspect columns (C:/CD:/CDA:) are aspects.
-            # Core File Exchange fields (*Description, *Format, *StartPrice, ...)
-            # are validated separately in the UI and must not be treated as aspects.
-            if raw.startswith("*") and re.match(r"^(cda|cd|c):", body, re.I) and raw not in {headers[0]}:
+            if raw.startswith("*") and raw not in {headers[0]}:
+                # Core fields are handled separately in the UI.
+                key = re.sub(r"[^a-z0-9äöüß]+", "", raw.lstrip("*").lower())
+                if key in {
+                    "action", "category", "categoryid", "title", "conditionid",
+                    "description", "format", "duration", "startprice", "quantity",
+                    "location", "dispatchtimemax", "returnsacceptedoption",
+                    "csportart"
+                }:
+                    continue
                 required.append(raw)
         # eBay explicitly states the required aspects in an Info row.
         for row in rows[7:10]:
@@ -2801,61 +3244,53 @@ def _ebay_required_aspects(template_key="football"):
         return []
 
 
-def _ebay_required_aspect_value(aspect, card):
-    """Resolve an eBay required aspect to the corresponding card value."""
-    body = re.sub(r"^(cda|cd|c):", "", str(aspect or "").lstrip("*").strip(), flags=re.I)
-    a = re.sub(r"[^a-z0-9äöüß]+", "", body.lower())
+def _ebay_required_aspect_value(aspect, card, template_key="football"):
+    """Resolve an eBay template aspect. Template-derived values are automatic."""
+    a = re.sub(r"[^a-z0-9äöüß]+", "", str(aspect or "").lower())
+    if a == "sportart":
+        cfg = _ebay_template_catalog().get(template_key) or _ebay_template_catalog()["football"]
+        return cfg.get("sport", "")
     mapping = {
-        "sportart": "category",
         "franchise": "theme",
         "hersteller": "manufacturer",
         "edition": "set_name",
         "saison": "season_year",
-        "liga": "category",
+        "liga": "",
         "team": "team",
-        "spieler/sportler": "title",
+        "spielersportler": "title",
         "charakter": "title",
         "abgebildetepersonkünstler": "title",
         "parallelvariante": "variant",
     }
-    for key, field in mapping.items():
-        if re.sub(r"[^a-z0-9äöüß]+", "", key.lower()) == a:
-            return card.get(field, "")
-    return ""
+    field = mapping.get(a)
+    return card.get(field, "") if field else ""
 
 
 def _ebay_draft_validation(card, title, condition, price, fmt, category, description, template_key="football"):
-    """Validate the user-visible core fields before an active-listing export."""
+    """Validate only fields that must be complete before an active export."""
     errors = []
     checks = [
-        ("Kategorie", category),
-        ("Titel", title),
-        ("Zustand", condition),
-        ("Preis", price),
-        ("Beschreibung", description),
-        ("Format", fmt),
+        ("Kategorie", category), ("Titel", title), ("Zustand", condition),
+        ("Preis", price), ("Beschreibung", description), ("Format", fmt),
         ("Bilder", card.get("front_image") or card.get("back_image")),
     ]
     try:
-        numeric_price = float(str(price or "").replace(",", "."))
-        if numeric_price <= 0:
+        if float(str(price or "").replace(",", ".")) <= 0:
             checks[3] = ("Preis", "")
     except (TypeError, ValueError):
         checks[3] = ("Preis", "")
     for label, value in checks:
-        if not str(value or "").strip():
-            errors.append(label)
-    # Quantity is derived from inventory, but still required for an active listing.
+        if not str(value or "").strip(): errors.append(label)
     try:
-        if _ebay_inventory_quantity(int(card.get("card_id", 0) or 0)) < 1:
-            errors.append("Menge")
+        if _ebay_inventory_quantity(int(card.get("card_id", 0) or 0)) < 1: errors.append("Menge")
     except Exception:
         errors.append("Menge")
+    # Only genuine template-specific required aspects are validated here.
+    # Sportart is derived from the selected template, not from Karten-Kategorie.
     for aspect in _ebay_required_aspects(template_key):
-        value = _ebay_required_aspect_value(aspect, card)
-        if not str(value or "").strip():
-            errors.append(str(aspect).lstrip("*"))
-    return errors
+        value = _ebay_required_aspect_value(aspect, card, template_key)
+        if not str(value or "").strip(): errors.append(str(aspect).lstrip("*"))
+    return list(dict.fromkeys(errors))
 
 
 def _ebay_offer_template_path(template_key="football"):
@@ -3212,13 +3647,18 @@ def main():
         card_tree.delete(*card_tree.get_children())
         for r in c.execute(
             """
-            SELECT card_id, category, theme, team, manufacturer, set_name,
-                   title, season_year, card_number, card_type,
-                   variant, is_numbered, serial_number, print_run,
-                   language, ocr_status, ocr_confidence,
-                   ocr_team, ocr_league, ocr_set, ocr_card_type,
-                   ocr_card_number, ocr_serial_number, ocr_print_run, ocr_variant
-            FROM cards ORDER BY card_id ASC
+            SELECT c.card_id, c.title,
+                   COALESCE(e.ebay_offer_id, '') AS ebay_offer_id,
+                   COALESCE(e.status, '') AS ebay_status,
+                   c.category, c.theme, c.team, c.manufacturer, c.set_name,
+                   c.season_year, c.card_number, c.card_type, c.variant,
+                   c.is_numbered, c.serial_number, c.print_run, c.language,
+                   c.ocr_status, c.ocr_confidence, c.ocr_team, c.ocr_league,
+                   c.ocr_set, c.ocr_card_type, c.ocr_card_number,
+                   c.ocr_serial_number, c.ocr_print_run, c.ocr_variant
+             FROM cards c
+             LEFT JOIN ebay_listings e ON e.card_id = c.card_id
+             ORDER BY c.card_id ASC
             """
         ):
             card_tree.insert("", "end", values=r)
@@ -3261,8 +3701,9 @@ def main():
         ebay_tree.delete(*ebay_tree.get_children())
         for r in c.execute(
             """
-            SELECT e.listing_id, e.card_id, c.title, e.title,
-                   e.condition, e.price, e.listing_format, e.status
+            SELECT e.listing_id, e.card_id, c.title, e.title, e.description,
+                   e.condition, e.price, e.listing_format, e.status,
+                   COALESCE(e.ebay_offer_id, '') AS ebay_offer_id
             FROM ebay_listings e
             JOIN cards c ON c.card_id=e.card_id
             ORDER BY e.listing_id ASC
@@ -3521,6 +3962,31 @@ def main():
         )
     ).pack(anchor="w", pady=(0, 8))
 
+    def show_card_field_help():
+        messagebox.showinfo(
+            "Karten – Datenfelder",
+            "Thema / Franchise\n"
+            "• Übergeordnete Marke, Serie, Welt oder Franchise der Karte.\n"
+            "• Beispiele: Pokémon, Marvel, Star Wars, Bundesliga.\n"
+            "• Für eBay wird dieses Feld typischerweise als Franchise verwendet.\n\n"
+            "Team / Verein\n"
+            "• Konkretes Team, Verein oder Club auf der Karte.\n"
+            "• Beispiele: 1. FC Köln, FC Bayern München, Real Madrid.\n"
+            "• Für eBay wird es als Team verwendet.\n\n"
+            "Für eBay besonders relevant\n"
+            "• Name / Titel → eBay-Titel bzw. Spieler/Sportler\n"
+            "• Hersteller → Hersteller\n"
+            "• Thema / Franchise → Franchise\n"
+            "• Team / Verein → Team\n"
+            "• Set / Serie → Edition\n"
+            "• Saison → Saison\n"
+            "• Kartennummer → Kartennummer\n"
+            "• Variante → Parallel/Variante\n"
+            "• Sprache → Sprache\n\n"
+            "Sportart wird NICHT aus Kategorie erraten. Sie kommt bei der eBay-Angebotsvorlage aus dem gewählten Template (z. B. Fußball)."
+        )
+    ttk.Button(cards_tab, text="ℹ Erklärung zu Datenfeldern / eBay", command=show_card_field_help).pack(anchor="e", pady=(0,8))
+
     ttk.Button(
         cards_tab,
         text="＋ Karte manuell hinzufügen",
@@ -3534,9 +4000,10 @@ def main():
     ).pack(anchor="e", pady=(0, 8))
 
     card_cols = [
-        "ID", "Kategorie", "Thema / Franchise", "Team", "Hersteller", "Set / Serie",
-        "Name / Titel", "Saison", "Kartennr.", "Typ", "Variante",
-        "Numbered", "Seriennr.", "Print Run", "Sprache", "OCR", "Konfidenz",
+        "ID", "Name / Titel", "eBay Offer-ID", "eBay Status", "Kategorie",
+        "Thema / Franchise", "Team", "Hersteller", "Set / Serie",
+        "Saison", "Kartennr.", "Typ", "Variante", "Numbered",
+        "Seriennr.", "Print Run", "Sprache", "OCR", "Konfidenz",
         "OCR Team", "OCR Liga", "OCR Set", "OCR Typ",
         "OCR Nr.", "OCR Serial", "OCR Print Run", "OCR Variante"
     ]
@@ -3554,8 +4021,8 @@ def main():
 
     card_tree = make_tree(
         cards_tab, card_cols,
-        [50,100,150,150,120,150,220,80,90,90,120,90,90,90,80,90,80,
-         130,110,110,100,90,110,110,110]
+        [50,220,155,130,100,150,150,120,150,80,90,90,120,90,
+         90,90,80,90,80,130,110,110,100,90,110,110,110]
     )
 
 
@@ -3922,7 +4389,9 @@ def main():
             ("ebay_template_key", "eBay Vorlage"), ("ebay_status", "eBay Status"),
             ("ebay_sku", "eBay SKU"), ("ebay_exported_at", "eBay exportiert am"),
             ("ebay_scheduled_at", "eBay geplant für"), ("ebay_item_id", "eBay Item ID"),
-            ("ebay_sold_at", "eBay verkauft am"), ("ebay_sale_price", "eBay Verkaufspreis"),
+            ("ebay_sold_at", "eBay verkauft am"), ("ebay_offer_price", "eBay Angebotspreis"),
+            ("ebay_offer_id", "eBay Offer ID"), ("ebay_listing_id", "eBay Listing ID"),
+            ("ebay_sale_price", "eBay Verkaufspreis"),
             ("ebay_fees", "eBay Gebühren"), ("ebay_order_id", "eBay Order ID"),
         ]
         for r, (key, label) in enumerate(tech_fields):
@@ -3960,6 +4429,25 @@ def main():
                 value = ebay.get(source_key, "") if key.startswith("ebay_") else data.get(source_key, "")
                 if key == "ebay_template_key":
                     value = ebay.get("template_key", "")
+                elif key == "ebay_offer_id":
+                    # DB column keeps the explicit ebay_ prefix; do not strip it.
+                    value = ebay.get("ebay_offer_id", "")
+                elif key == "ebay_listing_id":
+                    value = ebay.get("listing_id", "")
+                elif key == "ebay_offer_price":
+                    value = ebay.get("price", "")
+                    if value not in ("", None):
+                        try:
+                            value = f"{float(value):.2f}".replace(".", ",") + " €"
+                        except (TypeError, ValueError):
+                            value = str(value)
+                elif key == "ebay_sale_price":
+                    # 0.0 is the database default, not an actual sale price.
+                    try:
+                        value = float(ebay.get("sale_price", 0) or 0)
+                        value = "" if value <= 0 else f"{value:.2f}".replace(".", ",") + " €"
+                    except (TypeError, ValueError):
+                        value = ""
                 var.set("" if value is None else str(value))
 
         def load_card(index, preserve_selection=True):
@@ -4133,11 +4621,19 @@ def main():
         )
     ).pack(anchor="e", pady=(0, 8))
 
+    def edit_selected_inventory():
+        sel=inv_tree.selection()
+        if not sel:
+            messagebox.showinfo("Inventar","Bitte zuerst einen Inventareintrag auswählen.",parent=root); return
+        iid=int(inv_tree.item(sel[0],"values")[0]); open_inventory_editor(root,iid,on_saved=refresh)
+    ttk.Button(inv_tab,text="✎ Inventareintrag bearbeiten",command=edit_selected_inventory).pack(anchor="e",pady=(0,8))
+
     inv_tree = make_tree(
         inv_tab,
         ["ID", "Karten-ID", "Karte", "Menge", "Zustand", "Lagerort", "Notizen"],
         [60,80,300,80,100,180,300]
     )
+    inv_tree.bind("<Double-1>", lambda e: edit_selected_inventory())
     ttk.Button(
         buy_tab,
         text="＋ Kauf manuell hinzufügen",
@@ -4156,12 +4652,20 @@ def main():
         )
     ).pack(anchor="e", pady=(0, 8))
 
+    def edit_selected_purchase():
+        sel=buy_tree.selection()
+        if not sel:
+            messagebox.showinfo("Käufe","Bitte zuerst einen Kauf auswählen.",parent=root); return
+        pid=int(buy_tree.item(sel[0],"values")[0]); open_purchase_editor(root,pid,on_saved=refresh)
+    ttk.Button(buy_tab,text="✎ Kauf bearbeiten",command=edit_selected_purchase).pack(anchor="e",pady=(0,8))
+
     buy_tree = make_tree(
         buy_tab,
         ["ID", "Datum", "Plattform", "Verkäufer", "Karten",
          "Kaufpreis", "Versand", "Gesamt"],
         [60,100,130,180,80,110,100,110]
     )
+    buy_tree.bind("<Double-1>", lambda e: edit_selected_purchase())
 
     # ---------------- VERKÄUFE ----------------
     sales_top = ttk.Frame(sales_tab)
@@ -4442,17 +4946,62 @@ def main():
         )
         ttk.Combobox(
             editor_frame, textvariable=status_var,
-            values=["Entwurf", "Bereit", "Eingestellt", "Verkauft", "Beendet"],
+            values=["Entwurf", "Bereit", "Offer erstellt", "Eingestellt", "Verkauft", "Beendet"],
             state="readonly"
         ).grid(row=6, column=1, sticky="w", pady=4)
 
-        # Required-field panel. Template-specific required aspects are read from
+        ttk.Label(editor_frame, text="eBay Vorlage").grid(row=7, column=0, sticky="w", pady=4)
+        template_names = {k: v["name"] for k,v in _ebay_template_catalog().items()}
+        template_name_var = tk.StringVar(value=template_names["football"])
+        template_combo = ttk.Combobox(editor_frame, textvariable=template_name_var,
+                                      values=list(template_names.values()), state="readonly")
+        template_combo.grid(row=7, column=1, sticky="w", pady=4)
+        def on_template_change(*_):
+            reverse_templates = {v: k for k, v in template_names.items()}
+            template_key_state["value"] = reverse_templates.get(template_name_var.get(), "football")
+            current_card = ebay_get_card(card_id) or {}
+            rebuild_required_panel(current_card, template_key_state["value"])
+        template_combo.bind("<<ComboboxSelected>>", on_template_change)
+
+        # Required-field panel: only fields the user must complete before export.
+        #  Template-specific required aspects are read from
         # the actual eBay CSV, so football/non-sport stay in sync with eBay.
         required_box = ttk.LabelFrame(editor_frame, text="eBay-Pflichtfelder", padding=8)
-        required_box.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 6))
-        required_box.columnconfigure(1, weight=1)
+        required_box.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(8, 6))
+        required_box.columnconfigure(0, weight=1)
+
         required_status = ttk.Label(required_box, text="Prüfung läuft…", font=("", 10, "bold"))
         required_status.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+
+        required_scroll_frame = ttk.Frame(required_box)
+        required_scroll_frame.grid(row=1, column=0, sticky="nsew")
+        required_scroll_frame.columnconfigure(0, weight=1)
+        required_scroll_frame.rowconfigure(0, weight=1)
+
+        required_canvas = tk.Canvas(required_scroll_frame, height=140, highlightthickness=0)
+        required_canvas.grid(row=0, column=0, sticky="nsew")
+        required_scroll = ttk.Scrollbar(required_scroll_frame, orient="vertical", command=required_canvas.yview)
+        required_scroll.grid(row=0, column=1, sticky="ns")
+        required_canvas.configure(yscrollcommand=required_scroll.set)
+
+        required_inner = ttk.Frame(required_canvas)
+        required_window = required_canvas.create_window((0, 0), window=required_inner, anchor="nw")
+
+        def _required_on_frame_configure(_event=None):
+            required_canvas.configure(scrollregion=required_canvas.bbox("all"))
+
+        def _required_on_canvas_configure(event):
+            required_canvas.itemconfigure(required_window, width=event.width)
+
+        required_inner.bind("<Configure>", _required_on_frame_configure)
+        required_canvas.bind("<Configure>", _required_on_canvas_configure)
+
+        def _required_mousewheel(event):
+            required_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        required_canvas.bind("<MouseWheel>", _required_mousewheel)
+        required_inner.bind("<MouseWheel>", _required_mousewheel)
+
         required_rows = []
 
         ttk.Label(editor_frame, text="Beschreibung").grid(
@@ -4463,7 +5012,7 @@ def main():
         desc_frame.rowconfigure(0, weight=1)
         desc_frame.columnconfigure(0, weight=1)
 
-        desc = tk.Text(desc_frame, wrap="word", height=12)
+        desc = tk.Text(desc_frame, wrap="word", height=9)
         desc.grid(row=0, column=0, sticky="nsew")
         desc_scroll = ttk.Scrollbar(desc_frame, orient="vertical", command=desc.yview)
         desc_scroll.grid(row=0, column=1, sticky="ns")
@@ -4504,13 +5053,10 @@ def main():
                 ).pack()
 
         def rebuild_required_panel(current_card, template_key):
-            for child in required_box.winfo_children():
-                if child is not required_status:
-                    child.destroy()
+            for child in required_inner.winfo_children():
+                child.destroy()
             required_rows.clear()
-            aspect_fields = _ebay_required_aspects(template_key)
             checks = [
-                ("Kategorie", lambda: cat_var.get()),
                 ("Titel", lambda: title_var.get()),
                 ("Zustand", lambda: cond_var.get()),
                 ("Preis", lambda: price_var.get()),
@@ -4519,14 +5065,24 @@ def main():
                 ("Bilder", lambda: current_card.get("front_image") or current_card.get("back_image")),
                 ("Menge", lambda: _ebay_inventory_quantity(int(current_card.get("card_id", 0) or 0))),
             ]
-            for aspect in aspect_fields:
-                checks.append((str(aspect).lstrip("*"), lambda a=aspect: _ebay_required_aspect_value(a, current_card)))
-            for r, (label, getter) in enumerate(checks, start=1):
-                lab = ttk.Label(required_box, text="🔴 " + label)
-                lab.grid(row=r, column=0, sticky="w", padx=4, pady=1)
-                state = ttk.Label(required_box, text="–")
-                state.grid(row=r, column=1, sticky="e", padx=4, pady=1)
-                required_rows.append((label, getter, lab, state))
+            ttk.Label(required_inner, text="Vor dem eBay-Export erforderlich:", font=("",10,"bold")).grid(row=1,column=0,columnspan=2,sticky="w",padx=4,pady=(0,4))
+            for r,(label,getter) in enumerate(checks,start=2):
+                lab=ttk.Label(required_inner,text="🔴 "+label); lab.grid(row=r,column=0,sticky="w",padx=4,pady=1)
+                state=ttk.Label(required_inner,text="–"); state.grid(row=r,column=1,sticky="e",padx=4,pady=1)
+                required_rows.append((label,getter,lab,state))
+            auto_row=len(checks)+3
+            ttk.Label(required_inner,text="Automatisch beim Export:",font=("",10,"bold")).grid(row=auto_row,column=0,columnspan=2,sticky="w",padx=4,pady=(6,2))
+            cfg=_ebay_template_catalog().get(template_key) or _ebay_template_catalog()["football"]
+            auto_items=[
+                ("Sportart",cfg.get("sport") or "– (bei Non-Sport nicht gesetzt)"),
+                ("Category",cat_var.get() or ebay_get_settings()["category_id"]),
+                ("Duration","GTC"),("StartPrice","aus Preis"),("Quantity","aus Inventar"),
+                ("Location","Köln"),("DispatchTimeMax","3 Tage"),("ReturnsAcceptedOption","ReturnsNotAccepted"),
+                ("PicURL","aus Kartenbildern / Google Drive"),
+            ]
+            for r,(label,value) in enumerate(auto_items,start=auto_row+1):
+                ttk.Label(required_inner,text="⚙ "+label).grid(row=r,column=0,sticky="w",padx=4,pady=1)
+                ttk.Label(required_inner,text=str(value),wraplength=420).grid(row=r,column=1,sticky="e",padx=4,pady=1)
             validate_required_fields()
 
         def validate_required_fields():
@@ -4595,6 +5151,7 @@ def main():
 
             current_card["card_id"] = card_id
             template_key_state["value"] = template_key or "football"
+            template_name_var.set(template_names.get(template_key_state["value"], template_names["football"]))
             load_images(current_card)
             rebuild_required_panel(current_card, template_key_state["value"])
 
@@ -4628,13 +5185,6 @@ def main():
 
         def save(silent=False):
             missing = validate_required_fields()
-            if missing and not silent:
-                messagebox.showwarning(
-                    "eBay-Pflichtfelder",
-                    "Der Entwurf wurde nicht als vollständig markiert.\n\nFehlende Pflichtfelder:\n• " + "\n• ".join(missing),
-                    parent=win
-                )
-                return False
             if len(title_var.get()) > 80:
                 messagebox.showerror(
                     "eBay",
@@ -4663,7 +5213,8 @@ def main():
                 fmt_var.get(),
                 cat_var.get().strip() or cfg["category_id"],
                 sku_var.get().strip(),
-                status_var.get() or "Entwurf"
+                status_var.get() or "Entwurf",
+                template_key_state["value"]
             )
             refresh()
             initial_values["data"] = current_values()
@@ -4686,6 +5237,7 @@ def main():
                 cat_var.get(),
                 sku_var.get(),
                 status_var.get(),
+                template_key_state["value"],
             )
 
         initial_values = {"data": None}
@@ -4766,6 +5318,184 @@ def main():
             actions_right, text="Beschreibung kopieren",
             command=lambda: copy_text(desc.get("1.0", "end").strip())
         ).pack(side="left", padx=4)
+        def create_sandbox_offer():
+            if not save(silent=True):
+                return
+            try:
+                result = ebay_sandbox_create_offer(
+                    card_id,
+                    title_var.get().strip(),
+                    desc.get("1.0", "end").strip(),
+                    cond_var.get().strip(),
+                    float((price_var.get() or "0").replace(",", ".")),
+                    fmt_var.get(),
+                    cat_var.get().strip(),
+                    sku_var.get().strip(),
+                )
+                offer_id = result["offer"]["offer_id"]
+                status_var.set("Offer erstellt")
+                refresh()
+                if result.get("existing"):
+                    msg = (
+                        "Das eBay-Offer existierte bereits.\n\n"
+                        f"Vorhandene Offer-ID: {offer_id}\n\n"
+                        "Die Offer-ID wurde jetzt in DCardsLab übernommen.\n"
+                        "Das Angebot wurde noch NICHT veröffentlicht."
+                    )
+                else:
+                    msg = (
+                        "Offer erfolgreich erstellt.\n\n"
+                        f"Offer ID: {offer_id}\n\n"
+                        "Das Angebot wurde noch NICHT veröffentlicht."
+                    )
+                messagebox.showinfo("eBay Sandbox", msg, parent=win)
+            except Exception as exc:
+                log_exception(f"eBay Sandbox Offer für Karte #{card_id} fehlgeschlagen", exc)
+                messagebox.showerror("eBay Sandbox", str(exc), parent=win)
+
+        sandbox_btn = ttk.Button(
+            actions_right, text="🧪 eBay Sandbox: Offer erstellen",
+            command=create_sandbox_offer
+        )
+        sandbox_btn.pack(side="left", padx=4)
+
+        def refresh_sandbox_offer():
+            try:
+                c = db()
+                row = c.execute("SELECT ebay_offer_id FROM ebay_listings WHERE card_id=?", (int(card_id),)).fetchone()
+                c.close()
+                offer_id = str(row[0] or "").strip() if row else ""
+                if not offer_id:
+                    messagebox.showinfo("eBay Sandbox", "Für diese Karte ist noch keine Offer-ID gespeichert.", parent=win)
+                    return
+                result = ebay_sandbox_get_offer(offer_id)
+                offer = result.get("offer") or {}
+                offer_status = str(offer.get("status") or offer.get("listingStatus") or "Offer vorhanden")
+                c = db()
+                try:
+                    c.execute("UPDATE ebay_listings SET status=?, updated_at=? WHERE card_id=?",
+                              ("Offer: " + offer_status, datetime.now().isoformat(timespec="seconds"), int(card_id)))
+                    c.commit()
+                finally:
+                    c.close()
+                status_var.set("Offer: " + offer_status)
+                refresh()
+                messagebox.showinfo(
+                    "eBay Sandbox",
+                    f"Offer-ID: {offer_id}\n\nStatus: {offer_status}",
+                    parent=win,
+                )
+            except Exception as exc:
+                log_exception(f"eBay Sandbox Offer für Karte #{card_id} konnte nicht aktualisiert werden", exc)
+                messagebox.showerror("eBay Sandbox", str(exc), parent=win)
+
+        ttk.Button(
+            actions_right, text="↻ eBay Offer prüfen", command=refresh_sandbox_offer
+        ).pack(side="left", padx=4)
+
+        def publish_check():
+            try:
+                c = db()
+                row = c.execute("SELECT ebay_offer_id FROM ebay_listings WHERE card_id=?", (int(card_id),)).fetchone()
+                c.close()
+                offer_id = str(row[0] or "").strip() if row else ""
+                checks = ebay_publish_check(
+                    card_id, title_var.get(), desc.get("1.0", "end"),
+                    cond_var.get(), price_var.get(), fmt_var.get(),
+                    cat_var.get(), sku_var.get(), offer_id
+                )
+                lines = []
+                for ok, label, detail in checks:
+                    prefix = "✓" if ok is True else ("!" if ok is None else "✗")
+                    lines.append(f"{prefix} {label}: {detail}")
+                ready = all(ok is not False for ok, _, _ in checks)
+                lines.insert(0, "Bereit für Publish: JA" if ready else "Bereit für Publish: NEIN")
+                messagebox.showinfo("eBay Publish-Check", "\n".join(lines), parent=win)
+            except Exception as exc:
+                log_exception(f"eBay Publish-Check für Karte #{card_id} fehlgeschlagen", exc)
+                messagebox.showerror("eBay Publish-Check", str(exc), parent=win)
+
+        ttk.Button(
+            actions_right, text="✓ eBay Publish-Check", command=publish_check
+        ).pack(side="left", padx=4)
+
+        def publish_offer():
+            try:
+                c = db()
+                row = c.execute(
+                    "SELECT ebay_offer_id, ebay_listing_id FROM ebay_listings WHERE card_id=?",
+                    (int(card_id),)
+                ).fetchone()
+                c.close()
+                offer_id = str(row[0] or "").strip() if row else ""
+                existing_listing_id = str(row[1] or "").strip() if row else ""
+                if not offer_id:
+                    messagebox.showwarning(
+                        "eBay Publish",
+                        "Für diese Karte ist noch keine Offer-ID vorhanden.\n\n"
+                        "Bitte zuerst das Offer erstellen.",
+                        parent=win,
+                    )
+                    return
+                if existing_listing_id:
+                    messagebox.showinfo(
+                        "eBay Publish",
+                        f"Diese Karte ist bereits veröffentlicht.\n\nListing-ID: {existing_listing_id}",
+                        parent=win,
+                    )
+                    return
+
+                checks = ebay_publish_check(
+                    card_id, title_var.get(), desc.get("1.0", "end"),
+                    cond_var.get(), price_var.get(), fmt_var.get(),
+                    cat_var.get(), sku_var.get(), offer_id
+                )
+                failed = [(label, detail) for ok, label, detail in checks if ok is False]
+                if failed:
+                    lines = ["Das Angebot ist noch nicht bereit:", ""]
+                    lines.extend(f"✗ {label}: {detail}" for label, detail in failed)
+                    messagebox.showwarning("eBay Publish", "\n".join(lines), parent=win)
+                    return
+
+                answer = messagebox.askyesno(
+                    "eBay Sandbox veröffentlichen",
+                    "Das Angebot wird jetzt in der eBay SANDBOX veröffentlicht.\n\n"
+                    f"Karte: {card_id}\nOffer-ID: {offer_id}\nPreis: {price_var.get()} €\n\n"
+                    "Es wird KEIN echtes Produktivangebot erstellt.\n\nJetzt veröffentlichen?",
+                    parent=win,
+                )
+                if not answer:
+                    return
+
+                result, listing_id = ebay_sandbox_publish_offer(offer_id)
+                now = datetime.now().isoformat(timespec="seconds")
+                c = db()
+                try:
+                    c.execute(
+                        "UPDATE ebay_listings SET ebay_listing_id=?, ebay_item_id=?, status=?, updated_at=? WHERE card_id=?",
+                        (listing_id, listing_id, "Eingestellt", now, int(card_id)),
+                    )
+                    c.commit()
+                finally:
+                    c.close()
+                status_var.set("Eingestellt")
+                refresh()
+                messagebox.showinfo(
+                    "eBay Sandbox",
+                    "Angebot erfolgreich veröffentlicht.\n\n"
+                    f"Offer-ID: {offer_id}\nListing-ID: {listing_id}\n\n"
+                    "Das Angebot ist jetzt als aktives Sandbox-Listing vorhanden.",
+                    parent=win,
+                )
+            except Exception as exc:
+                log_exception(f"eBay Sandbox Publish für Karte #{card_id} fehlgeschlagen", exc)
+                messagebox.showerror("eBay Publish", str(exc), parent=win)
+
+        publish_btn = ttk.Button(
+            actions_right, text="🚀 eBay Angebot veröffentlichen", command=publish_offer
+        )
+        publish_btn.pack(side="left", padx=4)
+
         export_btn = ttk.Button(
             actions_right, text="▶ Angebotsdatei erstellen",
             command=lambda: ebay_export_offer_from_template(root, template_key=template_key_state["value"])
@@ -4960,9 +5690,9 @@ def main():
 
     ebay_tree = make_tree(
         ebay_tab,
-        ["ID", "Karten-ID", "Karte", "eBay-Titel", "Zustand",
-         "Preis", "Format", "Status"],
-        [60, 80, 220, 420, 90, 90, 100, 100]
+        ["ID", "Karten-ID", "Karte", "eBay-Titel", "Beschreibung", "Zustand",
+         "Preis", "Format", "Status", "Offer-ID"],
+        [60, 80, 220, 360, 420, 90, 90, 100, 120, 150]
     )
     ebay_tree.bind("<Double-1>", lambda e: open_ebay_editor())
 

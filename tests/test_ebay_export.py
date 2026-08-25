@@ -91,12 +91,25 @@ class RequiredAspectsTests(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
-    def test_missing_sport_is_still_caught(self):
+    def test_sport_is_derived_from_template_not_card_category(self):
+        # Sportart is now auto-derived from the selected export template
+        # (football -> "Fussball"), independent of the card's own
+        # "Kategorie" field, so an empty card category must not block
+        # validation.
         errors = app._ebay_draft_validation(
             self._full_card(category=""), "Test Spieler", "4000", "9.99",
             "FixedPrice", "261328", "Testbeschreibung", "football",
         )
-        self.assertTrue(any("Sportart" in e for e in errors), errors)
+        self.assertEqual(errors, [])
+        self.assertTrue(app._ebay_required_aspect_value("Sportart", {}, "football"))
+
+    def test_missing_images_are_still_caught(self):
+        errors = app._ebay_draft_validation(
+            self._full_card(front_image="", back_image=""), "Test Spieler",
+            "4000", "9.99", "FixedPrice", "261328", "Testbeschreibung",
+            "football",
+        )
+        self.assertTrue(any("Bilder" in e for e in errors), errors)
 
 
 class ExportOfferIntegrationTest(unittest.TestCase):
