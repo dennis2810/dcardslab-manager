@@ -179,6 +179,33 @@ def api_post(access_token, path, payload):
         return exc.code, parsed
 
 
+# eBay's Inventory API "condition" field takes a ConditionEnum string,
+# not the classic numeric ConditionID DCardsLab otherwise uses everywhere
+# (ebay_settings, the File Exchange CSV path). Sending the numeric ID
+# directly fails with errorId 2004 "Could not serialize field
+# [condition]". This is the documented enum<->legacy-ID mapping.
+_CONDITION_ID_TO_ENUM = {
+    "1000": "NEW",
+    "1500": "NEW_OTHER",
+    "1750": "NEW_WITH_DEFECTS",
+    "2000": "CERTIFIED_REFURBISHED",
+    "2500": "SELLER_REFURBISHED",
+    "2750": "LIKE_NEW",
+    "3000": "USED_EXCELLENT",
+    "4000": "USED_VERY_GOOD",
+    "5000": "USED_GOOD",
+    "6000": "USED_ACCEPTABLE",
+    "7000": "FOR_PARTS_OR_NOT_WORKING",
+}
+
+
+def condition_id_to_enum(condition):
+    """Translate DCardsLab's numeric ConditionID to eBay's ConditionEnum.
+    Passes an already-valid enum string (or anything unrecognised)
+    through unchanged."""
+    return _CONDITION_ID_TO_ENUM.get(str(condition or "").strip(), condition)
+
+
 _POLICY_SPECS = {
     "fulfillmentPolicyId": ("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "Versand-Richtlinie (Fulfillment Policy)"),
     "paymentPolicyId": ("payment_policy", "paymentPolicies", "paymentPolicyId", "Zahlungs-Richtlinie (Payment Policy)"),
@@ -532,7 +559,7 @@ def test_offer_create():
                     "quantity": quantity
                 }
             },
-            "condition": condition,
+            "condition": condition_id_to_enum(condition),
             "product": {
                 "title": title,
                 "description": description,
