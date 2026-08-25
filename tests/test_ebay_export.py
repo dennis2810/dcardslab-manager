@@ -265,6 +265,46 @@ class SandboxOfferConditionTest(unittest.TestCase):
         # is invalid for category 261328 (errorId 25059).
         self.assertNotEqual(self._sent_condition("4000 – Ungraded"), "NEW")
 
+    def test_inventory_item_failure_surfaces_the_actual_ebay_error(self):
+        # Regression: the OAuth server reports inventory-item failures as
+        # {"error": "<generic wrapper text>", "response": {<real eBay
+        # error JSON>}} - the client used to only look at
+        # result["offer"]["response"] (never populated for this failure
+        # shape), so the real eBay error message was silently dropped and
+        # only the generic wrapper text reached the user.
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+            def read(self):
+                return json.dumps({
+                    "success": False,
+                    "error": "eBay Inventory Item konnte nicht erstellt/aktualisiert werden.",
+                    "response": {
+                        "errors": [{"message": "Ganz genau dieser eBay-Fehlertext"}]
+                    },
+                }).encode("utf-8")
+
+        def fake_urlopen(req, timeout=None):
+            return FakeResponse()
+
+        orig_urlopen = app.urllib.request.urlopen
+        app.urllib.request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                app.ebay_sandbox_create_offer(
+                    1, "Titel", "Beschreibung", "4000 – Ungraded", 9.99,
+                    "Festpreis", "261328", "SKU1",
+                )
+        finally:
+            app.urllib.request.urlopen = orig_urlopen
+        self.assertIn("Ganz genau dieser eBay-Fehlertext", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

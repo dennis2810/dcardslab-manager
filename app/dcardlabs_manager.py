@@ -2776,10 +2776,10 @@ def ebay_sandbox_create_offer(card_id, title, description, condition_id, price,
     # eBay error 25002 means that an offer for this SKU already exists.
     # The response contains the existing offerId; recover and persist it.
     if status != 200 or not result.get("success"):
-        detail = result.get("error") or result.get("offer", {}).get("response") or raw
+        ebay_response = result.get("response")
         existing_offer_id = ""
         try:
-            payload = json.loads(detail) if isinstance(detail, str) else detail
+            payload = json.loads(ebay_response) if isinstance(ebay_response, str) else ebay_response
             for err in payload.get("errors", []) if isinstance(payload, dict) else []:
                 for param in err.get("parameters", []) or []:
                     if str(param.get("name", "")).lower() == "offerid":
@@ -2793,6 +2793,15 @@ def ebay_sandbox_create_offer(card_id, title, description, condition_id, price,
             result = {"success": True, "existing": True, "offer": {"offer_id": existing_offer_id},
                       "message": "Das eBay-Angebot existiert bereits; die vorhandene Offer-ID wurde übernommen."}
         else:
+            error_text = str(result.get("error") or "").strip()
+            if isinstance(ebay_response, (dict, list)):
+                response_text = json.dumps(ebay_response, ensure_ascii=False, indent=2)
+            else:
+                response_text = str(ebay_response or "").strip()
+            if error_text and response_text:
+                detail = error_text + "\n\neBay-Antwort:\n" + response_text
+            else:
+                detail = error_text or response_text or raw
             raise RuntimeError(f"eBay Sandbox: Offer konnte nicht erstellt werden.\n\n{detail}")
 
     offer_id = str(result.get("offer", {}).get("offer_id") or "").strip()
