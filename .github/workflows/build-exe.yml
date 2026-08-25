@@ -1,0 +1,48 @@
+name: Build EXE
+
+# Manuell im "Actions"-Tab starten (Button "Run workflow").
+# Baut die portable DCardLabs.exe auf einer von GitHub bereitgestellten
+# Windows-Maschine - lokal wird dafür kein Python benötigt.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build-Abhängigkeiten installieren
+        run: py -m pip install -r setup\requirements.txt pyinstaller
+
+      - name: EXE bauen
+        run: py -m PyInstaller --distpath build\dist --workpath build\build --noconfirm build\dcardlabs.spec
+
+      - name: Lose Dateien neben die EXE kopieren
+        run: |
+          $dist = "build\dist\DCardLabs"
+          New-Item -ItemType Directory -Force -Path "$dist\scanner" | Out-Null
+          Copy-Item "scanner\scanner_v0_8_dynamic.py" "$dist\scanner\" -Force
+          New-Item -ItemType Directory -Force -Path "$dist\templates\ebay" | Out-Null
+          Copy-Item "templates\ebay\eBay-draft-listing-template_DE.csv" "$dist\templates\ebay\" -Force
+          Copy-Item "templates\ebay\eBay-category-listing-template_261328.csv" "$dist\templates\ebay\" -Force
+          Copy-Item "templates\ebay\eBay-category-listing-template_non_sport.csv" "$dist\templates\ebay\" -Force
+          New-Item -ItemType Directory -Force -Path "$dist\integrations" | Out-Null
+          Copy-Item "integrations\google_sheets_sync.py" "$dist\integrations\" -Force
+          Copy-Item "integrations\google_drive_sync.py" "$dist\integrations\" -Force
+
+      - name: Build prüfen
+        run: |
+          if (-not (Test-Path "build\dist\DCardLabs\DCardLabs.exe")) {
+            Write-Error "DCardLabs.exe wurde nicht erzeugt."
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DCardLabs-windows-${{ github.run_number }}
+          path: build/dist/DCardLabs/
