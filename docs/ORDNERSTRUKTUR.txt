@@ -1,0 +1,42 @@
+DCardLabs Projektstruktur
+
+start_dcardlabs.bat
+  -> offizieller Programmstart
+
+app/
+  dcardlabs_manager.py
+  -> Hauptanwendung / GUI / Datenbank
+
+scanner/
+  scanner_v0_8_dynamic.py
+  -> produktiver 3x3 Scanner; Erkennungsengine unverändert
+
+integrations/
+  google_sheets_sync.py
+  -> Google-Sheets-Synchronisation
+  google_drive_sync.py
+  -> Google-Drive-Backup und Cloud-Ordnerstruktur
+
+setup/
+  requirements.txt
+  setup_google_sheets.bat
+  install_ocr.bat
+  -> Installation und Einrichtung
+
+docs/
+  -> technische Notizen und Regressionstests
+
+archive/
+  -> alte/experimentelle Scanner-Versionen, nicht für den normalen Betrieb
+
+images/cards/
+  -> zentraler Bildspeicher der Karten
+
+backups/
+  -> automatische und manuelle Backups
+
+Datenbank und Google-Konfiguration bleiben im Projekt-Hauptordner:
+  dcardlabs.db
+  credentials.json
+  token.json
+  google_sheets_config.json

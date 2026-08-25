@@ -1,0 +1,7 @@
+# Eine Zeile pro Testkarte.
+# dateiname   = Bilddatei in diesem Ordner (tests/ocr_corpus/)
+# erwarteter_name = exakt der Name, den ocr_name() liefern soll
+#
+# Beispielzeilen (bitte durch echte Karten ersetzen/ergaenzen):
+dateiname,erwarteter_name
+beispiel_karte_01.jpg,MAX MUSTERMANN

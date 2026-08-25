@@ -1,0 +1,5 @@
+v0.8 Dynamic Grid regression tests: PASS
+- Original Test(1).png: 1448x2048 -> 9 Karten, je 630x880
+- Resized input: 7000x9900 -> 9 Karten, je 630x880
+- 90° rotated input: 2048x1448 -> 9 Karten, je 630x880
+- No fixed 1448x2048 card positions are used.

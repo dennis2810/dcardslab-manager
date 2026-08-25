@@ -1,0 +1,6 @@
+﻿#INFO;Version=0.0.2;Template= eBay-draft-listings-template_DE;;;;;;;
+#INFO Action und Category ID sind erforderliche Felder. 1) Stellen Sie Action auf Draft ein. 2) Die Kategorie-ID für Ihre Angebote finden Sie hier: https://pages.ebay.com/sellerinformation/news/categorychanges.html;;;;;;;;;
+#INFO Nachdem Sie Ihren Entwurf erfolgreich im Berichte-Tab Ihres Verkäufer-Cockpit Pro heruntergeladen haben; können Sie die Entwürfe hier zu aktiven Angeboten vervollständigen: https://www.ebay.de/sh/lst/drafts;;;;;;;;;
+#INFO;;;;;;;;;;
+Action(SiteID=Germany|Country=DE|Currency=EUR|Version=1193|CC=UTF-8);Custom label (SKU);Category ID;Title;UPC;Price;Quantity;Item photo URL;Condition ID;CD:Card Condition - (ID: 40001);Description;Format
+Draft;;47140;Test Draft Shoe;;11;1;https://ir.ebaystatic.com/cr/v/c1/rsc/ebay_logo_512.png;NEW;;<p><CENTER><H4>This is a Test Auction...Please Do Not Bid</H4></CENTER><P>This is one of those test auctions. Please do not bid as there is no merchandise being auctioned.</P>;FixedPrice

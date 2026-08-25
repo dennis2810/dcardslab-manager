@@ -1,0 +1,8 @@
+DCardLabs v1.9.7 – Portable Build Fixes
+
+- Die fertige EXE verwendet Tesseract im Portable-Modus nur aus .\Tesseract-OCR\tesseract.exe. Eine lokale C:\Program Files-Installation wird in der EXE nicht mehr stillschweigend verwendet.
+- build\build_exe.bat übernimmt bei vorhandenem Tesseract automatisch die lokale Installation in das Bundle.
+- Scanner, eBay-Vorlage und Integrationen werden nach PyInstaller nochmals explizit nach build\dist\DCardLabs kopiert und geprüft.
+- Fehlt die Dynamic-Grid-Engine, gibt es einen klaren Fehler. Bei einer Hash-Abweichung wird der Scan nicht mehr blockiert; die Abweichung wird im Log als WARNING protokolliert.
+
+Immer den kompletten Ordner build\dist\DCardLabs kopieren, nicht nur DCardLabs.exe.

@@ -1,0 +1,11 @@
+DCardLabs v1.7.3
+
+- Fix: Windows WinError 32 beim Ersetzen/Zuordnen eines Kartenbildes.
+  Bilddateien werden in Vorschauen jetzt mit geschlossenem Dateihandle gelesen.
+  Bereits identische Zielbilder werden nicht erneut auf sich selbst kopiert.
+- UI: Vorderseite und Rückseite werden im Kartendialog nebeneinander angezeigt.
+- UI: Vorherige/Nächste Navigation durch die aktuell sichtbaren Karten.
+- UI: Anzeige Karte X von Y.
+- UI: Navigationsbuttons werden am Anfang/Ende automatisch deaktiviert.
+- UI: Alt+Links/Alt+Rechts navigiert ebenfalls.
+- Speichern bleibt im selben Dialog; die Prüfung kann damit Karte für Karte erfolgen.

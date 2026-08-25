@@ -1,0 +1,37 @@
+## v1.10.2-r9 – Verkaufsverwaltung
+- Verkaufsbereich als eigener Reiter „Verkäufe“ ergänzt.
+- „＋ Verkauf hinzufügen“, „🗑 Verkauf löschen“ und „↻ Aktualisieren“ ergänzt.
+- Doppelklick öffnet die Verkaufs-Detailansicht.
+- Detailansicht unterstützt Vorherige/Nächste sowie Alt+←/→.
+- Verkaufsdaten inkl. Karten-ID, eBay Item ID, Order ID, Datum, Menge, Brutto, Versand, Gebühren, Status und Notizen editierbar.
+- Netto wird automatisch als Brutto + Versand − eBay-Gebühren berechnet.
+- Verkaufslöschung erfolgt mit Sicherheitsabfrage.
+
+DCardLabs v1.10.2
+
+E-BAY ANGEBOT (NEU)
+- Separater UI-Button „▶ Angebotsdatei (Action=Add)“.
+- Verwendet die echte eBay-Kategorievorlage 261328 (Sports Trading Card Singles).
+- Action=Add wird nur in der lokal erzeugten CSV gesetzt; DCardLabs importiert/veröffentlicht nichts automatisch.
+- Vor der Erzeugung erscheint eine Sicherheitsabfrage, weil ein späterer eBay-Import die Angebote direkt einstellen kann.
+- Sicherheitsprüfung: Kategorie, Titel, Preis und mindestens ein Bild.
+- Front-/Rückseite werden nach Google Drive/DCardLabs/Cards hochgeladen und als HTTPS-URLs in PicURL eingetragen.
+- GTC, Köln, Quantity, Condition 4000, Card Condition 400010 (NM), Sportart Fußball und die drei eBay-Profile werden befüllt, sofern die Vorlage die Felder enthält.
+- Standardbeschreibung mit Versand/Kombiversand und Privatverkauf wird an die Kartenbeschreibung angehängt.
+- Nicht exportierbare Karten werden einzeln blockiert und im UI/Log ausgewiesen.
+
+Der bisherige „eBay-Importdatei erstellen“-Button bleibt der Entwurfs-Workflow (Action=Draft).
+
+
+FIX v1.10.2-r1 – Google-Drive-Bilder
+- Fehlende Funktion upload_card_images ergänzt.
+- Front-/Rückseite werden in DCardLabs/Cards hochgeladen bzw. aktualisiert.
+- Für eBay werden HTTPS-Bild-URLs erzeugt.
+- Bilddateien werden für den Abruf ohne Google-Login freigegeben.
+- Fehler „cannot import name upload_card_images“ behoben.
+
+v1.10.2-r2 – eBay UI Löschbutton
+- Im eBay-Reiter einen separaten Button „🗑 eBay-Datensatz löschen“ neben „＋ Karte auswählen / Entwurf erstellen“ ergänzt.
+- Löscht ausschließlich den eBay-Datensatz/Entwurf; die zugehörige Karte bleibt erhalten.
+- Vor dem Löschen erscheint eine Sicherheitsabfrage.
+- Nach erfolgreichem Löschen wird die eBay-Liste automatisch aktualisiert.

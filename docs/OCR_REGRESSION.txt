@@ -1,0 +1,9 @@
+001: expected=MANUEL UGARTE | got=MANUEL UGARTE | status=ok | confidence=89.5
+002: expected=NUNO MENDES | got=NUNO MENDES | status=ok | confidence=93.5
+003: expected=NADIEM AMIRI | got=MANIC AMID | status=prüfen | confidence=38.3
+004: expected=JAN-NIKLAS BESTE | got=JAN-NIKLAS BESTE | status=ok | confidence=85.7
+005: expected=ROMANO SCHMID | got=ROMANO SCHMID | status=ok | confidence=93.0
+006: expected=CHRISTIAN ERIKSEN | got=CHRISTIAN ERIKSEN | status=ok | confidence=73.7
+007: expected=MOHAMMED AMOURA | got=MOHAMMED AMOURA | status=ok | confidence=90.0
+008: expected=KONRAD LAIMER | got=AUARAU LAIMER | status=prüfen | confidence=58.0
+009: expected=MARCEL SABITZER | got=MARCEL SABITZER | status=ok | confidence=91.0

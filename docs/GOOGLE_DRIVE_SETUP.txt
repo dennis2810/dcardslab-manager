@@ -1,0 +1,22 @@
+DCardLabs – Google Drive Einrichtung
+
+Google Drive verwendet dieselbe credentials.json wie Google Sheets. Die Google-Konfiguration
+wird versionsübergreifend unter %APPDATA%\DCardLabs gespeichert. Bei einer neuen Version
+muss nichts erneut kopiert werden.
+
+Ersteinrichtung:
+1. Im selben Google-Cloud-Projekt wie Google Sheets die Google Drive API aktivieren.
+2. „Google Drive einrichten“ einmalig ausführen und den Google-Zugriff erlauben.
+3. DCardLabs legt automatisch an: DCardLabs/Backups, DCardLabs/Cards und DCardLabs/eBay.
+
+Persistente Dateien:
+credentials.json = Google-OAuth-Client
+token.json = Google Sheets Token
+drive_token.json = Google Drive Token
+google_drive_config.json = Drive-Ordnerkonfiguration
+
+Die Dateien bleiben bei einem Versionswechsel erhalten.
+
+Hinweis: Die DCardLabs-Backupfunktion verwendet die Drive API und nicht den lokalen
+Google-Drive-Dateisystempfad. Daher müssen die Cloud-Ordner NICHT auf „Immer verfügbar“
+oder „offline verfügbar“ gestellt werden.

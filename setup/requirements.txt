@@ -1,0 +1,9 @@
+opencv-python>=4.8
+numpy>=1.24
+pytesseract>=0.3.10
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+Pillow>=10.0
+
+openpyxl>=3.1

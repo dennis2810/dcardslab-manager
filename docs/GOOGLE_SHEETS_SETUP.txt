@@ -1,0 +1,21 @@
+DCardLabs – Google Sheets Einrichtung
+
+Die Google-Konfiguration ist versionsübergreifend. Du musst credentials.json und
+token.json bei einer neuen DCardLabs-Version NICHT erneut kopieren.
+
+Ersteinrichtung:
+1. Google Cloud Console öffnen und ein Projekt auswählen/erstellen.
+2. Google Sheets API aktivieren.
+3. Unter Google Auth Platform / Clients einen OAuth-Client für „Desktop app“ erstellen.
+4. Die heruntergeladene JSON-Datei einmalig als credentials.json in den DCardLabs-Hauptordner legen und Google Sheets synchronisieren.
+5. DCardLabs übernimmt die Datei automatisch nach %APPDATA%\DCardLabs.
+6. In Google Sheets eine Tabelle anlegen und die Tabellen-ID aus der URL kopieren.
+7. In DCardLabs „Google Sheets synchronisieren“ anklicken.
+8. Beim ersten Mal öffnet sich der Google-Anmelde-/Berechtigungsdialog.
+
+Danach bleiben diese Dateien versionsübergreifend erhalten:
+%APPDATA%\DCardLabs\credentials.json
+%APPDATA%\DCardLabs\token.json
+%APPDATA%\DCardLabs\google_sheets_config.json
+
+SQLite bleibt die Master-Datenbank.

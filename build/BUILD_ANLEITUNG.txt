@@ -1,0 +1,70 @@
+DCardLabs Card Manager - Eigenstaendige .exe bauen
+====================================================
+
+WICHTIG: Dieser Build muss auf einem WINDOWS-Rechner ausgefuehrt werden
+(eine .exe kann man nur unter Windows selbst erzeugen).
+
+VORAUSSETZUNG (einmalig)
+-------------------------
+Python muss installiert sein (wie bisher auch), da der Build-Vorgang
+selbst noch Python braucht. Das Ergebnis danach ist aber komplett
+eigenstaendig - der Endnutzer/du selbst brauchst dann kein Python mehr.
+
+SCHRITT 1 - Tesseract-OCR portable bereitstellen (optional, empfohlen)
+-------------------------------------------------------------------
+Damit die fertige .exe wirklich OHNE separate Tesseract-Installation
+laeuft, muss ein Tesseract-OCR-Ordner mitgebuendelt werden:
+
+  1. Tesseract-OCR einmal ganz normal installieren (z.B. den Installer
+     von der offiziellen UB-Mannheim-Tesseract-Seite), ODER eine bereits
+     vorhandene Installation nutzen (typ. unter
+     C:\Program Files\Tesseract-OCR).
+  2. Diesen kompletten Ordner "Tesseract-OCR" (mit tesseract.exe und dem
+     Unterordner tessdata\) in den DCardLabs-Hauptordner kopieren, direkt
+     neben die Ordner "app", "scanner", "setup" usw.
+  3. Im kopierten Unterordner tessdata\ ALLE Dateien loeschen ausser:
+        eng.traineddata
+        deu.traineddata
+        osd.traineddata   (wird von Tesseract intern benoetigt)
+     Eine normale Tesseract-Installation bringt oft 20+ Sprachen mit
+     (mehrere hundert MB) - das spart je nach Installation 150-300 MB
+     im fertigen Bundle, ohne Funktionsverlust, da DCardLabs aktuell
+     ohnehin nur "eng" fuer die OCR-Erkennung verwendet (siehe Hinweis
+     unten zu deu).
+
+Ohne diesen Schritt funktioniert die .exe trotzdem, sucht dann aber wie
+bisher nach einer separat installierten Tesseract-Version auf dem System
+(start_dcardlabs.bat / install_ocr.bat bleiben dafuer als Fallback nutzbar).
+
+SCHRITT 2 - Build ausfuehren
+-----------------------------
+Doppelklick auf:
+    build\build_exe.bat
+
+Das Skript installiert automatisch die Python-Abhaengigkeiten und
+PyInstaller, baut anschliessend das Programm.
+
+SCHRITT 3 - Ergebnis
+----------------------
+Nach erfolgreichem Build liegt hier die fertige, eigenstaendige App:
+
+    build\dist\DCardLabs\DCardLabs.exe
+
+Der komplette Ordner "DCardLabs" (nicht nur die .exe!) ist eigenstaendig
+lauffaehig - einfach kopieren/verschieben und DCardLabs.exe doppelklicken.
+Kein pip install, kein Python noetig.
+
+WICHTIG BEIM ERSTEN START
+---------------------------
+Der DCardLabs-Ordner erstellt beim ersten Start automatisch:
+  dcardlabs.db, images\cards\, backups\, logs\
+direkt neben der .exe - das entspricht dem bisherigen Verhalten.
+
+Falls du eine vorhandene dcardlabs.db und images\cards\ aus der alten
+Installation weiterverwenden willst, kopiere diese einfach in den neuen
+"DCardLabs"-Ordner (build\dist\DCardLabs\).
+
+NEUE VERSION BAUEN
+-------------------
+Wenn du spaeter am Code weiterarbeitest: einfach build_exe.bat erneut
+ausfuehren, der alte build\dist-Ordner wird automatisch ersetzt.
