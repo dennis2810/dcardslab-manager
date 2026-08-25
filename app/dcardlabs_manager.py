@@ -1001,13 +1001,17 @@ def infer_card_metadata(front_raw, back_raw, back_struct):
     return result
 
 
-def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr):
+def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr, progress=None):
     from ai_card_recognition import recognize_card
 
     back_map = {int(p.stem): p for p in back_files}
     pairs = []
+    sorted_fronts = sorted(front_files, key=lambda p: int(p.stem))
+    total = len(sorted_fronts)
 
-    for fp in sorted(front_files, key=lambda p: int(p.stem)):
+    for i, fp in enumerate(sorted_fronts, start=1):
+        if progress:
+            progress(i, total)
         number = int(fp.stem)
         bp = back_map.get(number)
         if bp is None:
@@ -3897,52 +3901,73 @@ def main():
         c.commit()
         c.close()
 
-        try:
-            status.set("1/4 Vorderseite – Dynamic Grid …")
-            root.update_idletasks()
-            front_files = scan_one(
-                front.get(), front_dir, int(quality.get()), rotate.get()
-            )
+        scan_button.configure(state="disabled")
 
-            status.set("2/4 Rückseite – Dynamic Grid …")
-            root.update_idletasks()
-            back_files = scan_one(
-                back.get(), back_dir, int(quality.get()), rotate.get()
-            )
+        def worker():
+            # Runs off the UI thread: pair_and_ocr() now makes up to 18
+            # sequential Claude API calls (front+back x 9 cards), which
+            # would otherwise freeze the Tk event loop for minutes and
+            # make the window look hung (Windows even marks it "Keine
+            # Rückmeldung") with no way to tell "still working" from
+            # "actually stuck". Every Tk touch is marshalled back via
+            # root.after() - Tkinter widgets aren't thread-safe.
+            try:
+                root.after(0, lambda: status.set("1/4 Vorderseite – Dynamic Grid …"))
+                front_files = scan_one(
+                    front.get(), front_dir, int(quality.get()), rotate.get()
+                )
 
-            status.set("3/4 Paarung + verbesserte OCR …")
-            root.update_idletasks()
-            pairs = pair_and_ocr(
-                front_files, back_files, pair_dir, do_ocr.get(), do_back_ocr.get()
-            )
-            write_pair_exports(pairs, pair_dir)
+                root.after(0, lambda: status.set("2/4 Rückseite – Dynamic Grid …"))
+                back_files = scan_one(
+                    back.get(), back_dir, int(quality.get()), rotate.get()
+                )
 
-            status.set("4/4 Datenbank aktualisieren …")
-            root.update_idletasks()
-            insert_cards(pairs, batch_id)
+                def on_progress(n, total):
+                    root.after(0, lambda: status.set(
+                        f"3/4 Paarung + KI-Erkennung … Karte {n}/{total}"
+                    ))
 
-            refresh()
-            status.set("Fertig – 9 Kartenpaare verarbeitet.")
-            messagebox.showinfo(
-                APP,
-                "Scan abgeschlossen.\n\n"
-                "✓ 9 Vorderseiten\n"
-                "✓ 9 Rückseiten\n"
-                "✓ 9 Kartenpaare\n"
-                f"✓ KI-Erkennung: {'aktiv' if do_ocr.get() else 'deaktiviert'}\n"
-                "✓ Datenbank aktualisiert\n\n"
-                f"Projektordner:\n{project}"
-            )
-        except Exception as e:
-            c = db()
-            c.execute(
-                "UPDATE scan_batches SET status=? WHERE batch_id=?",
-                (f"Fehler: {e}", batch_id)
-            )
-            c.commit()
-            c.close()
-            status.set("Fehler – Karten-Datenbank unverändert.")
-            messagebox.showerror(APP, f"{type(e).__name__}:\n{e}")
+                root.after(0, lambda: status.set("3/4 Paarung + KI-Erkennung …"))
+                pairs = pair_and_ocr(
+                    front_files, back_files, pair_dir, do_ocr.get(), do_back_ocr.get(),
+                    progress=on_progress,
+                )
+                write_pair_exports(pairs, pair_dir)
+
+                root.after(0, lambda: status.set("4/4 Datenbank aktualisieren …"))
+                insert_cards(pairs, batch_id)
+
+                def on_success():
+                    refresh()
+                    status.set("Fertig – 9 Kartenpaare verarbeitet.")
+                    scan_button.configure(state="normal")
+                    messagebox.showinfo(
+                        APP,
+                        "Scan abgeschlossen.\n\n"
+                        "✓ 9 Vorderseiten\n"
+                        "✓ 9 Rückseiten\n"
+                        "✓ 9 Kartenpaare\n"
+                        f"✓ KI-Erkennung: {'aktiv' if do_ocr.get() else 'deaktiviert'}\n"
+                        "✓ Datenbank aktualisiert\n\n"
+                        f"Projektordner:\n{project}"
+                    )
+                root.after(0, on_success)
+            except Exception as e:
+                c2 = db()
+                c2.execute(
+                    "UPDATE scan_batches SET status=? WHERE batch_id=?",
+                    (f"Fehler: {e}", batch_id)
+                )
+                c2.commit()
+                c2.close()
+
+                def on_error():
+                    status.set("Fehler – Karten-Datenbank unverändert.")
+                    scan_button.configure(state="normal")
+                    messagebox.showerror(APP, f"{type(e).__name__}:\n{e}")
+                root.after(0, on_error)
+
+        threading.Thread(target=worker, name="DCardLabs-Scan", daemon=True).start()
 
     def test_ocr():
         ok, msg = ocr_setup_status()
@@ -3958,11 +3983,12 @@ def main():
         command=test_ocr
     ).pack(anchor="w", pady=(4, 6))
 
-    ttk.Button(
+    scan_button = ttk.Button(
         scan_tab,
         text="▶  VORDERSEITE + RÜCKSEITE SCANNEN / PAAREN / OCR",
         command=start_scan
-    ).pack(fill="x", pady=8, ipady=7)
+    )
+    scan_button.pack(fill="x", pady=8, ipady=7)
     ttk.Label(scan_tab, textvariable=status).pack(anchor="w", pady=4)
 
     def make_tree(parent, cols, widths):

@@ -135,7 +135,11 @@ def recognize_card(front_path=None, back_path=None):
     content.append({"type": "text", "text": PROMPT.format(sides=" und ".join(sides))})
 
     try:
-        client = anthropic.Anthropic()
+        # Explicit bounded timeout: the SDK default (10 minutes) would leave
+        # the caller (a synchronous, single-threaded scan loop over up to 9
+        # cards) looking hung for a very long time on a stalled connection
+        # instead of failing this one card gracefully.
+        client = anthropic.Anthropic(timeout=60.0)
         response = client.messages.parse(
             model="claude-opus-5",
             max_tokens=2048,
