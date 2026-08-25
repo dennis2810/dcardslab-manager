@@ -158,6 +158,27 @@ def api_get(access_token, path):
         return exc.code, exc.read().decode("utf-8", errors="replace")
 
 
+def api_post(access_token, path, payload):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = Request(EBAY_API_BASE + path, data=body, method="POST", headers={
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Content-Language": "de-DE",
+    })
+    try:
+        with urlopen(req, timeout=30) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            return response.status, (json.loads(raw) if raw else {})
+    except HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            parsed = raw
+        return exc.code, parsed
+
+
 _POLICY_SPECS = {
     "fulfillmentPolicyId": ("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "Versand-Richtlinie (Fulfillment Policy)"),
     "paymentPolicyId": ("payment_policy", "paymentPolicies", "paymentPolicyId", "Zahlungs-Richtlinie (Payment Policy)"),
@@ -198,6 +219,94 @@ def get_listing_policies(access_token, marketplace_id):
             "Policies anlegen (siehe ebay-oauth-server/README.md)."
         )
     return result
+
+
+_POLICY_DEFAULTS = {
+    "fulfillmentPolicyId": (
+        "fulfillment_policy",
+        {
+            "name": "DCardsLab Standardversand",
+            "marketplaceId": None,
+            "categoryTypes": [{"name": "ALL_EXCLUDING_MOTORS_VEHICLES"}],
+            "handlingTime": {"value": 3, "unit": "DAY"},
+            "shippingOptions": [
+                {
+                    "optionType": "DOMESTIC",
+                    "costType": "FLAT_RATE",
+                    "shippingServices": [
+                        {
+                            "sortOrder": 1,
+                            "shippingCarrierCode": "DHL",
+                            "shippingServiceCode": "DE_DHLPaket",
+                            "shippingCost": {"currency": "EUR", "value": "3.99"},
+                            "freeShipping": False,
+                        }
+                    ],
+                }
+            ],
+        },
+    ),
+    "paymentPolicyId": (
+        "payment_policy",
+        {
+            "name": "DCardsLab Standardzahlung",
+            "marketplaceId": None,
+            "categoryTypes": [{"name": "ALL_EXCLUDING_MOTORS_VEHICLES"}],
+        },
+    ),
+    "returnPolicyId": (
+        "return_policy",
+        {
+            "name": "DCardsLab Standardrückgabe",
+            "marketplaceId": None,
+            "categoryTypes": [{"name": "ALL_EXCLUDING_MOTORS_VEHICLES"}],
+            "returnsAccepted": False,
+        },
+    ),
+}
+
+
+def bootstrap_listing_policies(access_token, marketplace_id):
+    """Create minimal default Business Policies for policies that don't
+    exist yet in the seller account, then return all resolved IDs.
+
+    Best-effort against eBay's documented Sell Account API - not verified
+    end-to-end (no live sandbox access here). If eBay rejects a specific
+    field (e.g. an unknown shippingServiceCode for the marketplace), the
+    per-policy error below reports it so the payload can be corrected.
+    """
+    api_post(access_token, "/sell/account/v1/program/opt_in",
+              {"programType": "SELLING_POLICY_MANAGEMENT"})
+    # A 400 here almost always just means "already opted in" - ignored.
+
+    result = {}
+    errors = {}
+    for out_key, (path, list_field, id_field, label) in _POLICY_SPECS.items():
+        status, raw = api_get(
+            access_token,
+            f"/sell/account/v1/{path}?marketplace_id={marketplace_id}",
+        )
+        try:
+            data = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            data = {}
+        items = data.get(list_field) or [] if isinstance(data, dict) else []
+        if status == 200 and items:
+            result[out_key] = items[0].get(id_field)
+            continue
+
+        create_path, template = _POLICY_DEFAULTS[out_key]
+        payload = dict(template)
+        payload["marketplaceId"] = marketplace_id
+        create_status, create_response = api_post(
+            access_token, f"/sell/account/v1/{create_path}", payload
+        )
+        if create_status in (200, 201) and isinstance(create_response, dict):
+            result[out_key] = create_response.get(id_field)
+        else:
+            errors[label] = create_response
+
+    return result, errors
 
 
 def html_page(title, heading, message, ok=True):
@@ -637,6 +746,36 @@ def inventory_locations():
                 "response": parsed,
             }), 200
 
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "environment": ENVIRONMENT,
+            "error": str(exc),
+        }), 500
+
+
+@app.post("/api/ebay/policies/bootstrap")
+def policies_bootstrap():
+    """One-time setup: create minimal default Business Policies for
+    whichever of fulfillment/payment/return don't exist yet, as an
+    alternative to the (often flaky) eBay Seller Hub web UI."""
+    try:
+        data = request.get_json(silent=True) or {}
+        marketplace_id = str(data.get("marketplace_id") or "EBAY_DE").strip()
+
+        token = refresh_access_token()
+        access_token = token.get("access_token")
+        if not access_token:
+            raise RuntimeError("eBay hat keinen Access Token zurückgegeben.")
+
+        policy_ids, errors = bootstrap_listing_policies(access_token, marketplace_id)
+        return jsonify({
+            "success": not errors,
+            "environment": ENVIRONMENT,
+            "marketplace_id": marketplace_id,
+            "policies": policy_ids,
+            "errors": errors,
+        }), 200
     except Exception as exc:
         return jsonify({
             "success": False,

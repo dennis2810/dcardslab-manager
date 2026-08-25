@@ -58,6 +58,24 @@ sowohl beim Offer-Erstellen als auch (nachträglich, falls nötig) beim
 Publish ins Offer. Fehlt eine Policy, kommt eine klare Fehlermeldung
 statt des kryptischen eBay-Fehlers 25007.
 
+### Alternative zur (oft instabilen) Sandbox-Weboberfläche
+
+Statt die drei Policies manuell im Seller Hub anzulegen, kann der Server
+sie per API mit sinnvollen Standardwerten erstellen (einmalig, nur für
+Policy-Typen, die noch nicht existieren):
+
+```
+curl -X POST http://<server>:8080/api/ebay/policies/bootstrap \
+  -H "Content-Type: application/json" \
+  -d '{"marketplace_id": "EBAY_DE"}'
+```
+
+Antwort enthält `policies` (erstellte/gefundene IDs) und `errors`
+(pro Policy-Typ, falls eBay einen Wert ablehnt - z. B. eine falsche
+`shippingServiceCode`). Nicht live gegen eBay getestet; bei Fehlern in
+der Antwort ggf. die Standardwerte in `app.py` (`_POLICY_DEFAULTS`)
+anpassen.
+
 ## Lokal starten
 
 ```
