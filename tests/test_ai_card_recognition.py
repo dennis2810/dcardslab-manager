@@ -10,11 +10,13 @@ are not installed.
 
     python3 -m unittest discover -s tests -v
 """
+import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -73,35 +75,28 @@ class RecognizeCardParsingTests(unittest.TestCase):
         self._env_patch.start()
         self.addCleanup(self._env_patch.stop)
 
-    def _mock_response(self, **fields):
-        from pydantic import BaseModel
-
-        class FakeCardRecognition(BaseModel):
-            title: str = ""
-            category: str = ""
-            theme: str = ""
-            manufacturer: str = ""
-            set_name: str = ""
-            season_year: str = ""
-            card_type: str = ""
-            variant: str = ""
-            team: str = ""
-            position: str = ""
-            squad_number: str = ""
-            club_debut_season: str = ""
-            card_number: str = ""
-            serial_number: str = ""
-            print_run: str = ""
-            confidence: float = 0
-
+    def _mock_response(self, text=None, **fields):
+        # recognize_card() now calls plain messages.create() and parses the
+        # JSON out of the text block itself (messages.parse(output_format=)
+        # made the API reject the schema with a 400 "Schema is too
+        # complex"), so the mock response shape is a content list with a
+        # text block, like the real SDK returns - not a parsed_output.
+        payload = {
+            "title": "", "category": "", "theme": "", "manufacturer": "",
+            "set_name": "", "season_year": "", "card_type": "", "variant": "",
+            "team": "", "position": "", "squad_number": "",
+            "club_debut_season": "", "card_number": "", "serial_number": "",
+            "print_run": "", "confidence": 0,
+        }
+        payload.update(fields)
         response = MagicMock()
-        response.parsed_output = FakeCardRecognition(**fields)
+        response.content = [SimpleNamespace(type="text", text=text or json.dumps(payload))]
         return response
 
     def test_high_confidence_maps_to_ok_status(self):
         response = self._mock_response(title="Max Mustermann", confidence=90)
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["title"], "Max Mustermann")
         self.assertEqual(result["status"], "ok")
@@ -109,14 +104,14 @@ class RecognizeCardParsingTests(unittest.TestCase):
     def test_low_confidence_with_title_maps_to_pruefen(self):
         response = self._mock_response(title="Max Mustermann", confidence=40)
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["status"], "prüfen")
 
     def test_no_title_maps_to_nicht_erkannt(self):
         response = self._mock_response(title="", confidence=0)
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["status"], "nicht erkannt")
 
@@ -125,7 +120,7 @@ class RecognizeCardParsingTests(unittest.TestCase):
             title="Karte", confidence=80, serial_number="123", print_run="199",
         )
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img, back_path=self.img)
         self.assertEqual(result["is_numbered"], 1)
         self.assertEqual(result["serial_number"], "123")
@@ -134,13 +129,32 @@ class RecognizeCardParsingTests(unittest.TestCase):
     def test_missing_serial_or_print_run_leaves_not_numbered(self):
         response = self._mock_response(title="Karte", confidence=80, serial_number="123")
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["is_numbered"], 0)
 
     def test_api_error_never_raises(self):
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.side_effect = RuntimeError("network down")
+            mock_anthropic_cls.return_value.messages.create.side_effect = RuntimeError("network down")
+            result = ai.recognize_card(front_path=self.img)
+        self.assertEqual(result["title"], "")
+        self.assertIn("fehlgeschlagen", result["status"])
+
+    def test_markdown_fenced_json_is_still_parsed(self):
+        # The prompt tells the model not to use a code fence, but models
+        # don't always follow that - this must not turn into a hard failure.
+        fenced = "```json\n" + json.dumps({"title": "Karte", "confidence": 80}) + "\n```"
+        response = self._mock_response(text=fenced)
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            mock_anthropic_cls.return_value.messages.create.return_value = response
+            result = ai.recognize_card(front_path=self.img)
+        self.assertEqual(result["title"], "Karte")
+        self.assertEqual(result["status"], "ok")
+
+    def test_unparseable_response_never_raises(self):
+        response = self._mock_response(text="Entschuldigung, ich kann das nicht lesen.")
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["title"], "")
         self.assertIn("fehlgeschlagen", result["status"])
@@ -148,9 +162,9 @@ class RecognizeCardParsingTests(unittest.TestCase):
     def test_sends_both_images_when_both_paths_given(self):
         response = self._mock_response(title="Karte", confidence=80)
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
-            mock_anthropic_cls.return_value.messages.parse.return_value = response
+            mock_anthropic_cls.return_value.messages.create.return_value = response
             ai.recognize_card(front_path=self.img, back_path=self.img)
-        _, kwargs = mock_anthropic_cls.return_value.messages.parse.call_args
+        _, kwargs = mock_anthropic_cls.return_value.messages.create.call_args
         content = kwargs["messages"][0]["content"]
         image_blocks = [b for b in content if b["type"] == "image"]
         text_blocks = [b for b in content if b["type"] == "text"]

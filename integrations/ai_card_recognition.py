@@ -70,8 +70,32 @@ PROMPT = (
     "zwei Zahlen aus einem Bruch wie 123/199 (serial_number=123, "
     "print_run=199).\n"
     "confidence = deine ehrliche Einschätzung (0-100), wie sicher du dir "
-    "beim Namen (title) insgesamt bist."
+    "beim Namen (title) insgesamt bist.\n\n"
+    "Antworte AUSSCHLIESSLICH mit einem einzigen JSON-Objekt, ohne "
+    "Markdown-Codeblock und ohne weiteren Text davor oder danach, mit "
+    "genau diesen Schlüsseln (alles Strings ausser confidence, das eine "
+    "Zahl ist; unbekannte Felder als leerer String \"\"):\n"
+    '{{"title": "", "category": "", "theme": "", "manufacturer": "", '
+    '"set_name": "", "season_year": "", "card_type": "", "variant": "", '
+    '"team": "", "position": "", "squad_number": "", '
+    '"club_debut_season": "", "card_number": "", "serial_number": "", '
+    '"print_run": "", "confidence": 0}}'
 )
+
+
+def _extract_json_object(text):
+    """Claude sometimes wraps JSON in a ```json code fence despite being
+    told not to; strip that, then take the outermost {...} span."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:]
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("Keine JSON-Antwort gefunden.")
+    return text[start:end + 1]
 
 
 def _image_block(path):
@@ -131,6 +155,7 @@ def recognize_card(front_path=None, back_path=None):
         return dict(EMPTY_FIELDS, status=f"KI-Erkennung nicht verfügbar: {message}")
 
     import anthropic
+    import json
     from pydantic import BaseModel
 
     class CardRecognition(BaseModel):
@@ -166,20 +191,29 @@ def recognize_card(front_path=None, back_path=None):
         # a stalled connection looking hung for far longer than a user would
         # ever wait, instead of failing this one card gracefully.
         client = anthropic.Anthropic(timeout=90.0)
-        response = client.messages.parse(
+        # Plain messages.create() + manual JSON parsing instead of
+        # messages.parse(output_format=...): the structured-output schema
+        # compiler rejected this model's schema with a 400 "Schema is too
+        # complex" even though it's flat (16 string/number fields, no
+        # nesting) - the limit isn't documented, so the reliable fix is to
+        # not depend on server-side schema compilation at all. The prompt
+        # asks for a raw JSON object instead; Pydantic still validates and
+        # fills defaults for whatever comes back.
+        response = client.messages.create(
             # Sonnet, not Opus: this is a straightforward "read the printed
             # text off a photo" extraction, not a task that needs Opus-level
             # reasoning - Sonnet is noticeably faster and cheaper per card
             # with no meaningful accuracy loss for this.
             model="claude-sonnet-5",
-            max_tokens=2048,
+            max_tokens=1024,
             messages=[{"role": "user", "content": content}],
-            output_format=CardRecognition,
         )
+        text = next(b.text for b in response.content if b.type == "text")
+        parsed = CardRecognition.model_validate(json.loads(_extract_json_object(text)))
     except Exception as exc:
         return dict(EMPTY_FIELDS, status=f"KI-Erkennung fehlgeschlagen: {exc}")
 
-    data = response.parsed_output.model_dump()
+    data = parsed.model_dump()
     data["is_numbered"] = 1 if data.get("serial_number") and data.get("print_run") else 0
     data["raw"] = ""
     if data.get("confidence", 0) >= 65:
