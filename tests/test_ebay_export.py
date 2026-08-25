@@ -8,6 +8,7 @@ with:
     python3 -m unittest discover -s tests -v
 """
 import csv
+import json
 import sqlite3
 import sys
 import tempfile
@@ -191,6 +192,78 @@ class ExportOfferIntegrationTest(unittest.TestCase):
         # Regression: this used to always be 400010 (Near Mint) no matter
         # what the card's actual inventory condition was.
         self.assertEqual(card_condition, "400011")  # EX -> 400011
+
+
+class SandboxOfferConditionTest(unittest.TestCase):
+    """ebay_sandbox_create_offer must send eBay's numeric ConditionID
+    (e.g. "4000"), never the generic "NEW" enum (-> ConditionID 1000,
+    rejected by eBay for Trading Cards categories like 261328 with
+    errorId 25059) or the raw UI display text ("4000 - Ungraded")."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        tmp = Path(self._tmpdir.name)
+
+        self._orig_db = app.DB
+        app.DB = tmp / "dcardlabs_test_sandbox.db"
+        self.addCleanup(lambda: setattr(app, "DB", self._orig_db))
+
+        conn = app.db()
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.execute(
+            "INSERT INTO cards (card_id, title, created_at) VALUES (1,'Test Karte',?)",
+            (now,),
+        )
+        conn.execute("INSERT INTO inventory (card_id, quantity) VALUES (1,1)")
+        conn.commit()
+        conn.close()
+
+    def _sent_condition(self, condition_arg):
+        """Call ebay_sandbox_create_offer with a stubbed HTTP layer and
+        return the "condition" field of the JSON body it sent."""
+        captured = {}
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+            def read(self):
+                return json.dumps({
+                    "success": True, "offer": {"offer_id": "999"},
+                }).encode("utf-8")
+
+        def fake_urlopen(req, timeout=None):
+            captured["body"] = json.loads(req.data.decode("utf-8"))
+            return FakeResponse()
+
+        orig_urlopen = app.urllib.request.urlopen
+        app.urllib.request.urlopen = fake_urlopen
+        try:
+            app.ebay_sandbox_create_offer(
+                1, "Titel", "Beschreibung", condition_arg, 9.99,
+                "Festpreis", "261328", "SKU1",
+            )
+        finally:
+            app.urllib.request.urlopen = orig_urlopen
+        return captured["body"]["condition"]
+
+    def test_ui_display_text_is_reduced_to_the_numeric_condition_id(self):
+        self.assertEqual(self._sent_condition("4000 – Ungraded"), "4000")
+        self.assertEqual(self._sent_condition("2750 – Graded"), "2750")
+
+    def test_bare_numeric_condition_id_still_works(self):
+        self.assertEqual(self._sent_condition("4000"), "4000")
+
+    def test_never_sends_the_generic_new_enum(self):
+        # "NEW" resolves to ConditionID 1000 in eBay's generic enum, which
+        # is invalid for category 261328 (errorId 25059).
+        self.assertNotEqual(self._sent_condition("4000 – Ungraded"), "NEW")
 
 
 if __name__ == "__main__":

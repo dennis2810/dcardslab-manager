@@ -2725,11 +2725,21 @@ def ebay_sandbox_create_offer(card_id, title, description, condition_id, price,
         if value:
             aspects[label] = [value]
 
+    # Trading Cards categories (e.g. 261328) use eBay's numeric ConditionID
+    # (4000 Ungraded / 2750 Graded), not the generic ConditionEnum ("NEW"
+    # maps to 1000, which eBay rejects for this category - errorId 25059).
+    # condition_id here is the UI value, e.g. "4000 – Ungraded".
+    condition_match = re.match(r"^\s*(\d+)", str(condition_id or ""))
+    condition_value = (
+        condition_match.group(1) if condition_match
+        else str(ebay_get_settings()["condition_ungraded_id"])
+    )
+
     payload = {
         "sku": sku or f"DC-{int(card_id):06d}",
         "title": str(title or "").strip()[:80],
         "description": str(description or "").strip(),
-        "condition": "NEW",
+        "condition": condition_value,
         "quantity": int(quantity),
         "marketplace_id": "EBAY_DE",
         "format": "FIXED_PRICE" if listing_format == "Festpreis" else "AUCTION",
