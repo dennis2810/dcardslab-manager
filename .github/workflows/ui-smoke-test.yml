@@ -1,0 +1,64 @@
+name: UI Smoke Test
+
+# Läuft automatisch bei jedem Push auf main: startet die App auf einer
+# echten Windows-Maschine, macht nach ein paar Sekunden einen Screenshot
+# und prüft, ob die App währenddessen abgestürzt ist. Kein manueller
+# Schritt nötig - Ergebnis (Screenshot + Log) liegt danach im "Actions"-Tab
+# unter "Artifacts".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  launch-and-screenshot:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten installieren
+        run: py -m pip install -r setup\requirements.txt
+
+      - name: App im Hintergrund starten
+        id: launch
+        run: |
+          $proc = Start-Process py -ArgumentList "app\dcardlabs_manager.py" -PassThru
+          Start-Sleep -Seconds 3
+          if ($proc.HasExited) {
+            Write-Host "::error::App ist innerhalb von 3 Sekunden abgestürzt (Exit-Code $($proc.ExitCode))."
+            echo "crashed=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "crashed=false" >> $env:GITHUB_OUTPUT
+            echo "pid=$($proc.Id)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Fenster rendern lassen
+        if: steps.launch.outputs.crashed == 'false'
+        run: Start-Sleep -Seconds 7
+
+      - name: Screenshot aufnehmen
+        if: steps.launch.outputs.crashed == 'false'
+        run: |
+          py -c "from PIL import ImageGrab; ImageGrab.grab().save('screenshot.png')"
+
+      - name: App beenden
+        if: always() && steps.launch.outputs.crashed == 'false'
+        run: |
+          Stop-Process -Id ${{ steps.launch.outputs.pid }} -Force -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-smoke-test-${{ github.run_number }}
+          path: |
+            screenshot.png
+            logs/dcardlabs.log
+          if-no-files-found: warn
+
+      - name: Fehlschlagen, wenn abgestürzt
+        if: steps.launch.outputs.crashed == 'true'
+        run: exit 1
