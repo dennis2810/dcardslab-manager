@@ -728,6 +728,47 @@ def get_offer(offer_id):
         }), 500
 
 
+@app.get("/api/ebay/inventory-item/<sku>")
+def get_inventory_item(sku):
+    """Diagnostic: read the raw Inventory Item eBay has stored for a SKU
+    (includes product.aspects) - to check what actually reached eBay
+    instead of guessing from client-side code alone."""
+    try:
+        sku = str(sku).strip()
+        if not sku:
+            return jsonify({
+                "success": False,
+                "environment": ENVIRONMENT,
+                "error": "SKU fehlt.",
+            }), 400
+
+        token = refresh_access_token()
+        access_token = token.get("access_token")
+        if not access_token:
+            raise RuntimeError("eBay hat keinen Access Token zurückgegeben.")
+
+        status, raw = api_get(
+            access_token,
+            f"/sell/inventory/v1/inventory_item/{sku}",
+        )
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            parsed = raw
+        return jsonify({
+            "success": status == 200,
+            "environment": ENVIRONMENT,
+            "http_status": status,
+            "response": parsed,
+        }), 200
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "environment": ENVIRONMENT,
+            "error": str(exc),
+        }), 500
+
+
 @app.get("/api/ebay/inventory/locations")
 def inventory_locations():
     """Return the Sandbox Inventory Locations for diagnosing merchantLocationKey."""
