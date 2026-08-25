@@ -1133,7 +1133,7 @@ def insert_cards(pairs, batch_id):
             c.execute(
                 """
                 INSERT INTO cards (
-                    category, theme, manufacturer, set_name, title,
+                    category, theme, team, manufacturer, set_name, title,
                     season_year, card_number, card_type, variant,
                     is_numbered, serial_number, print_run, language,
                     front_image, back_image,
@@ -1145,11 +1145,12 @@ def insert_cards(pairs, batch_id):
                     back_card_number, back_serial_number, back_print_run,
                     created_at
                 )
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     r.get("category", ""),
                     r.get("theme", ""),
+                    r.get("team", ""),
                     r.get("manufacturer", ""),
                     r.get("set_name", ""),
                     title,
