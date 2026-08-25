@@ -158,6 +158,48 @@ def api_get(access_token, path):
         return exc.code, exc.read().decode("utf-8", errors="replace")
 
 
+_POLICY_SPECS = {
+    "fulfillmentPolicyId": ("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "Versand-Richtlinie (Fulfillment Policy)"),
+    "paymentPolicyId": ("payment_policy", "paymentPolicies", "paymentPolicyId", "Zahlungs-Richtlinie (Payment Policy)"),
+    "returnPolicyId": ("return_policy", "returnPolicies", "returnPolicyId", "Rückgabe-Richtlinie (Return Policy)"),
+}
+
+
+def get_listing_policies(access_token, marketplace_id):
+    """Look up the seller's existing Business Policy IDs for a marketplace.
+
+    eBay rejects publish (error 25007) if an offer has no valid
+    Fulfillment Policy attached. This only reads policies already
+    configured in the seller account (Seller Hub -> Account -> Business
+    Policies) - it never creates one, since a shipping service always
+    needs a human decision.
+    """
+    result = {}
+    missing = []
+    for out_key, (path, list_field, id_field, label) in _POLICY_SPECS.items():
+        status, raw = api_get(
+            access_token,
+            f"/sell/account/v1/{path}?marketplace_id={marketplace_id}",
+        )
+        try:
+            data = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            data = {}
+        items = data.get(list_field) or [] if isinstance(data, dict) else []
+        if status == 200 and items:
+            result[out_key] = items[0].get(id_field)
+        else:
+            missing.append(label)
+    if missing:
+        raise RuntimeError(
+            f"Im eBay-Verkäuferkonto fehlen für {marketplace_id} folgende "
+            "Business Policies: " + ", ".join(missing) +
+            ". Bitte im Sandbox Seller Hub unter Account > Business "
+            "Policies anlegen (siehe ebay-oauth-server/README.md)."
+        )
+    return result
+
+
 def html_page(title, heading, message, ok=True):
     marker = "✓" if ok else "✗"
     return f"""<!doctype html>
@@ -402,6 +444,15 @@ def test_offer_create():
                 "response": inv_response,
             }), 200
 
+        try:
+            listing_policies = get_listing_policies(access_token, marketplace_id)
+        except RuntimeError as exc:
+            return jsonify({
+                "success": False,
+                "environment": ENVIRONMENT,
+                "error": str(exc),
+            }), 200
+
         offer_payload = {
             "sku": sku,
             "marketplaceId": marketplace_id,
@@ -410,6 +461,7 @@ def test_offer_create():
             "listingDescription": description,
             "listingDuration": "GTC",
             "merchantLocationKey": location_key,
+            "listingPolicies": listing_policies,
             "pricingSummary": {
                 "price": {
                     "value": f"{price:.2f}",
@@ -597,9 +649,10 @@ def inventory_locations():
 def publish_offer(offer_id):
     """Publish an existing eBay Inventory API offer.
 
-    Before publishing, verify the offer's merchant location. If the
-    inventory location exists but has no country, add DE via the official
-    update_location_details endpoint and then retry the publish.
+    Before publishing, verify the offer's merchant location and Business
+    Policies (fulfillment/payment/return - eBay error 25007 otherwise).
+    If the inventory location exists but has no country, add DE via the
+    official update_location_details endpoint and then retry the publish.
     """
     try:
         offer_id = str(offer_id).strip()
@@ -671,48 +724,86 @@ def publish_offer(offer_id):
             else None
         )
 
-        if not merchant_location_key:
-            merchant_location_key = "DCARDSLAB-DE"
-
-            location_payload = {
-                "location": {
-                    "address": {
-                        "postalCode": "50667",
-                        "country": "DE",
-                    }
-                },
-                "locationTypes": ["WAREHOUSE"],
-                "merchantLocationStatus": "ENABLED",
-                "name": "DCardsLab Sandbox Deutschland",
-            }
-
-            location_status, location_response = ebay_request(
-                "POST",
-                f"/sell/inventory/v1/location/{merchant_location_key}",
-                location_payload,
+        existing_policies = (
+            offer_response.get("listingPolicies")
+            if isinstance(offer_response, dict)
+            else None
+        ) or {}
+        needs_policy_fix = not all(
+            existing_policies.get(f)
+            for f in ("fulfillmentPolicyId", "paymentPolicyId", "returnPolicyId")
+        )
+        policy_ids = None
+        if needs_policy_fix:
+            offer_marketplace_id = (
+                offer_response.get("marketplaceId", "EBAY_DE")
+                if isinstance(offer_response, dict)
+                else "EBAY_DE"
             )
+            try:
+                policy_ids = get_listing_policies(access_token, offer_marketplace_id)
+            except RuntimeError as exc:
+                return jsonify({
+                    "success": False,
+                    "environment": ENVIRONMENT,
+                    "offer_id": offer_id,
+                    "error": str(exc),
+                }), 200
 
-            if location_status == 204:
-                pass
-            elif location_status == 400 and isinstance(location_response, dict) and any(
-                "already exists" in str(err.get("message", "")).lower()
-                for err in location_response.get("errors", [])
-            ):
+        if not merchant_location_key or policy_ids is not None:
+            merchant_location_key = merchant_location_key or "DCARDSLAB-DE"
+            created_location = not offer_response.get("merchantLocationKey")
+
+            if created_location:
+                location_payload = {
+                    "location": {
+                        "address": {
+                            "postalCode": "50667",
+                            "country": "DE",
+                        }
+                    },
+                    "locationTypes": ["WAREHOUSE"],
+                    "merchantLocationStatus": "ENABLED",
+                    "name": "DCardsLab Sandbox Deutschland",
+                }
+
                 location_status, location_response = ebay_request(
                     "POST",
-                    f"/sell/inventory/v1/location/{merchant_location_key}/update_location_details",
-                    {
-                        "location": {
-                            "address": {
-                                "postalCode": "50667",
-                                "country": "DE",
-                            }
-                        },
-                        "locationTypes": ["WAREHOUSE"],
-                        "name": "DCardsLab Sandbox Deutschland",
-                    },
+                    f"/sell/inventory/v1/location/{merchant_location_key}",
+                    location_payload,
                 )
-                if location_status not in (200, 204):
+
+                if location_status == 204:
+                    pass
+                elif location_status == 400 and isinstance(location_response, dict) and any(
+                    "already exists" in str(err.get("message", "")).lower()
+                    for err in location_response.get("errors", [])
+                ):
+                    location_status, location_response = ebay_request(
+                        "POST",
+                        f"/sell/inventory/v1/location/{merchant_location_key}/update_location_details",
+                        {
+                            "location": {
+                                "address": {
+                                    "postalCode": "50667",
+                                    "country": "DE",
+                                }
+                            },
+                            "locationTypes": ["WAREHOUSE"],
+                            "name": "DCardsLab Sandbox Deutschland",
+                        },
+                    )
+                    if location_status not in (200, 204):
+                        return jsonify({
+                            "success": False,
+                            "environment": ENVIRONMENT,
+                            "http_status": location_status,
+                            "offer_id": offer_id,
+                            "merchantLocationKey": merchant_location_key,
+                            "response": location_response,
+                            "error": "eBay Inventory Location existiert bereits, konnte aber nicht aktualisiert werden.",
+                        }), 200
+                else:
                     return jsonify({
                         "success": False,
                         "environment": ENVIRONMENT,
@@ -720,18 +811,8 @@ def publish_offer(offer_id):
                         "offer_id": offer_id,
                         "merchantLocationKey": merchant_location_key,
                         "response": location_response,
-                        "error": "eBay Inventory Location existiert bereits, konnte aber nicht aktualisiert werden.",
+                        "error": "Die DCardsLab Sandbox Inventory Location konnte nicht angelegt/aktualisiert werden.",
                     }), 200
-            else:
-                return jsonify({
-                    "success": False,
-                    "environment": ENVIRONMENT,
-                    "http_status": location_status,
-                    "offer_id": offer_id,
-                    "merchantLocationKey": merchant_location_key,
-                    "response": location_response,
-                    "error": "Die DCardsLab Sandbox Inventory Location konnte nicht angelegt/aktualisiert werden.",
-                }), 200
 
             # Update only fields accepted by updateOffer.
             offer_update = {}
@@ -746,6 +827,8 @@ def publish_offer(offer_id):
                 if field in offer_response:
                     offer_update[field] = offer_response[field]
             offer_update["merchantLocationKey"] = merchant_location_key
+            if policy_ids is not None:
+                offer_update["listingPolicies"] = policy_ids
 
             update_status, update_response = ebay_request(
                 "PUT",

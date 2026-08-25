@@ -38,6 +38,26 @@ werden.
 3. Token wird in `DATA_DIR/ebay_token.json` gespeichert und automatisch
    per Refresh Token erneuert
 
+## Business Policies (Voraussetzung für Publish)
+
+eBay lehnt das Veröffentlichen eines Offers ohne gültige Fulfillment-,
+Payment- und Return-Policy ab (Fehler 25007: "invalid data in the
+associated Fulfillment policy"). Der Server erstellt diese Policies NICHT
+automatisch – Versandoptionen erfordern eine bewusste Entscheidung. Vor
+dem ersten Offer/Publish einmalig im eBay Seller Hub (Sandbox:
+https://signin.sandbox.ebay.com/, Account → Business Policies) für die
+verwendete Marketplace-ID (Standard `EBAY_DE`) anlegen:
+
+- Fulfillment Policy mit mindestens einem inländischen Versandservice
+- Payment Policy
+- Return Policy
+
+Der Server liest die vorhandenen Policy-IDs automatisch per
+`GET /sell/account/v1/{fulfillment,payment,return}_policy` und hängt sie
+sowohl beim Offer-Erstellen als auch (nachträglich, falls nötig) beim
+Publish ins Offer. Fehlt eine Policy, kommt eine klare Fehlermeldung
+statt des kryptischen eBay-Fehlers 25007.
+
 ## Lokal starten
 
 ```
