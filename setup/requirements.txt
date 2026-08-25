@@ -7,3 +7,6 @@ google-auth-oauthlib
 Pillow>=10.0
 
 openpyxl>=3.1
+
+anthropic>=0.40
+pydantic>=2.0

@@ -32,6 +32,7 @@ copy /Y "templates\ebay\eBay-category-listing-template_261328.csv" "%DIST%\templ
 if not exist "%DIST%\integrations" mkdir "%DIST%\integrations"
 copy /Y "integrations\google_sheets_sync.py" "%DIST%\integrations\google_sheets_sync.py" >nul
 copy /Y "integrations\google_drive_sync.py" "%DIST%\integrations\google_drive_sync.py" >nul
+copy /Y "integrations\ai_card_recognition.py" "%DIST%\integrations\ai_card_recognition.py" >nul
 if exist Tesseract-OCR\tesseract.exe (
     if not exist "%DIST%\Tesseract-OCR" mkdir "%DIST%\Tesseract-OCR"
     xcopy "Tesseract-OCR" "%DIST%\Tesseract-OCR" /E /I /Y /Q >nul

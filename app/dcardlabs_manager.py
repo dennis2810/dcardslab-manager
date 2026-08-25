@@ -1002,6 +1002,8 @@ def infer_card_metadata(front_raw, back_raw, back_struct):
 
 
 def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr):
+    from ai_card_recognition import recognize_card
+
     back_map = {int(p.stem): p for p in back_files}
     pairs = []
 
@@ -1011,26 +1013,27 @@ def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr):
         if bp is None:
             raise RuntimeError(f"Rückseite für Karte {number:03d} fehlt.")
 
-        title, ocr_status, confidence, raw = "", "deaktiviert", 0, ""
+        recognition = recognize_card(
+            front_path=fp if do_ocr else None,
+            back_path=bp if do_back_ocr else None,
+        )
+        title = recognition["title"]
+        ocr_status = recognition["status"]
+        confidence = recognition["confidence"]
+        meta = {k: recognition[k] for k in (
+            "category", "theme", "manufacturer", "set_name", "season_year",
+            "card_type", "variant", "team", "position", "squad_number",
+            "club_debut_season", "card_number", "serial_number",
+            "print_run", "is_numbered",
+        )}
         back_ocr = {
-            "raw": "", "confidence": 0, "year": "", "card_number": "",
-            "serial_number": "", "print_run": "", "status": "deaktiviert"
+            "raw": "", "confidence": recognition["confidence"],
+            "year": recognition["season_year"],
+            "card_number": recognition["card_number"],
+            "serial_number": recognition["serial_number"],
+            "print_run": recognition["print_run"],
+            "status": recognition["status"] if do_back_ocr else "deaktiviert",
         }
-
-        if do_ocr:
-            title, ocr_status, confidence, raw = ocr_name(cv2.imread(str(fp)))
-        if do_back_ocr:
-            back_ocr = ocr_backside(cv2.imread(str(bp)))
-
-        back_struct = parse_back_ocr(back_ocr.get("raw", ""))
-        meta = infer_card_metadata(raw, back_ocr.get("raw", ""), back_struct)
-
-        # Keep compatibility with the older backside parser.
-        if not meta["card_number"]:
-            meta["card_number"] = back_ocr.get("card_number", "")
-        if not meta["serial_number"] and "/" in back_ocr.get("print_run", ""):
-            s, p = back_ocr["print_run"].split("/", 1)
-            meta["serial_number"], meta["print_run"] = s, p
 
         safe = safe_filename(title)
         folder = pair_dir / f"{number:03d}"
@@ -1043,7 +1046,7 @@ def pair_and_ocr(front_files, back_files, pair_dir, do_ocr, do_back_ocr):
 
         pairs.append({
             "number": number, "title": title, "ocr_status": ocr_status,
-            "ocr_confidence": confidence, "ocr_raw": raw,
+            "ocr_confidence": confidence, "ocr_raw": recognition["raw"],
             "front": str(front_dst.resolve()), "back": str(back_dst.resolve()),
             "back_ocr_raw": back_ocr.get("raw", ""),
             "back_ocr_confidence": back_ocr.get("confidence", 0),
@@ -3647,10 +3650,10 @@ def main():
     opt = ttk.LabelFrame(scan_tab, text="Optionen", padding=12)
     opt.pack(fill="x", pady=12)
     ttk.Checkbutton(
-        opt, text="OCR für Kartennamen", variable=do_ocr
+        opt, text="KI-Erkennung Vorderseite", variable=do_ocr
     ).grid(row=0, column=0, sticky="w", padx=8)
     ttk.Checkbutton(
-        opt, text="OCR Rückseite", variable=do_back_ocr
+        opt, text="KI-Erkennung Rückseite", variable=do_back_ocr
     ).grid(row=0, column=1, sticky="w", padx=8)
     ttk.Checkbutton(
         opt, text="Karten um 180° drehen", variable=rotate
@@ -3926,7 +3929,7 @@ def main():
                 "✓ 9 Vorderseiten\n"
                 "✓ 9 Rückseiten\n"
                 "✓ 9 Kartenpaare\n"
-                f"✓ OCR: {'aktiv' if do_ocr.get() else 'deaktiviert'}\n"
+                f"✓ KI-Erkennung: {'aktiv' if do_ocr.get() else 'deaktiviert'}\n"
                 "✓ Datenbank aktualisiert\n\n"
                 f"Projektordner:\n{project}"
             )

@@ -16,6 +16,7 @@ datas = [
     (str(PROJECT_ROOT / "scanner" / "scanner_v0_8_dynamic.py"), "scanner"),
     (str(PROJECT_ROOT / "integrations" / "google_sheets_sync.py"), "integrations"),
     (str(PROJECT_ROOT / "integrations" / "google_drive_sync.py"), "integrations"),
+    (str(PROJECT_ROOT / "integrations" / "ai_card_recognition.py"), "integrations"),
     (str(PROJECT_ROOT / "templates" / "ebay" / "eBay-draft-listing-template_DE.csv"), "templates/ebay"),
     (str(PROJECT_ROOT / "templates" / "ebay" / "eBay-category-listing-template_261328.csv"), "templates/ebay"),
     (str(PROJECT_ROOT / "templates" / "ebay" / "eBay-category-listing-template_non_sport.csv"), "templates/ebay"),
@@ -36,6 +37,8 @@ hiddenimports = [
     "google_auth_oauthlib",
     "google_auth_oauthlib.flow",
     "google.auth.transport.requests",
+    "anthropic",
+    "pydantic",
 ]
 
 a = Analysis(

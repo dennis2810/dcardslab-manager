@@ -1,0 +1,58 @@
+DCardLabs - KI-Kartenerkennung (Claude Vision)
+================================================
+
+Ab dieser Version wird die Kartenerkennung (Name, Team, Hersteller, Set,
+Saison, Kartennummer, Auflage, ...) nicht mehr per Tesseract-OCR mit fest
+einprogrammierten Bildbereichen erkannt, sondern per Claude-Vision-Modell
+(Anthropic API). Grund: die alten Bildbereiche waren auf ein bestimmtes
+Kartenlayout zugeschnitten (Topps Gold/PSG-Style) und funktionierten bei
+anderen Herstellern/Sets kaum. Die KI liest ab, was tatsächlich auf der
+Karte steht, unabhängig vom Layout.
+
+VORAUSSETZUNGEN
+----------------
+1. Ein Anthropic-API-Key (console.anthropic.com -> API Keys).
+2. Internetzugang beim Scannen (die Kartenbilder werden zur Erkennung an
+   die Anthropic-API geschickt).
+
+EINRICHTUNG
+------------
+Umgebungsvariable ANTHROPIC_API_KEY setzen, bevor DCardLabs gestartet wird:
+
+  Windows (dauerhaft, PowerShell als Administrator):
+    setx ANTHROPIC_API_KEY "dein-api-key"
+    (danach einmal neu anmelden/PC neu starten, damit es global gilt)
+
+  Windows (nur für die aktuelle Sitzung, cmd.exe):
+    set ANTHROPIC_API_KEY=dein-api-key
+    start_dcardlabs.bat
+
+Ohne gesetzten Key läuft das Scannen weiterhin durch, die KI-Erkennung
+liefert dann aber leere Felder mit dem Hinweis "ANTHROPIC_API_KEY ist
+nicht gesetzt" - Karten koennen danach manuell nachgetragen werden.
+
+KOSTEN (grobe Schätzung, keine Garantie)
+------------------------------------------
+Ein Scan mit Vorder- und Rückseite kostet grössenordnungsmässig 2-4 Cent
+pro Karte (Modell: claude-opus-5, Stand der Preisliste zum Zeitpunkt
+dieser Änderung). Bei einem 9er-Scanbogen also ungefähr 20-35 Cent
+insgesamt. Tatsächlichen Verbrauch im Anthropic Console Dashboard
+(console.anthropic.com -> Usage) nach den ersten Scans prüfen.
+
+WICHTIGER HINWEIS ZUM STAND DIESER ÄNDERUNG
+----------------------------------------------
+Diese Umstellung wurde ohne Zugriff auf echte Kartenbilder oder eine
+laufende Tesseract-Installation entwickelt (Claude-Code-Session ohne
+lokale Bildverarbeitung). Der Code wurde nur mit einer simulierten
+(gemockten) API-Antwort getestet, NICHT gegen echte Kartenfotos oder die
+echte Anthropic-API. Bitte nach der Einrichtung mit ein paar bekannten
+Karten testen und mit dem alten Tesseract-Ergebnis vergleichen. Der alte
+Tesseract-Code (ocr_name, ocr_backside, infer_card_metadata, ...) wurde
+bewusst NICHT gelöscht, falls ein Rollback nötig wird.
+
+TESTKORPUS AUFBAUEN
+---------------------
+tests/ocr_corpus/ enthält bisher nur ein Platzhalter-Beispiel. Lege dort
+echte Kartenbilder ab (siehe tests/ocr_corpus/README.txt) - das erlaubt
+künftige Änderungen an der Erkennung gegen bekannte, bereits korrekt
+erkannte Karten zu prüfen, statt jedes Mal blind zu testen.

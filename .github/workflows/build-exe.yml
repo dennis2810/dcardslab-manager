@@ -34,6 +34,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$dist\integrations" | Out-Null
           Copy-Item "integrations\google_sheets_sync.py" "$dist\integrations\" -Force
           Copy-Item "integrations\google_drive_sync.py" "$dist\integrations\" -Force
+          Copy-Item "integrations\ai_card_recognition.py" "$dist\integrations\" -Force
 
       - name: Build prüfen
         run: |
