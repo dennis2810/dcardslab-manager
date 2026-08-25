@@ -60,6 +60,8 @@ def _get_service(base, interactive=False):
     base = Path(base)
     _, credentials_path, token_path = _paths(base)
     if not credentials_path.exists():
+        if not interactive:
+            return None
         raise FileNotFoundError("credentials.json fehlt. Bitte die vorhandene Google-OAuth-Konfiguration für Google Sheets verwenden.")
 
     creds = None
