@@ -219,9 +219,9 @@ class SandboxOfferConditionTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
-    def _sent_condition(self, condition_arg):
+    def _sent_payload(self, condition_arg, template_key="football"):
         """Call ebay_sandbox_create_offer with a stubbed HTTP layer and
-        return the "condition" field of the JSON body it sent."""
+        return the full JSON body it sent."""
         captured = {}
 
         class FakeResponse:
@@ -247,11 +247,14 @@ class SandboxOfferConditionTest(unittest.TestCase):
         try:
             app.ebay_sandbox_create_offer(
                 1, "Titel", "Beschreibung", condition_arg, 9.99,
-                "Festpreis", "261328", "SKU1",
+                "Festpreis", "261328", "SKU1", template_key,
             )
         finally:
             app.urllib.request.urlopen = orig_urlopen
-        return captured["body"]["condition"]
+        return captured["body"]
+
+    def _sent_condition(self, condition_arg, template_key="football"):
+        return self._sent_payload(condition_arg, template_key)["condition"]
 
     def test_ui_display_text_is_reduced_to_the_numeric_condition_id(self):
         self.assertEqual(self._sent_condition("4000 – Ungraded"), "4000")
@@ -264,6 +267,13 @@ class SandboxOfferConditionTest(unittest.TestCase):
         # "NEW" resolves to ConditionID 1000 in eBay's generic enum, which
         # is invalid for category 261328 (errorId 25059).
         self.assertNotEqual(self._sent_condition("4000 – Ungraded"), "NEW")
+
+    def test_sportart_aspect_is_included_for_the_selected_template(self):
+        # Regression: category 261328 requires the "Sportart" item
+        # specific (eBay errorId 25002, "Das Artikelmerkmal Sportart
+        # fehlt.") - it was missing from the aspects payload entirely.
+        body = self._sent_payload("4000 – Ungraded", template_key="football")
+        self.assertEqual(body["aspects"].get("Sportart"), ["Fußball"])
 
     def test_inventory_item_failure_surfaces_the_actual_ebay_error(self):
         # Regression: the OAuth server reports inventory-item failures as

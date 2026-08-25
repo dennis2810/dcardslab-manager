@@ -2709,14 +2709,20 @@ def link_card_to_purchase(purchase_id, card_id, allocated_cost=0, quantity=1, no
 
 
 def ebay_sandbox_create_offer(card_id, title, description, condition_id, price,
-                              listing_format, category_id, sku):
+                              listing_format, category_id, sku, template_key="football"):
     """Create/update an eBay Sandbox inventory item and unpublished offer via the OAuth server."""
     card = ebay_get_card(card_id) or {}
     quantity = _ebay_inventory_quantity(int(card_id))
     if quantity < 1:
         raise ValueError("Die Karte hat keine verfügbare Inventarmenge.")
 
+    # Category 261328 requires the "Sportart" item specific (eBay errorId
+    # 25002 otherwise). Like the CSV export path, it comes from the
+    # selected template, not the card's own Kategorie field.
+    cfg = _ebay_template_catalog().get(template_key) or _ebay_template_catalog()["football"]
     aspects = {"Kategorie": [str(card.get("category") or "Sammelkarte")]}
+    if cfg.get("sport"):
+        aspects["Sportart"] = [cfg["sport"]]
     for label, key in (("Thema / Franchise", "theme"), ("Team / Verein", "team"),
                        ("Hersteller", "manufacturer"), ("Set / Serie", "set_name"),
                        ("Saison / Jahr", "season_year"), ("Kartennummer", "card_number"),
@@ -5350,6 +5356,7 @@ def main():
                     fmt_var.get(),
                     cat_var.get().strip(),
                     sku_var.get().strip(),
+                    template_key_state["value"],
                 )
                 offer_id = result["offer"]["offer_id"]
                 status_var.set("Offer erstellt")
