@@ -2972,7 +2972,7 @@ def ebay_export_offer_from_template(parent, template_key=None, schedule_hours=No
         target = filedialog.askdirectory(title="Zielordner für eBay-Angebotsdatei auswählen", parent=parent)
         if not target: return
         c=db()
-        drafts=c.execute("""SELECT e.card_id,e.title,e.description,e.condition,e.price,e.listing_format,e.category,e.sku,e.status,c.front_image,c.back_image,c.category,c.team,c.manufacturer,c.set_name,c.season_year,c.card_number,c.card_type,c.variant,c.language,c.theme FROM ebay_listings e JOIN cards c ON c.card_id=e.card_id ORDER BY e.listing_id ASC""").fetchall()
+        drafts=c.execute("""SELECT e.card_id,e.title,e.description,e.condition,e.price,e.listing_format,e.category,e.sku,e.status,c.front_image,c.back_image,c.category,c.team,c.manufacturer,c.set_name,c.season_year,c.card_number,c.card_type,c.variant,c.language,c.theme,(SELECT i.condition FROM inventory i WHERE i.card_id=e.card_id ORDER BY i.inventory_id ASC LIMIT 1) AS inv_condition FROM ebay_listings e JOIN cards c ON c.card_id=e.card_id ORDER BY e.listing_id ASC""").fetchall()
         settings=c.execute("SELECT category_id FROM ebay_settings WHERE settings_id=1").fetchone(); c.close()
         default_category=str(settings[0] or cfg["default_category"]) if settings else cfg["default_category"]
         if not drafts: messagebox.showinfo("eBay-Angebot", "Es gibt noch keine eBay-Entwürfe.", parent=parent); return
@@ -2982,7 +2982,7 @@ def ebay_export_offer_from_template(parent, template_key=None, schedule_hours=No
         if missing: raise ValueError("Die Angebotsvorlage enthält nicht die benötigten Spalten: "+", ".join(missing))
         base=[""]*len(headers); out_rows=rows[:header_idx+1]; blocked=[]; written=0; image_count=0
         for d in drafts:
-            (card_id,title,desc,cond,price,fmt,ecat,sku,status,front_ref,back_ref,ccat,team,mfr,setname,season,cnum,ctype,variant,lang,theme)=d
+            (card_id,title,desc,cond,price,fmt,ecat,sku,status,front_ref,back_ref,ccat,team,mfr,setname,season,cnum,ctype,variant,lang,theme,inv_condition)=d
             errors=[]; category=str(ecat or "").strip() if str(ecat or "").strip().isdigit() else default_category
             if not category.isdigit(): errors.append("Category ID fehlt")
             front=image_path_from_ref(front_ref); back=image_path_from_ref(back_ref)
@@ -3010,7 +3010,7 @@ def ebay_export_offer_from_template(parent, template_key=None, schedule_hours=No
             def put(field,value):
                 col=hm.get(field)
                 if col is not None and value not in (None,""): row[hidx[col]]=value
-            put("action","Add"); put("sku",sku or f"DC-{card_id:06d}"); put("category",category); put("title",str(title or "")[:80]); put("condition","4000" if not str(cond or "").strip().isdigit() else str(cond).strip()); put("card_condition",_ebay_card_condition_value(cond)); put("sport",cfg["sport"]); put("manufacturer",mfr); put("player",title); put("team",team); put("season",season); put("league","Bundesliga" if "bundesliga" in (str(setname)+str(theme)).lower() else ""); put("franchise",theme or setname or title); put("cardname",ctype or variant); put("cardnumber",cnum); put("producttype","Trading Card"); put("language",lang or "Deutsch"); put("picurl","|".join(urls)); put("description",_ebay_standard_description(desc)); put("format",_ebay_format_value(fmt or "FixedPrice")); put("schedule_time",_ebay_schedule_time(schedule_hours)); put("duration","GTC"); put("startprice",price); put("quantity",_ebay_inventory_quantity(card_id)); put("location","Köln"); put("shippingprofile","Pauschal: DE_DeutschePostBrief EUR 0,95, 3 Unt (276219276019)"); put("returnprofile","No Return Accepted (276219275019)"); put("paymentprofile","eBay Managed Payments (276219277019)"); put("returnsaccepted","ReturnsNotAccepted"); put("dispatch","3"); put("bestoffer","false")
+            put("action","Add"); put("sku",sku or f"DC-{card_id:06d}"); put("category",category); put("title",str(title or "")[:80]); put("condition","4000" if not str(cond or "").strip().isdigit() else str(cond).strip()); put("card_condition",_ebay_card_condition_value(inv_condition or "NM")); put("sport",cfg["sport"]); put("manufacturer",mfr); put("player",title); put("team",team); put("season",season); put("league","Bundesliga" if "bundesliga" in (str(setname)+str(theme)).lower() else ""); put("franchise",theme or setname or title); put("cardname",ctype or variant); put("cardnumber",cnum); put("producttype","Trading Card"); put("language",lang or "Deutsch"); put("picurl","|".join(urls)); put("description",_ebay_standard_description(desc)); put("format",_ebay_format_value(fmt or "FixedPrice")); put("schedule_time",_ebay_schedule_time(schedule_hours)); put("duration","GTC"); put("startprice",price); put("quantity",_ebay_inventory_quantity(card_id)); put("location","Köln"); put("shippingprofile","Pauschal: DE_DeutschePostBrief EUR 0,95, 3 Unt (276219276019)"); put("returnprofile","No Return Accepted (276219275019)"); put("paymentprofile","eBay Managed Payments (276219277019)"); put("returnsaccepted","ReturnsNotAccepted"); put("dispatch","3"); put("bestoffer","false")
             out_rows.append(row); written+=1
             exported_now=datetime.now().isoformat(timespec="seconds")
             scheduled_now=_ebay_schedule_time(schedule_hours)
