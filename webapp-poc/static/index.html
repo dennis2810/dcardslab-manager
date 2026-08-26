@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs Web PoC</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+  label { font-weight: 600; }
+  button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; width: fit-content; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+  th { background: #f0f0f0; }
+  #status { font-style: italic; color: #555; }
+  .error { color: #b00020; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs Web PoC – Scan &rarr; Zuschnitt &rarr; KI-Erkennung</h1>
+  <p>Lädt Vorder- und Rückseiten-Scanbogen hoch, schneidet die 9 Karten zu und lässt sie per Claude
+  Vision erkennen. Kein Speichern, kein eBay, keine Datenbank – nur der Kern-Workflow.</p>
+
+  <form id="scan-form">
+    <div>
+      <label for="front">Vorderseite (9-up Scan)</label><br>
+      <input type="file" id="front" name="front" accept="image/*" required>
+    </div>
+    <div>
+      <label for="back">Rückseite (9-up Scan)</label><br>
+      <input type="file" id="back" name="back" accept="image/*" required>
+    </div>
+    <button type="submit">Scannen &amp; erkennen</button>
+  </form>
+
+  <p id="status"></p>
+  <div id="result"></div>
+
+<script>
+const form = document.getElementById("scan-form");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+
+const COLUMNS = [
+  ["number", "#"], ["status", "Status"], ["confidence", "Konf."],
+  ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
+  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
+  ["season_year", "Saison"], ["card_number", "Kartennr."], ["card_type", "Typ"],
+];
+
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  resultEl.innerHTML = "";
+  statusEl.textContent = "Läuft … (kann bei 9 Karten parallel eine Weile dauern)";
+  statusEl.className = "";
+
+  const data = new FormData();
+  data.append("front", document.getElementById("front").files[0]);
+  data.append("back", document.getElementById("back").files[0]);
+
+  try {
+    const res = await fetch("/api/scan", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = `Fertig – ${body.cards.length} Karten.`;
+    renderTable(body.cards);
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  }
+});
+
+function renderTable(cards) {
+  const table = document.createElement("table");
+  const thead = document.createElement("tr");
+  for (const [, label] of COLUMNS) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    thead.appendChild(th);
+  }
+  table.appendChild(thead);
+
+  for (const card of cards) {
+    const tr = document.createElement("tr");
+    for (const [key] of COLUMNS) {
+      const td = document.createElement("td");
+      td.textContent = card[key] ?? "";
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+  resultEl.appendChild(table);
+}
+</script>
+</body>
+</html>
