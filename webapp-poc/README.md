@@ -26,10 +26,19 @@ eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
 - `static/cards.html` zeigt gespeicherte Karten als durchsuchbare/
   filterbare Liste (Freitext über Titel/Team/Set/Kartennummer,
   Status-Filter); `static/card.html` zeigt eine einzelne Karte im
-  Detail zum Bearbeiten/Vervollständigen fehlender Felder oder Löschen.
+  Detail zum Bearbeiten/Vervollständigen fehlender Felder oder Löschen,
+  inkl. Vor-/Zurück-Navigation innerhalb der zuletzt geladenen Liste
+  (gemerkt in `sessionStorage`, kein eigener Backend-Endpoint nötig).
 - `PATCH /api/cards/{id}` aktualisiert einzelne Felder einer Karte,
   `DELETE /api/cards/{id}` löscht eine Karte inkl. ihrer Bilder im
   Storage.
+- `POST /api/cards/{id}/rotate` (Body: `{"side": "front"|"back", "degrees":
+  90|180|270}`) dreht das gespeicherte Bild einer Seite im Nachhinein -
+  nutzbar über die Dreh-Buttons in `static/card.html`. Zusätzlich lässt
+  sich schon vor dem Scannen in `static/index.html` jeder Bogen per
+  Vorschau + Dreh-Buttons korrigieren, bevor er hochgeladen wird (rein
+  clientseitig per Canvas, das Backend bekommt nur das bereits gedrehte
+  Bild zu sehen).
 
 ## Starten auf dem NAS (Docker)
 
