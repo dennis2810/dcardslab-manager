@@ -179,5 +179,30 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
     return JSONResponse({"batch_id": batch_id, "cards": results})
 
 
+def _attach_signed_urls(card):
+    card = dict(card)
+    front_path = card.get("front_image_path")
+    back_path = card.get("back_image_path")
+    if front_path:
+        card["front_image_url"] = storage.signed_url(front_path)
+    if back_path:
+        card["back_image_url"] = storage.signed_url(back_path)
+    return card
+
+
+@app.get("/api/cards")
+async def list_cards():
+    cards = [_attach_signed_urls(c) for c in db.list_cards()]
+    return JSONResponse({"cards": cards})
+
+
+@app.get("/api/cards/{card_id}")
+async def get_card(card_id: str):
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(card))
+
+
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
