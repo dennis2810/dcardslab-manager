@@ -96,5 +96,59 @@ class GetCardEndpointTests(unittest.TestCase):
         self.assertNotIn("back_image_url", body)
 
 
+class ListCardsFilterEndpointTests(unittest.TestCase):
+    def test_passes_query_params_to_db(self):
+        with patch("main.db.list_cards", return_value=[]) as mock_list:
+            response = client.get("/api/cards?q=Bayern&status=pr%C3%BCfen")
+        self.assertEqual(response.status_code, 200)
+        mock_list.assert_called_once_with(q="Bayern", status="prüfen")
+
+
+class UpdateCardEndpointTests(unittest.TestCase):
+    def test_updates_and_returns_card_with_signed_urls(self):
+        updated = {
+            "id": "card-1", "title": "Korrigiert",
+            "front_image_path": "b1/1_front.jpg", "back_image_path": None,
+        }
+        with patch("main.db.update_card", return_value=updated) as mock_update, \
+             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+            response = client.patch("/api/cards/card-1", json={"title": "Korrigiert"})
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_called_once_with("card-1", {"title": "Korrigiert"})
+        body = response.json()
+        self.assertEqual(body["front_image_url"], "https://signed/b1/1_front.jpg")
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.update_card", return_value=None):
+            response = client.patch("/api/cards/does-not-exist", json={"title": "x"})
+        self.assertEqual(response.status_code, 404)
+
+
+class DeleteCardEndpointTests(unittest.TestCase):
+    def test_deletes_card_and_its_images(self):
+        deleted = {
+            "id": "card-1", "front_image_path": "b1/1_front.jpg",
+            "back_image_path": "b1/1_back.jpg",
+        }
+        with patch("main.db.delete_card", return_value=deleted) as mock_delete, \
+             patch("main.storage.delete_images") as mock_delete_images:
+            response = client.delete("/api/cards/card-1")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("card-1")
+        mock_delete_images.assert_called_once_with(["b1/1_front.jpg", "b1/1_back.jpg"])
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.delete_card", return_value=None):
+            response = client.delete("/api/cards/does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+    def test_image_delete_failure_does_not_block_card_deletion(self):
+        deleted = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": None}
+        with patch("main.db.delete_card", return_value=deleted), \
+             patch("main.storage.delete_images", side_effect=RuntimeError("bucket down")):
+            response = client.delete("/api/cards/card-1")
+        self.assertEqual(response.status_code, 204)
+
+
 if __name__ == "__main__":
     unittest.main()
