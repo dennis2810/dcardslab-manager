@@ -150,5 +150,53 @@ class DeleteCardEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+class RotateCardImageEndpointTests(unittest.TestCase):
+    def test_rotates_front_image_and_returns_card_with_fresh_signed_urls(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image") as mock_rotate, \
+             patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+
+        self.assertEqual(response.status_code, 200)
+        mock_rotate.assert_called_once_with("b1/1_front.jpg", 90)
+        body = response.json()
+        self.assertEqual(body["front_image_url"], "https://signed/b1/1_front.jpg")
+        self.assertEqual(body["back_image_url"], "https://signed/b1/1_back.jpg")
+
+    def test_rotates_back_image(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image") as mock_rotate, \
+             patch("main.storage.signed_url", return_value="https://signed/x"):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "back", "degrees": 180})
+
+        self.assertEqual(response.status_code, 200)
+        mock_rotate.assert_called_once_with("b1/1_back.jpg", 180)
+
+    def test_returns_404_when_card_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = client.post("/api/cards/does-not-exist/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_404_when_requested_side_has_no_image(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": "b1/1_back.jpg"}
+        with patch("main.db.get_card", return_value=card):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 404)
+
+    def test_rejects_invalid_side(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": None}
+        with patch("main.db.get_card", return_value=card):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "sideways", "degrees": 90})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_invalid_degrees(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": None}
+        with patch("main.db.get_card", return_value=card):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 45})
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()
