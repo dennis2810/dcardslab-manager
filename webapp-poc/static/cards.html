@@ -75,7 +75,7 @@ function render(cards) {
     a.href = `card.html?id=${encodeURIComponent(card.id)}`;
 
     const img = document.createElement("img");
-    img.src = card.front_image_url || "";
+    if (card.front_image_url) img.src = card.front_image_url;
     img.alt = card.title || "";
     a.appendChild(img);
 

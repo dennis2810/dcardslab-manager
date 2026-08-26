@@ -141,6 +141,20 @@ class UpdateCardTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"team": "FC Bayern"})
 
+    def test_never_writes_structural_columns(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "title": "x"}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {
+                "title": "x", "id": "other-id", "batch_id": "some-batch",
+                "created_at": "2020-01-01T00:00:00", "front_image_path": "evil.jpg",
+            })
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"title": "x"})
+
     def test_returns_none_when_not_found(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -219,7 +233,9 @@ class ListCardsFilterTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             db.list_cards(q="a,b(c)")
         filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
-        self.assertNotIn(",b(", filter_arg)
+        self.assertEqual(filter_arg.count(","), 3)  # exactly the 3 clause separators between the 4 ilike terms
+        self.assertNotIn("(", filter_arg)
+        self.assertNotIn(")", filter_arg)
 
     def test_status_filters_by_recognition_status(self):
         mock_client = MagicMock()

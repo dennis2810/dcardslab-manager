@@ -40,12 +40,20 @@ const FIELDS = [
   ["serial_number", "Seriennr."], ["print_run", "Auflage"],
 ];
 
+function showError(container, message) {
+  container.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "error";
+  p.textContent = message;
+  container.appendChild(p);
+}
+
 const params = new URLSearchParams(location.search);
 const cardId = params.get("id");
 const form = document.getElementById("edit-form");
 
 if (!cardId) {
-  form.innerHTML = '<p class="error">Keine Karten-ID angegeben.</p>';
+  showError(form, "Keine Karten-ID angegeben.");
 } else {
   loadCard();
 }
@@ -55,18 +63,20 @@ async function loadCard() {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
     const card = await res.json();
     if (!res.ok) {
-      form.innerHTML = `<p class="error">Fehler: ${card.detail || res.statusText}</p>`;
+      showError(form, "Fehler: " + (card.detail || res.statusText));
       return;
     }
     render(card);
   } catch (err) {
-    form.innerHTML = `<p class="error">Fehler: ${err}</p>`;
+    showError(form, "Fehler: " + err);
   }
 }
 
 function render(card) {
-  document.getElementById("front-img").src = card.front_image_url || "";
-  document.getElementById("back-img").src = card.back_image_url || "";
+  const frontImg = document.getElementById("front-img");
+  if (card.front_image_url) frontImg.src = card.front_image_url;
+  const backImg = document.getElementById("back-img");
+  if (card.back_image_url) backImg.src = card.back_image_url;
 
   form.innerHTML = "";
   for (const [key, label] of FIELDS) {
@@ -79,6 +89,20 @@ function render(card) {
     wrapper.appendChild(input);
     form.appendChild(wrapper);
   }
+
+  const statusWrapper = document.createElement("label");
+  statusWrapper.textContent = "Status";
+  const statusSelect = document.createElement("select");
+  statusSelect.name = "recognition_status";
+  for (const value of ["ok", "prüfen", "nicht erkannt"]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if (card.recognition_status === value) option.selected = true;
+    statusSelect.appendChild(option);
+  }
+  statusWrapper.appendChild(statusSelect);
+  form.appendChild(statusWrapper);
 
   const actions = document.createElement("div");
   actions.className = "actions";
@@ -108,6 +132,7 @@ form.addEventListener("submit", async (ev) => {
   for (const [key] of FIELDS) {
     fields[key] = form.elements[key].value;
   }
+  fields.recognition_status = form.elements["recognition_status"].value;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
   statusP.className = "";
@@ -134,7 +159,7 @@ async function onDelete() {
   if (!confirm("Diese Karte wirklich löschen?")) return;
   try {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
-    if (!res.ok && res.status !== 204) {
+    if (!res.ok) {
       const body = await res.json();
       alert("Fehler beim Löschen: " + (body.detail || res.statusText));
       return;

@@ -234,8 +234,8 @@ async def delete_card(card_id: str):
     if paths:
         try:
             storage.delete_images(paths)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Bild-Löschung fehlgeschlagen für {paths}: {type(exc).__name__}: {exc}")
     return Response(status_code=204)
 
 

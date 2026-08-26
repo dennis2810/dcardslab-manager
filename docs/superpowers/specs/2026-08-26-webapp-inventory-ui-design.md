@@ -108,7 +108,9 @@ existiert.
   `GET /api/cards/{id}`).
 - Alle Felder als Textfelder in einem Formular, vorausgefüllt mit den
   gespeicherten Werten (leere Felder erscheinen als leere Textfelder
-  zum Ausfüllen).
+  zum Ausfüllen). `recognition_status` ist ein Dropdown (`ok`/`prüfen`/
+  `nicht erkannt`) statt eines Textfelds, damit der Wert exakt zu
+  `cards.html`'s Status-Filter passt.
 - **"Speichern"**-Button: schickt nur die geänderten Werte per
   `PATCH /api/cards/{id}`, zeigt danach eine Bestätigung.
 - **"Löschen"**-Button mit Bestätigungsdialog (`confirm()`): ruft
