@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Karten</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
+  .card { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; text-decoration: none; color: inherit; display: block; }
+  .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .card .title { font-weight: 600; margin-top: 0.4rem; }
+  .card .meta { font-size: 0.8rem; color: #555; }
+  .status-pruefen { color: #b06000; font-weight: 600; }
+  .status-nicht_erkannt { color: #b00020; font-weight: 600; }
+  #status-msg { font-style: italic; color: #555; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs – Karten</h1>
+  <p><a href="index.html">&larr; Zum Scan-Formular</a></p>
+
+  <div class="controls">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr.)">
+    <select id="status">
+      <option value="">Alle Status</option>
+      <option value="ok">ok</option>
+      <option value="prüfen">prüfen</option>
+      <option value="nicht erkannt">nicht erkannt</option>
+    </select>
+  </div>
+
+  <p id="status-msg"></p>
+  <div id="grid" class="grid"></div>
+
+<script>
+const qInput = document.getElementById("q");
+const statusSelect = document.getElementById("status");
+const statusMsg = document.getElementById("status-msg");
+const grid = document.getElementById("grid");
+
+function statusClass(status) {
+  if (status === "prüfen") return "status-pruefen";
+  if (status === "nicht erkannt") return "status-nicht_erkannt";
+  return "";
+}
+
+async function loadCards() {
+  const params = new URLSearchParams();
+  if (qInput.value.trim()) params.set("q", qInput.value.trim());
+  if (statusSelect.value) params.set("status", statusSelect.value);
+
+  statusMsg.textContent = "Lädt …";
+  try {
+    const res = await fetch("/api/cards?" + params.toString());
+    const body = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (body.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = `${body.cards.length} Karte(n)`;
+    render(body.cards);
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function render(cards) {
+  grid.innerHTML = "";
+  for (const card of cards) {
+    const a = document.createElement("a");
+    a.className = "card";
+    a.href = `card.html?id=${encodeURIComponent(card.id)}`;
+
+    const img = document.createElement("img");
+    img.src = card.front_image_url || "";
+    img.alt = card.title || "";
+    a.appendChild(img);
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = card.title || "(ohne Titel)";
+    a.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = [card.team, card.season_year].filter(Boolean).join(" · ");
+    a.appendChild(meta);
+
+    const statusEl = document.createElement("div");
+    statusEl.className = "meta " + statusClass(card.recognition_status);
+    statusEl.textContent = card.recognition_status || "";
+    a.appendChild(statusEl);
+
+    grid.appendChild(a);
+  }
+}
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(loadCards, 300);
+});
+statusSelect.addEventListener("change", loadCards);
+
+loadCards();
+</script>
+</body>
+</html>
