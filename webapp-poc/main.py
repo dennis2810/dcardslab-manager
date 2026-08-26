@@ -91,12 +91,26 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
         batch_id = db.create_batch(card_count=len(front_files))
 
         def process_one(fp):
+            # Every branch below must return a result dict and must never let
+            # an exception escape - a single card's Supabase hiccup (upload,
+            # insert, or signed-URL lookup) may not abort the whole batch
+            # (see design spec's Fehlerbehandlung section). Failures are
+            # reported via the "image_error" field instead, using an explicit
+            # None sentinel (never gated on message truthiness, since
+            # str(exc) can be "") and naming which step/side failed.
             number = int(fp.stem)
             bp = back_map.get(number)
             if bp is None:
                 fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
-                card_row = db.insert_card(batch_id, number, fields, None, None)
-                return {"number": number, **fields, "id": card_row["id"]}
+                try:
+                    card_row = db.insert_card(batch_id, number, fields, None, None)
+                    return {"number": number, **fields, "id": card_row["id"]}
+                except Exception as exc:
+                    return {
+                        "number": number,
+                        **fields,
+                        "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
+                    }
 
             fields = recognize_card(front_path=fp, back_path=bp)
 
@@ -106,15 +120,33 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
                 front_image_path = storage.upload_image(batch_id, number, "front", fp)
                 back_image_path = storage.upload_image(batch_id, number, "back", bp)
             except Exception as exc:
-                image_error = str(exc)
+                stage = "front-Bild-Upload" if front_image_path is None else "Rückseiten-Bild-Upload"
+                image_error = f"{stage} fehlgeschlagen: {type(exc).__name__}: {exc}"
 
-            card_row = db.insert_card(batch_id, number, fields, front_image_path, back_image_path)
-            result = {"number": number, **fields, "id": card_row["id"]}
+            result = {"number": number, **fields}
+            try:
+                card_row = db.insert_card(batch_id, number, fields, front_image_path, back_image_path)
+                result["id"] = card_row["id"]
+            except Exception as exc:
+                if image_error is None:
+                    image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
+                result["image_error"] = image_error
+                return result
+
             if front_image_path:
-                result["front_image_url"] = storage.signed_url(front_image_path)
+                try:
+                    result["front_image_url"] = storage.signed_url(front_image_path)
+                except Exception as exc:
+                    if image_error is None:
+                        image_error = f"Signed-URL (Vorderseite) fehlgeschlagen: {type(exc).__name__}: {exc}"
             if back_image_path:
-                result["back_image_url"] = storage.signed_url(back_image_path)
-            if image_error:
+                try:
+                    result["back_image_url"] = storage.signed_url(back_image_path)
+                except Exception as exc:
+                    if image_error is None:
+                        image_error = f"Signed-URL (Rückseite) fehlgeschlagen: {type(exc).__name__}: {exc}"
+
+            if image_error is not None:
                 result["image_error"] = image_error
             return result
 
@@ -124,18 +156,25 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(process_one, front_files))
 
-    results.sort(key=lambda r: r["number"])
-
-    success_count = sum(
-        1 for r in results if r.get("status") == "ok" and "image_error" not in r
-    )
-    if success_count == len(results):
-        batch_status = "ok"
-    elif success_count == 0:
-        batch_status = "failed"
-    else:
-        batch_status = "partial"
-    db.update_batch_status(batch_id, batch_status)
+    # The scan_batches row was created above with status="pending" - it must
+    # never be left stuck there. Default to "failed" so that even if the
+    # status computation itself blows up unexpectedly, update_batch_status
+    # still runs (in finally) with a safe, non-pending value before the
+    # exception is allowed to propagate.
+    batch_status = "failed"
+    try:
+        results.sort(key=lambda r: r["number"])
+        success_count = sum(
+            1 for r in results if r.get("status") == "ok" and "image_error" not in r
+        )
+        if success_count == len(results):
+            batch_status = "ok"
+        elif success_count == 0:
+            batch_status = "failed"
+        else:
+            batch_status = "partial"
+    finally:
+        db.update_batch_status(batch_id, batch_status)
 
     return JSONResponse({"batch_id": batch_id, "cards": results})
 

@@ -118,6 +118,48 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self.assertNotIn("image_error", ok_card)
         self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "partial")
 
+    def test_missing_back_image_is_persisted_with_german_status(self):
+        def crop_with_missing_back(upload_path, out_dir, quality, rotate):
+            # _crop_side() requires exactly 9 files back from process(), so
+            # the back crop still yields 9 files here - it just never
+            # produces a "004" (position 4's back card is substituted with
+            # a "010" that back_map's int(p.stem) lookup never matches),
+            # mirroring how back_map.get(4) comes back None in production
+            # when the grid detector can't find a back card at that slot.
+            out_dir = Path(out_dir)
+            numbers = list(range(1, 10))
+            if out_dir.name == "back_cards":
+                numbers = [n for n in numbers if n != 4] + [10]
+            files = []
+            for n in numbers:
+                p = out_dir / f"{n:03d}.jpg"
+                p.write_bytes(b"\xff\xd8\xff\xe0fake-card-image")
+                files.append(str(p))
+            return files
+        self.mocks["main.scanner.process"].side_effect = crop_with_missing_back
+
+        response = self._post_scan()
+
+        body = response.json()
+        self.assertEqual(len(body["cards"]), 9)
+        missing_card = next(c for c in body["cards"] if c["number"] == 4)
+        self.assertIn("fehlt", missing_card["status"])
+
+        insert_calls_for_4 = [
+            call for call in self.mocks["main.db.insert_card"].call_args_list
+            if call.args[1] == 4
+        ]
+        self.assertEqual(len(insert_calls_for_4), 1)
+        self.assertIsNone(insert_calls_for_4[0].args[3])  # front_image_path
+        self.assertIsNone(insert_calls_for_4[0].args[4])  # back_image_path
+
+    def test_batch_marked_failed_when_every_card_fails(self):
+        self.mocks["main.storage.upload_image"].side_effect = RuntimeError("network down")
+
+        self._post_scan()
+
+        self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
+
 
 if __name__ == "__main__":
     unittest.main()
