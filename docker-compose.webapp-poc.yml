@@ -1,0 +1,17 @@
+# Für die UGOS-Docker-App ("Projekt" -> diese Datei auswählen/einfügen).
+# Baut und startet webapp-poc als eigenen Container, getrennt vom
+# eBay-OAuth-Server (der läuft unabhängig weiter, Port 8080).
+#
+# ANTHROPIC_API_KEY wird beim Anlegen des Projekts in der Docker-App als
+# Umgebungsvariable eingetragen (nicht hier im Klartext).
+services:
+  dcardslab-webapp-poc:
+    build:
+      context: .
+      dockerfile: webapp-poc/Dockerfile
+    container_name: dcardslab-webapp-poc
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped
