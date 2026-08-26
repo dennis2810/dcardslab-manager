@@ -94,11 +94,22 @@ function render(card) {
   statusWrapper.textContent = "Status";
   const statusSelect = document.createElement("select");
   statusSelect.name = "recognition_status";
-  for (const value of ["ok", "prüfen", "nicht erkannt"]) {
+  const KNOWN_STATUSES = ["ok", "prüfen", "nicht erkannt"];
+  const currentStatus = card.recognition_status || "";
+  // A card can carry a status outside the three normal values (e.g.
+  // "deaktiviert" or an AI-Erkennung-fehlgeschlagen error text from
+  // recognize_card()) - add it as its own preselected option instead of
+  // silently falling back to "ok" when the dropdown has no matching
+  // <option>, which would overwrite that status on the next save even if
+  // the user only meant to fix an unrelated field.
+  const options = currentStatus && !KNOWN_STATUSES.includes(currentStatus)
+    ? [currentStatus, ...KNOWN_STATUSES]
+    : KNOWN_STATUSES;
+  for (const value of options) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = value;
-    if (card.recognition_status === value) option.selected = true;
+    if (currentStatus === value) option.selected = true;
     statusSelect.appendChild(option);
   }
   statusWrapper.appendChild(statusSelect);

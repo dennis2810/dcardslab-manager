@@ -111,8 +111,10 @@ existiert.
   zum Ausfüllen). `recognition_status` ist ein Dropdown (`ok`/`prüfen`/
   `nicht erkannt`) statt eines Textfelds, damit der Wert exakt zu
   `cards.html`'s Status-Filter passt.
-- **"Speichern"**-Button: schickt nur die geänderten Werte per
-  `PATCH /api/cards/{id}`, zeigt danach eine Bestätigung.
+- **"Speichern"**-Button: schickt alle Formularfelder (nicht nur die
+  geänderten) per `PATCH /api/cards/{id}`, zeigt danach eine
+  Bestätigung - unkritisch, da alle Spalten `text` sind und jedes Feld
+  ohnehin vorausgefüllt ist.
 - **"Löschen"**-Button mit Bestätigungsdialog (`confirm()`): ruft
   `DELETE /api/cards/{id}` auf, navigiert danach zurück zu
   `cards.html`.
