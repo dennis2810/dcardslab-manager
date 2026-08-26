@@ -3,9 +3,9 @@
 Beantwortet genau eine Frage, bevor wir Zeit in DB/Auth/Frontend stecken:
 **Funktioniert Upload → Zuschnitt → KI-Erkennung sauber als Web-Request?**
 
-Kein Speichern, keine Datenbank, kein eBay, kein Login. Absichtlich
-Wegwerf-Code für die Validierung - nicht der Anfang der eigentlichen
-WebApp-Architektur.
+Mittlerweile wird jeder Scan in Supabase persistiert (Postgres + Storage,
+siehe unten) - der validierte PoC-Workflow bildet damit die Basis für die
+eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
 
 ## Was hier passiert
 
@@ -18,6 +18,11 @@ WebApp-Architektur.
 - Gibt die 9 erkannten Karten als JSON zurück.
 - `static/index.html` ist eine einzelne HTML-Seite mit Upload-Formular und
   Ergebnistabelle, um das ohne Frontend-Build direkt im Browser zu testen.
+- Persistiert jede gescannte Karte in Supabase Postgres (`scan_batches`,
+  `cards`) und lädt die (komprimierten) Kartenbilder in Supabase Storage
+  hoch - siehe `supabase/README.md` für die einmalige Projekt-Einrichtung.
+- `GET /api/cards` und `GET /api/cards/{id}` lesen gespeicherte Karten
+  inkl. frisch signierter Bild-URLs zurück.
 
 ## Starten auf dem NAS (Docker)
 
@@ -35,6 +40,8 @@ docker build -f webapp-poc/Dockerfile -t dcardslab-webapp-poc .
 
 docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e ANTHROPIC_API_KEY=dein-api-key \
+  -e SUPABASE_URL=dein-supabase-project-url \
+  -e SUPABASE_SERVICE_KEY=dein-supabase-service-role-key \
   dcardslab-webapp-poc
 ```
 
@@ -58,14 +65,11 @@ export ANTHROPIC_API_KEY=dein-api-key   # gleicher Key wie in der Desktop-App
 uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 ```
 
-## Was absichtlich fehlt
+## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- Keine Datenbank/Persistenz (Ergebnis wird nur einmal als JSON
-  zurückgegeben).
-- Kein Speichern der zugeschnittenen Kartenbilder.
-- Keine eBay-Integration, kein Login/Auth.
-- Kein Build-Frontend (React/Next) - nur eine statische Testseite.
-
-Wenn dieser Schritt zeigt, dass der Kern-Workflow im Web-Kontext gut genug
-läuft, ist der nächste sinnvolle Schritt die Datenbank (Supabase/Postgres)
-und ein echtes Backend, das Ergebnisse tatsächlich speichert.
+- Inventar-UI zum Bearbeiten/Korrigieren gespeicherter Karten
+  (Sub-Projekt 2).
+- Käufe/Purchases (Sub-Projekt 3).
+- eBay-Listing-Erstellung/-Export/-Sales-Sync (Sub-Projekt 4).
+- Google Drive/Sheets-Sync, Backups (Sub-Projekt 5).
+- Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
