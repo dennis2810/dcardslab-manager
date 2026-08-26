@@ -23,6 +23,13 @@ eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
   hoch - siehe `supabase/README.md` für die einmalige Projekt-Einrichtung.
 - `GET /api/cards` und `GET /api/cards/{id}` lesen gespeicherte Karten
   inkl. frisch signierter Bild-URLs zurück.
+- `static/cards.html` zeigt gespeicherte Karten als durchsuchbare/
+  filterbare Liste (Freitext über Titel/Team/Set/Kartennummer,
+  Status-Filter); `static/card.html` zeigt eine einzelne Karte im
+  Detail zum Bearbeiten/Vervollständigen fehlender Felder oder Löschen.
+- `PATCH /api/cards/{id}` aktualisiert einzelne Felder einer Karte,
+  `DELETE /api/cards/{id}` löscht eine Karte inkl. ihrer Bilder im
+  Storage.
 
 ## Starten auf dem NAS (Docker)
 
@@ -67,8 +74,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- Inventar-UI zum Bearbeiten/Korrigieren gespeicherter Karten
-  (Sub-Projekt 2).
 - Käufe/Purchases (Sub-Projekt 3).
 - eBay-Listing-Erstellung/-Export/-Sales-Sync (Sub-Projekt 4).
 - Google Drive/Sheets-Sync, Backups (Sub-Projekt 5).
