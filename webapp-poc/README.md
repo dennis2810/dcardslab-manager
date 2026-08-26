@@ -3,9 +3,9 @@
 Beantwortet genau eine Frage, bevor wir Zeit in DB/Auth/Frontend stecken:
 **Funktioniert Upload → Zuschnitt → KI-Erkennung sauber als Web-Request?**
 
-Kein Speichern, keine Datenbank, kein eBay, kein Login. Absichtlich
-Wegwerf-Code für die Validierung - nicht der Anfang der eigentlichen
-WebApp-Architektur.
+Mittlerweile wird jeder Scan in Supabase persistiert (Postgres + Storage,
+siehe unten) - der validierte PoC-Workflow bildet damit die Basis für die
+eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
 
 ## Was hier passiert
 

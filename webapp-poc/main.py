@@ -3,11 +3,13 @@ any DB/auth/frontend investment.
 
 POST /api/scan takes a front and back 9-up scan image (the same kind of
 files you currently drag into the desktop app) and returns the same crop +
-Claude-vision recognition result as a JSON list of 9 cards - nothing is
-persisted, there is no auth, no eBay integration. That's deliberate: this
-only answers one question - "does upload -> crop -> AI recognition work
-cleanly as a web request?" - before we build a database, auth, or a real
-frontend around it.
+Claude-vision recognition result as a JSON list of 9 cards - and persists
+every scanned card to Supabase (Postgres for the data, Storage for the
+compressed images); GET /api/cards and GET /api/cards/{id} read them back
+with freshly signed image URLs. There is still no auth and no eBay
+integration - this PoC only answers "does upload -> crop -> AI recognition
+-> persistence work cleanly as a web request?", building on the validated
+scan workflow before a real frontend is built around it.
 
 Reuses scanner/scanner_v0_8_dynamic.py (the OpenCV 9-up crop) and
 integrations/ai_card_recognition.py (Claude vision) unchanged from the
@@ -180,13 +182,24 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
 
 
 def _attach_signed_urls(card):
+    # Mirrors process_one()'s pattern in POST /api/scan: each signed_url()
+    # call is guarded individually, so a transient Supabase Storage hiccup
+    # (or a stored path that no longer resolves) drops only that one URL
+    # key instead of raising out of the list comprehension in list_cards()
+    # and taking down the whole /api/cards response with a 500.
     card = dict(card)
     front_path = card.get("front_image_path")
     back_path = card.get("back_image_path")
     if front_path:
-        card["front_image_url"] = storage.signed_url(front_path)
+        try:
+            card["front_image_url"] = storage.signed_url(front_path)
+        except Exception:
+            pass
     if back_path:
-        card["back_image_url"] = storage.signed_url(back_path)
+        try:
+            card["back_image_url"] = storage.signed_url(back_path)
+        except Exception:
+            pass
     return card
 
 
