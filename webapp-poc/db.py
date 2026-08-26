@@ -38,11 +38,40 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
     return response.data[0]
 
 
-def list_cards():
-    response = get_client().table("cards").select("*").order("created_at", desc=True).execute()
+def list_cards(q=None, status=None):
+    query = get_client().table("cards").select("*")
+    if q:
+        safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
+        pattern = f"%{safe_q}%"
+        query = query.or_(
+            f"title.ilike.{pattern},team.ilike.{pattern},"
+            f"set_name.ilike.{pattern},card_number.ilike.{pattern}"
+        )
+    if status:
+        query = query.eq("recognition_status", status)
+    response = query.order("created_at", desc=True).execute()
     return response.data
 
 
 def get_card(card_id):
     response = get_client().table("cards").select("*").eq("id", card_id).execute()
     return response.data[0] if response.data else None
+
+
+def update_card(card_id, fields):
+    row = {
+        name: value for name, value in fields.items()
+        if name in CARD_FIELDS or name == "recognition_status"
+    }
+    if not row:
+        return get_card(card_id)
+    response = get_client().table("cards").update(row).eq("id", card_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_card(card_id):
+    card = get_card(card_id)
+    if card is None:
+        return None
+    get_client().table("cards").delete().eq("id", card_id).execute()
+    return card

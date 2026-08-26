@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Karte bearbeiten</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+  .images img { width: 45%; border-radius: 6px; background: #f0f0f0; }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
+  button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
+  .error { color: #b00020; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Karte bearbeiten</h1>
+  <p><a href="cards.html">&larr; Zur Liste</a></p>
+
+  <div class="images">
+    <img id="front-img" alt="Vorderseite">
+    <img id="back-img" alt="Rückseite">
+  </div>
+
+  <form id="edit-form">
+    <p id="load-status">Lädt …</p>
+  </form>
+
+<script>
+const FIELDS = [
+  ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
+  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
+  ["season_year", "Saison"], ["card_type", "Typ"], ["variant", "Variante"],
+  ["position", "Position"], ["squad_number", "Trikotnummer"],
+  ["club_debut_season", "Debütsaison"], ["card_number", "Kartennr."],
+  ["serial_number", "Seriennr."], ["print_run", "Auflage"],
+];
+
+function showError(container, message) {
+  container.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "error";
+  p.textContent = message;
+  container.appendChild(p);
+}
+
+const params = new URLSearchParams(location.search);
+const cardId = params.get("id");
+const form = document.getElementById("edit-form");
+
+if (!cardId) {
+  showError(form, "Keine Karten-ID angegeben.");
+} else {
+  loadCard();
+}
+
+async function loadCard() {
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
+    const card = await res.json();
+    if (!res.ok) {
+      showError(form, "Fehler: " + (card.detail || res.statusText));
+      return;
+    }
+    render(card);
+  } catch (err) {
+    showError(form, "Fehler: " + err);
+  }
+}
+
+function render(card) {
+  const frontImg = document.getElementById("front-img");
+  if (card.front_image_url) frontImg.src = card.front_image_url;
+  const backImg = document.getElementById("back-img");
+  if (card.back_image_url) backImg.src = card.back_image_url;
+
+  form.innerHTML = "";
+  for (const [key, label] of FIELDS) {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.name = key;
+    input.value = card[key] ?? "";
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
+  }
+
+  const statusWrapper = document.createElement("label");
+  statusWrapper.textContent = "Status";
+  const statusSelect = document.createElement("select");
+  statusSelect.name = "recognition_status";
+  const KNOWN_STATUSES = ["ok", "prüfen", "nicht erkannt"];
+  const currentStatus = card.recognition_status || "";
+  // A card can carry a status outside the three normal values (e.g.
+  // "deaktiviert" or an AI-Erkennung-fehlgeschlagen error text from
+  // recognize_card()) - add it as its own preselected option instead of
+  // silently falling back to "ok" when the dropdown has no matching
+  // <option>, which would overwrite that status on the next save even if
+  // the user only meant to fix an unrelated field.
+  const options = currentStatus && !KNOWN_STATUSES.includes(currentStatus)
+    ? [currentStatus, ...KNOWN_STATUSES]
+    : KNOWN_STATUSES;
+  for (const value of options) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if (currentStatus === value) option.selected = true;
+    statusSelect.appendChild(option);
+  }
+  statusWrapper.appendChild(statusSelect);
+  form.appendChild(statusWrapper);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "submit";
+  saveBtn.textContent = "Speichern";
+  actions.appendChild(saveBtn);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.id = "delete-btn";
+  deleteBtn.textContent = "Löschen";
+  deleteBtn.addEventListener("click", onDelete);
+  actions.appendChild(deleteBtn);
+
+  form.appendChild(actions);
+
+  const statusP = document.createElement("p");
+  statusP.id = "save-status";
+  form.appendChild(statusP);
+}
+
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fields = {};
+  for (const [key] of FIELDS) {
+    fields[key] = form.elements[key].value;
+  }
+  fields.recognition_status = form.elements["recognition_status"].value;
+  const statusP = document.getElementById("save-status");
+  statusP.textContent = "Speichert …";
+  statusP.className = "";
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusP.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusP.className = "error";
+      return;
+    }
+    statusP.textContent = "Gespeichert.";
+  } catch (err) {
+    statusP.textContent = "Fehler: " + err;
+    statusP.className = "error";
+  }
+});
+
+async function onDelete() {
+  if (!confirm("Diese Karte wirklich löschen?")) return;
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      alert("Fehler beim Löschen: " + (body.detail || res.statusText));
+      return;
+    }
+    location.href = "cards.html";
+  } catch (err) {
+    alert("Fehler beim Löschen: " + err);
+  }
+}
+</script>
+</body>
+</html>

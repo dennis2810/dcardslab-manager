@@ -81,5 +81,28 @@ class SignedUrlTests(unittest.TestCase):
         )
 
 
+class DeleteImagesTests(unittest.TestCase):
+    def test_removes_given_paths(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_images(["b1/1_front.jpg", "b1/1_back.jpg"])
+        mock_client.storage.from_.assert_called_once_with(storage.BUCKET)
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(
+            ["b1/1_front.jpg", "b1/1_back.jpg"]
+        )
+
+    def test_filters_out_none_paths(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_images(["b1/1_front.jpg", None])
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(["b1/1_front.jpg"])
+
+    def test_noop_when_no_paths(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_images([])
+        mock_client.storage.from_.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

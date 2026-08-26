@@ -29,7 +29,7 @@ import types
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -204,8 +204,8 @@ def _attach_signed_urls(card):
 
 
 @app.get("/api/cards")
-async def list_cards():
-    cards = [_attach_signed_urls(c) for c in db.list_cards()]
+async def list_cards(q: str | None = None, status: str | None = None):
+    cards = [_attach_signed_urls(c) for c in db.list_cards(q=q, status=status)]
     return JSONResponse({"cards": cards})
 
 
@@ -215,6 +215,28 @@ async def get_card(card_id: str):
     if card is None:
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     return JSONResponse(_attach_signed_urls(card))
+
+
+@app.patch("/api/cards/{card_id}")
+async def update_card(card_id: str, fields: dict = Body(...)):
+    updated = db.update_card(card_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.delete("/api/cards/{card_id}", status_code=204)
+async def delete_card(card_id: str):
+    deleted = db.delete_card(card_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    paths = [p for p in (deleted.get("front_image_path"), deleted.get("back_image_path")) if p]
+    if paths:
+        try:
+            storage.delete_images(paths)
+        except Exception as exc:
+            print(f"Bild-Löschung fehlgeschlagen für {paths}: {type(exc).__name__}: {exc}")
+    return Response(status_code=204)
 
 
 static_dir = Path(__file__).parent / "static"

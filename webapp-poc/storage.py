@@ -38,3 +38,13 @@ def upload_image(batch_id, position, side, path):
 def signed_url(object_path, expires_in=3600):
     response = get_client().storage.from_(BUCKET).create_signed_url(object_path, expires_in)
     return response["signedURL"]
+
+
+def delete_images(paths):
+    """Removes zero or more objects from BUCKET in one call. None entries
+    (a card missing one side's image) are skipped, not passed to the
+    Supabase client."""
+    paths = [p for p in paths if p]
+    if not paths:
+        return
+    get_client().storage.from_(BUCKET).remove(paths)
