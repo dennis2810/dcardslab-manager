@@ -23,12 +23,23 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
 import sys
 import tempfile
+import types
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+# scanner_v0_8_dynamic.py imports tkinter at module level for its own
+# standalone CLI/GUI harness - process() (the only part we call) never
+# touches it. A real Tk install pulled in via a system package tends to
+# mismatch the container's Python build (confirmed while testing this PoC),
+# so stub it out instead - same approach this repo's test suite already
+# uses to import the desktop app headlessly.
+for _name in ("tkinter", "tkinter.filedialog", "tkinter.messagebox", "tkinter.ttk"):
+    if _name not in sys.modules:
+        sys.modules[_name] = types.ModuleType(_name)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scanner"))
