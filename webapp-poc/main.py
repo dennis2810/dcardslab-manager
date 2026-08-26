@@ -46,7 +46,10 @@ sys.path.insert(0, str(REPO_ROOT / "scanner"))
 sys.path.insert(0, str(REPO_ROOT / "integrations"))
 
 import scanner_v0_8_dynamic as scanner  # noqa: E402
-from ai_card_recognition import recognize_card  # noqa: E402
+from ai_card_recognition import recognize_card, EMPTY_FIELDS  # noqa: E402
+
+import db  # noqa: E402
+import storage  # noqa: E402
 
 app = FastAPI(title="DCardLabs Web PoC")
 
@@ -85,14 +88,35 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         back_map = {int(p.stem): p for p in back_files}
+        batch_id = db.create_batch(card_count=len(front_files))
 
         def process_one(fp):
             number = int(fp.stem)
             bp = back_map.get(number)
             if bp is None:
-                return {"number": number, "status": f"Rückseite für Karte {number:03d} fehlt."}
-            recognition = recognize_card(front_path=fp, back_path=bp)
-            return {"number": number, **recognition}
+                fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
+                card_row = db.insert_card(batch_id, number, fields, None, None)
+                return {"number": number, **fields, "id": card_row["id"]}
+
+            fields = recognize_card(front_path=fp, back_path=bp)
+
+            front_image_path = back_image_path = None
+            image_error = None
+            try:
+                front_image_path = storage.upload_image(batch_id, number, "front", fp)
+                back_image_path = storage.upload_image(batch_id, number, "back", bp)
+            except Exception as exc:
+                image_error = str(exc)
+
+            card_row = db.insert_card(batch_id, number, fields, front_image_path, back_image_path)
+            result = {"number": number, **fields, "id": card_row["id"]}
+            if front_image_path:
+                result["front_image_url"] = storage.signed_url(front_image_path)
+            if back_image_path:
+                result["back_image_url"] = storage.signed_url(back_image_path)
+            if image_error:
+                result["image_error"] = image_error
+            return result
 
         # Same pattern as pair_and_ocr() in the desktop app: recognize_card()
         # is a network round-trip, so a handful of cards run concurrently
@@ -101,7 +125,19 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
             results = list(pool.map(process_one, front_files))
 
     results.sort(key=lambda r: r["number"])
-    return JSONResponse({"cards": results})
+
+    success_count = sum(
+        1 for r in results if r.get("status") == "ok" and "image_error" not in r
+    )
+    if success_count == len(results):
+        batch_status = "ok"
+    elif success_count == 0:
+        batch_status = "failed"
+    else:
+        batch_status = "partial"
+    db.update_batch_status(batch_id, batch_status)
+
+    return JSONResponse({"batch_id": batch_id, "cards": results})
 
 
 static_dir = Path(__file__).parent / "static"
