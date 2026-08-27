@@ -37,16 +37,26 @@ def run_once(publish_fn):
         logger.exception("Konnte nativ geplante Angebote nicht laden")
         native_listings = []
 
-    for listing in native_listings:
+    if native_listings:
+        # One token for the whole batch, not one oauth-server round trip per
+        # listing - get_access_token() itself failing (e.g. not authorized)
+        # just skips this round's status poll instead of crashing run_once().
         try:
             token = ebay_client.get_access_token()
-            offer = ebay_client.get_offer(token, listing["ebay_offer_id"])
-            if offer.get("listingId"):
-                db.update_ebay_listing(listing["id"], {"status": "Veroeffentlicht"})
         except Exception:
-            logger.exception(
-                "Status-Abgleich fuer geplantes Angebot %s fehlgeschlagen", listing.get("id")
-            )
+            logger.exception("Konnte keinen Access-Token fuer den Status-Abgleich holen")
+            token = None
+
+        if token is not None:
+            for listing in native_listings:
+                try:
+                    offer = ebay_client.get_offer(token, listing["ebay_offer_id"])
+                    if offer.get("listingId"):
+                        db.update_ebay_listing(listing["id"], {"status": "Veroeffentlicht"})
+                except Exception:
+                    logger.exception(
+                        "Status-Abgleich fuer geplantes Angebot %s fehlgeschlagen", listing.get("id")
+                    )
 
 
 async def run_forever(publish_fn):

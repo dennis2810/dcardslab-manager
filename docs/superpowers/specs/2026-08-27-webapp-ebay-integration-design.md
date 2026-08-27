@@ -1,7 +1,7 @@
 # WebApp Sub-Projekt 4: eBay-Integration
 
-Status: Entwurf (Brainstorming mit Nutzer abgeschlossen 2026-08-27, Spec zur
-Freigabe)
+Status: Freigegeben (Brainstorming + Spec-Review mit Nutzer abgeschlossen
+2026-08-27)
 
 ## Kontext
 

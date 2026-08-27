@@ -120,13 +120,14 @@ def get_listing_policies(token, marketplace_id=MARKETPLACE_ID):
     return result
 
 
-def put_inventory_item(token, sku, card, image_url):
+def put_inventory_item(token, sku, listing, image_url):
     payload = {
         "product": {
-            "title": card.get("title", ""),
+            "title": listing.get("title", ""),
             "imageUrls": [image_url] if image_url else [],
         },
-        "availability": {"shipToLocationAvailability": {"quantity": 1}},
+        "condition": condition_id_to_enum(listing.get("condition_id")),
+        "availability": {"shipToLocationAvailability": {"quantity": listing.get("quantity") or 1}},
     }
     _request("PUT", token, f"/sell/inventory/v1/inventory_item/{sku}", payload)
 
@@ -136,11 +137,15 @@ def _offer_payload(sku, listing):
         "sku": sku,
         "marketplaceId": MARKETPLACE_ID,
         "format": "FIXED_PRICE",
-        "availableQuantity": listing.get("quantity", 1),
+        # dict.get(key, default) only applies the default for a *missing*
+        # key, not a stored None - a blanked price/quantity input becomes
+        # None via db._blank_numeric_to_none(), so "or" is needed here to
+        # actually fall back instead of sending "None"/null to eBay.
+        "availableQuantity": listing.get("quantity") or 1,
         "categoryId": listing["category_id"],
         "listingDescription": listing.get("description", ""),
         "pricingSummary": {
-            "price": {"value": str(listing.get("price", 0)), "currency": "EUR"},
+            "price": {"value": str(listing.get("price") or 0), "currency": "EUR"},
         },
         "listingPolicies": listing.get("policies", {}),
     }

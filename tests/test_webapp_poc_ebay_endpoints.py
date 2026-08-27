@@ -59,6 +59,7 @@ class CreateEbayListingEndpointTests(unittest.TestCase):
 
     def test_generates_fields_from_card_when_body_omitted(self):
         with patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
             response = client.post("/api/cards/card-1/ebay-listing")
@@ -92,7 +93,7 @@ class GetEbayListingEndpointTests(unittest.TestCase):
 
     def test_returns_listing_with_card_summary(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
-             patch("main.db.get_card", return_value=_card()):
+             patch("main.db.get_cards_by_ids", return_value=[_card()]):
             response = client.get("/api/ebay/listings/listing-1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["card"]["title"], "Musterkarte")
@@ -108,6 +109,7 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(price=12.0)) as mock_update, \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token") as mock_token:
             response = client.patch("/api/ebay/listings/listing-1", json={"price": 12.0})
         self.assertEqual(response.status_code, 200)
@@ -119,6 +121,7 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=published), \
              patch("main.db.update_ebay_listing", return_value=published) as mock_update, \
              patch("main.db.get_card", return_value=_card(front_image_path="b1/1_front.jpg")), \
+             patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
              patch("main.storage.public_url", return_value="https://img/x.jpg"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
@@ -163,6 +166,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Veroeffentlicht")) as mock_update, \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_policies", return_value={"fulfillmentPolicyId": "F1"}), \
              patch("main.ebay_client.put_inventory_item"), \
@@ -179,6 +183,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Fehler")), \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_policies", side_effect=ebay_client.EbayApiError("Policy fehlt")):
             response = client.post("/api/ebay/listings/listing-1/publish")
@@ -188,6 +193,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Fehler")), \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", side_effect=ebay_client.EbayNotAuthorizedError("nicht verbunden")):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 401)
@@ -196,6 +202,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Geplant")) as mock_update, \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.put_inventory_item") as mock_put, \
              patch("main.ebay_client.create_offer") as mock_create:
             response = client.post(
@@ -226,6 +233,7 @@ class UnscheduleEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=scheduled), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Entwurf")) as mock_update, \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/unschedule")
         self.assertEqual(response.status_code, 200)
@@ -242,6 +250,7 @@ class UnscheduleEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", return_value=scheduled), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Entwurf")), \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/unschedule")
@@ -265,6 +274,7 @@ class PublishBulkEndpointTests(unittest.TestCase):
         with patch("main.db.get_ebay_listing", side_effect=get_listing), \
              patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**get_listing(lid), **updates}), \
              patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
              patch("main.ebay_client.put_inventory_item"), \

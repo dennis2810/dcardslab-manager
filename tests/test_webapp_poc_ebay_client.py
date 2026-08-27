@@ -90,6 +90,18 @@ class PutInventoryItemTests(unittest.TestCase):
             with self.assertRaises(ebay_client.EbayApiError):
                 ebay_client.put_inventory_item("tok", "sku-1", {"title": "x"}, None)
 
+    def test_sends_translated_condition(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "x", "condition_id": "4000"}, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["condition"], "USED_VERY_GOOD")
+
+    def test_defaults_quantity_to_one_when_blank(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "x", "quantity": None}, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["availability"]["shipToLocationAvailability"]["quantity"], 1)
+
 
 class CreateOfferTests(unittest.TestCase):
     def test_returns_offer_id(self):
@@ -97,6 +109,17 @@ class CreateOfferTests(unittest.TestCase):
         with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})):
             offer_id = ebay_client.create_offer("tok", "sku-1", listing)
         self.assertEqual(offer_id, "offer-1")
+
+    def test_blanked_price_and_quantity_fall_back_instead_of_sending_none(self):
+        # db._blank_numeric_to_none() turns a cleared price/quantity input
+        # into None (not a missing key), so dict.get(key, default) alone
+        # wouldn't apply the fallback - this is a regression test for that.
+        listing = {"category_id": "261328", "price": None, "quantity": None, "description": "desc"}
+        with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})) as mock_request:
+            ebay_client.create_offer("tok", "sku-1", listing)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["pricingSummary"]["price"]["value"], "0")
+        self.assertEqual(kwargs["json"]["availableQuantity"], 1)
 
 
 class PublishOfferTests(unittest.TestCase):

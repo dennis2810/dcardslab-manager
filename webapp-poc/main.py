@@ -402,20 +402,33 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
     return Response(status_code=204)
 
 
+def _expand_ebay_listings(listings):
+    # Enriches each ebay_listings row with a thin card summary
+    # (id/title/front_image_url), same purpose and batching approach as
+    # _expand_purchase_items() above - one db.get_cards_by_ids() call for
+    # the whole list instead of a db.get_card() round trip per listing.
+    if not listings:
+        return []
+    card_ids = [l["card_id"] for l in listings]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    expanded = []
+    for listing in listings:
+        listing = dict(listing)
+        card = cards_by_id.get(listing["card_id"], {})
+        card_summary = {"id": listing["card_id"], "title": card.get("title", "")}
+        front_path = card.get("front_image_path")
+        if front_path:
+            try:
+                card_summary["front_image_url"] = storage.signed_url(front_path)
+            except Exception:
+                pass
+        listing["card"] = card_summary
+        expanded.append(listing)
+    return expanded
+
+
 def _listing_with_card(listing):
-    # Enriches an ebay_listings row with a thin card summary
-    # (id/title/front_image_url), same purpose as _expand_purchase_items()
-    # above - the frontend shouldn't need a second request per listing.
-    listing = dict(listing)
-    card = db.get_card(listing["card_id"]) or {}
-    listing["card"] = {"id": listing["card_id"], "title": card.get("title", "")}
-    front_path = card.get("front_image_path")
-    if front_path:
-        try:
-            listing["card"]["front_image_url"] = storage.signed_url(front_path)
-        except Exception:
-            pass
-    return listing
+    return _expand_ebay_listings([listing])[0]
 
 
 def _publish_listing(listing, scheduled_at=None):
@@ -449,7 +462,7 @@ def _publish_listing(listing, scheduled_at=None):
         image_url = None
         if card.get("front_image_path"):
             image_url = storage.public_url(card["front_image_path"])
-        ebay_client.put_inventory_item(token, listing["sku"], card, image_url)
+        ebay_client.put_inventory_item(token, listing["sku"], listing, image_url)
 
         offer_id = listing.get("ebay_offer_id")
         payload = {**listing, "policies": policies}
@@ -509,7 +522,7 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
 
 @app.get("/api/ebay/listings")
 async def list_ebay_listings(status: str | None = None, q: str | None = None):
-    listings = [_listing_with_card(l) for l in db.list_ebay_listings(status=status, q=q)]
+    listings = _expand_ebay_listings(db.list_ebay_listings(status=status, q=q))
     return JSONResponse({"listings": listings})
 
 
@@ -584,6 +597,12 @@ async def publish_ebay_listings_bulk(body: dict = Body(...)):
             results.append({"listing_id": listing_id, "status": updated["status"]})
         except HTTPException as exc:
             results.append({"listing_id": listing_id, "status": "Fehler", "error": str(exc.detail)})
+        except Exception as exc:
+            # Any other exception (a Supabase hiccup fetching the card,
+            # a public_url() failure, ...) must stay scoped to this one
+            # listing - the whole point of publish-bulk is that one bad
+            # card doesn't take the rest of the batch down with it.
+            results.append({"listing_id": listing_id, "status": "Fehler", "error": str(exc)})
     return JSONResponse({"results": results})
 
 

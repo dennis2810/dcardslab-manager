@@ -59,6 +59,32 @@ class RunOnceResilienceTests(unittest.TestCase):
 
 
 class RunOnceNativeModeTests(unittest.TestCase):
+    def test_fetches_token_once_per_round_not_per_listing(self):
+        native = [{"id": "l1", "ebay_offer_id": "offer-1"}, {"id": "l2", "ebay_offer_id": "offer-2"}]
+        with patch("ebay_scheduler.db.list_due_scheduled_listings", return_value=[]), \
+             patch("ebay_scheduler.db.list_native_scheduled_listings", return_value=native), \
+             patch("ebay_scheduler.ebay_client.get_access_token", return_value="tok") as mock_token, \
+             patch("ebay_scheduler.ebay_client.get_offer", return_value={}), \
+             patch("ebay_scheduler.db.update_ebay_listing"):
+            ebay_scheduler.run_once(MagicMock())
+        mock_token.assert_called_once()
+
+    def test_skips_native_polling_this_round_when_token_fetch_fails(self):
+        native = [{"id": "l1", "ebay_offer_id": "offer-1"}]
+        with patch("ebay_scheduler.db.list_due_scheduled_listings", return_value=[]), \
+             patch("ebay_scheduler.db.list_native_scheduled_listings", return_value=native), \
+             patch("ebay_scheduler.ebay_client.get_access_token", side_effect=RuntimeError("nicht verbunden")), \
+             patch("ebay_scheduler.ebay_client.get_offer") as mock_get_offer:
+            ebay_scheduler.run_once(MagicMock())  # must not raise
+        mock_get_offer.assert_not_called()
+
+    def test_does_not_fetch_token_when_nothing_to_poll(self):
+        with patch("ebay_scheduler.db.list_due_scheduled_listings", return_value=[]), \
+             patch("ebay_scheduler.db.list_native_scheduled_listings", return_value=[]), \
+             patch("ebay_scheduler.ebay_client.get_access_token") as mock_token:
+            ebay_scheduler.run_once(MagicMock())
+        mock_token.assert_not_called()
+
     def test_flips_status_when_offer_reports_live(self):
         native = [{"id": "l1", "ebay_offer_id": "offer-1"}]
         with patch("ebay_scheduler.db.list_due_scheduled_listings", return_value=[]), \
