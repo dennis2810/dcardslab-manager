@@ -106,8 +106,9 @@ in `webapp-poc/main.py`, DB-Zugriff über neue Funktionen in
 
 ```
 static/purchases.html  (neu) - Käufe-Liste: Suche, "+ Neuer Kauf", Klick -> Detail
-static/purchase.html   (neu) - Kauf-Detail: Felder bearbeiten, verknüpfte
-                                Karten (hinzufügen/entfernen/Anteile), löschen
+static/purchase.html   (neu) - Kauf-Detail: Vor-/Zurück-Navigation, Felder
+                                bearbeiten, verknüpfte Karten
+                                (hinzufügen/entfernen/Anteile), löschen
 static/card.html        (erweitert) - neuer "Kauf"-Bereich: verknüpften Kauf
                                 anzeigen/lösen, oder unverknüpfte Karte einem
                                 Kauf zuordnen
@@ -202,9 +203,22 @@ des vollen Objekts, um die Liste schlank zu halten.
   Karten-Zuordnung, die passiert danach auf `purchase.html` oder direkt
   auf `card.html` (siehe unten). Deckt den Desktop-App-Ablauf ab, wo ein
   Kauf oft manuell vor dem Scannen angelegt wird.
+- Legt bei jedem Rendern die aktuell angezeigte, gefilterte ID-Reihenfolge
+  in `sessionStorage` ab (Schlüssel `purchaseListIds`) — exakt das gleiche
+  Muster, mit dem `cards.html` bereits `cardListIds` für `card.html`s
+  Vor-/Zurück-Navigation ablegt (kein neuer Backend-Endpoint, nur
+  clientseitiger State für die aktuelle Tab-Session).
 
 ### `purchase.html` — Detail/Bearbeiten
 
+- **Vor-/Zurück-Navigation** oben auf der Seite: liest `purchaseListIds`
+  aus `sessionStorage`, ermittelt die Position der aktuellen Kauf-ID darin
+  und zeigt "← Vorherige"/"Nächste →"-Links innerhalb dieser Reihenfolge —
+  1:1 übertragen aus `card.html`s `renderPrevNextNav()` (gleiches
+  User-Erlebnis wie beim Blättern durch Karten: Direktaufruf ohne zuvor
+  geladene Liste, oder eine ID außerhalb der Liste, zeigt einfach keine
+  Links; `sessionStorage`-Zugriff ist try/catch-abgesichert, falls der
+  Browser-Kontext das blockiert).
 - Formular mit den Kauf-Feldern, vorausgefüllt, **"Speichern"** ruft
   `PATCH /api/purchases/{id}`.
 - Liste der verknüpften Karten (Thumbnail, Titel, `allocated_cost`,
