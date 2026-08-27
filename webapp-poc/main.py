@@ -181,6 +181,36 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
     return JSONResponse({"batch_id": batch_id, "cards": results})
 
 
+def _expand_purchase_items(items):
+    # Reichert jedes purchase_items-Row um eine schlanke Karten-Kurzinfo an
+    # (id/title/front_image_url), damit purchase.html/card.html nicht pro
+    # Karte einen eigenen Request an /api/cards/{id} schicken muessen.
+    if not items:
+        return []
+    card_ids = [item["card_id"] for item in items]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    expanded = []
+    for item in items:
+        item = dict(item)
+        card = cards_by_id.get(item["card_id"], {})
+        card_summary = {"id": item["card_id"], "title": card.get("title", "")}
+        front_path = card.get("front_image_path")
+        if front_path:
+            try:
+                card_summary["front_image_url"] = storage.signed_url(front_path)
+            except Exception:
+                pass
+        item["card"] = card_summary
+        expanded.append(item)
+    return expanded
+
+
+def _attach_purchase_items(purchase):
+    purchase = dict(purchase)
+    purchase["items"] = _expand_purchase_items(purchase.get("items", []))
+    return purchase
+
+
 def _attach_signed_urls(card):
     # Mirrors process_one()'s pattern in POST /api/scan: each signed_url()
     # call is guarded individually, so a transient Supabase Storage hiccup
@@ -206,6 +236,9 @@ def _attach_signed_urls(card):
 @app.get("/api/cards")
 async def list_cards(q: str | None = None, status: str | None = None):
     cards = [_attach_signed_urls(c) for c in db.list_cards(q=q, status=status)]
+    linked_ids = db.cards_with_purchase([c["id"] for c in cards])
+    for c in cards:
+        c["has_purchase"] = c["id"] in linked_ids
     return JSONResponse({"cards": cards})
 
 
@@ -214,7 +247,9 @@ async def get_card(card_id: str):
     card = db.get_card(card_id)
     if card is None:
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
-    return JSONResponse(_attach_signed_urls(card))
+    card = _attach_signed_urls(card)
+    card["purchase"] = db.get_purchase_for_card(card_id)
+    return JSONResponse(card)
 
 
 @app.patch("/api/cards/{card_id}")
@@ -273,6 +308,82 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
             detail=f"Bild wurde gedreht, aber die Vorschau-URL für {side} konnte gerade nicht erzeugt werden - bitte Seite neu laden.",
         )
     return JSONResponse(result)
+
+
+@app.post("/api/purchases")
+async def create_purchase(fields: dict = Body(...)):
+    fields = dict(fields)
+    items = fields.pop("items", None)
+    try:
+        purchase = db.create_purchase(fields, items)
+    except db.CardAlreadyLinkedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Karte {exc.args[0]} ist bereits einem Kauf zugeordnet.",
+        ) from exc
+    return JSONResponse(_attach_purchase_items(purchase))
+
+
+@app.get("/api/purchases")
+async def list_purchases(q: str | None = None):
+    return JSONResponse({"purchases": db.list_purchases(q=q)})
+
+
+@app.get("/api/purchases/{purchase_id}")
+async def get_purchase(purchase_id: str):
+    purchase = db.get_purchase(purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    return JSONResponse(_attach_purchase_items(purchase))
+
+
+@app.patch("/api/purchases/{purchase_id}")
+async def update_purchase(purchase_id: str, fields: dict = Body(...)):
+    updated = db.update_purchase(purchase_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    return JSONResponse(_attach_purchase_items(updated))
+
+
+@app.delete("/api/purchases/{purchase_id}", status_code=204)
+async def delete_purchase(purchase_id: str):
+    deleted = db.delete_purchase(purchase_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
+@app.post("/api/purchases/{purchase_id}/items")
+async def add_purchase_item(purchase_id: str, fields: dict = Body(...)):
+    if db.get_purchase(purchase_id) is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    card_id = fields.get("card_id")
+    if not card_id or db.get_card(card_id) is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    try:
+        item = db.add_purchase_item(purchase_id, fields)
+    except db.CardAlreadyLinkedError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Karte {exc.args[0]} ist bereits einem Kauf zugeordnet.",
+        ) from exc
+    return JSONResponse(_expand_purchase_items([item])[0])
+
+
+@app.patch("/api/purchases/{purchase_id}/items/{item_id}")
+async def update_purchase_item(purchase_id: str, item_id: str, fields: dict = Body(...)):
+    updated = db.update_purchase_item(purchase_id, item_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Kauf-Position {item_id} nicht gefunden.")
+    return JSONResponse(_expand_purchase_items([updated])[0])
+
+
+@app.delete("/api/purchases/{purchase_id}/items/{item_id}", status_code=204)
+async def delete_purchase_item(purchase_id: str, item_id: str):
+    deleted = db.delete_purchase_item(purchase_id, item_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Kauf-Position {item_id} nicht gefunden.")
+    return Response(status_code=204)
 
 
 static_dir = Path(__file__).parent / "static"
