@@ -197,6 +197,18 @@ class RotateCardImageEndpointTests(unittest.TestCase):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 45})
         self.assertEqual(response.status_code, 400)
 
+    def test_returns_502_when_signed_url_for_rotated_side_fails(self):
+        # storage.rotate_image() already persisted the rotation by this point -
+        # if signing the URL to show it back fails, the frontend must be told
+        # (not silently handed a response with no updated image), otherwise a
+        # click that actually worked looks like it did nothing.
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image"), \
+             patch("main.storage.signed_url", side_effect=Exception("boom")):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 502)
+
 
 if __name__ == "__main__":
     unittest.main()
