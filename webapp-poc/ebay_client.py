@@ -85,10 +85,11 @@ def _headers(token):
     }
 
 
-def _request(method, token, path, json_body=None):
+def _request(method, token, path, json_body=None, params=None):
     try:
         response = httpx.request(
-            method, EBAY_API_BASE + path, headers=_headers(token), json=json_body, timeout=45
+            method, EBAY_API_BASE + path, headers=_headers(token),
+            json=json_body, params=params, timeout=45,
         )
     except httpx.HTTPError as exc:
         raise EbayApiError(f"eBay nicht erreichbar: {exc}") from exc
@@ -186,6 +187,9 @@ def withdraw_offer(token, offer_id):
 
 
 def get_orders(token, created_since_iso):
-    filter_q = f"creationdate:[{created_since_iso}..]"
-    response = _request("GET", token, f"/sell/fulfillment/v1/order?filter={filter_q}&limit=200")
+    # Passed as params (not hand-built into the path) so httpx encodes the
+    # ISO timestamp's ":"/"+" correctly - a raw f-string left them literal,
+    # which eBay's API can reject.
+    params = {"filter": f"creationdate:[{created_since_iso}..]", "limit": "200"}
+    response = _request("GET", token, "/sell/fulfillment/v1/order", params=params)
     return response.json().get("orders", [])
