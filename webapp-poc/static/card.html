@@ -9,8 +9,10 @@
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
   .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
-  .rotate-buttons { display: flex; gap: 0.4rem; }
+  .rotate-buttons { display: flex; gap: 0.4rem; align-items: center; }
   .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
+  .rotate-buttons button:disabled { opacity: 0.5; cursor: default; }
+  .rotate-status { font-size: 0.8rem; color: #555; font-style: italic; }
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -40,6 +42,7 @@
       <div class="rotate-buttons">
         <button type="button" id="front-rotate-left">&#8634; Links</button>
         <button type="button" id="front-rotate-right">&#8635; Rechts</button>
+        <span class="rotate-status" id="front-rotate-status"></span>
       </div>
     </div>
     <div class="image-block">
@@ -47,6 +50,7 @@
       <div class="rotate-buttons">
         <button type="button" id="back-rotate-left">&#8634; Links</button>
         <button type="button" id="back-rotate-right">&#8635; Rechts</button>
+        <span class="rotate-status" id="back-rotate-status"></span>
       </div>
     </div>
   </div>
@@ -117,7 +121,26 @@ function renderPrevNextNav() {
   }
 }
 
+// Download + drehen + Re-Upload nach Supabase Storage ist ein Server-
+// seitiger Roundtrip, der spuerbar dauern kann (abhaengig von der
+// Upload-Bandbreite des NAS) - ohne Rueckmeldung sah ein Klick waehrend
+// dieser Wartezeit wie "tut nichts" aus, und mehrere schnelle Klicks
+// hintereinander feuerten mehrere ueberlappende Requests, deren Antworten
+// in beliebiger Reihenfolge zurueckkommen konnten. requestId pro Seite
+// sorgt dafuer, dass nur die Antwort des zuletzt gestarteten Requests
+// tatsaechlich angezeigt wird; die Buttons sind waehrenddessen deaktiviert,
+// damit gar nicht erst mehrere Requests fuer dieselbe Seite ueberlappen.
+const _rotateRequestIds = { front: 0, back: 0 };
+
 async function rotateImage(side, degrees) {
+  const leftBtn = document.getElementById(`${side}-rotate-left`);
+  const rightBtn = document.getElementById(`${side}-rotate-right`);
+  const statusEl = document.getElementById(`${side}-rotate-status`);
+  const requestId = ++_rotateRequestIds[side];
+
+  leftBtn.disabled = true;
+  rightBtn.disabled = true;
+  statusEl.textContent = "Dreht …";
   try {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/rotate`, {
       method: "POST",
@@ -125,6 +148,7 @@ async function rotateImage(side, degrees) {
       body: JSON.stringify({ side, degrees }),
     });
     const body = await res.json();
+    if (requestId !== _rotateRequestIds[side]) return;  // ueberholt von einem neueren Klick
     if (!res.ok) {
       alert("Fehler beim Drehen: " + (body.detail || res.statusText));
       return;
@@ -140,7 +164,13 @@ async function rotateImage(side, degrees) {
       document.getElementById(imgId).src = body.rotated_image_data_uri;
     }
   } catch (err) {
-    alert("Fehler beim Drehen: " + err);
+    if (requestId === _rotateRequestIds[side]) alert("Fehler beim Drehen: " + err);
+  } finally {
+    if (requestId === _rotateRequestIds[side]) {
+      leftBtn.disabled = false;
+      rightBtn.disabled = false;
+      statusEl.textContent = "";
+    }
   }
 }
 
