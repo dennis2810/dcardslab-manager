@@ -160,6 +160,21 @@ class CreateOfferTests(unittest.TestCase):
         _, kwargs = mock_request.call_args
         self.assertEqual(kwargs["json"]["merchantLocationKey"], ebay_client.DEFAULT_MERCHANT_LOCATION_KEY)
 
+    def test_disables_catalog_product_matching(self):
+        # Found live against the real sandbox: eBay's default
+        # includeCatalogProductDetails=true tries to auto-match the offer to
+        # an EPID catalog product, which is unreliable for niche categories
+        # like single trading cards and was the actual cause of a generic
+        # errorId 25002 "Systemfehler" failing publishOffer (GET on the
+        # published offer showed includeCatalogProductDetails: true even
+        # though this client never set it - eBay's own default). Explicitly
+        # disabling it turns the offer into a plain non-catalog listing.
+        listing = {"category_id": "261328", "price": 12.5, "quantity": 1, "description": "desc"}
+        with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})) as mock_request:
+            ebay_client.create_offer("tok", "sku-1", listing)
+        _, kwargs = mock_request.call_args
+        self.assertIs(kwargs["json"]["includeCatalogProductDetails"], False)
+
 
 class PublishOfferTests(unittest.TestCase):
     def test_publishes_without_scheduling_by_default(self):
