@@ -81,6 +81,21 @@ class SignedUrlTests(unittest.TestCase):
         )
 
 
+class PublicUrlTests(unittest.TestCase):
+    def test_builds_public_storage_url(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.get_public_url.return_value = (
+            "https://project.supabase.co/storage/v1/object/public/card-images/b1/1_front.jpg"
+        )
+        with patch("storage.get_client", return_value=mock_client):
+            result = storage.public_url("b1/1_front.jpg")
+        self.assertEqual(
+            result,
+            "https://project.supabase.co/storage/v1/object/public/card-images/b1/1_front.jpg",
+        )
+        mock_client.storage.from_.return_value.get_public_url.assert_called_once_with("b1/1_front.jpg")
+
+
 class RotateImageTests(unittest.TestCase):
     _MARKER = (0, 255, 0)
 

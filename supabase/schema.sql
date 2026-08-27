@@ -64,3 +64,52 @@ create table if not exists purchase_items (
 
 create index if not exists purchase_items_purchase_id_idx
     on purchase_items(purchase_id);
+
+create table if not exists ebay_listings (
+    id               uuid primary key default gen_random_uuid(),
+    card_id          uuid not null unique references cards(id) on delete cascade,
+    sku              text not null unique,
+    title            text default '',
+    description      text default '',
+    condition        text default 'NM',
+    condition_id     text default '4000',
+    listing_type     text not null default 'sport',  -- 'sport' | 'non_sport'
+    category_id      text default '261328',
+    aspects          jsonb default '{}'::jsonb,
+    price            numeric default 0,
+    quantity         int default 1,
+    status           text not null default 'Entwurf',
+        -- 'Entwurf' | 'Geplant' | 'Veroeffentlicht' | 'Verkauft' | 'Fehler'
+    scheduled_at     timestamptz,
+    scheduling_mode  text default '',  -- '' | 'native' | 'app'
+    ebay_offer_id    text default '',
+    ebay_listing_id  text default '',
+    last_error       text default '',
+    published_at     timestamptz,
+    created_at       timestamptz not null default now(),
+    updated_at       timestamptz not null default now()
+);
+
+create index if not exists ebay_listings_status_idx on ebay_listings(status);
+create index if not exists ebay_listings_scheduled_at_idx
+    on ebay_listings(scheduled_at) where scheduled_at is not null;
+
+create table if not exists ebay_sales (
+    id                uuid primary key default gen_random_uuid(),
+    listing_id        uuid references ebay_listings(id) on delete set null,
+    card_id           uuid references cards(id) on delete set null,
+    ebay_order_id     text not null,
+    ebay_line_item_id text default '',
+    sale_date         timestamptz,
+    quantity          int default 1,
+    gross_price       numeric default 0,
+    shipping_charged  numeric default 0,
+    ebay_fees         numeric default 0,
+    net_amount        numeric default 0,
+    notes             text default '',
+    created_at        timestamptz not null default now(),
+    unique (ebay_order_id, ebay_line_item_id)
+);
+
+create index if not exists ebay_sales_listing_id_idx on ebay_sales(listing_id);
+create index if not exists ebay_sales_card_id_idx on ebay_sales(card_id);

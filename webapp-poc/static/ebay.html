@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – eBay-Angebote</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  #oauth-banner { padding: 0.6rem 0.9rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+  #oauth-banner.ok { background: #e6f4ea; color: #1e4620; }
+  #oauth-banner.warn { background: #fdecea; color: #611a15; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  td.thumb img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  tr.row-link { cursor: pointer; }
+  tr.row-link:hover { background: #f7f7f7; }
+  .status-Entwurf { color: #555; }
+  .status-Geplant { color: #7a5c00; font-weight: 600; }
+  .status-Veroeffentlicht { color: #1e4620; font-weight: 600; }
+  .status-Verkauft { color: #0b3d91; font-weight: 600; }
+  .status-Fehler { color: #b00020; font-weight: 600; }
+  #status-msg { font-style: italic; color: #555; }
+  .actions-bar { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+  .error { color: #b00020; font-weight: 600; }
+  #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
+  #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs – eBay-Angebote</h1>
+  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+
+  <div id="oauth-banner">eBay-Status wird geprüft …</div>
+
+  <div class="controls">
+    <input type="text" id="q" placeholder="Suche (Titel)">
+    <select id="status">
+      <option value="">Alle Status</option>
+      <option value="Entwurf">Entwurf</option>
+      <option value="Geplant">Geplant</option>
+      <option value="Veroeffentlicht">Veröffentlicht</option>
+      <option value="Verkauft">Verkauft</option>
+      <option value="Fehler">Fehler</option>
+    </select>
+    <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
+  </div>
+  <p id="sync-status"></p>
+
+  <p id="status-msg"></p>
+  <table id="listings-table" style="display: none;">
+    <thead>
+      <tr><th></th><th></th><th>Titel</th><th>Preis</th><th>Status</th><th>Geplant für</th></tr>
+    </thead>
+    <tbody id="listings-body"></tbody>
+  </table>
+
+  <div class="actions-bar">
+    <button type="button" id="publish-selected-btn" disabled>Ausgewählte veröffentlichen</button>
+  </div>
+  <div id="bulk-results"></div>
+
+<script>
+const qInput = document.getElementById("q");
+const statusSelect = document.getElementById("status");
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("listings-table");
+const body = document.getElementById("listings-body");
+const publishSelectedBtn = document.getElementById("publish-selected-btn");
+const bulkResults = document.getElementById("bulk-results");
+
+const STATUS_LABELS = {
+  Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
+  Verkauft: "Verkauft", Fehler: "Fehler",
+};
+const SELECTABLE_STATUSES = new Set(["Entwurf", "Fehler"]);
+
+async function loadOauthStatus() {
+  const banner = document.getElementById("oauth-banner");
+  try {
+    const res = await fetch("/api/ebay/oauth/status");
+    const body = await res.json();
+    if (res.ok && body.authorized) {
+      banner.className = "ok";
+      banner.textContent = `eBay verbunden (${body.environment || "?"})`;
+    } else {
+      banner.className = "warn";
+      banner.textContent = "eBay ist nicht verbunden. OAuth-Flow im eBay-Server starten, bevor Angebote veröffentlicht werden können.";
+    }
+  } catch (err) {
+    banner.className = "warn";
+    banner.textContent = "eBay-Status konnte nicht geladen werden: " + err;
+  }
+}
+
+function updatePublishButtonState() {
+  const anySelected = !!body.querySelector("input[type=checkbox]:checked");
+  publishSelectedBtn.disabled = !anySelected;
+}
+
+async function loadListings() {
+  const params = new URLSearchParams();
+  if (qInput.value.trim()) params.set("q", qInput.value.trim());
+  if (statusSelect.value) params.set("status", statusSelect.value);
+
+  statusMsg.textContent = "Lädt …";
+  table.style.display = "none";
+  bulkResults.innerHTML = "";
+  try {
+    const res = await fetch("/api/ebay/listings?" + params.toString());
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = `${data.listings.length} Angebot(e)`;
+    render(data.listings);
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function render(listings) {
+  body.innerHTML = "";
+  table.style.display = listings.length ? "table" : "none";
+  for (const listing of listings) {
+    const tr = document.createElement("tr");
+
+    const checkboxTd = document.createElement("td");
+    if (SELECTABLE_STATUSES.has(listing.status)) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.dataset.listingId = listing.id;
+      checkbox.addEventListener("click", (ev) => ev.stopPropagation());
+      checkbox.addEventListener("change", updatePublishButtonState);
+      checkboxTd.appendChild(checkbox);
+    }
+    tr.appendChild(checkboxTd);
+
+    const thumbTd = document.createElement("td");
+    thumbTd.className = "thumb";
+    if (listing.card && listing.card.front_image_url) {
+      const img = document.createElement("img");
+      img.src = listing.card.front_image_url;
+      img.alt = "";
+      thumbTd.appendChild(img);
+    }
+    tr.appendChild(thumbTd);
+
+    const titleTd = document.createElement("td");
+    titleTd.textContent = listing.title || "(ohne Titel)";
+    tr.appendChild(titleTd);
+
+    const priceTd = document.createElement("td");
+    priceTd.textContent = listing.price != null ? `${listing.price} €` : "";
+    tr.appendChild(priceTd);
+
+    const statusTd = document.createElement("td");
+    statusTd.className = "status-" + listing.status;
+    statusTd.textContent = STATUS_LABELS[listing.status] || listing.status;
+    tr.appendChild(statusTd);
+
+    const scheduledTd = document.createElement("td");
+    scheduledTd.textContent = listing.scheduled_at
+      ? new Date(listing.scheduled_at).toLocaleString("de-DE")
+      : "";
+    tr.appendChild(scheduledTd);
+
+    tr.classList.add("row-link");
+    tr.addEventListener("click", () => {
+      location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
+    });
+    body.appendChild(tr);
+  }
+  updatePublishButtonState();
+}
+
+publishSelectedBtn.addEventListener("click", async () => {
+  const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
+    .map((cb) => cb.dataset.listingId);
+  if (!listingIds.length) return;
+
+  publishSelectedBtn.disabled = true;
+  bulkResults.textContent = "Veröffentlicht …";
+  try {
+    const res = await fetch("/api/ebay/listings/publish-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listing_ids: listingIds }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
+      bulkResults.className = "error";
+      return;
+    }
+    bulkResults.className = "";
+    const list = document.createElement("ul");
+    for (const r of data.results) {
+      const li = document.createElement("li");
+      const ok = r.status !== "Fehler";
+      li.textContent = `${ok ? "✓" : "✗"} ${r.listing_id}: ${STATUS_LABELS[r.status] || r.status}` + (r.error ? ` — ${r.error}` : "");
+      list.appendChild(li);
+    }
+    bulkResults.innerHTML = "";
+    bulkResults.appendChild(list);
+    loadListings();
+  } catch (err) {
+    bulkResults.textContent = "Fehler: " + err;
+    bulkResults.className = "error";
+  }
+});
+
+document.getElementById("sync-sales-btn").addEventListener("click", async () => {
+  const syncStatus = document.getElementById("sync-status");
+  syncStatus.textContent = "Synchronisiert …";
+  syncStatus.className = "";
+  try {
+    const res = await fetch("/api/ebay/sync-sales", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      syncStatus.textContent = "Fehler: " + (data.detail || res.statusText);
+      syncStatus.className = "error";
+      return;
+    }
+    syncStatus.textContent = `${data.synced} neue/aktualisierte Verkäufe, ${data.skipped} ohne Treffer.`;
+    loadListings();
+  } catch (err) {
+    syncStatus.textContent = "Fehler: " + err;
+    syncStatus.className = "error";
+  }
+});
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(loadListings, 300);
+});
+statusSelect.addEventListener("change", loadListings);
+
+loadOauthStatus();
+loadListings();
+</script>
+</body>
+</html>

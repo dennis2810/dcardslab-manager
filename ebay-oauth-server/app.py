@@ -1299,6 +1299,24 @@ def oauth_status():
     })
 
 
+@app.get("/api/internal/access-token")
+def internal_access_token():
+    # Called by webapp-poc's ebay_client.py so it never needs to see the
+    # refresh token itself - this server stays the only place holding eBay
+    # credentials. No auth header on this endpoint, consistent with every
+    # other endpoint here: only reachable inside the Tailscale-internal NAS
+    # network, no public ingress.
+    try:
+        token = refresh_access_token()
+    except RuntimeError:
+        return jsonify({"authorized": False}), 401
+    return jsonify({
+        "access_token": token["access_token"],
+        "environment": ENVIRONMENT,
+        "expires_in": token.get("expires_in"),
+    })
+
+
 @app.post("/api/oauth/revoke-local")
 def revoke_local():
     # Deliberately does not call eBay's revoke endpoint. This removes only the

@@ -38,6 +38,17 @@ werden.
 3. Token wird in `DATA_DIR/ebay_token.json` gespeichert und automatisch
    per Refresh Token erneuert
 
+## Interner Token-Endpoint (für webapp-poc)
+
+`GET /api/internal/access-token` liefert `{"access_token", "environment",
+"expires_in"}` (200) bzw. `{"authorized": false}` (401, falls der
+OAuth-Flow noch nicht abgeschlossen wurde). Genutzt von `webapp-poc`s
+`ebay_client.py`, das die eBay Sell-API direkt aufruft statt jede
+Listing-Operation über diesen Server zu proxyen — dieser Server bleibt
+damit der einzige Ort, der das eBay-Refresh-Token je zu sehen bekommt.
+Kein Auth-Header, wie bei allen Endpoints hier: nur im
+Tailscale-internen NAS-Netz erreichbar, kein öffentlicher Ingress.
+
 ## Business Policies (Voraussetzung für Publish)
 
 eBay lehnt das Veröffentlichen eines Offers ohne gültige Fulfillment-,

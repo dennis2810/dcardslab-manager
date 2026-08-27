@@ -40,6 +40,14 @@ def signed_url(object_path, expires_in=3600):
     return response["signedURL"]
 
 
+def public_url(object_path):
+    """Builds the permanent, unsigned Storage URL - only meaningful while
+    BUCKET is public-read (see supabase/README.md). Used only for handing an
+    image URL to eBay, which needs it to stay valid indefinitely, not just
+    for the current request; cards.html/card.html keep using signed_url()."""
+    return get_client().storage.from_(BUCKET).get_public_url(object_path)
+
+
 def rotate_image(object_path, degrees):
     """Rotates the stored image at object_path clockwise by `degrees` (a
     multiple of 90) and overwrites it in place at the same path. Returns the

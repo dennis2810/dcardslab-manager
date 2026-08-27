@@ -5,7 +5,8 @@ Beantwortet genau eine Frage, bevor wir Zeit in DB/Auth/Frontend stecken:
 
 Mittlerweile wird jeder Scan in Supabase persistiert (Postgres + Storage,
 siehe unten) - der validierte PoC-Workflow bildet damit die Basis für die
-eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
+eigentliche WebApp-Architektur. Seit Sub-Projekt 4 lassen sich Karten auch
+als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
 
 ## Was hier passiert
 
@@ -46,6 +47,25 @@ eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
   über `purchase.html` als auch direkt im "Kauf"-Bereich von `card.html`
   (`POST`/`DELETE /api/purchases/{id}/items[/{item_id}]`). Eine Karte
   gehört höchstens einem Kauf gleichzeitig.
+- Karten lassen sich als eBay-Angebote anlegen und veröffentlichen
+  (`static/ebay.html` für die Übersicht inkl. Mehrfachauswahl, der
+  "eBay"-Bereich in `static/card.html` für einzelne Karten). Sport/
+  Non-Sport-Kategorie und Pflicht-Item-Specifics werden aus den
+  Kartendaten sowie den eBay-Vorlagen in `templates/ebay/` automatisch
+  abgeleitet. Angebote lassen sich für einen späteren Zeitpunkt planen
+  (`scheduled_at` auf `POST /api/ebay/listings/{id}/publish`) - **natives
+  eBay-Scheduling ist noch nicht gegen die Sandbox verifiziert**
+  (`ebay_client.NATIVE_SCHEDULING_SUPPORTED = False`), bis dahin läuft
+  jede Planung über den zuverlässigen App-seitigen Fallback
+  (`ebay_scheduler.py`, kein eBay-seitiges Vorab-Einsehen möglich). Siehe
+  `docs/superpowers/specs/2026-08-27-webapp-ebay-integration-design.md`,
+  Abschnitt "Sandbox-Spike", für den offenen Verifikationsschritt.
+  `POST /api/ebay/sync-sales` holt Verkäufe von eBay und verknüpft sie
+  automatisch mit dem passenden Angebot. Die dafür genutzte
+  eBay-Sell-API-Anbindung (`ebay_client.py`) spricht `ebay-oauth-server`
+  nur noch für einen Access-Token an (`GET
+  /api/internal/access-token`), alle Listing-Operationen laufen direkt
+  von hier aus gegen eBay.
 
 ## Starten auf dem NAS (Docker)
 
@@ -65,8 +85,16 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e ANTHROPIC_API_KEY=dein-api-key \
   -e SUPABASE_URL=dein-supabase-project-url \
   -e SUPABASE_SERVICE_KEY=dein-supabase-service-role-key \
+  -e EBAY_OAUTH_SERVER_URL=http://<nas-adresse>:8080 \
+  -e EBAY_ENVIRONMENT=sandbox \
   dcardslab-webapp-poc
 ```
+
+`EBAY_OAUTH_SERVER_URL`/`EBAY_ENVIRONMENT` sind optional (Default:
+`http://ebay-oauth-server:8080` bzw. `sandbox`) - nur nötig, falls der
+oauth-server unter einer anderen Adresse läuft oder bereits auf
+Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
+übereinstimmen, den `ebay-oauth-server` selbst gesetzt hat.
 
 Dann von irgendeinem Gerät im Tailscale-Netz: `http://<nas-tailscale-name>:8000`
 öffnen (Port 8000, nicht 8080 - das ist der OAuth-Server).
@@ -90,6 +118,20 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- eBay-Listing-Erstellung/-Export/-Sales-Sync (Sub-Projekt 4).
-- Google Drive/Sheets-Sync, Backups (Sub-Projekt 5).
+- **Manuelles Anlegen einzelner Karten auf `cards.html`** (nächstes
+  Sub-Projekt): Der 9er-Scan über `index.html` bleibt der primäre Weg,
+  aber es soll auch möglich sein, eine einzelne Karte direkt auf
+  `cards.html` anzulegen - inkl. Vorder-/Rückseiten-Upload vom Rechner/
+  Device (nicht nur per Scan-Bogen), Dreh-Funktion wie in `card.html`
+  bereits vorhanden, und nach Möglichkeit KI-Vorbelegung der Kartendaten
+  aus den hochgeladenen Bildern (analog zu `recognize_card()` im
+  bestehenden Scan-Flow).
+- Google Drive/Sheets-Sync, Backups.
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
+- CSV-Export/-Import für eBay (wie in `docs/EBAY_IMPORT.md` für die
+  Desktop-App beschrieben) - bewusst nicht gebaut, da die Live-API jetzt
+  sinnvoll nutzbar ist.
+- Ein bereits live veröffentlichtes eBay-Angebot manuell beenden
+  (`withdrawOffer`).
+- Automatisches Nachtragen von eBay-Verkaufsgebühren (Finances API,
+  eigener OAuth-Scope) - `ebay_sales.ebay_fees` bleibt `0`.

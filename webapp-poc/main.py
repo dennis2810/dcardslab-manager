@@ -23,13 +23,16 @@ Run:
 
 Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
+import asyncio
 import base64
 import sys
 import tempfile
 import types
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import Body, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,9 +55,20 @@ import scanner_v0_8_dynamic as scanner  # noqa: E402
 from ai_card_recognition import recognize_card, EMPTY_FIELDS  # noqa: E402
 
 import db  # noqa: E402
+import ebay_client  # noqa: E402
+import ebay_listing  # noqa: E402
+import ebay_scheduler  # noqa: E402
 import storage  # noqa: E402
 
 app = FastAPI(title="DCardLabs Web PoC")
+
+
+@app.on_event("startup")
+async def _start_ebay_scheduler():
+    # publish_fn is _publish_listing() itself, defined further down in this
+    # module - a plain lambda closure avoids importing main.py from
+    # ebay_scheduler.py (which already imports db/ebay_client, not main).
+    asyncio.create_task(ebay_scheduler.run_forever(lambda listing: _publish_listing(listing)))
 
 # Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
 JPEG_QUALITY = 97
@@ -250,6 +264,7 @@ async def get_card(card_id: str):
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     card = _attach_signed_urls(card)
     card["purchase"] = db.get_purchase_for_card(card_id)
+    card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     return JSONResponse(card)
 
 
@@ -385,6 +400,248 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Kauf-Position {item_id} nicht gefunden.")
     return Response(status_code=204)
+
+
+def _expand_ebay_listings(listings):
+    # Enriches each ebay_listings row with a thin card summary
+    # (id/title/front_image_url), same purpose and batching approach as
+    # _expand_purchase_items() above - one db.get_cards_by_ids() call for
+    # the whole list instead of a db.get_card() round trip per listing.
+    if not listings:
+        return []
+    card_ids = [l["card_id"] for l in listings]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    expanded = []
+    for listing in listings:
+        listing = dict(listing)
+        card = cards_by_id.get(listing["card_id"], {})
+        card_summary = {"id": listing["card_id"], "title": card.get("title", "")}
+        front_path = card.get("front_image_path")
+        if front_path:
+            try:
+                card_summary["front_image_url"] = storage.signed_url(front_path)
+            except Exception:
+                pass
+        listing["card"] = card_summary
+        expanded.append(listing)
+    return expanded
+
+
+def _listing_with_card(listing):
+    return _expand_ebay_listings([listing])[0]
+
+
+def _publish_listing(listing, scheduled_at=None):
+    """Shared publish flow for POST .../publish, publish-bulk, and the
+    app-side scheduler (ebay_scheduler.py) - one place for "validate
+    required aspects, resolve policies, create/update inventory item +
+    offer, publish" so none of the three callers can drift apart."""
+    listing_type = listing["listing_type"]
+    missing = ebay_listing.missing_aspects(listing.get("aspects") or {}, listing_type)
+    if missing:
+        raise HTTPException(
+            status_code=422, detail="Pflichtfelder fehlen: " + ", ".join(missing)
+        )
+
+    if scheduled_at is not None:
+        mode = "native" if ebay_client.NATIVE_SCHEDULING_SUPPORTED else "app"
+        if mode == "app":
+            # App-Fallback legt noch nichts bei eBay an - nur der DB-Zustand
+            # aendert sich, ebay_scheduler.py holt das zum Zieltermin nach.
+            return db.update_ebay_listing(listing["id"], {
+                "status": "Geplant", "scheduled_at": scheduled_at, "scheduling_mode": mode,
+            })
+        # native: faellt durch auf den normalen Publish-Ablauf unten - das
+        # Offer wird JETZT angelegt, nur der eBay-Publish-Call bekommt den
+        # Scheduling-Parameter statt sofort live zu gehen (s. Spec).
+
+    try:
+        token = ebay_client.get_access_token()
+        policies = ebay_client.get_listing_policies(token)
+        card = db.get_card(listing["card_id"]) or {}
+        image_url = None
+        if card.get("front_image_path"):
+            image_url = storage.public_url(card["front_image_path"])
+        ebay_client.put_inventory_item(token, listing["sku"], listing, image_url)
+
+        offer_id = listing.get("ebay_offer_id")
+        payload = {**listing, "policies": policies}
+        if offer_id:
+            ebay_client.update_offer(token, offer_id, payload)
+        else:
+            offer_id = ebay_client.create_offer(token, listing["sku"], payload)
+
+        native_scheduled_at = (
+            scheduled_at if scheduled_at is not None and ebay_client.NATIVE_SCHEDULING_SUPPORTED else None
+        )
+        ebay_listing_id = ebay_client.publish_offer(token, offer_id, scheduled_at=native_scheduled_at)
+    except ebay_client.EbayNotAuthorizedError as exc:
+        db.update_ebay_listing(listing["id"], {"status": "Fehler", "last_error": str(exc)})
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        db.update_ebay_listing(listing["id"], {"status": "Fehler", "last_error": str(exc)})
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    updates = {
+        "ebay_offer_id": offer_id, "ebay_listing_id": ebay_listing_id or "", "last_error": "",
+    }
+    if scheduled_at is not None:
+        updates.update({"status": "Geplant", "scheduled_at": scheduled_at, "scheduling_mode": "native"})
+    else:
+        updates.update({"status": "Veroeffentlicht", "published_at": datetime.now(timezone.utc).isoformat()})
+    return db.update_ebay_listing(listing["id"], updates)
+
+
+@app.post("/api/cards/{card_id}/ebay-listing")
+async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    if db.get_ebay_listing_for_card(card_id) is not None:
+        raise HTTPException(
+            status_code=409, detail="Für diese Karte existiert bereits ein eBay-Angebot."
+        )
+
+    listing_type = fields.get("listing_type") or ebay_listing.derive_listing_type(card)
+    row = {
+        "title": fields.get("title") or ebay_listing.generate_title(card),
+        "description": fields.get("description") or ebay_listing.generate_description(card),
+        "condition": fields.get("condition", "NM"),
+        "condition_id": fields.get("condition_id", "4000"),
+        "listing_type": listing_type,
+        "category_id": fields.get("category_id") or ebay_listing.CATEGORY_IDS[listing_type],
+        "aspects": fields.get("aspects") or ebay_listing.build_aspects(card, listing_type),
+        "price": fields.get("price", 0),
+        "quantity": fields.get("quantity", 1),
+    }
+    sku = ebay_listing.sku_for_card(card_id)
+    listing = db.create_ebay_listing(card_id, sku, row)
+    listing["required_aspects"] = ebay_listing.required_aspects(listing_type)
+    return JSONResponse(_listing_with_card(listing))
+
+
+@app.get("/api/ebay/listings")
+async def list_ebay_listings(status: str | None = None, q: str | None = None):
+    listings = _expand_ebay_listings(db.list_ebay_listings(status=status, q=q))
+    return JSONResponse({"listings": listings})
+
+
+@app.get("/api/ebay/listings/{listing_id}")
+async def get_ebay_listing(listing_id: str):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    return JSONResponse(_listing_with_card(listing))
+
+
+@app.patch("/api/ebay/listings/{listing_id}")
+async def update_ebay_listing(listing_id: str, fields: dict = Body(...)):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    updated = db.update_ebay_listing(listing_id, fields)
+    if updated["status"] == "Veroeffentlicht":
+        updated = _publish_listing(updated)
+    return JSONResponse(_listing_with_card(updated))
+
+
+@app.delete("/api/ebay/listings/{listing_id}", status_code=204)
+async def delete_ebay_listing(listing_id: str):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if listing["status"] != "Entwurf":
+        raise HTTPException(status_code=409, detail="Nur Entwürfe können gelöscht werden.")
+    db.delete_ebay_listing(listing_id)
+    return Response(status_code=204)
+
+
+@app.post("/api/ebay/listings/{listing_id}/publish")
+async def publish_ebay_listing(listing_id: str, body: dict = Body(default={})):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    scheduled_at = body.get("scheduled_at")
+    if scheduled_at and scheduled_at <= datetime.now(timezone.utc).isoformat():
+        scheduled_at = None
+    updated = _publish_listing(listing, scheduled_at=scheduled_at)
+    return JSONResponse(_listing_with_card(updated))
+
+
+@app.post("/api/ebay/listings/{listing_id}/unschedule")
+async def unschedule_ebay_listing(listing_id: str):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if listing["status"] != "Geplant":
+        raise HTTPException(status_code=409, detail="Nur geplante Angebote können storniert werden.")
+    if listing.get("scheduling_mode") == "native" and listing.get("ebay_offer_id"):
+        token = ebay_client.get_access_token()
+        ebay_client.withdraw_offer(token, listing["ebay_offer_id"])
+    updated = db.update_ebay_listing(listing_id, {
+        "status": "Entwurf", "scheduled_at": None, "scheduling_mode": "",
+    })
+    return JSONResponse(_listing_with_card(updated))
+
+
+@app.post("/api/ebay/listings/publish-bulk")
+async def publish_ebay_listings_bulk(body: dict = Body(...)):
+    results = []
+    for listing_id in body.get("listing_ids", []):
+        listing = db.get_ebay_listing(listing_id)
+        if listing is None:
+            results.append({"listing_id": listing_id, "status": "Fehler", "error": "Nicht gefunden."})
+            continue
+        try:
+            updated = _publish_listing(listing)
+            results.append({"listing_id": listing_id, "status": updated["status"]})
+        except HTTPException as exc:
+            results.append({"listing_id": listing_id, "status": "Fehler", "error": str(exc.detail)})
+        except Exception as exc:
+            # Any other exception (a Supabase hiccup fetching the card,
+            # a public_url() failure, ...) must stay scoped to this one
+            # listing - the whole point of publish-bulk is that one bad
+            # card doesn't take the rest of the batch down with it.
+            results.append({"listing_id": listing_id, "status": "Fehler", "error": str(exc)})
+    return JSONResponse({"results": results})
+
+
+@app.get("/api/ebay/oauth/status")
+async def ebay_oauth_status():
+    response = httpx.get(f"{ebay_client.EBAY_OAUTH_SERVER_URL}/api/oauth/status", timeout=15)
+    return JSONResponse(response.json(), status_code=response.status_code)
+
+
+@app.post("/api/ebay/sync-sales")
+async def sync_ebay_sales():
+    try:
+        token = ebay_client.get_access_token()
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    cursor = db.latest_sale_sync_cursor()
+    since = cursor or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    orders = ebay_client.get_orders(token, since)
+    listings_by_sku = {l["sku"]: l for l in db.list_ebay_listings()}
+
+    synced = skipped = 0
+    for order in orders:
+        for line_item in order.get("lineItems", []):
+            listing = ebay_listing.match_sale_line_item(line_item, listings_by_sku)
+            if listing is None:
+                skipped += 1
+                continue
+            db.upsert_ebay_sale({
+                "listing_id": listing["id"], "card_id": listing["card_id"],
+                "ebay_order_id": order.get("orderId", ""),
+                "ebay_line_item_id": line_item.get("lineItemId", ""),
+                "sale_date": order.get("creationDate"),
+                "quantity": line_item.get("quantity", 1),
+                "gross_price": float((line_item.get("total") or {}).get("value", 0) or 0),
+            })
+            db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
+            synced += 1
+    return JSONResponse({"synced": synced, "skipped": skipped})
 
 
 static_dir = Path(__file__).parent / "static"

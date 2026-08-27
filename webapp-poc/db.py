@@ -253,3 +253,102 @@ def get_cards_by_ids(card_ids):
         return []
     response = get_client().table("cards").select("id,title,front_image_path").in_("id", card_ids).execute()
     return response.data
+
+
+EBAY_LISTING_FIELDS = [
+    "title", "description", "condition", "condition_id",
+    "listing_type", "category_id", "aspects", "price", "quantity",
+]
+EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
+    "status", "scheduled_at", "scheduling_mode",
+    "ebay_offer_id", "ebay_listing_id", "last_error", "published_at",
+}
+EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity"}
+
+
+def create_ebay_listing(card_id, sku, fields):
+    row = _blank_numeric_to_none(
+        {name: fields[name] for name in EBAY_LISTING_FIELDS if name in fields},
+        EBAY_LISTING_NUMERIC_FIELDS,
+    )
+    row.update({"card_id": card_id, "sku": sku})
+    response = get_client().table("ebay_listings").insert(row).execute()
+    return response.data[0]
+
+
+def get_ebay_listing(listing_id):
+    response = get_client().table("ebay_listings").select("*").eq("id", listing_id).execute()
+    return response.data[0] if response.data else None
+
+
+def get_ebay_listing_for_card(card_id):
+    response = get_client().table("ebay_listings").select("*").eq("card_id", card_id).execute()
+    return response.data[0] if response.data else None
+
+
+def list_ebay_listings(status=None, q=None):
+    query = get_client().table("ebay_listings").select("*")
+    if status:
+        query = query.eq("status", status)
+    if q:
+        query = query.or_(_ilike_search_filter(q, ["title"]))
+    response = query.order("updated_at", desc=True).execute()
+    return response.data
+
+
+def update_ebay_listing(listing_id, fields):
+    allowed = set(EBAY_LISTING_FIELDS) | EBAY_LISTING_WRITABLE_STATUS_FIELDS
+    row = _blank_numeric_to_none(
+        {name: value for name, value in fields.items() if name in allowed},
+        EBAY_LISTING_NUMERIC_FIELDS,
+    )
+    if not row:
+        return get_ebay_listing(listing_id)
+    response = get_client().table("ebay_listings").update(row).eq("id", listing_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_ebay_listing(listing_id):
+    response = get_client().table("ebay_listings").select("id").eq("id", listing_id).execute()
+    if not response.data:
+        return None
+    get_client().table("ebay_listings").delete().eq("id", listing_id).execute()
+    return response.data[0]
+
+
+def list_due_scheduled_listings(scheduling_mode):
+    # Client-seitig statt per PostgREST-Zeitvergleich gefiltert - gleiches
+    # Muster wie der Rest des Projekts, das komplexe PostgREST-Filter meidet.
+    from datetime import datetime, timezone
+
+    response = (
+        get_client().table("ebay_listings").select("*")
+        .eq("status", "Geplant").eq("scheduling_mode", scheduling_mode).execute()
+    )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    return [row for row in response.data if row.get("scheduled_at") and row["scheduled_at"] <= now_iso]
+
+
+def list_native_scheduled_listings():
+    response = (
+        get_client().table("ebay_listings").select("*")
+        .eq("status", "Geplant").eq("scheduling_mode", "native").execute()
+    )
+    return response.data
+
+
+def latest_sale_sync_cursor():
+    response = (
+        get_client().table("ebay_sales").select("created_at")
+        .order("created_at", desc=True).limit(1).execute()
+    )
+    return response.data[0]["created_at"] if response.data else None
+
+
+def upsert_ebay_sale(fields):
+    response = (
+        get_client().table("ebay_sales")
+        .upsert(fields, on_conflict="ebay_order_id,ebay_line_item_id")
+        .execute()
+    )
+    return response.data[0]

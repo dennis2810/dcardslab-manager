@@ -5,14 +5,18 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
 
 1. Projekt auf https://supabase.com anlegen.
 2. Im SQL Editor den Inhalt von `schema.sql` ausführen (legt `scan_batches`,
-   `cards`, `purchases` und `purchase_items` an).
+   `cards`, `purchases`, `purchase_items`, `ebay_listings` und
+   `ebay_sales` an).
    (Bei einem Schema-Update für ein bereits bestehendes Projekt: einfach
    den kompletten, aktuellen Inhalt von `schema.sql` erneut ausführen —
    `create table if not exists` überspringt bereits vorhandene Tabellen.)
 3. Unter Storage einen neuen Bucket `card-images` anlegen, **"Public
-   bucket" AUSGESCHALTET lassen** (privat – das Backend erzeugt bei
-   Bedarf signierte, zeitlich begrenzte URLs statt dauerhaft offener
-   Links).
+   bucket" EINGESCHALTET lassen** (seit der eBay-Integration braucht
+   jedes veröffentlichte Angebot eine dauerhaft erreichbare Bild-URL ohne
+   Ablauf — `cards.html`/`card.html` nutzen weiterhin signierte URLs für
+   die eigene Anzeige, nur die eBay-Bildübergabe braucht die öffentliche
+   URL). Bereits bestehende Projekte: Storage → `card-images` → Bucket
+   nachträglich auf public umstellen.
 4. Unter Project Settings → API: `Project URL` und `service_role`
    Secret Key kopieren (NICHT den `anon`-Key – der Service-Role-Key hat
    vollen Server-Zugriff und gehört nur ins Backend-Environment, niemals
