@@ -1,0 +1,152 @@
+"""Tests for webapp-poc/ebay_client.py - eBay Sell API client. All HTTP is
+mocked (unittest.mock), same depth as the rest of the project's tests."""
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "webapp-poc"))
+
+import ebay_client  # noqa: E402
+
+
+def _response(status_code=200, json_data=None, text=""):
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data if json_data is not None else {}
+    resp.text = text or str(json_data or "")
+    resp.raise_for_status.side_effect = None
+    return resp
+
+
+class GetAccessTokenTests(unittest.TestCase):
+    def test_returns_token_on_success(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {"access_token": "tok-1"})):
+            token = ebay_client.get_access_token()
+        self.assertEqual(token, "tok-1")
+
+    def test_raises_not_authorized_on_401(self):
+        with patch("ebay_client.httpx.get", return_value=_response(401, {"authorized": False})):
+            with self.assertRaises(ebay_client.EbayNotAuthorizedError):
+                ebay_client.get_access_token()
+
+    def test_raises_api_error_when_oauth_server_unreachable(self):
+        import httpx
+        with patch("ebay_client.httpx.get", side_effect=httpx.ConnectError("nope")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_access_token()
+
+
+class ConditionIdToEnumTests(unittest.TestCase):
+    def test_maps_known_ids(self):
+        self.assertEqual(ebay_client.condition_id_to_enum("4000"), "USED_VERY_GOOD")
+        self.assertEqual(ebay_client.condition_id_to_enum("2750"), "LIKE_NEW")
+
+    def test_passes_through_unknown_value(self):
+        self.assertEqual(ebay_client.condition_id_to_enum("USED_GOOD"), "USED_GOOD")
+
+
+class GetListingPoliciesTests(unittest.TestCase):
+    def _policy_response(self, list_field, id_field, policy_id):
+        return _response(200, {list_field: [{id_field: policy_id}]})
+
+    def test_returns_all_three_policy_ids(self):
+        responses = [
+            self._policy_response("fulfillmentPolicies", "fulfillmentPolicyId", "F1"),
+            self._policy_response("paymentPolicies", "paymentPolicyId", "P1"),
+            self._policy_response("returnPolicies", "returnPolicyId", "R1"),
+        ]
+        with patch("ebay_client.httpx.request", side_effect=responses):
+            policies = ebay_client.get_listing_policies("tok")
+        self.assertEqual(policies, {
+            "fulfillmentPolicyId": "F1", "paymentPolicyId": "P1", "returnPolicyId": "R1",
+        })
+
+    def test_raises_german_error_when_a_policy_is_missing(self):
+        responses = [
+            self._policy_response("fulfillmentPolicies", "fulfillmentPolicyId", "F1"),
+            _response(200, {"paymentPolicies": []}),
+            self._policy_response("returnPolicies", "returnPolicyId", "R1"),
+        ]
+        with patch("ebay_client.httpx.request", side_effect=responses):
+            with self.assertRaises(ebay_client.EbayApiError) as ctx:
+                ebay_client.get_listing_policies("tok")
+        self.assertIn("Zahlungs-Richtlinie", str(ctx.exception))
+
+
+class PutInventoryItemTests(unittest.TestCase):
+    def test_sends_title_and_image_url(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "Musterkarte"}, "https://img/x.jpg")
+        args, kwargs = mock_request.call_args
+        self.assertEqual(args[0], "PUT")
+        self.assertIn("/inventory_item/sku-1", args[1])
+        self.assertEqual(kwargs["json"]["product"]["title"], "Musterkarte")
+        self.assertEqual(kwargs["json"]["product"]["imageUrls"], ["https://img/x.jpg"])
+
+    def test_raises_on_error_status(self):
+        with patch("ebay_client.httpx.request", return_value=_response(400, text="bad request")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.put_inventory_item("tok", "sku-1", {"title": "x"}, None)
+
+
+class CreateOfferTests(unittest.TestCase):
+    def test_returns_offer_id(self):
+        listing = {"category_id": "261328", "price": 12.5, "quantity": 1, "description": "desc"}
+        with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})):
+            offer_id = ebay_client.create_offer("tok", "sku-1", listing)
+        self.assertEqual(offer_id, "offer-1")
+
+
+class PublishOfferTests(unittest.TestCase):
+    def test_publishes_without_scheduling_by_default(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"listingId": "L1"})) as mock_request:
+            listing_id = ebay_client.publish_offer("tok", "offer-1")
+        self.assertEqual(listing_id, "L1")
+        args, kwargs = mock_request.call_args
+        self.assertIsNone(kwargs.get("json"))
+
+    def test_raises_when_scheduled_and_native_not_supported(self):
+        with patch("ebay_client.NATIVE_SCHEDULING_SUPPORTED", False):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.publish_offer("tok", "offer-1", scheduled_at="2026-09-01T10:00:00Z")
+
+    def test_includes_scheduling_field_when_native_supported(self):
+        with patch("ebay_client.NATIVE_SCHEDULING_SUPPORTED", True), \
+             patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.publish_offer("tok", "offer-1", scheduled_at="2026-09-01T10:00:00Z")
+        _, kwargs = mock_request.call_args
+        self.assertIn("2026-09-01T10:00:00Z", str(kwargs["json"]))
+
+
+class GetOfferTests(unittest.TestCase):
+    def test_returns_offer_json(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"offerId": "offer-1"})):
+            offer = ebay_client.get_offer("tok", "offer-1")
+        self.assertEqual(offer["offerId"], "offer-1")
+
+
+class WithdrawOfferTests(unittest.TestCase):
+    def test_posts_to_withdraw_path(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.withdraw_offer("tok", "offer-1")
+        args, _ = mock_request.call_args
+        self.assertEqual(args[0], "POST")
+        self.assertIn("/offer/offer-1/withdraw", args[1])
+
+
+class GetOrdersTests(unittest.TestCase):
+    def test_returns_orders_list(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"orders": [{"orderId": "O1"}]})):
+            orders = ebay_client.get_orders("tok", "2026-08-01T00:00:00Z")
+        self.assertEqual(orders, [{"orderId": "O1"}])
+
+    def test_returns_empty_list_when_no_orders_key(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})):
+            orders = ebay_client.get_orders("tok", "2026-08-01T00:00:00Z")
+        self.assertEqual(orders, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
