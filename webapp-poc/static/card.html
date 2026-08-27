@@ -119,11 +119,16 @@ async function rotateImage(side, degrees) {
       alert("Fehler beim Drehen: " + (body.detail || res.statusText));
       return;
     }
+    // The signed URL's token differs on every response, but Supabase's
+    // storage CDN can still serve a stale cached copy of the object bytes
+    // for a short time after rotate_image() overwrites it - append a
+    // cache-busting param so the browser always fetches the fresh image
+    // instead of showing the same rotation again on the next click.
     if (side === "front" && body.front_image_url) {
-      document.getElementById("front-img").src = body.front_image_url;
+      document.getElementById("front-img").src = body.front_image_url + "&_cb=" + Date.now();
     }
     if (side === "back" && body.back_image_url) {
-      document.getElementById("back-img").src = body.back_image_url;
+      document.getElementById("back-img").src = body.back_image_url + "&_cb=" + Date.now();
     }
   } catch (err) {
     alert("Fehler beim Drehen: " + err);
