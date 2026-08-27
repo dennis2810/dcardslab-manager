@@ -12,6 +12,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 def _install_flask_stub():
@@ -34,7 +35,14 @@ def _install_flask_stub():
             return {}
 
     def _jsonify(*_a, **kw):
-        return kw
+        # Real Flask's jsonify() accepts a positional dict OR kwargs -
+        # existing app.py code (e.g. oauth_status()) uses the positional
+        # form, so the stub needs to merge both to be a faithful double.
+        result = {}
+        for arg in _a:
+            result.update(arg)
+        result.update(kw)
+        return result
 
     def _redirect(*_a, **_kw):
         return None
@@ -74,6 +82,27 @@ class ConditionIdToEnumTests(unittest.TestCase):
         # Defensive fallback - an already-valid enum string (or a value
         # this table doesn't know about) must not be mangled.
         self.assertEqual(oauth_server.condition_id_to_enum("USED_GOOD"), "USED_GOOD")
+
+
+class InternalAccessTokenTests(unittest.TestCase):
+    """webapp-poc's ebay_client.py calls this endpoint to get a token
+    without ever seeing the refresh token itself - oauth-server stays the
+    only place that holds eBay credentials."""
+
+    def test_returns_token_when_authorized(self):
+        with patch("app.refresh_access_token", return_value={
+            "access_token": "tok-123", "expires_in": 7200,
+        }):
+            result = oauth_server.internal_access_token()
+        self.assertEqual(result["access_token"], "tok-123")
+        self.assertEqual(result["environment"], oauth_server.ENVIRONMENT)
+        self.assertEqual(result["expires_in"], 7200)
+
+    def test_returns_401_shape_when_not_authorized(self):
+        with patch("app.refresh_access_token", side_effect=RuntimeError("Kein Refresh Token gespeichert.")):
+            result, status = oauth_server.internal_access_token()
+        self.assertEqual(status, 401)
+        self.assertFalse(result["authorized"])
 
 
 if __name__ == "__main__":
