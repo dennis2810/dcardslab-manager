@@ -44,6 +44,32 @@ unverändert von diesem Sub-Projekt weiterverwendet.
   signierte URL zu erzeugen — einfacher und eBay braucht die URL nicht nur
   beim Publish, sondern auch danach, wenn eBay das Angebot periodisch neu
   crawlt/anzeigt.
+- **Scheduling:** Angebote sollen sich für einen späteren Zeitpunkt planen
+  lassen, damit noch Zeit bleibt, sie **in eBay selbst** zu prüfen/
+  anzupassen, bevor sie live gehen. Das setzt voraus, dass eBay den
+  geplanten Eintrag bereits im Seller Hub anzeigt (natives Scheduling der
+  Sell-Inventory-API) — ob dieses Feld existiert, konnte in diesem Chat
+  nicht verifiziert werden (Netzwerkzugriff auf `developer.ebay.com` war
+  blockiert). Vorgehen: zuerst in der Sandbox verifizieren
+  ([Sandbox-Spike](#sandbox-spike-natives-scheduling-verifizieren)), bei
+  Nichtverfügbarkeit App-seitiger Fallback (siehe
+  [Scheduling-Architektur](#scheduling)) — dann ohne eBay-seitige Vorschau,
+  das wird dem Nutzer in der UI klar kommuniziert.
+- **Kartentyp (Sport/Non-Sport):** wird beim Anlegen eines Entwurfs aus dem
+  KI-erkannten `category`-Feld der Karte automatisch abgeleitet (bekannte
+  Sportarten → Kategorie `261328` + `Sportart`-Aspekt, sonst Kategorie
+  `183050` ohne `Sportart`), im Formular per Dropdown überschreibbar.
+  Pflicht-Aspekte pro Kategorie werden aus den bereits im Repo
+  vorhandenen eBay-CSV-Vorlagen (`templates/ebay/*.csv`) gelesen — exakt
+  wie in der Desktop-App, bleibt so automatisch synchron mit eBays echten
+  Vorgaben.
+- **Preisvorschläge:** kein automatischer Abruf/Scraping von eBay-
+  Verkaufsdaten oder 130point.com — eBays "verkaufte Preise" sind über die
+  normale Sell-API nicht zugänglich (dafür bräuchte es die stark
+  eingeschränkte Marketplace Insights API), und 130point.com bietet keine
+  bekannte öffentliche API; automatisiertes Abrufen wäre Scraping mit
+  ToS-/rechtlichem Risiko. Stattdessen nur Links zur manuellen Recherche
+  (siehe UI-Design, Abschnitt `card.html`).
 
 ## Ziel
 
@@ -64,6 +90,13 @@ unverändert von diesem Sub-Projekt weiterverwendet.
 - OAuth-Verbindungsstatus zum `ebay-oauth-server` sichtbar machen
   (autorisiert ja/nein, Umgebung), damit klar ist, warum ein Publish
   scheitert, falls der Sandbox/Produktions-Token fehlt oder abgelaufen ist.
+- Ein Angebot **für einen späteren Zeitpunkt planen** statt sofort zu
+  veröffentlichen, mit Möglichkeit, die Planung wieder zu stornieren.
+- Sport- und Non-Sport-Karten mit den jeweils **richtigen eBay-
+  Pflichtfeldern** (Item Specifics/Aspects) einstellen, automatisch aus
+  Kartendaten vorausgefüllt.
+- Direkte Links zur **manuellen Preisrecherche** (eBay verkaufte Artikel,
+  130point.com) im Entwurf, vorausgefüllt mit dem generierten Titel.
 
 ## Datenmodell
 
@@ -79,11 +112,15 @@ create table if not exists ebay_listings (
     description      text default '',
     condition        text default 'NM',
     condition_id     text default '4000',
+    listing_type     text not null default 'sport',  -- 'sport' | 'non_sport'
     category_id      text default '261328',
+    aspects          jsonb default '{}'::jsonb,
     price            numeric default 0,
     quantity         int default 1,
     status           text not null default 'Entwurf',
-        -- 'Entwurf' | 'Veroeffentlicht' | 'Verkauft' | 'Fehler'
+        -- 'Entwurf' | 'Geplant' | 'Veroeffentlicht' | 'Verkauft' | 'Fehler'
+    scheduled_at     timestamptz,
+    scheduling_mode  text default '',  -- '' | 'native' | 'app'
     ebay_offer_id    text default '',
     ebay_listing_id  text default '',
     last_error       text default '',
@@ -93,6 +130,8 @@ create table if not exists ebay_listings (
 );
 
 create index if not exists ebay_listings_status_idx on ebay_listings(status);
+create index if not exists ebay_listings_scheduled_at_idx
+    on ebay_listings(scheduled_at) where scheduled_at is not null;
 
 create table if not exists ebay_sales (
     id                uuid primary key default gen_random_uuid(),
@@ -149,10 +188,16 @@ Schlüssel.
   wird beim Sync auf `'Verkauft'` gesetzt, Detailwerte kommen ausschließlich
   aus `ebay_sales` (analog zur Vereinfachung bei `purchases`/`cards` in
   Sub-Projekt 3).
-- **Kein `template_key`/CSV-Exportfelder** (`exported_at`, `scheduled_at`)
-  — CSV-Export ist optional/außerhalb dieses Scopes (s. o.).
-- **Angebot beenden (`withdrawOffer`) ist nicht Teil dieses Sub-Projekts** —
-  s. [Explizit außerhalb dieses Scopes](#explizit-außerhalb-dieses-scopes).
+- **Kein `template_key`/CSV-Exportfelder** (`exported_at`) — CSV-Export ist
+  optional/außerhalb dieses Scopes (s. o.). `scheduled_at` existiert hier
+  wohl, aber mit anderer Bedeutung als ein reines CSV-Metadatum: es steuert
+  den [Scheduling](#scheduling)-Flow.
+- **Ein bereits live veröffentlichtes Angebot lässt sich nicht beenden**
+  (`withdrawOffer`) — das bleibt außerhalb dieses Sub-Projekts. Eine
+  **noch nicht live gegangene Planung stornieren** ist dagegen Teil davon,
+  s. [Scheduling](#scheduling) — technisch ein deutlich kleinerer Eingriff
+  (ein noch nicht verkäuflich sichtbares Offer zurückziehen, kein aktives
+  Angebot beenden).
 
 ## Bild-URLs für eBay
 
@@ -179,14 +224,19 @@ Umstellung:
 
 ```
 webapp-poc/
-    ebay_client.py   (neu) - HTTP-Client für eBay Sell-API (Inventory Item,
-                              Offer, Publish, Business Policies, Orders) +
-                              Access-Token vom oauth-server holen
-    ebay_listing.py  (neu) - Titel/Beschreibung generieren, SKU/Preis-Logik,
-                              Sales-Sync-Matching (kein HTTP, reine Funktionen
-                              -> einfach testbar ohne Mock-HTTP)
-    db.py            (erweitert) - CRUD für ebay_listings/ebay_sales
-    main.py          (erweitert) - neue /api/ebay/*-Endpoints
+    ebay_client.py    (neu) - HTTP-Client für eBay Sell-API (Inventory Item,
+                               Offer, Publish, Business Policies, Orders) +
+                               Access-Token vom oauth-server holen
+    ebay_listing.py   (neu) - Titel/Beschreibung generieren, SKU/Preis-Logik,
+                               Sport/Non-Sport-Ableitung + Aspects aus den
+                               eBay-CSV-Vorlagen, Preisrecherche-Links,
+                               Sales-Sync-Matching (kein HTTP, reine
+                               Funktionen -> einfach testbar ohne Mock-HTTP)
+    ebay_scheduler.py (neu) - Hintergrund-Loop für App-seitiges Scheduling
+                               (Fallback, s. Scheduling)
+    db.py             (erweitert) - CRUD für ebay_listings/ebay_sales
+    main.py           (erweitert) - neue /api/ebay/*-Endpoints, startet den
+                               Scheduler-Loop beim App-Start
     static/ebay.html          (neu) - Angebots-Übersicht, Mehrfachauswahl
     static/card.html          (erweitert) - neuer "eBay"-Bereich
 ```
@@ -205,6 +255,90 @@ bewährte Logik 1:1 (kein Fremdgebiet, nur ins neue Modul kopiert und an
   Return-Policy-IDs für eine Marketplace-ID — **erstellt keine**, das
   bleibt der einmalige manuelle/`policies/bootstrap`-Schritt gegen den
   oauth-server, unverändert dokumentiert in `ebay-oauth-server/README.md`)
+
+### Kartentyp-Ableitung (Sport/Non-Sport) und Pflicht-Aspekte
+
+`ebay_listing.derive_listing_type(card)` prüft `card["category"]` gegen
+eine feste, erweiterbare Liste bekannter Sportarten
+(`_KNOWN_SPORTS = {"Fußball", "Basketball", "Baseball", "Eishockey",
+"American Football", "Tennis", "Boxen", "Golf", "Motorsport", ...}` — nur
+eine Default-Vermutung, im Formular immer überschreibbar). Treffer →
+`listing_type='sport'`, `category_id='261328'`, Aspekt `Sportart` =
+`card["category"]`. Kein Treffer → `listing_type='non_sport'`,
+`category_id='183050'`, kein `Sportart`-Aspekt.
+
+`ebay_listing.build_aspects(card, listing_type)` füllt weitere Aspekte aus
+vorhandenen Kartenfeldern (Team, Hersteller, Set, Saison, Kartennummer —
+gleiche Zuordnung wie in `ebay_sandbox_create_offer()` in
+`app/dcardlabs_manager.py`, Zeilen ~2751–2760) und speichert sie im neuen
+`ebay_listings.aspects`-Feld (JSON) — im Formular als einfache
+Key-Value-Liste editierbar, für den Fall, dass ein Aspekt manuell
+korrigiert werden muss.
+
+`ebay_listing.required_aspects(listing_type)` liest die Pflichtfelder
+(mit `*` markierte Spalten in Zeile 2) direkt aus
+`templates/ebay/eBay-category-listing-template_261328.csv` (sport) bzw.
+`..._non_sport.csv` (non_sport) — portiert von `_ebay_required_aspects()`
+in `app/dcardlabs_manager.py`. `POST .../publish` validiert dagegen
+**vor** dem eBay-Aufruf: fehlt ein Pflicht-Aspekt, HTTP 422 mit deutscher
+Meldung, welche Felder fehlen — vermeidet einen unklaren eBay-Fehler nach
+einem bereits angelegten Inventory Item.
+
+### Scheduling
+
+Zwei Modi, `ebay_listings.scheduling_mode` hält fest, welcher für ein
+konkretes Angebot verwendet wurde:
+
+- **`native`** (bevorzugt, falls verfügbar): Inventory Item + Offer werden
+  **sofort** bei der Planung angelegt (nicht erst zum Zieltermin), inkl.
+  eines eBay-seitigen Scheduling-Felds am Offer/Publish-Aufruf. Das Offer
+  existiert damit direkt im (Sandbox-)Seller-Hub und kann dort geprüft/
+  angepasst werden, bevor es zum geplanten Zeitpunkt automatisch live
+  geht — genau das gewünschte Verhalten. `status='Geplant'`,
+  `ebay_offer_id` ist bereits gesetzt.
+- **`app`** (Fallback): Inventory Item/Offer werden **nicht** vorab
+  angelegt, nur `scheduled_at`/`status='Geplant'` in der DB gespeichert.
+  `ebay_scheduler.py` läuft als `asyncio`-Hintergrund-Task (gestartet in
+  `main.py`s FastAPI-Startup-Hook), prüft alle 5 Minuten auf
+  `status='Geplant' AND scheduling_mode='app' AND scheduled_at <= now()`
+  und veröffentlicht dann ganz normal (identischer Codepfad wie ein
+  manueller Publish-Aufruf). **Einschränkung, die dem Nutzer in der UI
+  angezeigt wird:** vor dem tatsächlichen Publish-Zeitpunkt existiert
+  nichts bei eBay, das dort geprüft/angepasst werden könnte.
+
+Welcher Modus verwendet wird, entscheidet `ebay_client.py` anhand des
+[Sandbox-Spikes](#sandbox-spike-natives-scheduling-verifizieren) — als
+Konstante (`NATIVE_SCHEDULING_SUPPORTED = True/False`), nicht dynamisch
+pro Aufruf ermittelt, da eine eBay-API-Fähigkeit sich nicht innerhalb
+einer Session ändert.
+
+Für `native`-Angebote läuft derselbe Hintergrund-Task zusätzlich alle
+5 Minuten `GET /sell/inventory/v1/offer/{offerId}` gegen alle
+`status='Geplant' AND scheduling_mode='native'`-Zeilen und setzt
+`status='Veroeffentlicht'`, sobald eBay das Offer als live meldet — ohne
+das müsste der Nutzer selbst auf "Aktualisieren" klicken, um den Übergang
+Geplant → Veröffentlicht zu sehen.
+
+**`POST /api/ebay/listings/{id}/unschedule`** (neu) storniert eine
+Planung: bei `scheduling_mode='app'` reicht `scheduled_at=null,
+status='Entwurf'`; bei `scheduling_mode='native'` wird zusätzlich das
+bereits angelegte, noch nicht live gegangene Offer über
+`withdrawOffer` zurückgezogen (kein aktives Angebot, s.
+[Abweichungen vom Desktop-Modell](#abweichungen-vom-desktop-modell)).
+
+#### Sandbox-Spike: natives Scheduling verifizieren
+
+**Erste Implementierungsaufgabe** dieses Sub-Projekts, vor dem Rest der
+Scheduling-Logik: ein einzelner manueller Test-Aufruf gegen die
+eBay-Sandbox (z. B. testweise über den bestehenden
+`ebay-oauth-server/test_offer_create`-Endpoint oder ein kurzes Skript),
+ob die Offer-Ressource ein Scheduling-Feld akzeptiert und das Offer
+tatsächlich als "geplant" statt sofort live im Sandbox Seller Hub
+erscheint. Ergebnis wird als eine Zeile Kommentar + die Konstante
+`NATIVE_SCHEDULING_SUPPORTED` in `ebay_client.py` festgehalten. Fällt der
+Test negativ aus, wird direkt mit `scheduling_mode='app'` als einzigem
+Modus weitergebaut (kein Blocker für den Rest des Sub-Projekts) und der
+Nutzer hier im Chat informiert.
 
 ### Neuer Endpoint in `ebay-oauth-server`
 
@@ -234,12 +368,18 @@ Muster wie `DCARDSLAB_EBAY_SERVER_URL` in der Desktop-App).
 Legt einen Angebots-Entwurf für eine Karte an (404, falls Karte nicht
 existiert; 409, falls bereits ein Angebot existiert — dann `PATCH`
 verwenden). Body optional: `title`, `description`, `price`, `quantity`,
-`condition`, `condition_id`, `category_id` — jedes fehlende Feld wird aus
-den Kartendaten vorgeschlagen (`ebay_listing.generate_title(card)`/
-`generate_description(card)`, portiert von
+`condition`, `condition_id`, `listing_type`, `category_id`, `aspects` —
+jedes fehlende Feld wird aus den Kartendaten vorgeschlagen:
+`title`/`description` über `ebay_listing.generate_title(card)`/
+`generate_description(card)` (portiert von
 `ebay_generate_title`/`ebay_generate_description` in
-`app/dcardlabs_manager.py`, an die webapp-Feldnamen angepasst). Gibt den
-angelegten Entwurf zurück.
+`app/dcardlabs_manager.py`, an die webapp-Feldnamen angepasst),
+`listing_type`/`category_id`/`aspects` über
+`derive_listing_type(card)`/`build_aspects(card, listing_type)` (s.
+[Kartentyp-Ableitung](#kartentyp-ableitung-sportnon-sport-und-pflicht-aspekte)).
+Gibt den angelegten Entwurf zurück, inkl. `required_aspects(listing_type)`
+als Hinweis fürs Frontend, welche Felder vor dem Publish noch fehlen
+könnten.
 
 ### `GET /api/ebay/listings` (neu)
 
@@ -273,15 +413,29 @@ Löscht nur den Entwurf, nicht die Karte.
 
 ### `POST /api/ebay/listings/{id}/publish` (neu)
 
-Veröffentlicht **ein** Angebot: Business Policies auflösen (Fehler mit
-deutscher Meldung, falls eine fehlt — Text unverändert aus
-`get_listing_policies()`), Inventory Item anlegen/aktualisieren (`PUT
+Body optional: `{"scheduled_at": "<iso8601>"}`. **Ohne** `scheduled_at`
+(oder mit einem Zeitpunkt in der Vergangenheit): sofortiges Publish wie
+folgt. Validiert zuerst `required_aspects(listing_type)` (422 bei
+fehlenden Pflichtfeldern, s.
+[Kartentyp-Ableitung](#kartentyp-ableitung-sportnon-sport-und-pflicht-aspekte)),
+löst Business Policies auf (Fehler mit deutscher Meldung, falls eine
+fehlt — Text unverändert aus `get_listing_policies()`), legt das
+Inventory Item an/aktualisiert es (`PUT
 /sell/inventory/v1/inventory_item/{sku}`, Bild-URL aus
-`storage.public_url()`), Offer anlegen (falls `ebay_offer_id` leer) oder
-aktualisieren, `publish` aufrufen. Bei Erfolg: `status='Veroeffentlicht'`,
-`ebay_offer_id`/`ebay_listing_id`/`published_at` gesetzt, `last_error`
-geleert. Bei Fehler: `status='Fehler'`, `last_error` mit der
-eBay-Fehlermeldung, HTTP 502 an den Client mit derselben Meldung.
+`storage.public_url()`), legt das Offer an (falls `ebay_offer_id` leer)
+oder aktualisiert es, ruft `publish` auf. Bei Erfolg:
+`status='Veroeffentlicht'`, `ebay_offer_id`/`ebay_listing_id`/
+`published_at` gesetzt, `last_error` geleert. Bei Fehler:
+`status='Fehler'`, `last_error` mit der eBay-Fehlermeldung, HTTP 502 an
+den Client mit derselben Meldung.
+
+**Mit** `scheduled_at` in der Zukunft: `status='Geplant'`,
+`scheduled_at` gespeichert, `scheduling_mode` auf `'native'` oder
+`'app'` gesetzt (s. [Scheduling](#scheduling)) — bei `'native'` laufen
+Validierung/Policy-Auflösung/Inventory-Item/Offer-Anlage bereits jetzt,
+nur `publish` bekommt den Scheduling-Parameter statt sofort live zu
+gehen; bei `'app'` passiert bis zum Zieltermin nichts weiter, das
+übernimmt `ebay_scheduler.py`.
 
 ### `POST /api/ebay/listings/publish-bulk` (neu)
 
@@ -302,6 +456,12 @@ Veröffentlichung von Karte Y nicht verhindern). Antwort:
 
 Immer HTTP 200 (Fehler stehen pro Zeile im Body) — das Frontend zeigt eine
 Ergebnisliste statt eines einzelnen Fehler-Alerts.
+
+### `POST /api/ebay/listings/{id}/unschedule` (neu)
+
+Storniert eine laufende Planung (s. [Scheduling](#scheduling)). Nur
+erlaubt bei `status='Geplant'` (409 sonst). Gibt das aktualisierte
+Angebot zurück (`status='Entwurf'`).
 
 ### `GET /api/ebay/oauth/status` (neu, Proxy)
 
@@ -338,11 +498,27 @@ Analog zum bestehenden "Kauf"-Bereich, unterhalb davon:
 - **Kein Angebot vorhanden:** einklappbarer Bereich "eBay-Angebot
   erstellen" — Titel/Beschreibung vorausgefüllt (aus
   `POST /api/cards/{id}/ebay-listing` ohne Body, das Backend generiert),
-  Felder editierbar, Preis/Menge/Zustand-Auswahl, **"Als Entwurf
-  speichern"**.
-- **Entwurf vorhanden:** Felder editierbar (`PATCH`), Buttons
-  **"Veröffentlichen"** (`POST .../publish`) und **"Entwurf löschen"**
-  (`DELETE`, mit `confirm()`).
+  Felder editierbar, Preis/Menge/Zustand-Auswahl, **Kartentyp**-Dropdown
+  (Sport/Non-Sport, vorbelegt aus `derive_listing_type()`, s.
+  [Kartentyp-Ableitung](#kartentyp-ableitung-sportnon-sport-und-pflicht-aspekte)),
+  Aspects als einfache Key-Value-Liste (vorausgefüllt, editierbar), Link
+  **"Preis recherchieren"** öffnet zwei neue Tabs — eBay-Sold-Suche
+  (`https://www.ebay.de/sch/i.html?_nkw=<title>&LH_Sold=1&LH_Complete=1`)
+  und `https://130point.com/sales/?search=<title>` — beide mit dem
+  generierten Titel vorausgefüllt, rein informativ, Preis bleibt manuell
+  im Formular einzutragen. **"Als Entwurf speichern"**.
+- **Entwurf vorhanden:** Felder editierbar (`PATCH`), zusätzlich ein
+  optionales **"Veröffentlichen am"**-Datum/Uhrzeit-Feld. Ohne gesetztes
+  Datum: Button **"Veröffentlichen"** (`POST .../publish` ohne Body). Mit
+  gesetztem Datum: Button **"Planen"** (`POST .../publish` mit
+  `scheduled_at`). Daneben **"Entwurf löschen"** (`DELETE`, mit
+  `confirm()`).
+- **Geplant:** schreibgeschützte Anzeige "Geplant für \<Datum/Uhrzeit\>",
+  bei `scheduling_mode='native'` zusätzlich Link **"Auf eBay ansehen"**
+  (Angebot existiert dort bereits im Entwurfs-/Geplant-Status), bei
+  `'app'` ein Hinweistext, dass vor dem Termin nichts bei eBay sichtbar
+  ist. Buttons **"Jetzt sofort veröffentlichen"** und **"Planung
+  stornieren"** (`POST .../unschedule`).
 - **Veröffentlicht:** schreibgeschützte Kernfelder (Titel, Preis, Zustand)
   mit **"Bearbeiten"**-Umschalter (löst beim Speichern automatisch den
   Re-Publish aus, s. o.), Link **"Auf eBay ansehen"**
@@ -359,8 +535,9 @@ Analog zum bestehenden "Kauf"-Bereich, unterhalb davon:
   (Sandbox)" / "Nicht verbunden — OAuth-Flow im eBay-Server starten"
   (Link auf `{EBAY_OAUTH_SERVER_URL}/ebay/oauth/start`, öffnet in neuem
   Tab).
-- Status-Filter (Entwurf/Veröffentlicht/Verkauft/Fehler) + Freitextsuche
-  über Titel.
+- Status-Filter (Entwurf/Geplant/Veröffentlicht/Verkauft/Fehler) +
+  Freitextsuche über Titel. Geplante Angebote zeigen zusätzlich das
+  `scheduled_at`-Datum in der Zeile.
 - Tabelle/Kacheln mit Checkbox pro Zeile, Thumbnail, Titel, Preis, Status.
   Klick auf eine Zeile (außerhalb der Checkbox) navigiert zu
   `card.html?id=<card_id>`.
@@ -393,6 +570,10 @@ Analog zum bestehenden "Kauf"-Bereich, unterhalb davon:
   eBay-Angebot.").
 - `DELETE` auf ein nicht-Entwurf-Angebot: 409 mit deutscher
   Fehlermeldung.
+- Fehlende Pflicht-Aspekte beim Publish: 422 mit deutscher Meldung, welche
+  Felder (aus `required_aspects(listing_type)`) noch fehlen.
+- `POST .../unschedule` auf ein nicht-`Geplant`-Angebot: 409 mit
+  deutscher Fehlermeldung.
 - Frontend zeigt Netzwerk-/Serverfehler über das bestehende
   `#status`-Muster.
 
@@ -403,24 +584,35 @@ gesamten Projekt):
 
 - `tests/test_webapp_poc_ebay_listing.py` — reine Logik in
   `ebay_listing.py` (Titel-/Beschreibungsgenerierung aus Kartendaten,
-  SKU-Format, Sales-Sync-Matching von Bestellzeilen gegen `ebay_listings`).
+  SKU-Format, `derive_listing_type`/`build_aspects`/`required_aspects`
+  für Sport- und Non-Sport-Beispielkarten inkl. Karten mit unbekannter/
+  fehlender `category`, Preisrecherche-Link-Generierung,
+  Sales-Sync-Matching von Bestellzeilen gegen `ebay_listings`).
 - `tests/test_webapp_poc_ebay_client.py` — `ebay_client.py` gegen einen
   gemockten `httpx`-Transport: Token holen (inkl. 401-Fall),
   `condition_id_to_enum`, `get_listing_policies` (Erfolg + fehlende
   Policy → Fehlermeldung), Inventory-Item/Offer/Publish-Aufrufe (Request-
-  Payload-Form + Fehlerpfad).
+  Payload-Form + Fehlerpfad), Scheduling-Parameter im Publish-Request nur
+  bei `NATIVE_SCHEDULING_SUPPORTED=True` gesetzt.
+- `tests/test_webapp_poc_ebay_scheduler.py` — `ebay_scheduler.py`: findet
+  fällige `app`-geplante Angebote und veröffentlicht sie, lässt noch nicht
+  fällige unangetastet, aktualisiert `native`-geplante Angebote auf
+  `Veroeffentlicht`, sobald `get_offer` das meldet, Fehlerfall setzt
+  `status='Fehler'` statt den Loop abzubrechen.
 - `tests/test_webapp_poc_ebay_endpoints.py` — alle neuen `/api/ebay/*`-
   und `/api/cards/{id}/ebay-listing`-Endpoints gegen `db.py`/
-  `ebay_client.py`-Mocks: Entwurf anlegen (409 bei Duplikat), Liste/Filter,
-  `PATCH` (inkl. Re-Publish-Trigger bei bereits veröffentlichtem Angebot),
-  `DELETE` (409 bei Nicht-Entwurf), `publish` (Erfolg/Fehler-Pfad),
-  `publish-bulk` (gemischtes Ergebnis, ein Fehler blockiert die anderen
-  nicht), `sync-sales` (Treffer/Skip/Idempotenz bei erneutem Sync),
-  `oauth/status`-Proxy.
+  `ebay_client.py`-Mocks: Entwurf anlegen mit automatischer Kartentyp-
+  Ableitung (409 bei Duplikat), Liste/Filter (inkl. `Geplant`), `PATCH`
+  (inkl. Re-Publish-Trigger bei bereits veröffentlichtem Angebot),
+  `DELETE` (409 bei Nicht-Entwurf), `publish` ohne/mit `scheduled_at`
+  (native + app, Erfolg/Fehler-Pfad, 422 bei fehlenden Pflicht-Aspekten),
+  `unschedule` (409 bei Nicht-Geplant), `publish-bulk` (gemischtes
+  Ergebnis, ein Fehler blockiert die anderen nicht), `sync-sales`
+  (Treffer/Skip/Idempotenz bei erneutem Sync), `oauth/status`-Proxy.
 - Ergänzungen in `tests/test_webapp_poc_db.py` für die neuen `db.py`-
   Funktionen (`create_ebay_listing`, `get_ebay_listing`,
   `get_ebay_listing_for_card`, `list_ebay_listings`, `update_ebay_listing`,
-  `delete_ebay_listing`, `upsert_ebay_sale`).
+  `delete_ebay_listing`, `upsert_ebay_sale`, `list_due_scheduled_listings`).
 - Frontend (`ebay.html`, erweitertes `card.html`): kein JS-Test-Framework
   im Projekt (wie in Sub-Projekt 2/3) — Verifikation manuell im Browser
   gegen die Sandbox.
@@ -442,6 +634,8 @@ gesamten Projekt):
   `unique(card_id)`, siehe Datenmodell-Abschnitt.
 - eBay-Verkaufsgebühren automatisch nachtragen (Finances API, eigener
   OAuth-Scope) — `ebay_fees` bleibt vorerst `0`.
+- Automatischer Abruf/Scraping von eBay-Verkaufsdaten oder 130point.com —
+  nur Links zur manuellen Recherche (s. o.).
 - Automatisches Bootstrap der Business Policies als Teil des
   Publish-Flows — bleibt der bestehende, einmalige manuelle Schritt über
   `ebay-oauth-server/README.md`.
