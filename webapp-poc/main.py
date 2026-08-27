@@ -242,13 +242,18 @@ async def create_card_manual(
         try:
             front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
             back_image_path = storage.upload_image(batch_id, 1, "back", back_path)
+            card_row = db.insert_card(batch_id, 1, parsed_fields, front_image_path, back_image_path)
         except Exception as exc:
+            # Covers db.insert_card() too, not just the image uploads - a
+            # Supabase insert failure here must not leave the batch row
+            # stuck at "pending" forever (same trap /api/scan's
+            # process_one() already guards against for its own
+            # insert_card() call).
             db.update_batch_status(batch_id, "failed")
             raise HTTPException(
-                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+                status_code=502, detail=f"Karte anlegen fehlgeschlagen: {type(exc).__name__}: {exc}"
             ) from exc
 
-    card_row = db.insert_card(batch_id, 1, parsed_fields, front_image_path, back_image_path)
     db.update_batch_status(batch_id, "ok")
     return JSONResponse(_attach_signed_urls(card_row))
 

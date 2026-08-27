@@ -385,6 +385,19 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
         mocks["main.db.insert_card"].assert_not_called()
 
+    def test_insert_failure_marks_batch_failed_and_returns_502(self):
+        # Regression test: db.insert_card() must be covered by the same
+        # failure handling as storage.upload_image() - otherwise a Supabase
+        # insert error leaves the scan_batches row stuck at "pending"
+        # forever instead of "failed" (same trap /api/scan's process_one()
+        # already guards against for its own insert_card() call).
+        mocks = self._patch_all(
+            **{"main.db.insert_card": MagicMock(side_effect=RuntimeError("Insert down"))}
+        )
+        response = self._post_create()
+        self.assertEqual(response.status_code, 502)
+        mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
+
     def test_missing_file_is_422(self):
         self._patch_all()
         response = client.post(
