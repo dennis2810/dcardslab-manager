@@ -616,12 +616,14 @@ async def ebay_oauth_status():
 async def sync_ebay_sales():
     try:
         token = ebay_client.get_access_token()
+        cursor = db.latest_sale_sync_cursor()
+        since = cursor or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        orders = ebay_client.get_orders(token, since)
     except ebay_client.EbayNotAuthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    cursor = db.latest_sale_sync_cursor()
-    since = cursor or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-    orders = ebay_client.get_orders(token, since)
     listings_by_sku = {l["sku"]: l for l in db.list_ebay_listings()}
 
     synced = skipped = 0

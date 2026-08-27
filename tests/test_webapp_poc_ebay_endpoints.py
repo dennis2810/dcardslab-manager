@@ -334,6 +334,18 @@ class SyncSalesEndpointTests(unittest.TestCase):
         mock_upsert.assert_called_once()
         mock_update.assert_called_once_with("listing-1", {"status": "Verkauft"})
 
+    def test_returns_502_instead_of_crashing_when_get_orders_fails(self):
+        # A regression test: get_orders() raising EbayApiError (eBay
+        # rejects the request, network hiccup, ...) must not escape as an
+        # unhandled 500 - only get_access_token()'s EbayNotAuthorizedError
+        # was caught before this fix.
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", side_effect=ebay_client.EbayApiError("eBay lehnt die Anfrage ab")):
+            response = client.post("/api/ebay/sync-sales")
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("eBay lehnt die Anfrage ab", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r webapp-poc/requirements.txt
 COPY scanner/ scanner/
 COPY integrations/ integrations/
 COPY webapp-poc/ webapp-poc/
+# ebay_listing.py reads the eBay-provided CSV templates at runtime
+# (Sport/Non-Sport required item specifics) - without this, every
+# eBay-listing operation fails with FileNotFoundError inside the container.
+COPY templates/ templates/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "webapp-poc"]
