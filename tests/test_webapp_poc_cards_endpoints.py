@@ -158,7 +158,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
     def test_rotates_front_image_and_returns_card_with_fresh_signed_urls(self):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
-             patch("main.storage.rotate_image") as mock_rotate, \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
              patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
 
@@ -167,11 +167,15 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["front_image_url"], "https://signed/b1/1_front.jpg")
         self.assertEqual(body["back_image_url"], "https://signed/b1/1_back.jpg")
+        # The rotated bytes come back as a data URI - no dependency on the
+        # (possibly still Storage-CDN-stale) signed URL for the just-rotated
+        # side, see main.py's rotate endpoint comment.
+        self.assertTrue(body["rotated_image_data_uri"].startswith("data:image/jpeg;base64,"))
 
     def test_rotates_back_image(self):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
-             patch("main.storage.rotate_image") as mock_rotate, \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
              patch("main.storage.signed_url", return_value="https://signed/x"):
             response = client.post("/api/cards/card-1/rotate", json={"side": "back", "degrees": 180})
 
@@ -201,17 +205,20 @@ class RotateCardImageEndpointTests(unittest.TestCase):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 45})
         self.assertEqual(response.status_code, 400)
 
-    def test_returns_502_when_signed_url_for_rotated_side_fails(self):
-        # storage.rotate_image() already persisted the rotation by this point -
-        # if signing the URL to show it back fails, the frontend must be told
-        # (not silently handed a response with no updated image), otherwise a
-        # click that actually worked looks like it did nothing.
+    def test_returns_rotated_data_uri_even_when_signed_url_fails(self):
+        # storage.rotate_image() already persisted the rotation and its
+        # return value is already in memory - the response's data URI must
+        # not depend on signed_url() (a separate, potentially-CDN-stale or
+        # even failing network call) succeeding.
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
-             patch("main.storage.rotate_image"), \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
              patch("main.storage.signed_url", side_effect=Exception("boom")):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
-        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["rotated_image_data_uri"].startswith("data:image/jpeg;base64,"))
+        self.assertNotIn("front_image_url", body)
 
 
 class GetCardPurchaseFieldTests(unittest.TestCase):

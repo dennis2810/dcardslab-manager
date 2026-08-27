@@ -129,32 +129,19 @@ async function rotateImage(side, degrees) {
       alert("Fehler beim Drehen: " + (body.detail || res.statusText));
       return;
     }
-    if (side === "front" && body.front_image_url) {
-      refreshRotatedImage("front-img", body.front_image_url);
-    }
-    if (side === "back" && body.back_image_url) {
-      refreshRotatedImage("back-img", body.back_image_url);
+    // Zeigt die gedrehten Bytes direkt als Data-URI an, statt eine
+    // signierte Storage-URL nachzuladen: Supabase Storage's CDN kann kurz
+    // nach dem Ueberschreiben noch eine veraltete Kopie der Objekt-Bytes
+    // ausliefern, selbst bei einer frisch signierten URL mit Cache-Busting-
+    // Parameter - die Data-URI kommt dagegen direkt aus der Rotation
+    // selbst und kann nicht veraltet sein.
+    if (body.rotated_image_data_uri) {
+      const imgId = side === "front" ? "front-img" : "back-img";
+      document.getElementById(imgId).src = body.rotated_image_data_uri;
     }
   } catch (err) {
     alert("Fehler beim Drehen: " + err);
   }
-}
-
-// The signed URL's token differs on every response, so a cache-busting
-// param alone forces the browser to issue a fresh request - but Supabase
-// Storage's CDN can still serve a stale cached copy of the object bytes
-// for a short moment after rotate_image() overwrites it, so even a fresh
-// request can come back with the pre-rotation image. A single delayed
-// second reload (with its own cache-busting param, so it's a genuinely
-// new request too) gives the CDN a bit more time to catch up without
-// requiring the user to notice and manually reload the page.
-function refreshRotatedImage(imgId, url) {
-  const img = document.getElementById(imgId);
-  const separator = url.includes("?") ? "&" : "?";
-  img.src = `${url}${separator}_cb=${Date.now()}`;
-  setTimeout(() => {
-    img.src = `${url}${separator}_cb=${Date.now()}`;
-  }, 1200);
 }
 
 document.getElementById("front-rotate-left").addEventListener("click", () => rotateImage("front", 270));
