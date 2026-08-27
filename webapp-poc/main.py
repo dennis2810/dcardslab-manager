@@ -264,6 +264,7 @@ async def get_card(card_id: str):
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     card = _attach_signed_urls(card)
     card["purchase"] = db.get_purchase_for_card(card_id)
+    card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     return JSONResponse(card)
 
 
