@@ -239,5 +239,27 @@ async def delete_card(card_id: str):
     return Response(status_code=204)
 
 
+@app.post("/api/cards/{card_id}/rotate")
+async def rotate_card_image(card_id: str, body: dict = Body(...)):
+    side = body.get("side")
+    degrees = body.get("degrees")
+    if side not in ("front", "back"):
+        raise HTTPException(status_code=400, detail="side muss 'front' oder 'back' sein.")
+    if degrees not in (90, 180, 270):
+        raise HTTPException(status_code=400, detail="degrees muss 90, 180 oder 270 sein.")
+
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+
+    path_key = "front_image_path" if side == "front" else "back_image_path"
+    object_path = card.get(path_key)
+    if not object_path:
+        raise HTTPException(status_code=404, detail=f"Kein Bild für {side} vorhanden.")
+
+    storage.rotate_image(object_path, degrees)
+    return JSONResponse(_attach_signed_urls(card))
+
+
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
