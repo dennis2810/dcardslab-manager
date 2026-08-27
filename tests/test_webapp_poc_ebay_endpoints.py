@@ -189,6 +189,46 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 502)
 
+    def test_persists_offer_id_even_when_a_later_step_fails(self):
+        # Regression test: create_offer() succeeding but publish_offer()
+        # failing afterward must not lose the offer_id - otherwise every
+        # retry calls create_offer() again against an offer eBay already
+        # has (errorId 25002 "Offer entity already exists"), an infinite
+        # loop discovered live against the real eBay sandbox.
+        with patch("main.db.get_ebay_listing", return_value=_listing()), \
+             patch("main.db.update_ebay_listing", return_value=_listing()) as mock_update, \
+             patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_policies", return_value={}), \
+             patch("main.ebay_client.put_inventory_item"), \
+             patch("main.ebay_client.create_offer", return_value="offer-new"), \
+             patch("main.ebay_client.publish_offer", side_effect=ebay_client.EbayApiError("Policy fehlt")):
+            response = client.post("/api/ebay/listings/listing-1/publish")
+        self.assertEqual(response.status_code, 502)
+        offer_id_updates = [
+            call.args[1]["ebay_offer_id"] for call in mock_update.call_args_list
+            if "ebay_offer_id" in call.args[1]
+        ]
+        self.assertIn("offer-new", offer_id_updates)
+
+    def test_does_not_recreate_offer_when_offer_id_already_saved(self):
+        listing_with_offer = _listing(ebay_offer_id="offer-existing")
+        with patch("main.db.get_ebay_listing", return_value=listing_with_offer), \
+             patch("main.db.update_ebay_listing", return_value=listing_with_offer), \
+             patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_policies", return_value={}), \
+             patch("main.ebay_client.put_inventory_item"), \
+             patch("main.ebay_client.create_offer") as mock_create, \
+             patch("main.ebay_client.update_offer") as mock_update_offer, \
+             patch("main.ebay_client.publish_offer", return_value="L1"):
+            response = client.post("/api/ebay/listings/listing-1/publish")
+        self.assertEqual(response.status_code, 200)
+        mock_create.assert_not_called()
+        mock_update_offer.assert_called_once()
+
     def test_returns_401_when_not_authorized(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Fehler")), \
