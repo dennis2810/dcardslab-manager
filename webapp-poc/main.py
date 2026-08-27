@@ -23,6 +23,7 @@ Run:
 
 Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
+import asyncio
 import base64
 import sys
 import tempfile
@@ -56,9 +57,18 @@ from ai_card_recognition import recognize_card, EMPTY_FIELDS  # noqa: E402
 import db  # noqa: E402
 import ebay_client  # noqa: E402
 import ebay_listing  # noqa: E402
+import ebay_scheduler  # noqa: E402
 import storage  # noqa: E402
 
 app = FastAPI(title="DCardLabs Web PoC")
+
+
+@app.on_event("startup")
+async def _start_ebay_scheduler():
+    # publish_fn is _publish_listing() itself, defined further down in this
+    # module - a plain lambda closure avoids importing main.py from
+    # ebay_scheduler.py (which already imports db/ebay_client, not main).
+    asyncio.create_task(ebay_scheduler.run_forever(lambda listing: _publish_listing(listing)))
 
 # Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
 JPEG_QUALITY = 97
