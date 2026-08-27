@@ -25,6 +25,7 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
 import asyncio
 import base64
+import json
 import logging
 import sys
 import tempfile
@@ -34,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import Body, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -207,6 +208,49 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
         db.update_batch_status(batch_id, batch_status)
 
     return JSONResponse({"batch_id": batch_id, "cards": results})
+
+
+@app.post("/api/cards/recognize")
+async def recognize_card_images(front: UploadFile = File(...), back: UploadFile = File(...)):
+    with tempfile.TemporaryDirectory(prefix="dcardslab_manual_") as tmp_str:
+        tmp = Path(tmp_str)
+        front_path = tmp / f"front{Path(front.filename or 'front.jpg').suffix}"
+        back_path = tmp / f"back{Path(back.filename or 'back.jpg').suffix}"
+        front_path.write_bytes(await front.read())
+        back_path.write_bytes(await back.read())
+        fields = recognize_card(front_path=front_path, back_path=back_path)
+    return JSONResponse(fields)
+
+
+@app.post("/api/cards")
+async def create_card_manual(
+    front: UploadFile = File(...), back: UploadFile = File(...), fields: str = Form("{}"),
+):
+    try:
+        parsed_fields = json.loads(fields)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="fields muss gueltiges JSON sein.") from exc
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_manual_") as tmp_str:
+        tmp = Path(tmp_str)
+        front_path = tmp / f"front{Path(front.filename or 'front.jpg').suffix}"
+        back_path = tmp / f"back{Path(back.filename or 'back.jpg').suffix}"
+        front_path.write_bytes(await front.read())
+        back_path.write_bytes(await back.read())
+
+        batch_id = db.create_batch(card_count=1)
+        try:
+            front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
+            back_image_path = storage.upload_image(batch_id, 1, "back", back_path)
+        except Exception as exc:
+            db.update_batch_status(batch_id, "failed")
+            raise HTTPException(
+                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    card_row = db.insert_card(batch_id, 1, parsed_fields, front_image_path, back_image_path)
+    db.update_batch_status(batch_id, "ok")
+    return JSONResponse(_attach_signed_urls(card_row))
 
 
 def _expand_purchase_items(items):
