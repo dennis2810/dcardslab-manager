@@ -40,6 +40,16 @@ als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
   Vorschau + Dreh-Buttons korrigieren, bevor er hochgeladen wird (rein
   clientseitig per Canvas, das Backend bekommt nur das bereits gedrehte
   Bild zu sehen).
+- `static/card-new.html` legt eine einzelne Karte manuell an, ohne
+  9er-Scan-Bogen - Vorder-/Rückseite vom Gerät hochladen (Pflicht),
+  Vorschau + Drehen vor dem Speichern (gleiches Canvas-Verfahren wie
+  `index.html`), optional per Button "KI erkennen" die Felder aus den
+  Bildern vorbelegen lassen (`POST /api/cards/recognize`, ruft
+  `recognize_card()` auf, ohne etwas zu speichern), dann "Karte
+  speichern" (`POST /api/cards`, multipart: `front`/`back` + `fields`
+  als JSON-String) - legt wie jede gescannte Karte einen
+  `scan_batches`-Eintrag mit `card_count=1` an, leitet danach zu
+  `card.html?id=...` weiter.
 - Käufe (Einzelkauf oder Sammelkauf/Lot) lassen sich erfassen, durchsuchen,
   bearbeiten und löschen (`static/purchases.html`/`purchase.html`,
   `POST`/`GET`/`PATCH`/`DELETE /api/purchases[/{id}]`). Einzelne Karten
@@ -152,14 +162,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- **Manuelles Anlegen einzelner Karten auf `cards.html`** (nächstes
-  Sub-Projekt): Der 9er-Scan über `index.html` bleibt der primäre Weg,
-  aber es soll auch möglich sein, eine einzelne Karte direkt auf
-  `cards.html` anzulegen - inkl. Vorder-/Rückseiten-Upload vom Rechner/
-  Device (nicht nur per Scan-Bogen), Dreh-Funktion wie in `card.html`
-  bereits vorhanden, und nach Möglichkeit KI-Vorbelegung der Kartendaten
-  aus den hochgeladenen Bildern (analog zu `recognize_card()` im
-  bestehenden Scan-Flow).
 - Google Drive/Sheets-Sync, Backups.
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
 - CSV-Export/-Import für eBay (wie in `docs/EBAY_IMPORT.md` für die
