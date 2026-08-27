@@ -619,5 +619,181 @@ class CardsWithPurchaseTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class CreateEbayListingTests(unittest.TestCase):
+    def test_inserts_row_with_card_id_and_sku(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1", "card_id": "card-1", "sku": "webapp-card-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_ebay_listing("card-1", "webapp-card-1", {"title": "Musterkarte", "price": 9.99})
+        self.assertEqual(result["id"], "listing-1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["card_id"], "card-1")
+        self.assertEqual(row["sku"], "webapp-card-1")
+        self.assertEqual(row["title"], "Musterkarte")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_ebay_listing("card-1", "sku-1", {"title": "x", "not_a_real_column": "y"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_real_column", row)
+
+
+class GetEbayListingTests(unittest.TestCase):
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [])
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.get_ebay_listing("does-not-exist"))
+
+
+class GetEbayListingForCardTests(unittest.TestCase):
+    def test_returns_single_object_when_linked(self):
+        mock_client = MagicMock()
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+            {"id": "listing-1", "card_id": "card-1"}
+        ]
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_ebay_listing_for_card("card-1")
+        self.assertEqual(result["id"], "listing-1")
+
+    def test_returns_none_when_not_linked(self):
+        mock_client = MagicMock()
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.get_ebay_listing_for_card("card-1"))
+
+
+class ListEbayListingsTests(unittest.TestCase):
+    def test_status_filter(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        eq_builder = mock_client.table.return_value.select.return_value.eq.return_value
+        eq_builder.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_ebay_listings(status="Entwurf")
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("status", "Entwurf")
+
+    def test_q_filters_title(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        or_builder = mock_client.table.return_value.select.return_value.or_.return_value
+        or_builder.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_ebay_listings(q="Musterkarte")
+        filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
+        self.assertIn("title.ilike.%Musterkarte%", filter_arg)
+
+
+class UpdateEbayListingTests(unittest.TestCase):
+    def test_updates_only_allowed_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1", "price": 15.0}])
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_listing("listing-1", {"price": 15.0, "not_a_real_column": "x"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["price"], 15.0)
+        self.assertNotIn("not_a_real_column", row)
+
+    def test_status_and_scheduling_fields_are_writable(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1", "status": "Geplant"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_listing("listing-1", {
+                "status": "Geplant", "scheduled_at": "2026-09-01T10:00:00Z", "scheduling_mode": "app",
+            })
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["status"], "Geplant")
+        self.assertEqual(row["scheduling_mode"], "app")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [])
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.update_ebay_listing("does-not-exist", {"price": 1}))
+
+
+class DeleteEbayListingTests(unittest.TestCase):
+    def test_deletes_and_returns_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "listing-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_ebay_listing("listing-1")
+        self.assertEqual(result, {"id": "listing-1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "listing-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.delete_ebay_listing("does-not-exist"))
+        mock_client.table.return_value.delete.assert_not_called()
+
+
+class ListDueScheduledListingsTests(unittest.TestCase):
+    def test_filters_out_not_yet_due_rows(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "scheduled_at": "2020-01-01T00:00:00+00:00"},  # long past, due
+            {"id": "l2", "scheduled_at": "2999-01-01T00:00:00+00:00"},  # far future, not due
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_due_scheduled_listings("app")
+        self.assertEqual([r["id"] for r in result], ["l1"])
+
+
+class ListNativeScheduledListingsTests(unittest.TestCase):
+    def test_returns_all_native_scheduled_rows(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "l1", "scheduling_mode": "native"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_native_scheduled_listings()
+        self.assertEqual(result, [{"id": "l1", "scheduling_mode": "native"}])
+
+
+class LatestSaleSyncCursorTests(unittest.TestCase):
+    def test_returns_none_when_no_sales_yet(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.order.return_value.limit.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.latest_sale_sync_cursor())
+
+    def test_returns_created_at_of_most_recent_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"created_at": "2026-08-27T10:00:00+00:00"}]
+        mock_client.table.return_value.select.return_value.order.return_value.limit.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertEqual(db.latest_sale_sync_cursor(), "2026-08-27T10:00:00+00:00")
+
+
+class UpsertEbaySaleTests(unittest.TestCase):
+    def test_upserts_on_order_and_line_item(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.upsert_ebay_sale({"ebay_order_id": "O1", "ebay_line_item_id": "LI1"})
+        self.assertEqual(result, {"id": "sale-1"})
+        mock_client.table.return_value.upsert.assert_called_once_with(
+            {"ebay_order_id": "O1", "ebay_line_item_id": "LI1"},
+            on_conflict="ebay_order_id,ebay_line_item_id",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
