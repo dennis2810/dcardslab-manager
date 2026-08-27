@@ -39,3 +39,28 @@ create table if not exists cards (
 );
 
 create index if not exists cards_batch_id_idx on cards(batch_id);
+
+create table if not exists purchases (
+    id             uuid primary key default gen_random_uuid(),
+    purchase_date  date not null,
+    platform       text default '',   -- z.B. "eBay", "Kleinanzeigen", "Messe"
+    seller         text default '',
+    shipping       numeric default 0,
+    total_price    numeric default 0,
+    notes          text default '',
+    created_at     timestamptz not null default now()
+);
+
+create table if not exists purchase_items (
+    id              uuid primary key default gen_random_uuid(),
+    purchase_id     uuid not null references purchases(id) on delete cascade,
+    card_id         uuid not null references cards(id) on delete cascade,
+    allocated_cost  numeric default 0,
+    quantity        int default 1,
+    notes           text default '',   -- Zustand bei Kauf o.ä., Freitext
+    created_at      timestamptz not null default now(),
+    unique (card_id)
+);
+
+create index if not exists purchase_items_purchase_id_idx
+    on purchase_items(purchase_id);
