@@ -470,6 +470,12 @@ def _publish_listing(listing, scheduled_at=None):
             ebay_client.update_offer(token, offer_id, payload)
         else:
             offer_id = ebay_client.create_offer(token, listing["sku"], payload)
+            # Persisted immediately, not only on full success below - if a
+            # later step (e.g. publish_offer) fails, the next retry must
+            # call update_offer() with this ID instead of create_offer()
+            # again, which eBay rejects with errorId 25002 "Offer entity
+            # already exists" once an Offer for this SKU exists there.
+            db.update_ebay_listing(listing["id"], {"ebay_offer_id": offer_id})
 
         native_scheduled_at = (
             scheduled_at if scheduled_at is not None and ebay_client.NATIVE_SCHEDULING_SUPPORTED else None
