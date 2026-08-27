@@ -192,6 +192,25 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 502)
 
+    def test_logs_which_step_failed(self):
+        # eBay's sandbox reuses one generic errorId (25002) for many
+        # distinct causes, and the raw HTTP response alone doesn't say which
+        # of the ~5 sequential eBay calls in _publish_listing() actually
+        # failed - the log line naming the step is what makes a live
+        # failure diagnosable from container logs alone.
+        with patch("main.db.get_ebay_listing", return_value=_listing()), \
+             patch("main.db.update_ebay_listing", return_value=_listing(status="Fehler")), \
+             patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
+             patch("main.ebay_client.get_listing_policies", side_effect=ebay_client.EbayApiError("Policy fehlt")), \
+             self.assertLogs("ebay_publish", level="INFO") as log_ctx:
+            response = client.post("/api/ebay/listings/listing-1/publish")
+        self.assertEqual(response.status_code, 502)
+        joined = "\n".join(log_ctx.output)
+        self.assertIn("get_listing_policies", joined)
+
     def test_persists_offer_id_even_when_a_later_step_fails(self):
         # Regression test: create_offer() succeeding but publish_offer()
         # failing afterward must not lose the offer_id - otherwise every

@@ -25,6 +25,7 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
 import asyncio
 import base64
+import logging
 import sys
 import tempfile
 import types
@@ -59,6 +60,18 @@ import ebay_client  # noqa: E402
 import ebay_listing  # noqa: E402
 import ebay_scheduler  # noqa: E402
 import storage  # noqa: E402
+
+logger = logging.getLogger("ebay_publish")
+# Explicit handler+level on this logger itself (not relying on root/uvicorn
+# logging config) - uvicorn's default dictConfig only sets up the "uvicorn"
+# logger namespace, not root, so a plain logger.info() call here would
+# otherwise be silently dropped (Python's logging "handler of last resort"
+# only handles WARNING and above).
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(_handler)
 
 app = FastAPI(title="DCardLabs Web PoC")
 
@@ -455,22 +468,53 @@ def _publish_listing(listing, scheduled_at=None):
         # Offer wird JETZT angelegt, nur der eBay-Publish-Call bekommt den
         # Scheduling-Parameter statt sofort live zu gehen (s. Spec).
 
+    # Each step is logged individually (start + ok) so that a failure's
+    # traceback - logged via logger.exception() in the except blocks below -
+    # lands right after the last "-> ok" line, making the failing step
+    # obvious from the container logs alone. Needed because eBay's sandbox
+    # reuses one generic errorId (25002) for many distinct causes, and the
+    # existing except-blocks below already catch EbayApiError cleanly, so
+    # nothing about *which* of the ~5 sequential eBay calls failed was
+    # visible in the logs before this.
+    step = "start"
     try:
+        step = "get_access_token"
+        logger.info("Publish %s: %s ...", listing["id"], step)
         token = ebay_client.get_access_token()
+        logger.info("Publish %s: %s -> ok", listing["id"], step)
+
+        step = "ensure_merchant_location"
+        logger.info("Publish %s: %s ...", listing["id"], step)
         merchant_location_key = ebay_client.ensure_merchant_location(token)
+        logger.info("Publish %s: %s -> ok (%s)", listing["id"], step, merchant_location_key)
+
+        step = "get_listing_policies"
+        logger.info("Publish %s: %s ...", listing["id"], step)
         policies = ebay_client.get_listing_policies(token)
+        logger.info("Publish %s: %s -> ok", listing["id"], step)
+
         card = db.get_card(listing["card_id"]) or {}
         image_url = None
         if card.get("front_image_path"):
             image_url = storage.public_url(card["front_image_path"])
+
+        step = "put_inventory_item"
+        logger.info("Publish %s: %s ...", listing["id"], step)
         ebay_client.put_inventory_item(token, listing["sku"], listing, image_url)
+        logger.info("Publish %s: %s -> ok", listing["id"], step)
 
         offer_id = listing.get("ebay_offer_id")
         payload = {**listing, "policies": policies, "merchant_location_key": merchant_location_key}
         if offer_id:
+            step = "update_offer"
+            logger.info("Publish %s: %s (%s) ...", listing["id"], step, offer_id)
             ebay_client.update_offer(token, offer_id, payload)
+            logger.info("Publish %s: %s -> ok", listing["id"], step)
         else:
+            step = "create_offer"
+            logger.info("Publish %s: %s ...", listing["id"], step)
             offer_id = ebay_client.create_offer(token, listing["sku"], payload)
+            logger.info("Publish %s: %s -> ok (%s)", listing["id"], step, offer_id)
             # Persisted immediately, not only on full success below - if a
             # later step (e.g. publish_offer) fails, the next retry must
             # call update_offer() with this ID instead of create_offer()
@@ -481,11 +525,16 @@ def _publish_listing(listing, scheduled_at=None):
         native_scheduled_at = (
             scheduled_at if scheduled_at is not None and ebay_client.NATIVE_SCHEDULING_SUPPORTED else None
         )
+        step = "publish_offer"
+        logger.info("Publish %s: %s (%s) ...", listing["id"], step, offer_id)
         ebay_listing_id = ebay_client.publish_offer(token, offer_id, scheduled_at=native_scheduled_at)
+        logger.info("Publish %s: %s -> ok (%s)", listing["id"], step, ebay_listing_id)
     except ebay_client.EbayNotAuthorizedError as exc:
+        logger.exception("Publish %s: Schritt '%s' fehlgeschlagen (nicht autorisiert)", listing["id"], step)
         db.update_ebay_listing(listing["id"], {"status": "Fehler", "last_error": str(exc)})
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
+        logger.exception("Publish %s: Schritt '%s' fehlgeschlagen", listing["id"], step)
         db.update_ebay_listing(listing["id"], {"status": "Fehler", "last_error": str(exc)})
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
