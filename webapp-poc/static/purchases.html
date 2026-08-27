@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Käufe</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  input { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  tr.row { cursor: pointer; }
+  tr.row:hover { background: #f7f7f7; }
+  #status-msg { font-style: italic; color: #555; }
+  #new-purchase-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+  #new-purchase-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  #new-purchase-form input { font-weight: normal; margin-top: 0.2rem; }
+  #new-purchase-form .actions { grid-column: 1 / -1; }
+  .error { color: #b00020; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs – Käufe</h1>
+  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+
+  <div class="controls">
+    <input type="text" id="q" placeholder="Suche (Plattform, Verkäufer, Notizen)">
+    <button type="button" id="toggle-new">+ Neuer Kauf</button>
+  </div>
+
+  <form id="new-purchase-form">
+    <label>Kaufdatum <input type="date" name="purchase_date" required></label>
+    <label>Plattform <input type="text" name="platform"></label>
+    <label>Verkäufer <input type="text" name="seller"></label>
+    <label>Versand <input type="number" step="0.01" name="shipping"></label>
+    <label>Gesamtpreis <input type="number" step="0.01" name="total_price"></label>
+    <label>Notizen <input type="text" name="notes"></label>
+    <div class="actions">
+      <button type="submit">Speichern</button>
+      <span id="new-purchase-status"></span>
+    </div>
+  </form>
+
+  <p id="status-msg"></p>
+  <table id="purchases-table" style="display: none;">
+    <thead>
+      <tr><th>Datum</th><th>Plattform</th><th>Verkäufer</th><th>Karten</th><th>Gesamt</th><th>Versand</th></tr>
+    </thead>
+    <tbody id="purchases-body"></tbody>
+  </table>
+
+<script>
+const qInput = document.getElementById("q");
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("purchases-table");
+const body = document.getElementById("purchases-body");
+const toggleNewBtn = document.getElementById("toggle-new");
+const newForm = document.getElementById("new-purchase-form");
+
+toggleNewBtn.addEventListener("click", () => {
+  newForm.style.display = newForm.style.display === "grid" ? "none" : "grid";
+});
+
+async function loadPurchases() {
+  const params = new URLSearchParams();
+  if (qInput.value.trim()) params.set("q", qInput.value.trim());
+
+  statusMsg.textContent = "Lädt …";
+  table.style.display = "none";
+  try {
+    const res = await fetch("/api/purchases?" + params.toString());
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = `${data.purchases.length} Kauf/Käufe`;
+    render(data.purchases);
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function render(purchases) {
+  body.innerHTML = "";
+  table.style.display = purchases.length ? "table" : "none";
+  try {
+    sessionStorage.setItem("purchaseListIds", JSON.stringify(purchases.map((p) => p.id)));
+  } catch (err) {
+    // sessionStorage kann in eingeschraenkten Browser-Kontexten werfen -
+    // Vor-/Zurueck-Navigation ist dann einfach nicht verfuegbar.
+  }
+  for (const p of purchases) {
+    const tr = document.createElement("tr");
+    tr.className = "row";
+    tr.addEventListener("click", () => {
+      location.href = `purchase.html?id=${encodeURIComponent(p.id)}`;
+    });
+    const cells = [
+      p.purchase_date || "", p.platform || "", p.seller || "",
+      String(p.item_count ?? 0), p.total_price ?? "", p.shipping ?? "",
+    ];
+    for (const text of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+newForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fields = Object.fromEntries(new FormData(newForm).entries());
+  const statusEl = document.getElementById("new-purchase-status");
+  statusEl.textContent = "Speichert …";
+  statusEl.className = "";
+  try {
+    const res = await fetch("/api/purchases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const responseBody = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (responseBody.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    newForm.reset();
+    newForm.style.display = "none";
+    statusEl.textContent = "";
+    loadPurchases();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  }
+});
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(loadPurchases, 300);
+});
+
+loadPurchases();
+</script>
+</body>
+</html>

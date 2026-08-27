@@ -39,6 +39,13 @@ eigentliche WebApp-Architektur. Weiterhin kein eBay, kein Login.
   Vorschau + Dreh-Buttons korrigieren, bevor er hochgeladen wird (rein
   clientseitig per Canvas, das Backend bekommt nur das bereits gedrehte
   Bild zu sehen).
+- Käufe (Einzelkauf oder Sammelkauf/Lot) lassen sich erfassen, durchsuchen,
+  bearbeiten und löschen (`static/purchases.html`/`purchase.html`,
+  `POST`/`GET`/`PATCH`/`DELETE /api/purchases[/{id}]`). Einzelne Karten
+  lassen sich einem Kauf zuordnen bzw. die Zuordnung wieder lösen - sowohl
+  über `purchase.html` als auch direkt im "Kauf"-Bereich von `card.html`
+  (`POST`/`DELETE /api/purchases/{id}/items[/{item_id}]`). Eine Karte
+  gehört höchstens einem Kauf gleichzeitig.
 
 ## Starten auf dem NAS (Docker)
 
@@ -83,7 +90,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- Käufe/Purchases (Sub-Projekt 3).
 - eBay-Listing-Erstellung/-Export/-Sales-Sync (Sub-Projekt 4).
 - Google Drive/Sheets-Sync, Backups (Sub-Projekt 5).
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.

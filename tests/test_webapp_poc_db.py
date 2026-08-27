@@ -250,5 +250,374 @@ class ListCardsFilterTests(unittest.TestCase):
         )
 
 
+def _mock_client_for_tables(**table_builders):
+    """client.table(name) liefert table_builders[name] statt eines einzigen
+    geteilten Mocks - noetig fuer Funktionen, die mehr als eine Tabelle
+    anfassen (z.B. create_purchase() -> purchases UND purchase_items)."""
+    client = MagicMock()
+    client.table.side_effect = lambda name: table_builders[name]
+    return client
+
+
+class CreatePurchaseTests(unittest.TestCase):
+    def test_creates_purchase_without_items(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "purchases", [{"id": "purchase-1", "purchase_date": "2026-08-27"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_purchase({"purchase_date": "2026-08-27"})
+        self.assertEqual(result["id"], "purchase-1")
+        self.assertEqual(result["items"], [])
+        mock_client.table.return_value.insert.assert_called_once_with(
+            {"purchase_date": "2026-08-27"}
+        )
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "purchases", [{"id": "purchase-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_purchase({"purchase_date": "2026-08-27", "not_a_real_column": "x"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_real_column", row)
+
+    def test_blank_numeric_fields_become_none(self):
+        # <input type=number> that's left empty sends "" - Postgres rejects
+        # "" on a numeric column, so it must become NULL instead.
+        mock_client = MagicMock()
+        _mock_table(mock_client, "purchases", [{"id": "purchase-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_purchase({"purchase_date": "2026-08-27", "shipping": "", "total_price": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["shipping"])
+        self.assertIsNone(row["total_price"])
+
+    def test_rolls_back_purchase_and_items_on_any_item_insertion_error(self):
+        # Nicht nur CardAlreadyLinkedError - jede Ausnahme waehrend der
+        # Item-Verknuepfung (z.B. ein nicht existierender card_id, der die
+        # FK-Constraint verletzt) muss den Kauf wieder abraeumen.
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "purchase-1"}]
+        purchases_builder.insert.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = dup_check
+        items_builder.insert.return_value.execute.side_effect = RuntimeError("FK violation")
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            with self.assertRaises(RuntimeError):
+                db.create_purchase({"purchase_date": "2026-08-27"}, items=[{"card_id": "does-not-exist"}])
+        purchases_builder.delete.return_value.eq.assert_called_once_with("id", "purchase-1")
+
+    def test_creates_purchase_with_single_item(self):
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "purchase-1"}]
+        purchases_builder.insert.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = dup_check
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1", "purchase_id": "purchase-1", "card_id": "card-1"}]
+        items_builder.insert.return_value.execute.return_value = insert_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_purchase({"purchase_date": "2026-08-27"}, items=[{"card_id": "card-1"}])
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["card_id"], "card-1")
+
+    def test_rolls_back_purchase_and_items_when_an_item_is_already_linked(self):
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "purchase-1"}]
+        purchases_builder.insert.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        not_linked = MagicMock()
+        not_linked.data = []
+        already_linked = MagicMock()
+        already_linked.data = [{"id": "existing-item"}]
+        items_builder.select.return_value.eq.return_value.execute.side_effect = [not_linked, already_linked]
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1", "purchase_id": "purchase-1", "card_id": "card-1"}]
+        items_builder.insert.return_value.execute.return_value = insert_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            with self.assertRaises(db.CardAlreadyLinkedError):
+                db.create_purchase(
+                    {"purchase_date": "2026-08-27"},
+                    items=[{"card_id": "card-1"}, {"card_id": "card-2"}],
+                )
+        items_builder.delete.return_value.eq.assert_called_once_with("id", "item-1")
+        purchases_builder.delete.return_value.eq.assert_called_once_with("id", "purchase-1")
+
+
+class ListPurchasesTests(unittest.TestCase):
+    def test_computes_item_count_per_purchase(self):
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "p1"}, {"id": "p2"}]
+        purchases_builder.select.return_value.order.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{"purchase_id": "p1"}, {"purchase_id": "p1"}, {"purchase_id": "p2"}]
+        items_builder.select.return_value.in_.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_purchases()
+        counts = {p["id"]: p["item_count"] for p in result}
+        self.assertEqual(counts, {"p1": 2, "p2": 1})
+
+    def test_q_filters_platform_seller_notes(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        or_builder = mock_client.table.return_value.select.return_value.or_.return_value
+        or_builder.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_purchases(q="eBay")
+        filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
+        self.assertIn("platform.ilike.%eBay%", filter_arg)
+        self.assertIn("seller.ilike.%eBay%", filter_arg)
+        self.assertIn("notes.ilike.%eBay%", filter_arg)
+
+
+class GetPurchaseTests(unittest.TestCase):
+    def test_returns_purchase_with_items(self):
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "p1", "platform": "eBay"}]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{"id": "item-1", "card_id": "card-1"}]
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_purchase("p1")
+        self.assertEqual(result["platform"], "eBay")
+        self.assertEqual(result["items"], [{"id": "item-1", "card_id": "card-1"}])
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_purchase("does-not-exist")
+        self.assertIsNone(result)
+
+
+class UpdatePurchaseTests(unittest.TestCase):
+    def test_updates_only_provided_fields_and_reattaches_items(self):
+        purchases_builder = MagicMock()
+        update_response = MagicMock()
+        update_response.data = [{"id": "p1", "platform": "Kleinanzeigen"}]
+        purchases_builder.update.return_value.eq.return_value.execute.return_value = update_response
+
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{"id": "item-1"}]
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_purchase("p1", {"platform": "Kleinanzeigen"})
+        self.assertEqual(result["platform"], "Kleinanzeigen")
+        self.assertEqual(result["items"], [{"id": "item-1"}])
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_purchase("does-not-exist", {"platform": "x"})
+        self.assertIsNone(result)
+
+    def test_blank_numeric_fields_become_none(self):
+        purchases_builder = MagicMock()
+        update_response = MagicMock()
+        update_response.data = [{"id": "p1"}]
+        purchases_builder.update.return_value.eq.return_value.execute.return_value = update_response
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            db.update_purchase("p1", {"shipping": ""})
+        row = purchases_builder.update.call_args[0][0]
+        self.assertIsNone(row["shipping"])
+
+
+class DeletePurchaseTests(unittest.TestCase):
+    def test_deletes_and_returns_purchase(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "p1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_purchase("p1")
+        self.assertEqual(result, {"id": "p1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "p1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_purchase("does-not-exist")
+        self.assertIsNone(result)
+        mock_client.table.return_value.delete.assert_not_called()
+
+
+class AddPurchaseItemTests(unittest.TestCase):
+    def test_links_card_to_purchase(self):
+        mock_client = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = dup_check
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1", "purchase_id": "p1", "card_id": "card-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = insert_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.add_purchase_item("p1", {"card_id": "card-1", "allocated_cost": 12.5})
+        self.assertEqual(result["card_id"], "card-1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["allocated_cost"], 12.5)
+        self.assertEqual(row["quantity"], 1)  # default
+
+    def test_raises_when_card_already_linked(self):
+        mock_client = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = [{"id": "existing-item"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = dup_check
+        with patch("db.get_client", return_value=mock_client):
+            with self.assertRaises(db.CardAlreadyLinkedError):
+                db.add_purchase_item("p1", {"card_id": "card-1"})
+        mock_client.table.return_value.insert.assert_not_called()
+
+    def test_blank_allocated_cost_becomes_none(self):
+        mock_client = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = dup_check
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = insert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.add_purchase_item("p1", {"card_id": "card-1", "allocated_cost": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["allocated_cost"])
+
+
+class UpdatePurchaseItemTests(unittest.TestCase):
+    def test_updates_only_provided_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "item-1", "notes": "LP statt NM"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_purchase_item("p1", "item-1", {"notes": "LP statt NM"})
+        self.assertEqual(result["notes"], "LP statt NM")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_purchase_item("p1", "does-not-exist", {"notes": "x"})
+        self.assertIsNone(result)
+
+
+class DeletePurchaseItemTests(unittest.TestCase):
+    def test_deletes_and_returns_item(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "item-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_purchase_item("p1", "item-1")
+        self.assertEqual(result, {"id": "item-1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "item-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_purchase_item("p1", "does-not-exist")
+        self.assertIsNone(result)
+        mock_client.table.return_value.delete.assert_not_called()
+
+
+class GetPurchaseForCardTests(unittest.TestCase):
+    def test_returns_flat_purchase_info_when_linked(self):
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{
+            "id": "item-1", "purchase_id": "p1",
+            "allocated_cost": 12.5, "quantity": 1, "notes": "",
+        }]
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{
+            "id": "p1", "purchase_date": "2026-08-27", "platform": "eBay", "seller": "cardguy88",
+        }]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = purchases_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_purchase_for_card("card-1")
+        self.assertEqual(result["purchase_id"], "p1")
+        self.assertEqual(result["item_id"], "item-1")
+        self.assertEqual(result["platform"], "eBay")
+        self.assertEqual(result["allocated_cost"], 12.5)
+
+    def test_returns_none_when_not_linked(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_purchase_for_card("card-1")
+        self.assertIsNone(result)
+
+
+class CardsWithPurchaseTests(unittest.TestCase):
+    def test_returns_set_of_linked_card_ids(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"card_id": "card-1"}, {"card_id": "card-2"}]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.cards_with_purchase(["card-1", "card-2", "card-3"])
+        self.assertEqual(result, {"card-1", "card-2"})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.cards_with_purchase([])
+        self.assertEqual(result, set())
+        mock_client.table.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

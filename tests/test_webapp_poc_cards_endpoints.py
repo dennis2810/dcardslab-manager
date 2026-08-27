@@ -28,6 +28,7 @@ class ListCardsEndpointTests(unittest.TestCase):
             {"id": "card-2", "title": "Karte 2", "front_image_path": None, "back_image_path": None},
         ]
         with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
             response = client.get("/api/cards")
 
@@ -49,6 +50,7 @@ class ListCardsEndpointTests(unittest.TestCase):
             return f"https://signed/{path}"
 
         with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.storage.signed_url", side_effect=fake_signed_url):
             response = client.get("/api/cards")
 
@@ -71,6 +73,7 @@ class GetCardEndpointTests(unittest.TestCase):
     def test_returns_card_with_signed_urls(self):
         row = {"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg", "back_image_path": None}
         with patch("main.db.get_card", return_value=row), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
              patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
             response = client.get("/api/cards/card-1")
 
@@ -86,6 +89,7 @@ class GetCardEndpointTests(unittest.TestCase):
     def test_signed_url_failure_degrades_gracefully_instead_of_500(self):
         row = {"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=row), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
              patch("main.storage.signed_url", side_effect=RuntimeError("Supabase Storage hiccup")):
             response = client.get("/api/cards/card-1")
 
@@ -208,6 +212,37 @@ class RotateCardImageEndpointTests(unittest.TestCase):
              patch("main.storage.signed_url", side_effect=Exception("boom")):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
         self.assertEqual(response.status_code, 502)
+
+
+class GetCardPurchaseFieldTests(unittest.TestCase):
+    def test_includes_purchase_info_when_linked(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        purchase_info = {"purchase_id": "p1", "item_id": "item-1", "platform": "eBay"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=purchase_info):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.json()["purchase"], purchase_info)
+
+    def test_purchase_is_null_when_not_linked(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None):
+            response = client.get("/api/cards/card-1")
+        self.assertIsNone(response.json()["purchase"])
+
+
+class ListCardsHasPurchaseFieldTests(unittest.TestCase):
+    def test_flags_cards_with_a_linked_purchase(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None},
+        ]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value={"card-1"}):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertTrue(cards[0]["has_purchase"])
+        self.assertFalse(cards[1]["has_purchase"])
 
 
 if __name__ == "__main__":

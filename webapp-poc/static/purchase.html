@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Kauf bearbeiten</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
+  button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
+  .error { color: #b00020; font-weight: 600; }
+  .items { margin-top: 2rem; }
+  .item-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #ddd; }
+  .item-row img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .item-row .title { flex: 1; }
+  #add-item { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <h1>Kauf bearbeiten</h1>
+  <p><a href="purchases.html">&larr; Zur Liste</a></p>
+  <p id="prev-next-nav"></p>
+
+  <form id="edit-form">
+    <p id="load-status">Lädt …</p>
+  </form>
+
+  <div class="items">
+    <h2>Verknüpfte Karten</h2>
+    <div id="items-list"></div>
+    <div id="add-item">
+      <input type="text" id="card-search" placeholder="Karte suchen (Titel, Team, Set, Kartennr.)">
+      <select id="card-results"></select>
+      <button type="button" id="link-card-btn">Verknüpfen</button>
+      <span id="link-status"></span>
+    </div>
+  </div>
+
+<script>
+const FIELDS = [
+  ["purchase_date", "Kaufdatum", "date"], ["platform", "Plattform", "text"],
+  ["seller", "Verkäufer", "text"], ["shipping", "Versand", "number"],
+  ["total_price", "Gesamtpreis", "number"], ["notes", "Notizen", "text"],
+];
+
+function showError(container, message) {
+  container.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "error";
+  p.textContent = message;
+  container.appendChild(p);
+}
+
+const params = new URLSearchParams(location.search);
+const purchaseId = params.get("id");
+const form = document.getElementById("edit-form");
+
+if (!purchaseId) {
+  showError(form, "Keine Kauf-ID angegeben.");
+} else {
+  loadPurchase();
+  renderPrevNextNav();
+}
+
+// Liest die von purchases.html in sessionStorage abgelegte ID-Liste der
+// aktuell gefilterten/durchsuchten Kaeufe, um "vorherige/naechste" ohne
+// eigenen Backend-Endpoint anzuzeigen - exakt das gleiche Muster wie
+// card.html's renderPrevNextNav() mit cardListIds.
+function renderPrevNextNav() {
+  const nav = document.getElementById("prev-next-nav");
+  nav.innerHTML = "";
+  let ids = [];
+  try {
+    ids = JSON.parse(sessionStorage.getItem("purchaseListIds") || "[]");
+  } catch (err) {
+    ids = [];
+  }
+  const index = ids.indexOf(purchaseId);
+  if (index === -1) return;
+
+  if (index > 0) {
+    const prevLink = document.createElement("a");
+    prevLink.href = `purchase.html?id=${encodeURIComponent(ids[index - 1])}`;
+    prevLink.textContent = "← Vorherige";
+    nav.appendChild(prevLink);
+  }
+  if (index < ids.length - 1) {
+    const nextLink = document.createElement("a");
+    nextLink.href = `purchase.html?id=${encodeURIComponent(ids[index + 1])}`;
+    nextLink.textContent = "Nächste →";
+    nav.appendChild(nextLink);
+  }
+}
+
+async function loadPurchase() {
+  try {
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}`);
+    const purchase = await res.json();
+    if (!res.ok) {
+      showError(form, "Fehler: " + (purchase.detail || res.statusText));
+      return;
+    }
+    render(purchase);
+  } catch (err) {
+    showError(form, "Fehler: " + err);
+  }
+}
+
+function render(purchase) {
+  form.innerHTML = "";
+  for (const [key, label, type] of FIELDS) {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = label;
+    const input = document.createElement("input");
+    input.type = type;
+    input.name = key;
+    input.value = purchase[key] ?? "";
+    if (key === "purchase_date") input.required = true;
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "submit";
+  saveBtn.textContent = "Speichern";
+  actions.appendChild(saveBtn);
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.id = "delete-btn";
+  deleteBtn.textContent = "Kauf löschen";
+  deleteBtn.addEventListener("click", onDeletePurchase);
+  actions.appendChild(deleteBtn);
+  form.appendChild(actions);
+  const statusP = document.createElement("p");
+  statusP.id = "save-status";
+  form.appendChild(statusP);
+
+  renderItems(purchase.items || []);
+}
+
+function renderItems(items) {
+  const list = document.getElementById("items-list");
+  list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = "<p>Noch keine Karte verknüpft.</p>";
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    const img = document.createElement("img");
+    if (item.card?.front_image_url) img.src = item.card.front_image_url;
+    row.appendChild(img);
+    const title = document.createElement("a");
+    title.className = "title";
+    title.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
+    title.textContent = item.card?.title || "(ohne Titel)";
+    row.appendChild(title);
+    const cost = document.createElement("span");
+    cost.textContent = item.allocated_cost != null ? `${item.allocated_cost} €` : "";
+    row.appendChild(cost);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Entfernen";
+    removeBtn.addEventListener("click", () => onRemoveItem(item.id));
+    row.appendChild(removeBtn);
+    list.appendChild(row);
+  }
+}
+
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const statusP = document.getElementById("save-status");
+  statusP.textContent = "Speichert …";
+  statusP.className = "";
+  try {
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusP.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusP.className = "error";
+      return;
+    }
+    statusP.textContent = "Gespeichert.";
+    renderItems(body.items || []);
+  } catch (err) {
+    statusP.textContent = "Fehler: " + err;
+    statusP.className = "error";
+  }
+});
+
+async function onDeletePurchase() {
+  if (!confirm("Diesen Kauf wirklich löschen? Verknüpfte Karten bleiben erhalten, nur die Zuordnung geht verloren.")) return;
+  try {
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      const body = await res.json();
+      alert("Fehler beim Löschen: " + (body.detail || res.statusText));
+      return;
+    }
+    location.href = "purchases.html";
+  } catch (err) {
+    alert("Fehler beim Löschen: " + err);
+  }
+}
+
+async function onRemoveItem(itemId) {
+  if (!confirm("Diese Karte aus dem Kauf entfernen?")) return;
+  try {
+    const res = await fetch(
+      `/api/purchases/${encodeURIComponent(purchaseId)}/items/${encodeURIComponent(itemId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok && res.status !== 204) {
+      const body = await res.json();
+      alert("Fehler: " + (body.detail || res.statusText));
+      return;
+    }
+    loadPurchase();
+  } catch (err) {
+    alert("Fehler: " + err);
+  }
+}
+
+const cardSearch = document.getElementById("card-search");
+const cardResults = document.getElementById("card-results");
+let searchedCards = [];
+
+async function searchCards() {
+  const q = cardSearch.value.trim();
+  cardResults.innerHTML = "";
+  if (!q) return;
+  try {
+    const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
+    const body = await res.json();
+    searchedCards = (body.cards || []).filter((c) => !c.has_purchase);
+    for (const c of searchedCards) {
+      const option = document.createElement("option");
+      option.value = c.id;
+      option.textContent = c.title || "(ohne Titel)";
+      cardResults.appendChild(option);
+    }
+  } catch (err) {
+    // Suche schlaegt fehl -> Dropdown bleibt leer, kein Blocker fuer den Rest der Seite.
+  }
+}
+
+cardSearch.addEventListener("input", () => {
+  clearTimeout(cardSearch._debounce);
+  cardSearch._debounce = setTimeout(searchCards, 300);
+});
+
+document.getElementById("link-card-btn").addEventListener("click", async () => {
+  const cardId = cardResults.value;
+  const linkStatus = document.getElementById("link-status");
+  if (!cardId) {
+    linkStatus.textContent = "Bitte erst eine Karte suchen und auswählen.";
+    linkStatus.className = "error";
+    return;
+  }
+  linkStatus.textContent = "Verknüpft …";
+  linkStatus.className = "";
+  try {
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_id: cardId }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      linkStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+      linkStatus.className = "error";
+      return;
+    }
+    linkStatus.textContent = "";
+    cardSearch.value = "";
+    cardResults.innerHTML = "";
+    loadPurchase();
+  } catch (err) {
+    linkStatus.textContent = "Fehler: " + err;
+    linkStatus.className = "error";
+  }
+});
+</script>
+</body>
+</html>
