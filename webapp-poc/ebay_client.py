@@ -17,6 +17,11 @@ EBAY_API_BASE = (
 )
 MARKETPLACE_ID = "EBAY_DE"
 
+# Same fixed single-warehouse key the desktop app's ebay-oauth-server
+# prototype uses - the Sell Inventory API requires every Offer to reference
+# one via merchantLocationKey (see ensure_merchant_location()).
+DEFAULT_MERCHANT_LOCATION_KEY = "DCARDSLAB-DE"
+
 # Set to True only after a real sandbox spike confirms the Offer resource
 # accepts a scheduling field and the item actually stays inactive until the
 # target time (see docs/superpowers/specs/2026-08-27-webapp-ebay-integration-design.md,
@@ -121,6 +126,32 @@ def get_listing_policies(token, marketplace_id=MARKETPLACE_ID):
     return result
 
 
+def ensure_merchant_location(token, location_key=DEFAULT_MERCHANT_LOCATION_KEY):
+    """Creates (or, if it already exists, updates) the seller's single
+    warehouse location. eBay's Sell Inventory API rejects createOffer/
+    publishOffer without a merchantLocationKey - without one it reports a
+    confusing errorId 25002 about a missing "Item.Country" (found live
+    against the real sandbox) instead of naming the actual cause. Ported
+    from the desktop app's proven create-or-update flow in
+    ebay-oauth-server/app.py."""
+    location = {"address": {"postalCode": "50667", "country": "DE"}}
+    try:
+        _request("POST", token, f"/sell/inventory/v1/location/{location_key}", {
+            "location": location,
+            "locationTypes": ["WAREHOUSE"],
+            "merchantLocationStatus": "ENABLED",
+            "name": "DCardsLab Sandbox Deutschland",
+        })
+    except EbayApiError as exc:
+        if "already exists" not in str(exc).lower():
+            raise
+        _request(
+            "POST", token, f"/sell/inventory/v1/location/{location_key}/update_location_details",
+            {"location": location, "locationTypes": ["WAREHOUSE"], "name": "DCardsLab Sandbox Deutschland"},
+        )
+    return location_key
+
+
 def put_inventory_item(token, sku, listing, image_url):
     payload = {
         "product": {
@@ -138,6 +169,7 @@ def _offer_payload(sku, listing):
         "sku": sku,
         "marketplaceId": MARKETPLACE_ID,
         "format": "FIXED_PRICE",
+        "merchantLocationKey": listing.get("merchant_location_key") or DEFAULT_MERCHANT_LOCATION_KEY,
         # dict.get(key, default) only applies the default for a *missing*
         # key, not a stored None - a blanked price/quantity input becomes
         # None via db._blank_numeric_to_none(), so "or" is needed here to

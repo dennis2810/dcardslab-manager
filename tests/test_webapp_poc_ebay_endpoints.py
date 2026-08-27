@@ -124,6 +124,7 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
              patch("main.storage.public_url", return_value="https://img/x.jpg"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
              patch("main.ebay_client.put_inventory_item") as mock_put, \
              patch("main.ebay_client.update_offer") as mock_update_offer, \
@@ -168,6 +169,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={"fulfillmentPolicyId": "F1"}), \
              patch("main.ebay_client.put_inventory_item"), \
              patch("main.ebay_client.create_offer", return_value="offer-1"), \
@@ -185,6 +187,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", side_effect=ebay_client.EbayApiError("Policy fehlt")):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 502)
@@ -200,6 +203,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
              patch("main.ebay_client.put_inventory_item"), \
              patch("main.ebay_client.create_offer", return_value="offer-new"), \
@@ -219,6 +223,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
              patch("main.ebay_client.put_inventory_item"), \
              patch("main.ebay_client.create_offer") as mock_create, \
@@ -316,6 +321,7 @@ class PublishBulkEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
              patch("main.ebay_client.put_inventory_item"), \
              patch("main.ebay_client.create_offer", side_effect=["offer-a", ebay_client.EbayApiError("eBay lehnt Karte b ab")]), \

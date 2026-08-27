@@ -75,6 +75,38 @@ class GetListingPoliciesTests(unittest.TestCase):
         self.assertIn("Zahlungs-Richtlinie", str(ctx.exception))
 
 
+class EnsureMerchantLocationTests(unittest.TestCase):
+    """eBay's Sell Inventory API requires every Offer to reference a
+    merchantLocationKey - without one, createOffer/publishOffer fail with
+    a confusing errorId 25002 mentioning a missing "Item.Country" (found
+    live against the real sandbox). Ported from the desktop app's proven
+    create-or-update flow in ebay-oauth-server/app.py."""
+
+    def test_creates_location_when_it_does_not_exist_yet(self):
+        with patch("ebay_client.httpx.request", return_value=_response(201, {})) as mock_request:
+            key = ebay_client.ensure_merchant_location("tok")
+        self.assertEqual(key, ebay_client.DEFAULT_MERCHANT_LOCATION_KEY)
+        args, kwargs = mock_request.call_args
+        self.assertEqual(args[0], "POST")
+        self.assertIn(f"/location/{ebay_client.DEFAULT_MERCHANT_LOCATION_KEY}", args[1])
+        self.assertNotIn("update_location_details", args[1])
+        self.assertEqual(kwargs["json"]["location"]["address"]["country"], "DE")
+
+    def test_falls_back_to_update_when_location_already_exists(self):
+        already_exists = _response(400, {"errors": [{"message": "Location already exists."}]}, text="Location already exists.")
+        with patch("ebay_client.httpx.request", side_effect=[already_exists, _response(200, {})]) as mock_request:
+            key = ebay_client.ensure_merchant_location("tok")
+        self.assertEqual(key, ebay_client.DEFAULT_MERCHANT_LOCATION_KEY)
+        self.assertEqual(mock_request.call_count, 2)
+        update_args, _ = mock_request.call_args_list[1]
+        self.assertIn("update_location_details", update_args[1])
+
+    def test_raises_on_unrelated_error(self):
+        with patch("ebay_client.httpx.request", return_value=_response(400, {"errors": [{"message": "Invalid postal code."}]}, text="Invalid postal code.")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.ensure_merchant_location("tok")
+
+
 class PutInventoryItemTests(unittest.TestCase):
     def test_sends_title_and_image_url(self):
         with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
@@ -120,6 +152,13 @@ class CreateOfferTests(unittest.TestCase):
         _, kwargs = mock_request.call_args
         self.assertEqual(kwargs["json"]["pricingSummary"]["price"]["value"], "0")
         self.assertEqual(kwargs["json"]["availableQuantity"], 1)
+
+    def test_includes_merchant_location_key(self):
+        listing = {"category_id": "261328", "price": 12.5, "quantity": 1, "description": "desc"}
+        with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})) as mock_request:
+            ebay_client.create_offer("tok", "sku-1", listing)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["merchantLocationKey"], ebay_client.DEFAULT_MERCHANT_LOCATION_KEY)
 
 
 class PublishOfferTests(unittest.TestCase):

@@ -457,6 +457,7 @@ def _publish_listing(listing, scheduled_at=None):
 
     try:
         token = ebay_client.get_access_token()
+        merchant_location_key = ebay_client.ensure_merchant_location(token)
         policies = ebay_client.get_listing_policies(token)
         card = db.get_card(listing["card_id"]) or {}
         image_url = None
@@ -465,7 +466,7 @@ def _publish_listing(listing, scheduled_at=None):
         ebay_client.put_inventory_item(token, listing["sku"], listing, image_url)
 
         offer_id = listing.get("ebay_offer_id")
-        payload = {**listing, "policies": policies}
+        payload = {**listing, "policies": policies, "merchant_location_key": merchant_location_key}
         if offer_id:
             ebay_client.update_offer(token, offer_id, payload)
         else:
