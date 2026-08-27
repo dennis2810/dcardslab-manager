@@ -9,8 +9,10 @@
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
   .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
-  .rotate-buttons { display: flex; gap: 0.4rem; }
+  .rotate-buttons { display: flex; gap: 0.4rem; align-items: center; }
   .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
+  .rotate-buttons button:disabled { opacity: 0.5; cursor: default; }
+  .rotate-status { font-size: 0.8rem; color: #555; font-style: italic; }
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -40,6 +42,7 @@
       <div class="rotate-buttons">
         <button type="button" id="front-rotate-left">&#8634; Links</button>
         <button type="button" id="front-rotate-right">&#8635; Rechts</button>
+        <span class="rotate-status" id="front-rotate-status"></span>
       </div>
     </div>
     <div class="image-block">
@@ -47,6 +50,7 @@
       <div class="rotate-buttons">
         <button type="button" id="back-rotate-left">&#8634; Links</button>
         <button type="button" id="back-rotate-right">&#8635; Rechts</button>
+        <span class="rotate-status" id="back-rotate-status"></span>
       </div>
     </div>
   </div>
@@ -117,7 +121,26 @@ function renderPrevNextNav() {
   }
 }
 
+// Download + drehen + Re-Upload nach Supabase Storage ist ein Server-
+// seitiger Roundtrip, der spuerbar dauern kann (abhaengig von der
+// Upload-Bandbreite des NAS) - ohne Rueckmeldung sah ein Klick waehrend
+// dieser Wartezeit wie "tut nichts" aus, und mehrere schnelle Klicks
+// hintereinander feuerten mehrere ueberlappende Requests, deren Antworten
+// in beliebiger Reihenfolge zurueckkommen konnten. requestId pro Seite
+// sorgt dafuer, dass nur die Antwort des zuletzt gestarteten Requests
+// tatsaechlich angezeigt wird; die Buttons sind waehrenddessen deaktiviert,
+// damit gar nicht erst mehrere Requests fuer dieselbe Seite ueberlappen.
+const _rotateRequestIds = { front: 0, back: 0 };
+
 async function rotateImage(side, degrees) {
+  const leftBtn = document.getElementById(`${side}-rotate-left`);
+  const rightBtn = document.getElementById(`${side}-rotate-right`);
+  const statusEl = document.getElementById(`${side}-rotate-status`);
+  const requestId = ++_rotateRequestIds[side];
+
+  leftBtn.disabled = true;
+  rightBtn.disabled = true;
+  statusEl.textContent = "Dreht …";
   try {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/rotate`, {
       method: "POST",
@@ -125,23 +148,29 @@ async function rotateImage(side, degrees) {
       body: JSON.stringify({ side, degrees }),
     });
     const body = await res.json();
+    if (requestId !== _rotateRequestIds[side]) return;  // ueberholt von einem neueren Klick
     if (!res.ok) {
       alert("Fehler beim Drehen: " + (body.detail || res.statusText));
       return;
     }
-    // The signed URL's token differs on every response, but Supabase's
-    // storage CDN can still serve a stale cached copy of the object bytes
-    // for a short time after rotate_image() overwrites it - append a
-    // cache-busting param so the browser always fetches the fresh image
-    // instead of showing the same rotation again on the next click.
-    if (side === "front" && body.front_image_url) {
-      document.getElementById("front-img").src = body.front_image_url + "&_cb=" + Date.now();
-    }
-    if (side === "back" && body.back_image_url) {
-      document.getElementById("back-img").src = body.back_image_url + "&_cb=" + Date.now();
+    // Zeigt die gedrehten Bytes direkt als Data-URI an, statt eine
+    // signierte Storage-URL nachzuladen: Supabase Storage's CDN kann kurz
+    // nach dem Ueberschreiben noch eine veraltete Kopie der Objekt-Bytes
+    // ausliefern, selbst bei einer frisch signierten URL mit Cache-Busting-
+    // Parameter - die Data-URI kommt dagegen direkt aus der Rotation
+    // selbst und kann nicht veraltet sein.
+    if (body.rotated_image_data_uri) {
+      const imgId = side === "front" ? "front-img" : "back-img";
+      document.getElementById(imgId).src = body.rotated_image_data_uri;
     }
   } catch (err) {
-    alert("Fehler beim Drehen: " + err);
+    if (requestId === _rotateRequestIds[side]) alert("Fehler beim Drehen: " + err);
+  } finally {
+    if (requestId === _rotateRequestIds[side]) {
+      leftBtn.disabled = false;
+      rightBtn.disabled = false;
+      statusEl.textContent = "";
+    }
   }
 }
 
@@ -392,26 +421,35 @@ function renderPurchaseSection(purchase) {
 
   const purchaseSearch = document.getElementById("purchase-search");
   const purchaseResults = document.getElementById("purchase-results");
+
+  // Ohne Suchbegriff werden die zuletzt angelegten Kaeufe vorgeschlagen
+  // (GET /api/purchases liefert standardmaessig neueste zuerst), auf 20
+  // Eintraege gedeckelt - deckt den haeufigen Fall ab, eine Karte direkt
+  // dem gerade eben angelegten Kauf zuzuordnen, ohne erst danach suchen
+  // zu muessen.
+  async function searchPurchases() {
+    const q = purchaseSearch.value.trim();
+    purchaseResults.innerHTML = "";
+    try {
+      const url = q ? `/api/purchases?q=${encodeURIComponent(q)}` : "/api/purchases";
+      const res = await fetch(url);
+      const body = await res.json();
+      for (const p of (body.purchases || []).slice(0, 20)) {
+        const option = document.createElement("option");
+        option.value = p.id;
+        option.textContent = `${p.purchase_date || ""} · ${p.platform || ""} · ${p.seller || ""}`;
+        purchaseResults.appendChild(option);
+      }
+    } catch (err) {
+      // Suche schlaegt fehl -> Dropdown bleibt leer.
+    }
+  }
+
   purchaseSearch.addEventListener("input", () => {
     clearTimeout(purchaseSearch._debounce);
-    purchaseSearch._debounce = setTimeout(async () => {
-      const q = purchaseSearch.value.trim();
-      purchaseResults.innerHTML = "";
-      if (!q) return;
-      try {
-        const res = await fetch(`/api/purchases?q=${encodeURIComponent(q)}`);
-        const body = await res.json();
-        for (const p of body.purchases || []) {
-          const option = document.createElement("option");
-          option.value = p.id;
-          option.textContent = `${p.purchase_date || ""} · ${p.platform || ""} · ${p.seller || ""}`;
-          purchaseResults.appendChild(option);
-        }
-      } catch (err) {
-        // Suche schlaegt fehl -> Dropdown bleibt leer.
-      }
-    }, 300);
+    purchaseSearch._debounce = setTimeout(searchPurchases, 300);
   });
+  searchPurchases();
 
   document.getElementById("link-purchase-btn").addEventListener("click", async () => {
     const statusEl = document.getElementById("link-purchase-status");

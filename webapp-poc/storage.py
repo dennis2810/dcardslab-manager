@@ -42,17 +42,22 @@ def signed_url(object_path, expires_in=3600):
 
 def rotate_image(object_path, degrees):
     """Rotates the stored image at object_path clockwise by `degrees` (a
-    multiple of 90) and overwrites it in place at the same path - callers
-    already have a signed_url() for that path, so nothing else needs to
-    change. Raises whatever the Supabase client raises on failure."""
+    multiple of 90) and overwrites it in place at the same path. Returns the
+    rotated JPEG bytes so the caller can show them immediately without a
+    Storage read-after-write round trip - Supabase's storage CDN can serve a
+    stale cached copy of the object for a short time right after an
+    overwrite, even to a request carrying a fresh signed-URL token. Raises
+    whatever the Supabase client raises on failure."""
     data = get_client().storage.from_(BUCKET).download(object_path)
     img = Image.open(io.BytesIO(data)).convert("RGB")
     rotated = img.rotate(-degrees, expand=True)  # PIL rotates counter-clockwise for positive angles
     buf = io.BytesIO()
     rotated.save(buf, format="JPEG", quality=_JPEG_QUALITY)
+    rotated_bytes = buf.getvalue()
     get_client().storage.from_(BUCKET).upload(
-        object_path, buf.getvalue(), file_options={"content-type": "image/jpeg", "upsert": "true"}
+        object_path, rotated_bytes, file_options={"content-type": "image/jpeg", "upsert": "true"}
     )
+    return rotated_bytes
 
 
 def delete_images(paths):

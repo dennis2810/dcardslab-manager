@@ -23,6 +23,7 @@ Run:
 
 Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
+import base64
 import sys
 import tempfile
 import types
@@ -292,21 +293,17 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
     if not object_path:
         raise HTTPException(status_code=404, detail=f"Kein Bild für {side} vorhanden.")
 
-    storage.rotate_image(object_path, degrees)
+    rotated_bytes = storage.rotate_image(object_path, degrees)
 
     result = _attach_signed_urls(card)
-    # _attach_signed_urls() swallows signed_url() failures per-side so one
-    # broken path doesn't break the whole /api/cards list - but here the
-    # rotate just happened for real (storage.rotate_image() already ran),
-    # so silently dropping the URL for that side would leave the frontend
-    # with nothing to update and no way to tell the user their click did
-    # anything. Surface it as an error instead of a silent no-op.
-    url_key = "front_image_url" if side == "front" else "back_image_url"
-    if url_key not in result:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Bild wurde gedreht, aber die Vorschau-URL für {side} konnte gerade nicht erzeugt werden - bitte Seite neu laden.",
-        )
+    # Not relying on a freshly signed URL for the just-rotated side here:
+    # Supabase Storage's CDN can serve a stale cached copy of the object for
+    # a short time right after rotate_image()'s overwrite, even to a request
+    # carrying a brand-new signed-URL token - a prior cache-busting-only
+    # frontend fix wasn't reliably enough ahead of it. The rotated bytes are
+    # already in memory from rotate_image()'s return value, so they're sent
+    # straight back as a data URI - no read-after-write race possible.
+    result["rotated_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(rotated_bytes).decode("ascii")
     return JSONResponse(result)
 
 

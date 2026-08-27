@@ -117,7 +117,7 @@ class RotateImageTests(unittest.TestCase):
         mock_client = MagicMock()
         self._stub_download(mock_client, size=(100, 60))
         with patch("storage.get_client", return_value=mock_client):
-            storage.rotate_image("batch-1/3_front.jpg", 90)
+            result = storage.rotate_image("batch-1/3_front.jpg", 90)
 
         mock_client.storage.from_.return_value.download.assert_called_once_with("batch-1/3_front.jpg")
         upload_call = mock_client.storage.from_.return_value.upload
@@ -125,6 +125,9 @@ class RotateImageTests(unittest.TestCase):
         args, kwargs = upload_call.call_args
         self.assertEqual(args[0], "batch-1/3_front.jpg")
         self.assertEqual(kwargs["file_options"]["upsert"], "true")
+        # The returned bytes are exactly what got uploaded - callers can show
+        # them immediately without reading the object back from Storage.
+        self.assertEqual(result, args[1])
 
         rotated = Image.open(io.BytesIO(args[1])).convert("RGB")
         self.assertEqual(rotated.size, (60, 100))  # dimensions swap on a 90-degree turn
