@@ -67,6 +67,40 @@ als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
   /api/internal/access-token`), alle Listing-Operationen laufen direkt
   von hier aus gegen eBay.
 
+### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
+
+Live gegen die echte eBay-Sandbox getestet (27.08.2026): `POST .../offer/{id}/publish`
+schlägt reproduzierbar mit `errorId 25002` fehl
+(`"A user error has occurred. Systemfehler. Ihre Anfrage konnte nicht
+bearbeitet werden. Bitte versuchen Sie es zu einem späteren Zeitpunkt
+erneut."`) - ohne weitere Details, auch für ein komplett frisches Angebot
+(neue SKU, `create_offer` statt `update_offer`).
+
+Vor einem erneuten Debugging-Anlauf **zuerst prüfen, ob es diesmal an
+dieser Codebase liegt** - folgende Ursachen wurden bereits ausgeschlossen
+(alle mit Logging/direkten eBay-API-Abfragen live verifiziert):
+- Fehlender `merchantLocationKey` (behoben, siehe `ensure_merchant_location()`).
+- `includeCatalogProductDetails` (eBays Default `true`, explizit auf
+  `false` gesetzt in `_offer_payload()`).
+- Fehlendes/nicht erreichbares Bild (Bild ist öffentlich erreichbar und
+  laut `GET /sell/inventory/v1/inventory_item/{sku}` korrekt bei eBay
+  hinterlegt).
+- Ein einzelnes "kaputtes" Offer (ein komplett frisches Angebot mit neuer
+  SKU scheitert identisch).
+
+Stattdessen zeigten sich an diesem Tag mehrere voneinander unabhängige
+Ausfälle der eBay-Sandbox-Weboberfläche selbst (My-eBay-Aktivitäten-Seite,
+der von eBay verlinkte DE-Payments-Link zeigt auf eine nicht auflösbare
+interne eBay-Testdomain, `sandbox.ebay.de` selbst nicht erreichbar) -
+zusammen mit öffentlich dokumentierten, wiederkehrenden Sandbox-Ausfällen
+in der eBay-Developer-Community. Das deutet stark auf ein eBay-seitiges
+Sandbox-Infrastrukturproblem hin, nicht auf einen Bug in dieser Codebase.
+
+Empfehlung: `https://developer.ebay.com/support/api-status/sandbox` auf
+gemeldete Vorfälle prüfen, ein paar Stunden/Tage warten, dann erneut
+versuchen. Falls der Fehler dann verschwindet, ohne dass sich an dieser
+Codebase etwas geändert hat, ist die obige Diagnose bestätigt.
+
 ## Starten auf dem NAS (Docker)
 
 Läuft als **eigener, zweiter Container** neben `ebay-oauth-server` - andere
