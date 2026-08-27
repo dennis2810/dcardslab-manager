@@ -181,6 +181,13 @@ def _offer_payload(sku, listing):
             "price": {"value": str(listing.get("price") or 0), "currency": "EUR"},
         },
         "listingPolicies": listing.get("policies", {}),
+        # eBay defaults this to true and tries to auto-match the offer to an
+        # EPID catalog product at publish time - unreliable for niche
+        # categories like single trading cards and confirmed live against
+        # the sandbox as the cause of a generic errorId 25002 "Systemfehler"
+        # failing publishOffer with no further detail. Explicitly disabling
+        # it keeps the offer a plain non-catalog listing.
+        "includeCatalogProductDetails": False,
     }
 
 
