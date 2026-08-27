@@ -2,6 +2,7 @@
 Images are compressed client-side before upload (see _MAX_EDGE/_JPEG_QUALITY)
 so the free-tier 1GB storage quota lasts - full-resolution scanner output
 is overkill for web display and eBay listing photos."""
+import io
 from pathlib import Path
 
 from PIL import Image
@@ -17,7 +18,6 @@ def compress_image(path):
     img = Image.open(path).convert("RGB")
     if max(img.size) > _MAX_EDGE:
         img.thumbnail((_MAX_EDGE, _MAX_EDGE), Image.LANCZOS)
-    import io
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=_JPEG_QUALITY)
     return buf.getvalue()
@@ -38,6 +38,21 @@ def upload_image(batch_id, position, side, path):
 def signed_url(object_path, expires_in=3600):
     response = get_client().storage.from_(BUCKET).create_signed_url(object_path, expires_in)
     return response["signedURL"]
+
+
+def rotate_image(object_path, degrees):
+    """Rotates the stored image at object_path clockwise by `degrees` (a
+    multiple of 90) and overwrites it in place at the same path - callers
+    already have a signed_url() for that path, so nothing else needs to
+    change. Raises whatever the Supabase client raises on failure."""
+    data = get_client().storage.from_(BUCKET).download(object_path)
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    rotated = img.rotate(-degrees, expand=True)  # PIL rotates counter-clockwise for positive angles
+    buf = io.BytesIO()
+    rotated.save(buf, format="JPEG", quality=_JPEG_QUALITY)
+    get_client().storage.from_(BUCKET).upload(
+        object_path, buf.getvalue(), file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
 
 
 def delete_images(paths):

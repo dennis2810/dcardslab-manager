@@ -239,5 +239,41 @@ async def delete_card(card_id: str):
     return Response(status_code=204)
 
 
+@app.post("/api/cards/{card_id}/rotate")
+async def rotate_card_image(card_id: str, body: dict = Body(...)):
+    side = body.get("side")
+    degrees = body.get("degrees")
+    if side not in ("front", "back"):
+        raise HTTPException(status_code=400, detail="side muss 'front' oder 'back' sein.")
+    if degrees not in (90, 180, 270):
+        raise HTTPException(status_code=400, detail="degrees muss 90, 180 oder 270 sein.")
+
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+
+    path_key = "front_image_path" if side == "front" else "back_image_path"
+    object_path = card.get(path_key)
+    if not object_path:
+        raise HTTPException(status_code=404, detail=f"Kein Bild für {side} vorhanden.")
+
+    storage.rotate_image(object_path, degrees)
+
+    result = _attach_signed_urls(card)
+    # _attach_signed_urls() swallows signed_url() failures per-side so one
+    # broken path doesn't break the whole /api/cards list - but here the
+    # rotate just happened for real (storage.rotate_image() already ran),
+    # so silently dropping the URL for that side would leave the frontend
+    # with nothing to update and no way to tell the user their click did
+    # anything. Surface it as an error instead of a silent no-op.
+    url_key = "front_image_url" if side == "front" else "back_image_url"
+    if url_key not in result:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Bild wurde gedreht, aber die Vorschau-URL für {side} konnte gerade nicht erzeugt werden - bitte Seite neu laden.",
+        )
+    return JSONResponse(result)
+
+
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

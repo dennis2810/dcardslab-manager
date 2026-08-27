@@ -69,6 +69,15 @@ async function loadCards() {
 
 function render(cards) {
   grid.innerHTML = "";
+  // card.html reads this to render "vorherige/nächste" navigation within
+  // the current search/filter order, without a dedicated backend endpoint.
+  try {
+    sessionStorage.setItem("cardListIds", JSON.stringify(cards.map((c) => c.id)));
+  } catch (err) {
+    // sessionStorage can throw in locked-down browser contexts (private
+    // mode quirks, storage disabled) - prev/next navigation just won't be
+    // available then, the list itself still renders fine.
+  }
   for (const card of cards) {
     const a = document.createElement("a");
     a.className = "card";

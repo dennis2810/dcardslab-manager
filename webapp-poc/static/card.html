@@ -7,7 +7,11 @@
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-  .images img { width: 45%; border-radius: 6px; background: #f0f0f0; }
+  .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+  .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
+  .rotate-buttons { display: flex; gap: 0.4rem; }
+  .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
+  #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
@@ -20,10 +24,23 @@
 <body>
   <h1>Karte bearbeiten</h1>
   <p><a href="cards.html">&larr; Zur Liste</a></p>
+  <p id="prev-next-nav"></p>
 
   <div class="images">
-    <img id="front-img" alt="Vorderseite">
-    <img id="back-img" alt="Rückseite">
+    <div class="image-block">
+      <img id="front-img" alt="Vorderseite">
+      <div class="rotate-buttons">
+        <button type="button" id="front-rotate-left">&#8634; Links</button>
+        <button type="button" id="front-rotate-right">&#8635; Rechts</button>
+      </div>
+    </div>
+    <div class="image-block">
+      <img id="back-img" alt="Rückseite">
+      <div class="rotate-buttons">
+        <button type="button" id="back-rotate-left">&#8634; Links</button>
+        <button type="button" id="back-rotate-right">&#8635; Rechts</button>
+      </div>
+    </div>
   </div>
 
   <form id="edit-form">
@@ -56,7 +73,72 @@ if (!cardId) {
   showError(form, "Keine Karten-ID angegeben.");
 } else {
   loadCard();
+  renderPrevNextNav();
 }
+
+// Reads the ordered ID list cards.html stored for the current search/filter
+// (see cards.html's render()) so "vorherige/nächste" can jump within that
+// same order - no dedicated backend endpoint needed. Direct navigation to
+// this page (no list ever loaded in this tab, or the ID isn't in the
+// stored list) just renders no links.
+function renderPrevNextNav() {
+  const nav = document.getElementById("prev-next-nav");
+  nav.innerHTML = "";
+  let ids = [];
+  try {
+    ids = JSON.parse(sessionStorage.getItem("cardListIds") || "[]");
+  } catch (err) {
+    ids = [];
+  }
+  const index = ids.indexOf(cardId);
+  if (index === -1) return;
+
+  if (index > 0) {
+    const prevLink = document.createElement("a");
+    prevLink.href = `card.html?id=${encodeURIComponent(ids[index - 1])}`;
+    prevLink.textContent = "← Vorherige";
+    nav.appendChild(prevLink);
+  }
+  if (index < ids.length - 1) {
+    const nextLink = document.createElement("a");
+    nextLink.href = `card.html?id=${encodeURIComponent(ids[index + 1])}`;
+    nextLink.textContent = "Nächste →";
+    nav.appendChild(nextLink);
+  }
+}
+
+async function rotateImage(side, degrees) {
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/rotate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ side, degrees }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      alert("Fehler beim Drehen: " + (body.detail || res.statusText));
+      return;
+    }
+    // The signed URL's token differs on every response, but Supabase's
+    // storage CDN can still serve a stale cached copy of the object bytes
+    // for a short time after rotate_image() overwrites it - append a
+    // cache-busting param so the browser always fetches the fresh image
+    // instead of showing the same rotation again on the next click.
+    if (side === "front" && body.front_image_url) {
+      document.getElementById("front-img").src = body.front_image_url + "&_cb=" + Date.now();
+    }
+    if (side === "back" && body.back_image_url) {
+      document.getElementById("back-img").src = body.back_image_url + "&_cb=" + Date.now();
+    }
+  } catch (err) {
+    alert("Fehler beim Drehen: " + err);
+  }
+}
+
+document.getElementById("front-rotate-left").addEventListener("click", () => rotateImage("front", 270));
+document.getElementById("front-rotate-right").addEventListener("click", () => rotateImage("front", 90));
+document.getElementById("back-rotate-left").addEventListener("click", () => rotateImage("back", 270));
+document.getElementById("back-rotate-right").addEventListener("click", () => rotateImage("back", 90));
 
 async function loadCard() {
   try {
