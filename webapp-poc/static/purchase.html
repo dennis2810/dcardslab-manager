@@ -238,14 +238,19 @@ const cardSearch = document.getElementById("card-search");
 const cardResults = document.getElementById("card-results");
 let searchedCards = [];
 
+// Ohne Suchbegriff werden die zuletzt gescannten, noch nicht verknuepften
+// Karten vorgeschlagen (GET /api/cards liefert standardmaessig neueste
+// zuerst) - deckt den haeufigen Fall ab, direkt nach dem Scannen eine
+// Karte zuzuordnen, ohne erst nach ihr suchen zu muessen. Auf 20 Eintraege
+// gedeckelt, damit das Dropdown bei einem groesseren Bestand nutzbar bleibt.
 async function searchCards() {
   const q = cardSearch.value.trim();
   cardResults.innerHTML = "";
-  if (!q) return;
   try {
-    const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
+    const url = q ? `/api/cards?q=${encodeURIComponent(q)}` : "/api/cards";
+    const res = await fetch(url);
     const body = await res.json();
-    searchedCards = (body.cards || []).filter((c) => !c.has_purchase);
+    searchedCards = (body.cards || []).filter((c) => !c.has_purchase).slice(0, 20);
     for (const c of searchedCards) {
       const option = document.createElement("option");
       option.value = c.id;
@@ -261,6 +266,7 @@ cardSearch.addEventListener("input", () => {
   clearTimeout(cardSearch._debounce);
   cardSearch._debounce = setTimeout(searchCards, 300);
 });
+searchCards();
 
 document.getElementById("link-card-btn").addEventListener("click", async () => {
   const cardId = cardResults.value;

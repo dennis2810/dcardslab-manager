@@ -404,26 +404,35 @@ function renderPurchaseSection(purchase) {
 
   const purchaseSearch = document.getElementById("purchase-search");
   const purchaseResults = document.getElementById("purchase-results");
+
+  // Ohne Suchbegriff werden die zuletzt angelegten Kaeufe vorgeschlagen
+  // (GET /api/purchases liefert standardmaessig neueste zuerst), auf 20
+  // Eintraege gedeckelt - deckt den haeufigen Fall ab, eine Karte direkt
+  // dem gerade eben angelegten Kauf zuzuordnen, ohne erst danach suchen
+  // zu muessen.
+  async function searchPurchases() {
+    const q = purchaseSearch.value.trim();
+    purchaseResults.innerHTML = "";
+    try {
+      const url = q ? `/api/purchases?q=${encodeURIComponent(q)}` : "/api/purchases";
+      const res = await fetch(url);
+      const body = await res.json();
+      for (const p of (body.purchases || []).slice(0, 20)) {
+        const option = document.createElement("option");
+        option.value = p.id;
+        option.textContent = `${p.purchase_date || ""} · ${p.platform || ""} · ${p.seller || ""}`;
+        purchaseResults.appendChild(option);
+      }
+    } catch (err) {
+      // Suche schlaegt fehl -> Dropdown bleibt leer.
+    }
+  }
+
   purchaseSearch.addEventListener("input", () => {
     clearTimeout(purchaseSearch._debounce);
-    purchaseSearch._debounce = setTimeout(async () => {
-      const q = purchaseSearch.value.trim();
-      purchaseResults.innerHTML = "";
-      if (!q) return;
-      try {
-        const res = await fetch(`/api/purchases?q=${encodeURIComponent(q)}`);
-        const body = await res.json();
-        for (const p of body.purchases || []) {
-          const option = document.createElement("option");
-          option.value = p.id;
-          option.textContent = `${p.purchase_date || ""} · ${p.platform || ""} · ${p.seller || ""}`;
-          purchaseResults.appendChild(option);
-        }
-      } catch (err) {
-        // Suche schlaegt fehl -> Dropdown bleibt leer.
-      }
-    }, 300);
+    purchaseSearch._debounce = setTimeout(searchPurchases, 300);
   });
+  searchPurchases();
 
   document.getElementById("link-purchase-btn").addEventListener("click", async () => {
     const statusEl = document.getElementById("link-purchase-status");
