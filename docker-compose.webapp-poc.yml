@@ -16,4 +16,9 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      # eBay-Integration (Sub-Projekt 4): interne Adresse des
+      # ebay-oauth-server-Containers (Port 8080) und dieselbe Umgebung wie
+      # dort konfiguriert - sonst passt der Token nicht zur API-Basis-URL.
+      - EBAY_OAUTH_SERVER_URL=${EBAY_OAUTH_SERVER_URL:-http://ebay-oauth-server:8080}
+      - EBAY_ENVIRONMENT=${EBAY_ENVIRONMENT:-sandbox}
     restart: unless-stopped
