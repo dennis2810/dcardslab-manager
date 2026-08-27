@@ -29,6 +29,25 @@
   .purchase-forms { display: flex; flex-direction: column; gap: 1rem; }
   .purchase-forms > div { border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem; }
   .purchase-forms input, .purchase-forms select { padding: 0.3rem; margin-right: 0.4rem; }
+  .ebay-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .ebay-section h2 { font-size: 1.1rem; }
+  .ebay-status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
+  .ebay-status-Entwurf { background: #eee; color: #333; }
+  .ebay-status-Geplant { background: #fff3cd; color: #7a5c00; }
+  .ebay-status-Veroeffentlicht { background: #e6f4ea; color: #1e4620; }
+  .ebay-status-Verkauft { background: #dce8fb; color: #0b3d91; }
+  .ebay-status-Fehler { background: #fdecea; color: #611a15; }
+  .ebay-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .ebay-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .ebay-form input, .ebay-form select, .ebay-form textarea { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .ebay-form textarea { grid-column: 1 / -1; min-height: 4rem; }
+  .ebay-aspects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .ebay-aspects label { flex: 1 1 160px; }
+  .ebay-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+  .ebay-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
+  .ebay-readonly dt { font-weight: 600; }
+  .ebay-readonly dd { margin: 0; }
+  .price-research-links { font-size: 0.85rem; margin: 0.4rem 0; }
 </style>
 </head>
 <body>
@@ -60,6 +79,7 @@
   </form>
 
   <div class="purchase-section" id="purchase-section"></div>
+  <div class="ebay-section" id="ebay-section"></div>
 
 <script>
 const FIELDS = [
@@ -189,6 +209,7 @@ async function loadCard() {
     }
     render(card);
     renderPurchaseSection(card.purchase);
+    renderEbaySection(card.ebay_listing);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -479,6 +500,381 @@ function renderPurchaseSection(purchase) {
       statusEl.className = "error";
     }
   });
+}
+
+const EBAY_STATUS_LABELS = {
+  Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
+  Verkauft: "Verkauft", Fehler: "Fehler",
+};
+
+// Same URL formulas as ebay_listing.price_research_links() on the backend
+// - built client-side here so the links update live as the title is
+// edited, without a round trip for something this cheap to compute.
+function priceResearchLinks(title) {
+  const q = encodeURIComponent(title || "");
+  return {
+    ebaySold: `https://www.ebay.de/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`,
+    onepoint: `https://130point.com/sales/?search=${q}`,
+  };
+}
+
+function ebayListingUrl(listing) {
+  const host = "sandbox.ebay.de";  // EBAY_ENVIRONMENT=sandbox during development, s. Spec
+  return `https://www.${host}/itm/${encodeURIComponent(listing.ebay_listing_id)}`;
+}
+
+async function renderEbaySection(listing) {
+  const section = document.getElementById("ebay-section");
+  section.innerHTML = "<h2>eBay</h2>";
+
+  if (!listing) {
+    renderEbayCreateForm(section);
+    return;
+  }
+
+  const badge = document.createElement("span");
+  badge.className = "ebay-status-badge ebay-status-" + listing.status;
+  badge.textContent = EBAY_STATUS_LABELS[listing.status] || listing.status;
+  section.appendChild(badge);
+
+  if (listing.status === "Entwurf" || listing.status === "Fehler") {
+    if (listing.status === "Fehler" && listing.last_error) {
+      const err = document.createElement("p");
+      err.className = "error";
+      err.textContent = listing.last_error;
+      section.appendChild(err);
+    }
+    renderEbayEditForm(section, listing);
+  } else if (listing.status === "Geplant") {
+    renderEbayScheduledView(section, listing);
+  } else {
+    renderEbayPublishedView(section, listing);
+  }
+}
+
+function renderEbayCreateForm(section) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "eBay-Angebot erstellen";
+  const statusEl = document.createElement("span");
+  statusEl.style.marginLeft = "0.6rem";
+  section.appendChild(btn);
+  section.appendChild(statusEl);
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    statusEl.textContent = "Erstellt Vorschlag …";
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/ebay-listing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        btn.disabled = false;
+        return;
+      }
+      renderEbaySection(body);
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+      btn.disabled = false;
+    }
+  });
+}
+
+function renderEbayEditForm(section, listing) {
+  const form = document.createElement("form");
+  form.className = "ebay-form";
+
+  function field(label, name, value, type = "text") {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = label;
+    const input = document.createElement(type === "textarea" ? "textarea" : "input");
+    if (type !== "textarea") input.type = type;
+    input.name = name;
+    input.value = value ?? "";
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
+    return input;
+  }
+
+  const titleInput = field("Titel", "title", listing.title);
+  field("Beschreibung", "description", listing.description, "textarea");
+  field("Preis (€)", "price", listing.price, "number");
+  field("Menge", "quantity", listing.quantity ?? 1, "number");
+
+  const typeWrapper = document.createElement("label");
+  typeWrapper.textContent = "Kartentyp";
+  const typeSelect = document.createElement("select");
+  typeSelect.name = "listing_type";
+  for (const [value, label] of [["sport", "Sport"], ["non_sport", "Non-Sport"]]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (listing.listing_type === value) option.selected = true;
+    typeSelect.appendChild(option);
+  }
+  typeWrapper.appendChild(typeSelect);
+  form.appendChild(typeWrapper);
+
+  const priceLinksP = document.createElement("p");
+  priceLinksP.className = "price-research-links";
+  form.appendChild(priceLinksP);
+  function updatePriceLinks() {
+    const links = priceResearchLinks(titleInput.value);
+    priceLinksP.innerHTML = "";
+    const a1 = document.createElement("a");
+    a1.href = links.ebaySold; a1.target = "_blank"; a1.rel = "noopener";
+    a1.textContent = "eBay verkaufte Artikel";
+    const a2 = document.createElement("a");
+    a2.href = links.onepoint; a2.target = "_blank"; a2.rel = "noopener";
+    a2.textContent = "130point.com";
+    priceLinksP.append("Preis recherchieren: ", a1, " · ", a2);
+  }
+  titleInput.addEventListener("input", updatePriceLinks);
+  updatePriceLinks();
+
+  const aspectsWrapper = document.createElement("div");
+  aspectsWrapper.className = "ebay-aspects";
+  const aspectsTitle = document.createElement("strong");
+  aspectsTitle.textContent = "Aspects (eBay-Pflichtfelder je Kartentyp)";
+  aspectsWrapper.appendChild(aspectsTitle);
+  const aspectEntries = Object.entries(listing.aspects || {});
+  for (const [key, values] of aspectEntries) {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = key;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.dataset.aspectKey = key;
+    input.value = (values || []).join(", ");
+    wrapper.appendChild(input);
+    aspectsWrapper.appendChild(wrapper);
+  }
+  form.appendChild(aspectsWrapper);
+
+  const scheduleWrapper = document.createElement("label");
+  scheduleWrapper.textContent = "Veröffentlichen am (optional)";
+  const scheduleInput = document.createElement("input");
+  scheduleInput.type = "datetime-local";
+  scheduleInput.id = "ebay-schedule-at";
+  scheduleWrapper.appendChild(scheduleInput);
+  form.appendChild(scheduleWrapper);
+
+  const actions = document.createElement("div");
+  actions.className = "ebay-actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = listing.id ? "Speichern" : "Als Entwurf speichern";
+  actions.appendChild(saveBtn);
+
+  const publishBtn = document.createElement("button");
+  publishBtn.type = "button";
+  publishBtn.textContent = "Veröffentlichen";
+  scheduleInput.addEventListener("input", () => {
+    publishBtn.textContent = scheduleInput.value ? "Planen" : "Veröffentlichen";
+  });
+  actions.appendChild(publishBtn);
+
+  if (listing.id) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Entwurf löschen";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("Diesen eBay-Entwurf wirklich löschen?")) return;
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}`, { method: "DELETE" });
+        if (!res.ok && res.status !== 204) {
+          const body = await res.json();
+          alert("Fehler: " + (body.detail || res.statusText));
+          return;
+        }
+        loadCard();
+      } catch (err) {
+        alert("Fehler: " + err);
+      }
+    });
+    actions.appendChild(deleteBtn);
+  }
+
+  const statusEl = document.createElement("span");
+  actions.appendChild(statusEl);
+  form.appendChild(actions);
+  section.appendChild(form);
+
+  function collectFields() {
+    const aspects = {};
+    for (const input of form.querySelectorAll("[data-aspect-key]")) {
+      const values = input.value.split(",").map((v) => v.trim()).filter(Boolean);
+      if (values.length) aspects[input.dataset.aspectKey] = values;
+    }
+    return {
+      title: form.elements.title.value,
+      description: form.elements.description.value,
+      price: form.elements.price.value,
+      quantity: form.elements.quantity.value,
+      listing_type: form.elements.listing_type.value,
+      aspects,
+    };
+  }
+
+  async function saveDraft() {
+    statusEl.textContent = "Speichert …";
+    statusEl.className = "";
+    try {
+      const url = listing.id
+        ? `/api/ebay/listings/${encodeURIComponent(listing.id)}`
+        : `/api/cards/${encodeURIComponent(cardId)}/ebay-listing`;
+      const res = await fetch(url, {
+        method: listing.id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectFields()),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        return null;
+      }
+      return body;
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+      return null;
+    }
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    const saved = await saveDraft();
+    if (saved) loadCard();
+  });
+
+  publishBtn.addEventListener("click", async () => {
+    const saved = await saveDraft();
+    if (!saved) return;
+    statusEl.textContent = "Veröffentlicht …";
+    statusEl.className = "";
+    try {
+      const publishBody = scheduleInput.value
+        ? { scheduled_at: new Date(scheduleInput.value).toISOString() }
+        : {};
+      const res = await fetch(`/api/ebay/listings/${encodeURIComponent(saved.id)}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(publishBody),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+    }
+  });
+}
+
+function renderEbayScheduledView(section, listing) {
+  const readonly = document.createElement("div");
+  readonly.className = "ebay-readonly";
+  const scheduledDate = listing.scheduled_at ? new Date(listing.scheduled_at).toLocaleString("de-DE") : "";
+  const dl = document.createElement("dl");
+  const rows = [["Geplant für", scheduledDate], ["Titel", listing.title], ["Preis", listing.price + " €"]];
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
+    const dd = document.createElement("dd"); dd.textContent = value || ""; dl.appendChild(dd);
+  }
+  readonly.appendChild(dl);
+
+  const hint = document.createElement("p");
+  if (listing.scheduling_mode === "native" && listing.ebay_listing_id) {
+    const a = document.createElement("a");
+    a.href = ebayListingUrl(listing);
+    a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "Auf eBay ansehen";
+    hint.appendChild(a);
+  } else {
+    hint.textContent = "Wird erst zum geplanten Zeitpunkt bei eBay angelegt - vorher dort nicht einsehbar.";
+  }
+  readonly.appendChild(hint);
+  section.appendChild(readonly);
+
+  const actions = document.createElement("div");
+  actions.className = "ebay-actions";
+
+  const publishNowBtn = document.createElement("button");
+  publishNowBtn.type = "button";
+  publishNowBtn.textContent = "Jetzt sofort veröffentlichen";
+  publishNowBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/publish`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        alert("Fehler: " + (body.detail || res.statusText));
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      alert("Fehler: " + err);
+    }
+  });
+  actions.appendChild(publishNowBtn);
+
+  const unscheduleBtn = document.createElement("button");
+  unscheduleBtn.type = "button";
+  unscheduleBtn.textContent = "Planung stornieren";
+  unscheduleBtn.addEventListener("click", async () => {
+    if (!confirm("Geplante Veröffentlichung wirklich stornieren?")) return;
+    try {
+      const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/unschedule`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        alert("Fehler: " + (body.detail || res.statusText));
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      alert("Fehler: " + err);
+    }
+  });
+  actions.appendChild(unscheduleBtn);
+  section.appendChild(actions);
+}
+
+function renderEbayPublishedView(section, listing) {
+  const readonly = document.createElement("div");
+  readonly.className = "ebay-readonly";
+  const dl = document.createElement("dl");
+  const rows = [["Titel", listing.title], ["Preis", listing.price + " €"], ["Zustand", listing.condition]];
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
+    const dd = document.createElement("dd"); dd.textContent = value || ""; dl.appendChild(dd);
+  }
+  readonly.appendChild(dl);
+
+  if (listing.ebay_listing_id) {
+    const a = document.createElement("a");
+    a.href = ebayListingUrl(listing);
+    a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "Auf eBay ansehen";
+    readonly.appendChild(a);
+  }
+  section.appendChild(readonly);
+
+  if (listing.status === "Veroeffentlicht") {
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Bearbeiten";
+    editBtn.addEventListener("click", () => renderEbayEditForm(section, listing));
+    section.appendChild(editBtn);
+  }
 }
 </script>
 </body>
