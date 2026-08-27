@@ -118,7 +118,15 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- Google Drive/Sheets-Sync, Backups (Sub-Projekt 5).
+- **Manuelles Anlegen einzelner Karten auf `cards.html`** (nächstes
+  Sub-Projekt): Der 9er-Scan über `index.html` bleibt der primäre Weg,
+  aber es soll auch möglich sein, eine einzelne Karte direkt auf
+  `cards.html` anzulegen - inkl. Vorder-/Rückseiten-Upload vom Rechner/
+  Device (nicht nur per Scan-Bogen), Dreh-Funktion wie in `card.html`
+  bereits vorhanden, und nach Möglichkeit KI-Vorbelegung der Kartendaten
+  aus den hochgeladenen Bildern (analog zu `recognize_card()` im
+  bestehenden Scan-Flow).
+- Google Drive/Sheets-Sync, Backups.
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
 - CSV-Export/-Import für eBay (wie in `docs/EBAY_IMPORT.md` für die
   Desktop-App beschrieben) - bewusst nicht gebaut, da die Live-API jetzt
