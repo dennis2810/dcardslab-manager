@@ -19,6 +19,14 @@
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
   .error { color: #b00020; font-weight: 600; }
+  .purchase-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .purchase-section h2 { font-size: 1.1rem; }
+  .purchase-info { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin-bottom: 0.75rem; }
+  .purchase-info dt { font-weight: 600; }
+  .purchase-info dd { margin: 0; }
+  .purchase-forms { display: flex; flex-direction: column; gap: 1rem; }
+  .purchase-forms > div { border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem; }
+  .purchase-forms input, .purchase-forms select { padding: 0.3rem; margin-right: 0.4rem; }
 </style>
 </head>
 <body>
@@ -46,6 +54,8 @@
   <form id="edit-form">
     <p id="load-status">Lädt …</p>
   </form>
+
+  <div class="purchase-section" id="purchase-section"></div>
 
 <script>
 const FIELDS = [
@@ -149,6 +159,7 @@ async function loadCard() {
       return;
     }
     render(card);
+    renderPurchaseSection(card.purchase);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -261,6 +272,175 @@ async function onDelete() {
   } catch (err) {
     alert("Fehler beim Löschen: " + err);
   }
+}
+
+function renderPurchaseSection(purchase) {
+  const section = document.getElementById("purchase-section");
+  section.innerHTML = "<h2>Kauf</h2>";
+
+  if (purchase) {
+    const dl = document.createElement("dl");
+    dl.className = "purchase-info";
+    const rows = [
+      ["Kaufdatum", purchase.purchase_date], ["Plattform", purchase.platform],
+      ["Verkäufer", purchase.seller], ["Anteil-Preis", purchase.allocated_cost],
+      ["Notizen", purchase.notes],
+    ];
+    for (const [label, value] of rows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      dl.appendChild(dt);
+      const dd = document.createElement("dd");
+      dd.textContent = value || "";
+      dl.appendChild(dd);
+    }
+    section.appendChild(dl);
+
+    const link = document.createElement("a");
+    link.href = `purchase.html?id=${encodeURIComponent(purchase.purchase_id)}`;
+    link.textContent = "Zum Kauf";
+    section.appendChild(link);
+    section.appendChild(document.createTextNode(" · "));
+
+    const unlinkBtn = document.createElement("button");
+    unlinkBtn.type = "button";
+    unlinkBtn.textContent = "Verknüpfung lösen";
+    unlinkBtn.addEventListener("click", async () => {
+      if (!confirm("Verknüpfung zu diesem Kauf lösen? Der Kauf selbst bleibt bestehen.")) return;
+      try {
+        const res = await fetch(
+          `/api/purchases/${encodeURIComponent(purchase.purchase_id)}/items/${encodeURIComponent(purchase.item_id)}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok && res.status !== 204) {
+          const body = await res.json();
+          alert("Fehler: " + (body.detail || res.statusText));
+          return;
+        }
+        loadCard();
+      } catch (err) {
+        alert("Fehler: " + err);
+      }
+    });
+    section.appendChild(unlinkBtn);
+    return;
+  }
+
+  const forms = document.createElement("div");
+  forms.className = "purchase-forms";
+
+  const quickBuy = document.createElement("div");
+  quickBuy.innerHTML = `
+    <strong>Neuer Kauf für diese Karte</strong><br>
+    <input type="date" id="quick-purchase-date" required>
+    <input type="text" id="quick-platform" placeholder="Plattform">
+    <input type="text" id="quick-seller" placeholder="Verkäufer">
+    <input type="number" step="0.01" id="quick-total-price" placeholder="Preis">
+    <input type="number" step="0.01" id="quick-shipping" placeholder="Versand">
+    <button type="button" id="quick-buy-btn">Speichern</button>
+    <span id="quick-buy-status"></span>
+  `;
+  forms.appendChild(quickBuy);
+
+  const existingBuy = document.createElement("div");
+  existingBuy.innerHTML = `
+    <strong>Zu bestehendem Kauf hinzufügen</strong><br>
+    <input type="text" id="purchase-search" placeholder="Kauf suchen (Plattform, Verkäufer, Notizen)">
+    <select id="purchase-results"></select>
+    <button type="button" id="link-purchase-btn">Verknüpfen</button>
+    <span id="link-purchase-status"></span>
+  `;
+  forms.appendChild(existingBuy);
+
+  section.appendChild(forms);
+
+  document.getElementById("quick-buy-btn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("quick-buy-status");
+    const purchaseDate = document.getElementById("quick-purchase-date").value;
+    if (!purchaseDate) {
+      statusEl.textContent = "Kaufdatum fehlt.";
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = "Speichert …";
+    statusEl.className = "";
+    try {
+      const res = await fetch("/api/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purchase_date: purchaseDate,
+          platform: document.getElementById("quick-platform").value,
+          seller: document.getElementById("quick-seller").value,
+          total_price: document.getElementById("quick-total-price").value,
+          shipping: document.getElementById("quick-shipping").value,
+          items: [{ card_id: cardId }],
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+    }
+  });
+
+  const purchaseSearch = document.getElementById("purchase-search");
+  const purchaseResults = document.getElementById("purchase-results");
+  purchaseSearch.addEventListener("input", () => {
+    clearTimeout(purchaseSearch._debounce);
+    purchaseSearch._debounce = setTimeout(async () => {
+      const q = purchaseSearch.value.trim();
+      purchaseResults.innerHTML = "";
+      if (!q) return;
+      try {
+        const res = await fetch(`/api/purchases?q=${encodeURIComponent(q)}`);
+        const body = await res.json();
+        for (const p of body.purchases || []) {
+          const option = document.createElement("option");
+          option.value = p.id;
+          option.textContent = `${p.purchase_date || ""} · ${p.platform || ""} · ${p.seller || ""}`;
+          purchaseResults.appendChild(option);
+        }
+      } catch (err) {
+        // Suche schlaegt fehl -> Dropdown bleibt leer.
+      }
+    }, 300);
+  });
+
+  document.getElementById("link-purchase-btn").addEventListener("click", async () => {
+    const statusEl = document.getElementById("link-purchase-status");
+    const selectedPurchaseId = purchaseResults.value;
+    if (!selectedPurchaseId) {
+      statusEl.textContent = "Bitte erst einen Kauf suchen und auswählen.";
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = "Verknüpft …";
+    statusEl.className = "";
+    try {
+      const res = await fetch(`/api/purchases/${encodeURIComponent(selectedPurchaseId)}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_id: cardId }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+    }
+  });
 }
 </script>
 </body>
