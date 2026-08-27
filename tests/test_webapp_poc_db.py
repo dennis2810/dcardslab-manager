@@ -279,6 +279,38 @@ class CreatePurchaseTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertNotIn("not_a_real_column", row)
 
+    def test_blank_numeric_fields_become_none(self):
+        # <input type=number> that's left empty sends "" - Postgres rejects
+        # "" on a numeric column, so it must become NULL instead.
+        mock_client = MagicMock()
+        _mock_table(mock_client, "purchases", [{"id": "purchase-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_purchase({"purchase_date": "2026-08-27", "shipping": "", "total_price": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["shipping"])
+        self.assertIsNone(row["total_price"])
+
+    def test_rolls_back_purchase_and_items_on_any_item_insertion_error(self):
+        # Nicht nur CardAlreadyLinkedError - jede Ausnahme waehrend der
+        # Item-Verknuepfung (z.B. ein nicht existierender card_id, der die
+        # FK-Constraint verletzt) muss den Kauf wieder abraeumen.
+        purchases_builder = MagicMock()
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "purchase-1"}]
+        purchases_builder.insert.return_value.execute.return_value = purchases_response
+
+        items_builder = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = dup_check
+        items_builder.insert.return_value.execute.side_effect = RuntimeError("FK violation")
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            with self.assertRaises(RuntimeError):
+                db.create_purchase({"purchase_date": "2026-08-27"}, items=[{"card_id": "does-not-exist"}])
+        purchases_builder.delete.return_value.eq.assert_called_once_with("id", "purchase-1")
+
     def test_creates_purchase_with_single_item(self):
         purchases_builder = MagicMock()
         purchases_response = MagicMock()
@@ -413,6 +445,22 @@ class UpdatePurchaseTests(unittest.TestCase):
             result = db.update_purchase("does-not-exist", {"platform": "x"})
         self.assertIsNone(result)
 
+    def test_blank_numeric_fields_become_none(self):
+        purchases_builder = MagicMock()
+        update_response = MagicMock()
+        update_response.data = [{"id": "p1"}]
+        purchases_builder.update.return_value.eq.return_value.execute.return_value = update_response
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            db.update_purchase("p1", {"shipping": ""})
+        row = purchases_builder.update.call_args[0][0]
+        self.assertIsNone(row["shipping"])
+
 
 class DeletePurchaseTests(unittest.TestCase):
     def test_deletes_and_returns_purchase(self):
@@ -461,6 +509,19 @@ class AddPurchaseItemTests(unittest.TestCase):
             with self.assertRaises(db.CardAlreadyLinkedError):
                 db.add_purchase_item("p1", {"card_id": "card-1"})
         mock_client.table.return_value.insert.assert_not_called()
+
+    def test_blank_allocated_cost_becomes_none(self):
+        mock_client = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = dup_check
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = insert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.add_purchase_item("p1", {"card_id": "card-1", "allocated_cost": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["allocated_cost"])
 
 
 class UpdatePurchaseItemTests(unittest.TestCase):

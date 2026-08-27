@@ -314,6 +314,10 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
 async def create_purchase(fields: dict = Body(...)):
     fields = dict(fields)
     items = fields.pop("items", None)
+    for item in items or []:
+        card_id = item.get("card_id")
+        if not card_id or db.get_card(card_id) is None:
+            raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     try:
         purchase = db.create_purchase(fields, items)
     except db.CardAlreadyLinkedError as exc:

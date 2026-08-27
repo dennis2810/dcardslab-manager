@@ -40,15 +40,19 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
     return response.data[0]
 
 
+def _ilike_search_filter(q, columns):
+    """Builds a PostgREST or_()-Filterstring 'col.ilike.%q%,...' fuer
+    mehrere Spalten. Entfernt Komma/Klammern aus q, da diese in der
+    or_()-Filtersyntax als Trenner/Gruppierung gelten wuerden."""
+    safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
+    pattern = f"%{safe_q}%"
+    return ",".join(f"{col}.ilike.{pattern}" for col in columns)
+
+
 def list_cards(q=None, status=None):
     query = get_client().table("cards").select("*")
     if q:
-        safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
-        pattern = f"%{safe_q}%"
-        query = query.or_(
-            f"title.ilike.{pattern},team.ilike.{pattern},"
-            f"set_name.ilike.{pattern},card_number.ilike.{pattern}"
-        )
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number"]))
     if status:
         query = query.eq("recognition_status", status)
     response = query.order("created_at", desc=True).execute()
@@ -80,7 +84,9 @@ def delete_card(card_id):
 
 
 PURCHASE_FIELDS = ["purchase_date", "platform", "seller", "shipping", "total_price", "notes"]
+PURCHASE_NUMERIC_FIELDS = {"shipping", "total_price"}
 PURCHASE_ITEM_DEFAULTS = {"allocated_cost": 0, "quantity": 1, "notes": ""}
+PURCHASE_ITEM_NUMERIC_FIELDS = {"allocated_cost", "quantity"}
 
 
 class CardAlreadyLinkedError(Exception):
@@ -89,17 +95,34 @@ class CardAlreadyLinkedError(Exception):
     steht in exc.args[0]."""
 
 
+def _blank_numeric_to_none(row, numeric_fields):
+    # HTML number-Inputs, die leer gelassen werden, schicken "" statt gar
+    # keinen Wert - ein leerer String auf einer numeric-Spalte laesst
+    # Postgres/PostgREST den Insert/Update mit einem rohen 500 ablehnen.
+    # None (-> NULL) ist erlaubt, da keine der Spalten NOT NULL ist.
+    for name in numeric_fields:
+        if row.get(name) == "":
+            row[name] = None
+    return row
+
+
 def create_purchase(fields, items=None):
-    row = {name: fields[name] for name in PURCHASE_FIELDS if name in fields}
+    row = _blank_numeric_to_none(
+        {name: fields[name] for name in PURCHASE_FIELDS if name in fields},
+        PURCHASE_NUMERIC_FIELDS,
+    )
     response = get_client().table("purchases").insert(row).execute()
     purchase = response.data[0]
     inserted_items = []
     try:
         for item_fields in items or []:
             inserted_items.append(add_purchase_item(purchase["id"], item_fields))
-    except CardAlreadyLinkedError:
+    except Exception:
         # Alles-oder-nichts: bereits eingefuegte Items und den Kauf selbst
-        # wieder entfernen, statt einen halb verknuepften Kauf zurueckzulassen.
+        # wieder entfernen, statt einen halb verknuepften Kauf zurueckzulassen -
+        # nicht nur bei CardAlreadyLinkedError, sondern bei jedem Fehler
+        # waehrend der Item-Verknuepfung (z.B. ein nicht existierender
+        # card_id, der die FK-Constraint auf purchase_items verletzt).
         for inserted in inserted_items:
             get_client().table("purchase_items").delete().eq("id", inserted["id"]).execute()
         get_client().table("purchases").delete().eq("id", purchase["id"]).execute()
@@ -111,11 +134,7 @@ def create_purchase(fields, items=None):
 def list_purchases(q=None):
     query = get_client().table("purchases").select("*")
     if q:
-        safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
-        pattern = f"%{safe_q}%"
-        query = query.or_(
-            f"platform.ilike.{pattern},seller.ilike.{pattern},notes.ilike.{pattern}"
-        )
+        query = query.or_(_ilike_search_filter(q, ["platform", "seller", "notes"]))
     response = query.order("purchase_date", desc=True).execute()
     purchases = response.data
     if not purchases:
@@ -143,7 +162,10 @@ def get_purchase(purchase_id):
 
 
 def update_purchase(purchase_id, fields):
-    row = {name: value for name, value in fields.items() if name in PURCHASE_FIELDS}
+    row = _blank_numeric_to_none(
+        {name: value for name, value in fields.items() if name in PURCHASE_FIELDS},
+        PURCHASE_NUMERIC_FIELDS,
+    )
     if not row:
         return get_purchase(purchase_id)
     response = get_client().table("purchases").update(row).eq("id", purchase_id).execute()
@@ -167,14 +189,20 @@ def add_purchase_item(purchase_id, fields):
     existing = get_client().table("purchase_items").select("id").eq("card_id", card_id).execute()
     if existing.data:
         raise CardAlreadyLinkedError(card_id)
-    row = {name: fields.get(name, default) for name, default in PURCHASE_ITEM_DEFAULTS.items()}
+    row = _blank_numeric_to_none(
+        {name: fields.get(name, default) for name, default in PURCHASE_ITEM_DEFAULTS.items()},
+        PURCHASE_ITEM_NUMERIC_FIELDS,
+    )
     row.update({"purchase_id": purchase_id, "card_id": card_id})
     response = get_client().table("purchase_items").insert(row).execute()
     return response.data[0] if response.data else None
 
 
 def update_purchase_item(purchase_id, item_id, fields):
-    row = {name: value for name, value in fields.items() if name in PURCHASE_ITEM_DEFAULTS}
+    row = _blank_numeric_to_none(
+        {name: value for name, value in fields.items() if name in PURCHASE_ITEM_DEFAULTS},
+        PURCHASE_ITEM_NUMERIC_FIELDS,
+    )
     query = get_client().table("purchase_items")
     if not row:
         response = query.select("*").eq("id", item_id).eq("purchase_id", purchase_id).execute()

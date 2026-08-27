@@ -29,6 +29,7 @@ class CreatePurchaseEndpointTests(unittest.TestCase):
             "items": [{"id": "item-1", "card_id": "card-1", "allocated_cost": 10}],
         }
         with patch("main.db.create_purchase", return_value=created) as mock_create, \
+             patch("main.db.get_card", return_value={"id": "card-1"}), \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg"}]), \
              patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
             response = client.post("/api/purchases", json={
@@ -43,11 +44,22 @@ class CreatePurchaseEndpointTests(unittest.TestCase):
         self.assertEqual(body["items"][0]["card"]["front_image_url"], "https://signed/b1/1_front.jpg")
 
     def test_returns_409_when_card_already_linked(self):
-        with patch("main.db.create_purchase", side_effect=db.CardAlreadyLinkedError("card-1")):
+        with patch("main.db.get_card", return_value={"id": "card-1"}), \
+             patch("main.db.create_purchase", side_effect=db.CardAlreadyLinkedError("card-1")):
             response = client.post("/api/purchases", json={
                 "purchase_date": "2026-08-27", "items": [{"card_id": "card-1"}],
             })
         self.assertEqual(response.status_code, 409)
+
+    def test_returns_404_when_an_item_card_does_not_exist(self):
+        with patch("main.db.get_card", return_value=None) as mock_get_card, \
+             patch("main.db.create_purchase") as mock_create:
+            response = client.post("/api/purchases", json={
+                "purchase_date": "2026-08-27", "items": [{"card_id": "does-not-exist"}],
+            })
+        self.assertEqual(response.status_code, 404)
+        mock_get_card.assert_called_once_with("does-not-exist")
+        mock_create.assert_not_called()
 
 
 class ListPurchasesEndpointTests(unittest.TestCase):
