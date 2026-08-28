@@ -518,8 +518,29 @@ function priceResearchLinks(title) {
   };
 }
 
-function ebayListingUrl(listing) {
-  const host = "sandbox.ebay.de";  // EBAY_ENVIRONMENT=sandbox during development, s. Spec
+// Cached across calls within the page's lifetime - the environment
+// (sandbox vs. production) can't change without a server restart, so one
+// fetch per page load is enough instead of one per rendered link.
+let _ebayEnvironment = null;
+
+async function getEbayEnvironment() {
+  if (_ebayEnvironment) return _ebayEnvironment;
+  try {
+    const res = await fetch("/api/ebay/oauth/status");
+    const body = await res.json();
+    _ebayEnvironment = body.environment || "sandbox";
+    return _ebayEnvironment;
+  } catch (err) {
+    // Only a successful fetch is cached - a transient failure here must
+    // not permanently pin every later link on this page to "sandbox"
+    // (falling through to the same fallback without caching it retries
+    // on the next call instead).
+    return "sandbox";
+  }
+}
+
+function ebayListingUrl(listing, environment) {
+  const host = environment === "production" ? "ebay.de" : "sandbox.ebay.de";
   return `https://www.${host}/itm/${encodeURIComponent(listing.ebay_listing_id)}`;
 }
 
@@ -546,9 +567,11 @@ async function renderEbaySection(listing) {
     }
     renderEbayEditForm(section, listing);
   } else if (listing.status === "Geplant") {
-    renderEbayScheduledView(section, listing);
+    const environment = await getEbayEnvironment();
+    renderEbayScheduledView(section, listing, environment);
   } else {
-    renderEbayPublishedView(section, listing);
+    const environment = await getEbayEnvironment();
+    renderEbayPublishedView(section, listing, environment);
   }
 }
 
@@ -781,7 +804,7 @@ function renderEbayEditForm(section, listing) {
   });
 }
 
-function renderEbayScheduledView(section, listing) {
+function renderEbayScheduledView(section, listing, environment) {
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const scheduledDate = listing.scheduled_at ? new Date(listing.scheduled_at).toLocaleString("de-DE") : "";
@@ -796,7 +819,7 @@ function renderEbayScheduledView(section, listing) {
   const hint = document.createElement("p");
   if (listing.scheduling_mode === "native" && listing.ebay_listing_id) {
     const a = document.createElement("a");
-    a.href = ebayListingUrl(listing);
+    a.href = ebayListingUrl(listing, environment);
     a.target = "_blank"; a.rel = "noopener";
     a.textContent = "Auf eBay ansehen";
     hint.appendChild(a);
@@ -848,7 +871,7 @@ function renderEbayScheduledView(section, listing) {
   section.appendChild(actions);
 }
 
-function renderEbayPublishedView(section, listing) {
+function renderEbayPublishedView(section, listing, environment) {
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const dl = document.createElement("dl");
@@ -861,7 +884,7 @@ function renderEbayPublishedView(section, listing) {
 
   if (listing.ebay_listing_id) {
     const a = document.createElement("a");
-    a.href = ebayListingUrl(listing);
+    a.href = ebayListingUrl(listing, environment);
     a.target = "_blank"; a.rel = "noopener";
     a.textContent = "Auf eBay ansehen";
     readonly.appendChild(a);
