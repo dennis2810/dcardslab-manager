@@ -644,6 +644,25 @@ function renderEbayEditForm(section, listing) {
   typeWrapper.appendChild(typeSelect);
   form.appendChild(typeWrapper);
 
+  const conditionWrapper = document.createElement("label");
+  conditionWrapper.textContent = "Zustand";
+  const conditionSelect = document.createElement("select");
+  conditionSelect.name = "condition";
+  for (const [value, label] of [
+    ["NM", "Neuwertig / Near Mint or Better (NM)"],
+    ["EX", "Sehr gut / Excellent (EX)"],
+    ["VG", "Gut / Very Good (VG)"],
+    ["G", "Befriedigend / Poor (G)"],
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if ((listing.condition || "NM") === value) option.selected = true;
+    conditionSelect.appendChild(option);
+  }
+  conditionWrapper.appendChild(conditionSelect);
+  form.appendChild(conditionWrapper);
+
   const priceLinksP = document.createElement("p");
   priceLinksP.className = "price-research-links";
   form.appendChild(priceLinksP);
@@ -741,6 +760,7 @@ function renderEbayEditForm(section, listing) {
       price: form.elements.price.value,
       quantity: form.elements.quantity.value,
       listing_type: form.elements.listing_type.value,
+      condition: form.elements.condition.value,
       aspects,
     };
   }
