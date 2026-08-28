@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Einstellungen</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  section h2 { font-size: 1.1rem; }
+  label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; max-width: 400px; margin-bottom: 0.75rem; }
+  input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  button { padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; margin-right: 0.5rem; }
+  .status { font-style: italic; color: #555; margin-top: 0.5rem; }
+  .error { color: #b00020; font-weight: 600; }
+  .connected { color: #1e4620; font-weight: 600; }
+  .not-connected { color: #7a5c00; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Einstellungen</h1>
+  <p><a href="cards.html">&larr; Zur Liste</a></p>
+
+  <section id="sheets-section">
+    <h2>Google Sheets</h2>
+    <p id="sheets-status">Lädt …</p>
+    <div id="sheets-connect" style="display:none;">
+      <a href="/api/sheets/oauth/start"><button type="button">Mit Google verbinden</button></a>
+    </div>
+    <div id="sheets-configured" style="display:none;">
+      <label for="spreadsheet-id">Google-Sheets-Tabellen-ID
+        <input type="text" id="spreadsheet-id" placeholder="z.B. 1AbCdEfGh...">
+      </label>
+      <button type="button" id="save-spreadsheet-id-btn">Speichern</button>
+      <button type="button" id="sync-btn">Jetzt synchronisieren</button>
+      <p class="status" id="sync-status"></p>
+    </div>
+  </section>
+
+  <section id="backup-section">
+    <h2>Backup</h2>
+    <p>Lädt eine ZIP-Datei mit allen Daten (Karten, Käufe, eBay-Angebote)
+      als JSON sowie allen Kartenbildern herunter.</p>
+    <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
+  </section>
+
+<script>
+const sheetsStatusEl = document.getElementById("sheets-status");
+const connectDiv = document.getElementById("sheets-connect");
+const configuredDiv = document.getElementById("sheets-configured");
+const spreadsheetIdInput = document.getElementById("spreadsheet-id");
+const syncStatusEl = document.getElementById("sync-status");
+
+function showSheetsError(message) {
+  sheetsStatusEl.textContent = "Fehler: " + message;
+  sheetsStatusEl.className = "error";
+}
+
+async function loadSheetsStatus() {
+  const params = new URLSearchParams(window.location.search);
+  const sheetsError = params.get("sheets_error");
+  if (sheetsError) {
+    showSheetsError(sheetsError);
+  }
+
+  try {
+    const res = await fetch("/api/sheets/status");
+    const body = await res.json();
+    if (!res.ok) {
+      showSheetsError(body.detail || res.statusText);
+      return;
+    }
+    if (body.connected) {
+      if (!sheetsError) {
+        sheetsStatusEl.textContent = "Verbunden seit " + (body.connected_at || "?");
+        sheetsStatusEl.className = "connected";
+      }
+      connectDiv.style.display = "none";
+      configuredDiv.style.display = "block";
+      spreadsheetIdInput.value = body.spreadsheet_id || "";
+      if (body.last_synced_at) {
+        syncStatusEl.textContent = "Zuletzt synchronisiert: " + body.last_synced_at;
+      }
+    } else {
+      if (!sheetsError) {
+        sheetsStatusEl.textContent = "Nicht verbunden";
+        sheetsStatusEl.className = "not-connected";
+      }
+      connectDiv.style.display = "block";
+      configuredDiv.style.display = "none";
+    }
+  } catch (err) {
+    showSheetsError(String(err));
+  }
+}
+
+document.getElementById("save-spreadsheet-id-btn").addEventListener("click", async () => {
+  syncStatusEl.textContent = "Speichert …";
+  syncStatusEl.className = "status";
+  try {
+    const res = await fetch("/api/sheets/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spreadsheet_id: spreadsheetIdInput.value.trim() }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      syncStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      syncStatusEl.className = "error";
+      return;
+    }
+    syncStatusEl.textContent = "Gespeichert.";
+    syncStatusEl.className = "status";
+  } catch (err) {
+    syncStatusEl.textContent = "Fehler: " + err;
+    syncStatusEl.className = "error";
+  }
+});
+
+document.getElementById("sync-btn").addEventListener("click", async () => {
+  syncStatusEl.textContent = "Synchronisiert …";
+  syncStatusEl.className = "status";
+  try {
+    const res = await fetch("/api/sheets/sync", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      syncStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      syncStatusEl.className = "error";
+      return;
+    }
+    syncStatusEl.textContent = "Zuletzt synchronisiert: " + body.synced_at;
+    syncStatusEl.className = "status";
+  } catch (err) {
+    syncStatusEl.textContent = "Fehler: " + err;
+    syncStatusEl.className = "error";
+  }
+});
+
+loadSheetsStatus();
+</script>
+</body>
+</html>

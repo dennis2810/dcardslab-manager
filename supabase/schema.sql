@@ -113,3 +113,11 @@ create table if not exists ebay_sales (
 
 create index if not exists ebay_sales_listing_id_idx on ebay_sales(listing_id);
 create index if not exists ebay_sales_card_id_idx on ebay_sales(card_id);
+
+create table if not exists google_sheets_settings (
+    id              boolean primary key default true check (id),
+    refresh_token   text default '',
+    spreadsheet_id  text default '',
+    connected_at    timestamptz,
+    last_synced_at  timestamptz
+);

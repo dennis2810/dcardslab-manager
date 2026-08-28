@@ -5,8 +5,8 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
 
 1. Projekt auf https://supabase.com anlegen.
 2. Im SQL Editor den Inhalt von `schema.sql` ausführen (legt `scan_batches`,
-   `cards`, `purchases`, `purchase_items`, `ebay_listings` und
-   `ebay_sales` an).
+   `cards`, `purchases`, `purchase_items`, `ebay_listings`,
+   `ebay_sales` und `google_sheets_settings` an).
    (Bei einem Schema-Update für ein bereits bestehendes Projekt: einfach
    den kompletten, aktuellen Inhalt von `schema.sql` erneut ausführen —
    `create table if not exists` überspringt bereits vorhandene Tabellen.)
