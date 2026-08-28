@@ -21,8 +21,14 @@ def _card(**overrides):
 
 
 class SkuForCardTests(unittest.TestCase):
-    def test_prefixes_card_id(self):
-        self.assertEqual(ebay_listing.sku_for_card("abc-123"), "webapp-abc-123")
+    def test_formats_as_zero_padded_sequential_number(self):
+        # cards.id is a UUID - a poor SKU/inventory reference to read off
+        # an eBay order export by eye. card_no is a short, sequential,
+        # human-readable number instead (see supabase/schema.sql migration).
+        self.assertEqual(ebay_listing.sku_for_card(123), "webapp-000123")
+
+    def test_pads_small_numbers(self):
+        self.assertEqual(ebay_listing.sku_for_card(1), "webapp-000001")
 
 
 class GenerateTitleTests(unittest.TestCase):

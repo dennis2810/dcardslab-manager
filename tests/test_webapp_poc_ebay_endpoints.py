@@ -24,7 +24,7 @@ client = TestClient(main.app)
 
 def _card(**overrides):
     card = {
-        "id": "card-1", "title": "Musterkarte", "category": "Fußball",
+        "id": "card-1", "card_no": 1, "title": "Musterkarte", "category": "Fußball",
         "team": "FC Beispiel", "manufacturer": "Topps", "set_name": "Bundesliga 2024",
         "season_year": "2024", "card_number": "12", "front_image_path": None,
     }
@@ -67,7 +67,7 @@ class CreateEbayListingEndpointTests(unittest.TestCase):
         args, _ = mock_create.call_args
         card_id, sku, row = args
         self.assertEqual(card_id, "card-1")
-        self.assertEqual(sku, "webapp-card-1")
+        self.assertEqual(sku, "webapp-000001")
         self.assertIn("Musterkarte", row["title"])
         self.assertEqual(row["listing_type"], "sport")
         self.assertEqual(row["category_id"], "261328")

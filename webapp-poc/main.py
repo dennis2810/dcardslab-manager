@@ -626,7 +626,7 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
         "price": fields.get("price", 0),
         "quantity": fields.get("quantity", 1),
     }
-    sku = ebay_listing.sku_for_card(card_id)
+    sku = ebay_listing.sku_for_card(card["card_no"])
     listing = db.create_ebay_listing(card_id, sku, row)
     listing["required_aspects"] = ebay_listing.required_aspects(listing_type)
     return JSONResponse(_listing_with_card(listing))

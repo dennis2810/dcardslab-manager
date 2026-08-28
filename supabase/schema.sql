@@ -40,6 +40,30 @@ create table if not exists cards (
 
 create index if not exists cards_batch_id_idx on cards(batch_id);
 
+-- Migration (2026-08-28): a short, sequential, human-readable card number -
+-- cards.id is a UUID, which makes a poor eBay SKU/inventory reference to
+-- read off an order export or a Seller Hub listing by eye. Adds the column
+-- without a default, backfills existing rows in creation order, then wires
+-- up a sequence for all future inserts. Safe to re-run - the column add and
+-- backfill are both guarded.
+alter table cards add column if not exists card_no bigint;
+
+with ordered as (
+    select id, row_number() over (order by created_at, id) as rn
+    from cards
+    where card_no is null
+)
+update cards set card_no = ordered.rn
+from ordered
+where cards.id = ordered.id;
+
+create sequence if not exists cards_card_no_seq;
+select setval('cards_card_no_seq', coalesce((select max(card_no) from cards), 0));
+alter sequence cards_card_no_seq owned by cards.card_no;
+alter table cards alter column card_no set default nextval('cards_card_no_seq');
+alter table cards alter column card_no set not null;
+create unique index if not exists cards_card_no_idx on cards(card_no);
+
 create table if not exists purchases (
     id             uuid primary key default gen_random_uuid(),
     purchase_date  date not null,

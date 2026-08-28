@@ -24,8 +24,8 @@ _KNOWN_SPORTS = {
 }
 
 
-def sku_for_card(card_id):
-    return f"webapp-{card_id}"
+def sku_for_card(card_no):
+    return f"webapp-{card_no:06d}"
 
 
 def generate_title(card, max_len=80):
