@@ -134,6 +134,28 @@ class PutInventoryItemTests(unittest.TestCase):
         _, kwargs = mock_request.call_args
         self.assertEqual(kwargs["json"]["availability"]["shipToLocationAvailability"]["quantity"], 1)
 
+    def test_sends_aspects_as_item_specifics(self):
+        # Regression test: found live against real eBay production - the
+        # Inventory Item's product.aspects field is where eBay actually
+        # reads Item Specifics (e.g. "Sportart") from. Without it, eBay
+        # rejects the offer/publish with errorId 25002 "Das Artikelmerkmal
+        # Sportart fehlt" even though ebay_listing.build_aspects()/
+        # missing_aspects() already computed and locally validated the
+        # exact same aspects - they were just never sent to eBay at all.
+        # The sandbox apparently doesn't enforce this as strictly, which is
+        # why this stayed hidden through all the sandbox testing.
+        listing = {"title": "x", "aspects": {"Sportart": ["Fußball"], "Team / Verein": ["FC Test"]}}
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", listing, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["product"]["aspects"], {"Sportart": ["Fußball"], "Team / Verein": ["FC Test"]})
+
+    def test_sends_empty_aspects_dict_when_none_set(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "x"}, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["product"]["aspects"], {})
+
 
 class CreateOfferTests(unittest.TestCase):
     def test_returns_offer_id(self):

@@ -157,6 +157,14 @@ def put_inventory_item(token, sku, listing, image_url):
         "product": {
             "title": listing.get("title", ""),
             "imageUrls": [image_url] if image_url else [],
+            # eBay reads Item Specifics (e.g. "Sportart") from here, not
+            # from the Offer - found live against real eBay production
+            # (errorId 25002 "Das Artikelmerkmal Sportart fehlt" even
+            # though ebay_listing.build_aspects()/missing_aspects() already
+            # computed and locally validated the exact same aspects). The
+            # sandbox apparently doesn't enforce this as strictly, which is
+            # why this stayed hidden through all the sandbox testing.
+            "aspects": listing.get("aspects") or {},
         },
         "condition": condition_id_to_enum(listing.get("condition_id")),
         "availability": {"shipToLocationAvailability": {"quantity": listing.get("quantity") or 1}},
