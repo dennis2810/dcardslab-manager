@@ -47,6 +47,21 @@ _CONDITION_ID_TO_ENUM = {
     "7000": "FOR_PARTS_OR_NOT_WORKING",
 }
 
+# eBay's "Kartenzustand"/"Card Condition" Condition Descriptor (ID 40001) -
+# required (separately from the top-level ConditionEnum) for Ungraded
+# trading cards in categories 261328/183050, found live against real eBay
+# production (errorId 25064 "Kartenzustand (40001) ist ein erforderliches
+# Feld"). Condition Descriptors take numeric value IDs, not free text.
+# Ported from the desktop app's proven _ebay_card_condition_value()
+# (app/dcardlabs_manager.py), already used there for File Exchange uploads.
+CARD_CONDITION_DESCRIPTOR_ID = "40001"
+_CARD_CONDITION_TO_DESCRIPTOR_VALUE = {
+    "NM": "400010", "NEAR MINT": "400010", "NEAR MINT OR BETTER": "400010",
+    "EX": "400011", "EXCELLENT": "400011",
+    "VG": "400012", "VERY GOOD": "400012",
+    "G": "400013", "GOOD": "400013", "POOR": "400013",
+}
+
 _POLICY_SPECS = {
     "fulfillmentPolicyId": ("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "Versand-Richtlinie (Fulfillment Policy)"),
     "paymentPolicyId": ("payment_policy", "paymentPolicies", "paymentPolicyId", "Zahlungs-Richtlinie (Payment Policy)"),
@@ -78,6 +93,11 @@ def get_access_token():
 
 def condition_id_to_enum(condition):
     return _CONDITION_ID_TO_ENUM.get(str(condition or "").strip(), condition)
+
+
+def card_condition_descriptor_value(condition):
+    value = str(condition or "").strip().upper()
+    return _CARD_CONDITION_TO_DESCRIPTOR_VALUE.get(value, "400010" if value else "")
 
 
 def _headers(token):
@@ -169,6 +189,11 @@ def put_inventory_item(token, sku, listing, image_url):
         "condition": condition_id_to_enum(listing.get("condition_id")),
         "availability": {"shipToLocationAvailability": {"quantity": listing.get("quantity") or 1}},
     }
+    condition_descriptor_value = card_condition_descriptor_value(listing.get("condition"))
+    if condition_descriptor_value:
+        payload["conditionDescriptors"] = [
+            {"name": CARD_CONDITION_DESCRIPTOR_ID, "values": [condition_descriptor_value]}
+        ]
     _request("PUT", token, f"/sell/inventory/v1/inventory_item/{sku}", payload)
 
 
