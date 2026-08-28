@@ -21,4 +21,9 @@ services:
       # dort konfiguriert - sonst passt der Token nicht zur API-Basis-URL.
       - EBAY_OAUTH_SERVER_URL=${EBAY_OAUTH_SERVER_URL:-http://ebay-oauth-server:8080}
       - EBAY_ENVIRONMENT=${EBAY_ENVIRONMENT:-sandbox}
+      # Google-Sheets-Sync (Sub-Projekt 6, optional): ohne diese drei bleibt
+      # /api/backup weiterhin nutzbar, nur "Mit Google verbinden" scheitert.
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
     restart: unless-stopped
