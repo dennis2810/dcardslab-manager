@@ -126,12 +126,25 @@ class EnsureMerchantLocationTests(unittest.TestCase):
 class PutInventoryItemTests(unittest.TestCase):
     def test_sends_title_and_image_url(self):
         with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
-            ebay_client.put_inventory_item("tok", "sku-1", {"title": "Musterkarte"}, "https://img/x.jpg")
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "Musterkarte"}, ["https://img/x.jpg"])
         args, kwargs = mock_request.call_args
         self.assertEqual(args[0], "PUT")
         self.assertIn("/inventory_item/sku-1", args[1])
         self.assertEqual(kwargs["json"]["product"]["title"], "Musterkarte")
         self.assertEqual(kwargs["json"]["product"]["imageUrls"], ["https://img/x.jpg"])
+
+    def test_sends_front_and_back_image_urls(self):
+        # Regression test: the app only ever sent the front photo here -
+        # found live after the first successful production publish showed
+        # up on eBay with the back of the card missing entirely.
+        listing = {"title": "x"}
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", listing, ["https://img/front.jpg", "https://img/back.jpg"])
+        _, kwargs = mock_request.call_args
+        self.assertEqual(
+            kwargs["json"]["product"]["imageUrls"],
+            ["https://img/front.jpg", "https://img/back.jpg"],
+        )
 
     def test_raises_on_error_status(self):
         with patch("ebay_client.httpx.request", return_value=_response(400, text="bad request")):

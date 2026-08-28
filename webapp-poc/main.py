@@ -548,13 +548,15 @@ def _publish_listing(listing, scheduled_at=None):
         logger.info("Publish %s: %s -> ok", listing["id"], step)
 
         card = db.get_card(listing["card_id"]) or {}
-        image_url = None
-        if card.get("front_image_path"):
-            image_url = storage.public_url(card["front_image_path"])
+        image_urls = [
+            storage.public_url(path)
+            for path in (card.get("front_image_path"), card.get("back_image_path"))
+            if path
+        ]
 
         step = "put_inventory_item"
         logger.info("Publish %s: %s ...", listing["id"], step)
-        ebay_client.put_inventory_item(token, listing["sku"], listing, image_url)
+        ebay_client.put_inventory_item(token, listing["sku"], listing, image_urls)
         logger.info("Publish %s: %s -> ok", listing["id"], step)
 
         offer_id = listing.get("ebay_offer_id")

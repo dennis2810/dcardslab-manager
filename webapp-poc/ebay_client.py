@@ -172,11 +172,15 @@ def ensure_merchant_location(token, location_key=DEFAULT_MERCHANT_LOCATION_KEY):
     return location_key
 
 
-def put_inventory_item(token, sku, listing, image_url):
+def put_inventory_item(token, sku, listing, image_urls):
     payload = {
         "product": {
             "title": listing.get("title", ""),
-            "imageUrls": [image_url] if image_url else [],
+            # A list, not a single URL - trading cards have a front and a
+            # back, and eBay accepts up to 12 imageUrls per item. Sending
+            # only the front (found live: the app only ever built one URL
+            # here) leaves the back photo missing from the live listing.
+            "imageUrls": list(image_urls) if image_urls else [],
             # eBay reads Item Specifics (e.g. "Sportart") from here, not
             # from the Offer - found live against real eBay production
             # (errorId 25002 "Das Artikelmerkmal Sportart fehlt" even
