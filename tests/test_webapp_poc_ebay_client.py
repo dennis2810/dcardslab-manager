@@ -47,6 +47,22 @@ class ConditionIdToEnumTests(unittest.TestCase):
         self.assertEqual(ebay_client.condition_id_to_enum("USED_GOOD"), "USED_GOOD")
 
 
+class CardConditionDescriptorValueTests(unittest.TestCase):
+    def test_maps_known_abbreviations_and_full_names_case_insensitively(self):
+        self.assertEqual(ebay_client.card_condition_descriptor_value("NM"), "400010")
+        self.assertEqual(ebay_client.card_condition_descriptor_value("near mint"), "400010")
+        self.assertEqual(ebay_client.card_condition_descriptor_value("EX"), "400011")
+        self.assertEqual(ebay_client.card_condition_descriptor_value("Very Good"), "400012")
+        self.assertEqual(ebay_client.card_condition_descriptor_value("Poor"), "400013")
+
+    def test_falls_back_to_near_mint_or_better_for_unknown_value(self):
+        self.assertEqual(ebay_client.card_condition_descriptor_value("Mint"), "400010")
+
+    def test_returns_empty_string_when_blank(self):
+        self.assertEqual(ebay_client.card_condition_descriptor_value(None), "")
+        self.assertEqual(ebay_client.card_condition_descriptor_value(""), "")
+
+
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):
         return _response(200, {list_field: [{id_field: policy_id}]})
@@ -155,6 +171,29 @@ class PutInventoryItemTests(unittest.TestCase):
             ebay_client.put_inventory_item("tok", "sku-1", {"title": "x"}, None)
         _, kwargs = mock_request.call_args
         self.assertEqual(kwargs["json"]["product"]["aspects"], {})
+
+    def test_sends_card_condition_as_condition_descriptor(self):
+        # Regression test: found live against real eBay production - the
+        # top-level "condition" ConditionEnum alone isn't enough for
+        # trading card categories (261328/183050). eBay separately requires
+        # a "conditionDescriptors" entry for the "Kartenzustand"/"Card
+        # Condition" descriptor (ID 40001), rejecting the Inventory Item
+        # otherwise with errorId 25064 "Kartenzustand (40001) ist ein
+        # erforderliches Feld".
+        listing = {"title": "x", "condition": "NM"}
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", listing, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(
+            kwargs["json"]["conditionDescriptors"],
+            [{"name": "40001", "values": ["400010"]}],
+        )
+
+    def test_omits_condition_descriptors_when_condition_not_set(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", {"title": "x"}, None)
+        _, kwargs = mock_request.call_args
+        self.assertNotIn("conditionDescriptors", kwargs["json"])
 
 
 class CreateOfferTests(unittest.TestCase):
