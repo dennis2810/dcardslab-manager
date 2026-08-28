@@ -795,5 +795,77 @@ class UpsertEbaySaleTests(unittest.TestCase):
         )
 
 
+class GoogleSheetsSettingsTests(unittest.TestCase):
+    def test_get_returns_none_when_no_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_google_sheets_settings()
+        self.assertIsNone(result)
+
+    def test_get_returns_the_single_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "spreadsheet_id": "sheet-1"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_google_sheets_settings()
+        self.assertEqual(result["spreadsheet_id"], "sheet-1")
+
+    def test_save_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "spreadsheet_id": "sheet-2"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_google_sheets_settings({"spreadsheet_id": "sheet-2"})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row["id"], True)
+        self.assertEqual(row["spreadsheet_id"], "sheet-2")
+
+    def test_save_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_google_sheets_settings({"spreadsheet_id": "s1", "not_a_real_column": "x"})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertNotIn("not_a_real_column", row)
+
+
+class BackupReadFunctionsTests(unittest.TestCase):
+    def _assert_reads_table(self, fn, table_name):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "row-1"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = fn()
+        mock_client.table.assert_called_once_with(table_name)
+        mock_client.table.return_value.select.assert_called_once_with("*")
+        self.assertEqual(result, [{"id": "row-1"}])
+
+    def test_all_scan_batches(self):
+        self._assert_reads_table(db.all_scan_batches, "scan_batches")
+
+    def test_all_cards(self):
+        self._assert_reads_table(db.all_cards, "cards")
+
+    def test_all_purchases(self):
+        self._assert_reads_table(db.all_purchases, "purchases")
+
+    def test_all_purchase_items(self):
+        self._assert_reads_table(db.all_purchase_items, "purchase_items")
+
+    def test_all_ebay_listings(self):
+        self._assert_reads_table(db.all_ebay_listings, "ebay_listings")
+
+    def test_all_ebay_sales(self):
+        self._assert_reads_table(db.all_ebay_sales, "ebay_sales")
+
+
 if __name__ == "__main__":
     unittest.main()

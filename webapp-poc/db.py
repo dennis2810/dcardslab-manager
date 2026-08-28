@@ -352,3 +352,45 @@ def upsert_ebay_sale(fields):
         .execute()
     )
     return response.data[0]
+
+
+GOOGLE_SHEETS_SETTINGS_FIELDS = {"refresh_token", "spreadsheet_id", "connected_at", "last_synced_at"}
+
+
+def get_google_sheets_settings():
+    response = get_client().table("google_sheets_settings").select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def save_google_sheets_settings(fields):
+    # Singleton-row pattern (id=true, enforced by the check(id) column
+    # constraint) - upsert always targets the same row instead of ever
+    # needing a lookup-then-update.
+    row = {name: value for name, value in fields.items() if name in GOOGLE_SHEETS_SETTINGS_FIELDS}
+    row["id"] = True
+    response = get_client().table("google_sheets_settings").upsert(row).execute()
+    return response.data[0]
+
+
+def all_scan_batches():
+    return get_client().table("scan_batches").select("*").execute().data
+
+
+def all_cards():
+    return get_client().table("cards").select("*").execute().data
+
+
+def all_purchases():
+    return get_client().table("purchases").select("*").execute().data
+
+
+def all_purchase_items():
+    return get_client().table("purchase_items").select("*").execute().data
+
+
+def all_ebay_listings():
+    return get_client().table("ebay_listings").select("*").execute().data
+
+
+def all_ebay_sales():
+    return get_client().table("ebay_sales").select("*").execute().data
