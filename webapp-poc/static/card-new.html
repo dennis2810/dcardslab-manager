@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Neue Karte anlegen</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .side { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.5rem; }
+  label { font-weight: 600; }
+  .preview { display: none; max-width: 100%; max-height: 320px; border: 1px solid #ccc; border-radius: 6px; }
+  .rotate-buttons { display: none; gap: 0.5rem; }
+  .rotate-buttons button { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  #recognize-btn { padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; margin-bottom: 1.5rem; }
+  #recognize-btn:disabled { opacity: 0.5; cursor: default; }
+  form#card-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  form#card-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  form#card-form input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
+  button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { font-style: italic; color: #555; grid-column: 1 / -1; }
+  .error { color: #b00020; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Neue Karte anlegen</h1>
+  <p><a href="cards.html">&larr; Zur Liste</a></p>
+
+  <div class="images">
+    <div class="side">
+      <label for="front">Vorderseite</label>
+      <input type="file" id="front" name="front" accept="image/*" required>
+      <img id="front-preview" class="preview" alt="Vorschau Vorderseite">
+      <div id="front-rotate" class="rotate-buttons">
+        <button type="button" data-side="front" data-dir="left">&#8634; Links drehen</button>
+        <button type="button" data-side="front" data-dir="right">&#8635; Rechts drehen</button>
+      </div>
+    </div>
+    <div class="side">
+      <label for="back">Rückseite</label>
+      <input type="file" id="back" name="back" accept="image/*" required>
+      <img id="back-preview" class="preview" alt="Vorschau Rückseite">
+      <div id="back-rotate" class="rotate-buttons">
+        <button type="button" data-side="back" data-dir="left">&#8634; Links drehen</button>
+        <button type="button" data-side="back" data-dir="right">&#8635; Rechts drehen</button>
+      </div>
+    </div>
+  </div>
+
+  <button type="button" id="recognize-btn" disabled>KI erkennen</button>
+
+  <form id="card-form">
+    <div id="status"></div>
+    <div class="actions">
+      <button type="submit" id="save-btn" disabled>Karte speichern</button>
+    </div>
+  </form>
+
+<script>
+const FIELDS = [
+  ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
+  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
+  ["season_year", "Saison"], ["card_type", "Typ"], ["variant", "Variante"],
+  ["position", "Position"], ["squad_number", "Trikotnummer"],
+  ["club_debut_season", "Debütsaison"], ["card_number", "Kartennr."],
+  ["serial_number", "Seriennr."], ["print_run", "Auflage"],
+];
+
+const form = document.getElementById("card-form");
+const statusEl = document.getElementById("status");
+const recognizeBtn = document.getElementById("recognize-btn");
+const saveBtn = document.getElementById("save-btn");
+
+// Holds the blob actually submitted for each side - starts as the file the
+// user picked, gets replaced by a rotated re-encoding each time they click
+// a rotate button, so the preview and every upload (recognize + save) use
+// the same, current image - same pattern as index.html's scan form.
+const sideBlobs = { front: null, back: null };
+
+// Build the form fields dynamically so FIELDS stays the single source of
+// truth (same field set/labels as card.html's edit form).
+for (const [key, label] of FIELDS) {
+  const wrapper = document.createElement("label");
+  wrapper.textContent = label;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.name = key;
+  wrapper.appendChild(input);
+  form.insertBefore(wrapper, statusEl);
+}
+
+function updatePreview(side) {
+  const img = document.getElementById(`${side}-preview`);
+  const rotateButtons = document.getElementById(`${side}-rotate`);
+  const blob = sideBlobs[side];
+  if (!blob) {
+    img.style.display = "none";
+    rotateButtons.style.display = "none";
+    updateButtonsEnabled();
+    return;
+  }
+  if (img.dataset.objectUrl) URL.revokeObjectURL(img.dataset.objectUrl);
+  const url = URL.createObjectURL(blob);
+  img.dataset.objectUrl = url;
+  img.src = url;
+  img.style.display = "block";
+  rotateButtons.style.display = "flex";
+  updateButtonsEnabled();
+}
+
+function updateButtonsEnabled() {
+  const bothPresent = Boolean(sideBlobs.front && sideBlobs.back);
+  recognizeBtn.disabled = !bothPresent;
+  saveBtn.disabled = !bothPresent;
+}
+
+function rotateBlob(blob, direction) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((direction === "right" ? 90 : -90) * Math.PI / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      URL.revokeObjectURL(objectUrl);
+      canvas.toBlob((rotated) => {
+        if (rotated) resolve(rotated);
+        else reject(new Error("Drehen fehlgeschlagen."));
+      }, "image/jpeg", 0.92);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Bild konnte nicht geladen werden."));
+    };
+    img.src = objectUrl;
+  });
+}
+
+for (const side of ["front", "back"]) {
+  document.getElementById(side).addEventListener("change", (ev) => {
+    sideBlobs[side] = ev.target.files[0] || null;
+    updatePreview(side);
+  });
+}
+
+document.querySelectorAll(".rotate-buttons button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const { side, dir } = button.dataset;
+    if (!sideBlobs[side]) return;
+    try {
+      sideBlobs[side] = await rotateBlob(sideBlobs[side], dir);
+      updatePreview(side);
+    } catch (err) {
+      statusEl.textContent = "Fehler beim Drehen: " + err;
+      statusEl.className = "error";
+    }
+  });
+});
+
+recognizeBtn.addEventListener("click", async () => {
+  if (!sideBlobs.front || !sideBlobs.back) return;
+  recognizeBtn.disabled = true;
+  statusEl.textContent = "Erkenne …";
+  statusEl.className = "";
+
+  const data = new FormData();
+  data.append("front", sideBlobs.front, "front.jpg");
+  data.append("back", sideBlobs.back, "back.jpg");
+
+  try {
+    const res = await fetch("/api/cards/recognize", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    for (const [key] of FIELDS) {
+      if (body[key] !== undefined && body[key] !== null) {
+        form.elements[key].value = body[key];
+      }
+    }
+    statusEl.textContent = body.status === "ok" ? "Erkennung abgeschlossen." : (body.status || "Erkennung abgeschlossen.");
+    statusEl.className = "";
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  } finally {
+    updateButtonsEnabled();
+  }
+});
+
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!sideBlobs.front || !sideBlobs.back) return;
+  saveBtn.disabled = true;
+  statusEl.textContent = "Speichert …";
+  statusEl.className = "";
+
+  const fields = {};
+  for (const [key] of FIELDS) {
+    fields[key] = form.elements[key].value;
+  }
+
+  const data = new FormData();
+  data.append("front", sideBlobs.front, "front.jpg");
+  data.append("back", sideBlobs.back, "back.jpg");
+  data.append("fields", JSON.stringify(fields));
+
+  try {
+    const res = await fetch("/api/cards", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      saveBtn.disabled = false;
+      return;
+    }
+    window.location.href = `card.html?id=${encodeURIComponent(body.id)}`;
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    saveBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
