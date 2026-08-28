@@ -3,6 +3,7 @@
 links, and sales-sync matching. No HTTP, no DB - easy to unit test.
 """
 import csv
+import html
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -37,16 +38,41 @@ def generate_title(card, max_len=80):
     return " ".join(p for p in parts if p).strip()[:max_len]
 
 
+# The seller's fixed link to their own other eBay listings, used unchanged
+# across every generated description (see EBAY_SHOP_SEARCH_URL below).
+EBAY_SHOP_SEARCH_URL = "https://ebay.de/sch/dennis281086/m.html"
+
+# The seller's real standard footer (shipping/combined-shipping info, a
+# link to their other listings, a legal disclaimer) - eBay's
+# listingDescription field accepts HTML, so this replaces the previous
+# plain-text-only footer with the seller's actual, already-in-use listing
+# text (provided by the user, not portable from the desktop app - that one
+# never had this content).
+_DESCRIPTION_FOOTER_HTML = f"""<p><strong>Versand &amp; Kombiversand:</strong></p>
+<ul>
+  <li><strong>Sicher verpackt:</strong> Jede Karte wird geschützt in einer weichen Hülle (Sleeve) und zusätzlich in einer festen Plastikhülle (Toploader) knicksicher versendet.</li>
+  <li><strong>Versandrabatt: Kombiversand ist aktiv!</strong> Egal wie viele Karten du bei mir kaufst, du zahlst nur einmalig die Versandkosten für den ersten Artikel. Jede weitere Karte reist komplett kostenlos mit.</li>
+  <li><em>Wichtig bei Großbestellungen:</em> Bitte vor der Zahlung die Gesamtrechnung abwarten, falls die Kartenanzahl das Gewicht für einen Standardbrief überschreitet.</li>
+</ul>
+<p>🔗 <strong>Mehr Karten entdecken:</strong></p>
+<p>👉 <a href="{EBAY_SHOP_SEARCH_URL}"><strong>Hier klicken, um meine anderen Sammelkarten anzusehen und Versandkosten zu sparen!</strong></a></p>
+<p><em>Rechtlicher Hinweis: Dies ist ein Privatverkauf. Der Verkauf erfolgt unter Ausschluss jeglicher Gewährleistung, Sachmängelhaftung oder Rücknahme.</em></p>"""
+
+
 def generate_description(card):
-    lines = [generate_title(card, max_len=200)]
+    lines = [f"<p><strong>{html.escape(generate_title(card, max_len=200))}</strong></p>"]
+    items = []
     for label, key in (
         ("Set", "set_name"), ("Saison", "season_year"),
         ("Team", "team"), ("Kartennummer", "card_number"),
     ):
         value = card.get(key)
         if value:
-            lines.append(f"{label}: {value}")
-    lines.append("Zustand: siehe Angebot. Versand aus Deutschland.")
+            items.append(f"<li>{html.escape(label)}: {html.escape(str(value))}</li>")
+    if items:
+        lines.append("<ul>" + "".join(items) + "</ul>")
+    lines.append("<p>Zustand: siehe Angebot. Versand aus Deutschland.</p>")
+    lines.append(_DESCRIPTION_FOOTER_HTML)
     return "\n".join(lines)
 
 

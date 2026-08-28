@@ -603,7 +603,7 @@ function renderEbayEditForm(section, listing) {
   }
 
   const titleInput = field("Titel", "title", listing.title);
-  field("Beschreibung", "description", listing.description, "textarea");
+  field("Beschreibung (HTML)", "description", listing.description, "textarea");
   field("Preis (€)", "price", listing.price, "number");
   field("Menge", "quantity", listing.quantity ?? 1, "number");
 

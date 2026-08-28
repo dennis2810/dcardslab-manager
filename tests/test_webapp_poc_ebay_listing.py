@@ -48,6 +48,25 @@ class GenerateDescriptionTests(unittest.TestCase):
         self.assertIn("2024", description)
         self.assertIn("FC Beispiel", description)
 
+    def test_is_html_with_the_sellers_standard_shipping_and_legal_footer(self):
+        # The user's real eBay listings use a fixed HTML footer (shipping/
+        # combined-shipping info, a link to their other listings, a legal
+        # disclaimer) - eBay's listingDescription field accepts HTML, so
+        # this is appended after the per-card details instead of the
+        # previous plain-text-only description.
+        description = ebay_listing.generate_description(_card())
+        self.assertIn("<ul>", description)
+        self.assertIn("Versand", description)
+        self.assertIn("Kombiversand", description)
+        self.assertIn(f'<a href="{ebay_listing.EBAY_SHOP_SEARCH_URL}"', description)
+        self.assertIn("Privatverkauf", description)
+        self.assertIn("Gewährleistung", description)
+
+    def test_escapes_html_special_characters_in_card_fields(self):
+        description = ebay_listing.generate_description(_card(team="A & B <script>"))
+        self.assertNotIn("<script>", description)
+        self.assertIn("A &amp; B &lt;script&gt;", description)
+
 
 class DeriveListingTypeTests(unittest.TestCase):
     def test_known_sport_is_sport(self):
