@@ -181,6 +181,27 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(updates["ebay_offer_id"], "offer-1")
         self.assertEqual(updates["ebay_listing_id"], "L1")
 
+    def test_sends_both_front_and_back_image_urls(self):
+        # Regression test: the first real production publish only sent the
+        # front photo to eBay - _publish_listing() built image_url from
+        # front_image_path alone, never looking at back_image_path.
+        card = _card(front_image_path="b1/1_front.jpg", back_image_path="b1/1_back.jpg")
+        with patch("main.db.get_ebay_listing", return_value=_listing()), \
+             patch("main.db.update_ebay_listing", return_value=_listing(status="Veroeffentlicht")), \
+             patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_cards_by_ids", return_value=[card]), \
+             patch("main.storage.public_url", side_effect=lambda path: f"https://img/{path}"), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
+             patch("main.ebay_client.get_listing_policies", return_value={"fulfillmentPolicyId": "F1"}), \
+             patch("main.ebay_client.put_inventory_item") as mock_put, \
+             patch("main.ebay_client.create_offer", return_value="offer-1"), \
+             patch("main.ebay_client.publish_offer", return_value="L1"):
+            response = client.post("/api/ebay/listings/listing-1/publish")
+        self.assertEqual(response.status_code, 200)
+        image_urls = mock_put.call_args[0][3]
+        self.assertEqual(image_urls, ["https://img/b1/1_front.jpg", "https://img/b1/1_back.jpg"])
+
     def test_returns_502_on_ebay_api_error(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.update_ebay_listing", return_value=_listing(status="Fehler")), \
