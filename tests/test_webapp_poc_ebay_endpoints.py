@@ -141,7 +141,7 @@ class DeleteEbayListingEndpointTests(unittest.TestCase):
             response = client.delete("/api/ebay/listings/does-not-exist")
         self.assertEqual(response.status_code, 404)
 
-    def test_returns_409_when_not_draft(self):
+    def test_returns_409_when_not_draft_or_failed(self):
         with patch("main.db.get_ebay_listing", return_value=_listing(status="Veroeffentlicht")):
             response = client.delete("/api/ebay/listings/listing-1")
         self.assertEqual(response.status_code, 409)
@@ -149,6 +149,17 @@ class DeleteEbayListingEndpointTests(unittest.TestCase):
     def test_deletes_draft(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.delete_ebay_listing", return_value=_listing()) as mock_delete:
+            response = client.delete("/api/ebay/listings/listing-1")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("listing-1")
+
+    def test_deletes_failed_listing(self):
+        # Regression test: card.html's edit form shows a delete button for
+        # status "Fehler" too (renderEbaySection treats "Entwurf" and
+        # "Fehler" alike), but the backend only ever allowed "Entwurf" -
+        # clicking delete on a failed listing silently 409'd.
+        with patch("main.db.get_ebay_listing", return_value=_listing(status="Fehler")), \
+             patch("main.db.delete_ebay_listing", return_value=_listing(status="Fehler")) as mock_delete:
             response = client.delete("/api/ebay/listings/listing-1")
         self.assertEqual(response.status_code, 204)
         mock_delete.assert_called_once_with("listing-1")

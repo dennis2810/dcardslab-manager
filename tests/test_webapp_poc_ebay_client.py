@@ -107,6 +107,7 @@ class EnsureMerchantLocationTests(unittest.TestCase):
         self.assertIn(f"/location/{ebay_client.DEFAULT_MERCHANT_LOCATION_KEY}", args[1])
         self.assertNotIn("update_location_details", args[1])
         self.assertEqual(kwargs["json"]["location"]["address"]["country"], "DE")
+        self.assertEqual(kwargs["json"]["location"]["address"]["postalCode"], "51061")
 
     def test_falls_back_to_update_when_location_already_exists(self):
         already_exists = _response(400, {"errors": [{"message": "Location already exists."}]}, text="Location already exists.")
