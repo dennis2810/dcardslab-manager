@@ -27,8 +27,10 @@ import asyncio
 import base64
 import json
 import logging
+import secrets
 import sys
 import tempfile
+import time
 import types
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -36,7 +38,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import Body, FastAPI, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # scanner_v0_8_dynamic.py imports tkinter at module level for its own
@@ -56,10 +58,12 @@ sys.path.insert(0, str(REPO_ROOT / "integrations"))
 import scanner_v0_8_dynamic as scanner  # noqa: E402
 from ai_card_recognition import recognize_card, EMPTY_FIELDS  # noqa: E402
 
+import backup  # noqa: E402
 import db  # noqa: E402
 import ebay_client  # noqa: E402
 import ebay_listing  # noqa: E402
 import ebay_scheduler  # noqa: E402
+import google_sheets_client  # noqa: E402
 import storage  # noqa: E402
 
 logger = logging.getLogger("ebay_publish")
@@ -749,6 +753,151 @@ async def sync_ebay_sales():
             db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
             synced += 1
     return JSONResponse({"synced": synced, "skipped": skipped})
+
+
+# In-memory CSRF state for the Google OAuth redirect flow - same pattern
+# as ebay-oauth-server/app.py's _states. A single webapp-poc process, no
+# multi-worker deployment, so a module dict is enough (no shared cache
+# needed).
+_sheets_oauth_states = {}
+_SHEETS_STATE_TTL_SECONDS = 600
+
+
+def _new_sheets_oauth_state():
+    now = time.time()
+    for key, created in list(_sheets_oauth_states.items()):
+        if created < now - _SHEETS_STATE_TTL_SECONDS:
+            _sheets_oauth_states.pop(key, None)
+    state = secrets.token_urlsafe(32)
+    _sheets_oauth_states[state] = now
+    return state
+
+
+def _consume_sheets_oauth_state(state):
+    created = _sheets_oauth_states.pop(state, None)
+    return created is not None and created >= time.time() - _SHEETS_STATE_TTL_SECONDS
+
+
+@app.get("/api/sheets/status")
+async def sheets_status():
+    settings = db.get_google_sheets_settings() or {}
+    return JSONResponse({
+        "connected": bool(settings.get("refresh_token")),
+        "spreadsheet_id": settings.get("spreadsheet_id", ""),
+        "connected_at": settings.get("connected_at"),
+        "last_synced_at": settings.get("last_synced_at"),
+    })
+
+
+@app.get("/api/sheets/oauth/start")
+async def sheets_oauth_start():
+    state = _new_sheets_oauth_state()
+    return RedirectResponse(google_sheets_client.authorization_url(state))
+
+
+@app.get("/api/sheets/oauth/callback")
+async def sheets_oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    if error:
+        return RedirectResponse(f"/settings.html?sheets_error={error}")
+    if not code or not state or not _consume_sheets_oauth_state(state):
+        return RedirectResponse("/settings.html?sheets_error=ungueltiger_oauth_state")
+    try:
+        token = google_sheets_client.exchange_code(code)
+    except google_sheets_client.GoogleApiError as exc:
+        return RedirectResponse(f"/settings.html?sheets_error={exc}")
+    db.save_google_sheets_settings({
+        "refresh_token": token.get("refresh_token", ""),
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return RedirectResponse("/settings.html")
+
+
+@app.post("/api/sheets/settings")
+async def update_sheets_settings(body: dict = Body(...)):
+    spreadsheet_id = (body.get("spreadsheet_id") or "").strip()
+    if not spreadsheet_id:
+        raise HTTPException(status_code=400, detail="spreadsheet_id darf nicht leer sein.")
+    updated = db.save_google_sheets_settings({"spreadsheet_id": spreadsheet_id})
+    return JSONResponse(updated)
+
+
+def _sheets_tabs():
+    cards = db.all_cards()
+    purchases = db.all_purchases()
+    items_by_purchase = {}
+    for item in db.all_purchase_items():
+        items_by_purchase[item["purchase_id"]] = items_by_purchase.get(item["purchase_id"], 0) + 1
+    listings = db.all_ebay_listings()
+    sales_by_listing = {s["listing_id"]: s for s in db.all_ebay_sales() if s.get("listing_id")}
+
+    card_headers = [
+        "id", "title", "category", "team", "manufacturer", "set_name",
+        "season_year", "card_number", "recognition_status", "created_at",
+    ]
+    card_rows = [[str(c.get(h, "") or "") for h in card_headers] for c in cards]
+
+    purchase_headers = ["id", "purchase_date", "platform", "seller", "total_price", "notes", "Anzahl Karten"]
+    purchase_rows = [
+        [str(p.get(h, "") or "") for h in purchase_headers[:-1]] + [str(items_by_purchase.get(p["id"], 0))]
+        for p in purchases
+    ]
+
+    ebay_headers = ["id", "title", "price", "status", "scheduled_at", "sale_date", "gross_price"]
+    ebay_rows = []
+    for listing in listings:
+        sale = sales_by_listing.get(listing["id"], {})
+        ebay_rows.append([
+            str(listing.get("id", "") or ""), str(listing.get("title", "") or ""),
+            str(listing.get("price", "") or ""), str(listing.get("status", "") or ""),
+            str(listing.get("scheduled_at") or ""),
+            str(sale.get("sale_date") or ""), str(sale.get("gross_price") or ""),
+        ])
+
+    sync_info = (["Information", "Wert"], [
+        ["Quelle", "DCardsLab Supabase"],
+        ["Synchronisiert", datetime.now(timezone.utc).isoformat(timespec="seconds")],
+        ["Richtung", "Supabase -> Google Sheets"],
+        ["Hinweis", "Supabase ist die Master-Datenbank; Sheets ist die externe Auswertungsansicht."],
+    ])
+
+    return {
+        "Karten": (card_headers, card_rows), "Käufe": (purchase_headers, purchase_rows),
+        "eBay": (ebay_headers, ebay_rows), "Sync_Info": sync_info,
+    }
+
+
+@app.post("/api/sheets/sync")
+async def sync_to_sheets():
+    settings = db.get_google_sheets_settings() or {}
+    if not settings.get("refresh_token"):
+        raise HTTPException(
+            status_code=401,
+            detail="Google Sheets ist nicht verbunden — bitte zuerst auf der Einstellungen-Seite verbinden.",
+        )
+    if not settings.get("spreadsheet_id"):
+        raise HTTPException(status_code=400, detail="Bitte zuerst eine Google-Sheets-Tabellen-ID hinterlegen.")
+
+    try:
+        access_token = google_sheets_client.refresh_access_token(settings["refresh_token"])
+        google_sheets_client.sync_to_sheets(access_token, settings["spreadsheet_id"], _sheets_tabs())
+    except google_sheets_client.GoogleNotConnectedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except google_sheets_client.GoogleApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    synced_at = datetime.now(timezone.utc).isoformat()
+    db.save_google_sheets_settings({"last_synced_at": synced_at})
+    return JSONResponse({"synced_at": synced_at})
+
+
+@app.get("/api/backup")
+async def download_backup():
+    data = backup.build_backup_zip()
+    filename = f"dcardslab-backup-{datetime.now(timezone.utc).date().isoformat()}.zip"
+    return Response(
+        content=data, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 static_dir = Path(__file__).parent / "static"
