@@ -76,6 +76,39 @@ als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
   nur noch für einen Access-Token an (`GET
   /api/internal/access-token`), alle Listing-Operationen laufen direkt
   von hier aus gegen eBay.
+- `static/settings.html` bündelt zwei unabhängige Funktionen:
+  **Backup** (`GET /api/backup`, ein Klick lädt eine ZIP-Datei mit allen
+  Supabase-Tabellen als JSON plus allen Kartenbildern herunter - eine
+  Kopie außerhalb von Supabase) und **Google-Sheets-Sync**
+  (einseitig Supabase → Sheets, manuell per Button, vier Tabs: Karten/
+  Käufe/eBay/Sync_Info). Die Google-Verbindung läuft über einen
+  redirect-basierten OAuth-Flow direkt in `webapp-poc`
+  (`google_sheets_client.py`, portiert vom bewährten
+  `ebay-oauth-server`-Muster) statt der Desktop-App's lokalem
+  Browser-Flow, der auf einem headless NAS-Container nicht
+  funktioniert - siehe Einrichtung unten.
+
+### Google-Sheets-Sync einrichten
+
+Einmalige manuelle Einrichtung, unabhängig vom Backup-Download (der
+braucht keine Google-Konfiguration):
+
+1. Google Cloud Console → Projekt wählen/anlegen, **Google Sheets
+   API** aktivieren.
+2. Unter „APIs & Services" → „Credentials" einen OAuth-Client vom Typ
+   **„Web application"** anlegen (nicht „Desktop app" - ein
+   bestehender Desktop-Client aus der alten Desktop-App-Einrichtung
+   ist hier nicht wiederverwendbar, da er keine Redirect-URI
+   akzeptiert).
+3. Als autorisierte Redirect-URI eintragen:
+   `http://<nas-tailscale-name>:8000/api/sheets/oauth/callback`.
+4. Client-ID/-Secret als `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+   sowie die Redirect-URI aus Schritt 3 als `GOOGLE_REDIRECT_URI` beim
+   `webapp-poc`-Container-Deployment setzen (s. u.).
+5. In Google Sheets eine neue Tabelle anlegen, die Tabellen-ID aus der
+   URL kopieren (`https://docs.google.com/spreadsheets/d/<ID>/edit`).
+6. Auf `settings.html` auf „Mit Google verbinden" klicken (einmaliger
+   Consent-Screen), danach die Tabellen-ID eintragen und speichern.
 
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
@@ -131,6 +164,9 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e SUPABASE_SERVICE_KEY=dein-supabase-service-role-key \
   -e EBAY_OAUTH_SERVER_URL=http://<nas-adresse>:8080 \
   -e EBAY_ENVIRONMENT=sandbox \
+  -e GOOGLE_CLIENT_ID=deine-google-client-id \
+  -e GOOGLE_CLIENT_SECRET=dein-google-client-secret \
+  -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
   dcardslab-webapp-poc
 ```
 
@@ -139,6 +175,9 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
 oauth-server unter einer anderen Adresse läuft oder bereits auf
 Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
 übereinstimmen, den `ebay-oauth-server` selbst gesetzt hat.
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` sind
+nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.) - ohne
+sie funktioniert alles andere inkl. Backup-Download unverändert.
 
 Dann von irgendeinem Gerät im Tailscale-Netz: `http://<nas-tailscale-name>:8000`
 öffnen (Port 8000, nicht 8080 - das ist der OAuth-Server).
@@ -162,7 +201,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
-- Google Drive/Sheets-Sync, Backups.
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
 - CSV-Export/-Import für eBay (wie in `docs/EBAY_IMPORT.md` für die
   Desktop-App beschrieben) - bewusst nicht gebaut, da die Live-API jetzt
