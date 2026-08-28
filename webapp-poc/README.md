@@ -199,6 +199,12 @@ export ANTHROPIC_API_KEY=dein-api-key   # gleicher Key wie in der Desktop-App
 uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir webapp-poc
 ```
 
+## Umstellung auf eBay-Produktion
+
+Siehe `PRODUCTION_CHECKLIST.md` — reine Konfigurations-/Kontoschritte
+(neues Produktions-Keyset, Business Policies im echten Verkäuferkonto,
+`EBAY_ENVIRONMENT=production`), keine Code-Änderung nötig.
+
 ## Was absichtlich fehlt (kommt in späteren Sub-Projekten)
 
 - Kein Build-Frontend (React/Next) - weiterhin nur die statische Testseite.
