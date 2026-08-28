@@ -61,6 +61,26 @@ class SheetsOauthCallbackEndpointTests(unittest.TestCase):
         mock_exchange.assert_not_called()
         self.assertIn("sheets_error=", response.headers["location"])
 
+    def test_error_containing_special_characters_is_url_encoded_not_interpolated_raw(self):
+        # Regression test: an unescaped f-string into the redirect URL lets
+        # a "&"/"#" in the error text corrupt the query string, and CRLF in
+        # the value would make uvicorn reject the Location header outright
+        # (turning a clean error redirect into an unhandled 500). Google's
+        # error text is external input, so it must go through urlencode().
+        response = client.get("/api/sheets/oauth/callback?error=access_denied%26evil%3D1")
+        location = response.headers["location"]
+        self.assertNotIn("evil=1", location)  # the raw "&evil=1" must not survive unescaped
+        self.assertTrue(location.startswith("/settings.html?sheets_error="))
+
+    def test_google_api_error_message_is_url_encoded_in_redirect(self):
+        with patch("main.google_sheets_client.exchange_code", side_effect=google_sheets_client.GoogleApiError("bad & broken")):
+            start_response = client.get("/api/sheets/oauth/start")
+            state = start_response.headers["location"].split("state=")[1].split("&")[0]
+            response = client.get(f"/api/sheets/oauth/callback?code=abc&state={state}")
+        location = response.headers["location"]
+        self.assertNotIn(" ", location)
+        self.assertNotIn("bad & broken", location)
+
     def test_valid_code_and_state_saves_token_and_redirects_to_settings(self):
         start_response = client.get("/api/sheets/oauth/start")
         state = start_response.headers["location"].split("state=")[1].split("&")[0]

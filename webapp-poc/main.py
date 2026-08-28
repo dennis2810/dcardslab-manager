@@ -35,6 +35,7 @@ import types
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import Body, FastAPI, File, Form, HTTPException, Response, UploadFile
@@ -795,16 +796,24 @@ async def sheets_oauth_start():
     return RedirectResponse(google_sheets_client.authorization_url(state))
 
 
+def _sheets_error_redirect(message):
+    # message can be external input (Google's own error text) - urlencode()
+    # it into the query string instead of raw f-string interpolation, which
+    # would let a "&"/"#" corrupt the query string or CRLF get rejected by
+    # uvicorn as an invalid header value.
+    return RedirectResponse(f"/settings.html?{urlencode({'sheets_error': message})}")
+
+
 @app.get("/api/sheets/oauth/callback")
 async def sheets_oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
     if error:
-        return RedirectResponse(f"/settings.html?sheets_error={error}")
+        return _sheets_error_redirect(error)
     if not code or not state or not _consume_sheets_oauth_state(state):
-        return RedirectResponse("/settings.html?sheets_error=ungueltiger_oauth_state")
+        return _sheets_error_redirect("ungueltiger_oauth_state")
     try:
         token = google_sheets_client.exchange_code(code)
     except google_sheets_client.GoogleApiError as exc:
-        return RedirectResponse(f"/settings.html?sheets_error={exc}")
+        return _sheets_error_redirect(str(exc))
     db.save_google_sheets_settings({
         "refresh_token": token.get("refresh_token", ""),
         "connected_at": datetime.now(timezone.utc).isoformat(),
