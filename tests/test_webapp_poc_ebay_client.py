@@ -235,6 +235,19 @@ class CreateOfferTests(unittest.TestCase):
         _, kwargs = mock_request.call_args
         self.assertEqual(kwargs["json"]["merchantLocationKey"], ebay_client.DEFAULT_MERCHANT_LOCATION_KEY)
 
+    def test_enables_best_offer_with_auto_accept_and_decline_prices(self):
+        # The seller wants Best Offer on: auto-accept at 75% of the listing
+        # price, auto-decline below 50% - anything in between waits for a
+        # manual decision in Seller Hub.
+        listing = {"category_id": "261328", "price": 20, "quantity": 1, "description": "desc"}
+        with patch("ebay_client.httpx.request", return_value=_response(201, {"offerId": "offer-1"})) as mock_request:
+            ebay_client.create_offer("tok", "sku-1", listing)
+        _, kwargs = mock_request.call_args
+        terms = kwargs["json"]["listingPolicies"]["bestOfferTerms"]
+        self.assertTrue(terms["bestOfferEnabled"])
+        self.assertEqual(terms["autoAcceptPrice"], {"value": "15.00", "currency": "EUR"})
+        self.assertEqual(terms["autoDeclinePrice"], {"value": "10.00", "currency": "EUR"})
+
     def test_disables_catalog_product_matching(self):
         # Found live against the real sandbox: eBay's default
         # includeCatalogProductDetails=true tries to auto-match the offer to

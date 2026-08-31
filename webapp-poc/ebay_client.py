@@ -203,6 +203,22 @@ def put_inventory_item(token, sku, listing, image_urls):
     _request("PUT", token, f"/sell/inventory/v1/inventory_item/{sku}", payload)
 
 
+# The seller's chosen Best Offer thresholds: auto-accept an offer at or
+# above 75% of the listing price, auto-decline below 50% - anything in
+# between is left for a manual decision in Seller Hub.
+BEST_OFFER_AUTO_ACCEPT_PERCENT = 0.75
+BEST_OFFER_AUTO_DECLINE_PERCENT = 0.50
+
+
+def _best_offer_terms(price):
+    price = float(price or 0)
+    return {
+        "bestOfferEnabled": True,
+        "autoAcceptPrice": {"value": f"{price * BEST_OFFER_AUTO_ACCEPT_PERCENT:.2f}", "currency": "EUR"},
+        "autoDeclinePrice": {"value": f"{price * BEST_OFFER_AUTO_DECLINE_PERCENT:.2f}", "currency": "EUR"},
+    }
+
+
 def _offer_payload(sku, listing):
     return {
         "sku": sku,
@@ -219,7 +235,10 @@ def _offer_payload(sku, listing):
         "pricingSummary": {
             "price": {"value": str(listing.get("price") or 0), "currency": "EUR"},
         },
-        "listingPolicies": listing.get("policies", {}),
+        "listingPolicies": {
+            **listing.get("policies", {}),
+            "bestOfferTerms": _best_offer_terms(listing.get("price")),
+        },
         # eBay defaults this to true and tries to auto-match the offer to an
         # EPID catalog product at publish time - unreliable for niche
         # categories like single trading cards and confirmed live against
