@@ -154,20 +154,22 @@ def ensure_merchant_location(token, location_key=DEFAULT_MERCHANT_LOCATION_KEY):
     against the real sandbox) instead of naming the actual cause. Ported
     from the desktop app's proven create-or-update flow in
     ebay-oauth-server/app.py."""
-    location = {"address": {"postalCode": "50667", "country": "DE"}}
+    # The seller's actual item location, provided by the user - not the
+    # placeholder postal code this location used during Sandbox testing.
+    location = {"address": {"postalCode": "51061", "country": "DE"}}
     try:
         _request("POST", token, f"/sell/inventory/v1/location/{location_key}", {
             "location": location,
             "locationTypes": ["WAREHOUSE"],
             "merchantLocationStatus": "ENABLED",
-            "name": "DCardsLab Sandbox Deutschland",
+            "name": "DCardsLab Deutschland",
         })
     except EbayApiError as exc:
         if "already exists" not in str(exc).lower():
             raise
         _request(
             "POST", token, f"/sell/inventory/v1/location/{location_key}/update_location_details",
-            {"location": location, "locationTypes": ["WAREHOUSE"], "name": "DCardsLab Sandbox Deutschland"},
+            {"location": location, "locationTypes": ["WAREHOUSE"], "name": "DCardsLab Deutschland"},
         )
     return location_key
 

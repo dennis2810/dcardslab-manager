@@ -662,8 +662,10 @@ async def delete_ebay_listing(listing_id: str):
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
-    if listing["status"] != "Entwurf":
-        raise HTTPException(status_code=409, detail="Nur Entwürfe können gelöscht werden.")
+    if listing["status"] not in ("Entwurf", "Fehler"):
+        raise HTTPException(
+            status_code=409, detail="Nur Entwürfe oder fehlgeschlagene Angebote können gelöscht werden."
+        )
     db.delete_ebay_listing(listing_id)
     return Response(status_code=204)
 
