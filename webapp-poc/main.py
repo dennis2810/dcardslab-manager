@@ -104,6 +104,19 @@ def _crop_side(upload_path, out_dir):
     return [Path(p) for p in files]
 
 
+def _create_default_inventory_item(card_id):
+    # Every scanned card gets a quantity-1 "NM" inventory row automatically -
+    # the seller physically has the card in hand at scan time, so requiring
+    # a separate manual step for the common case would just be busywork.
+    # Isolated from the card-insert's own error handling on purpose: this
+    # failing must not make an otherwise-successful card insert look failed
+    # to the caller (see process_one() below) - it's a soft warning only.
+    try:
+        db.create_inventory_item(card_id, {"quantity": 1})
+    except Exception:
+        logger.exception("Automatischer Inventareintrag fuer Karte %s fehlgeschlagen", card_id)
+
+
 @app.post("/api/scan")
 async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
     with tempfile.TemporaryDirectory(prefix="dcardslab_poc_") as tmp_str:
@@ -140,13 +153,14 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
                 fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
                 try:
                     card_row = db.insert_card(batch_id, number, fields, None, None)
-                    return {"number": number, **fields, "id": card_row["id"]}
                 except Exception as exc:
                     return {
                         "number": number,
                         **fields,
                         "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
                     }
+                _create_default_inventory_item(card_row["id"])
+                return {"number": number, **fields, "id": card_row["id"]}
 
             fields = recognize_card(front_path=fp, back_path=bp)
 
@@ -168,6 +182,7 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
                     image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
                 result["image_error"] = image_error
                 return result
+            _create_default_inventory_item(card_row["id"])
 
             if front_image_path:
                 try:
@@ -290,11 +305,13 @@ def _expand_purchase_items(items):
 def _expand_inventory_items(items):
     # Same enrichment as _expand_purchase_items() - a lean card summary
     # (id/title/front_image_url) so inventory.html doesn't need a
-    # per-row /api/cards/{id} request.
+    # per-row /api/cards/{id} request. Also attaches the linked eBay
+    # listing's SKU (if any), for inventory.html's SKU column.
     if not items:
         return []
     card_ids = [item["card_id"] for item in items]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    ebay_info = db.ebay_info_by_card_id(card_ids)
     expanded = []
     for item in items:
         item = dict(item)
@@ -307,6 +324,7 @@ def _expand_inventory_items(items):
             except Exception:
                 pass
         item["card"] = card_summary
+        item["sku"] = (ebay_info.get(item["card_id"]) or {}).get("sku")
         expanded.append(item)
     return expanded
 
