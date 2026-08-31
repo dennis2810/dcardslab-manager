@@ -104,6 +104,12 @@ class BuildAspectsTests(unittest.TestCase):
         self.assertEqual(aspects["Saison / Jahr"], ["2024"])
         self.assertEqual(aspects["Kartennummer"], ["12"])
 
+    def test_defaults_mit_autogramm_to_nein(self):
+        # DCardsLab has no per-card autograph field yet - "Nein" is the
+        # correct default for the ordinary (non-autographed) card.
+        aspects = ebay_listing.build_aspects(_card(), "sport")
+        self.assertEqual(aspects["Mit Autogramm"], ["Nein"])
+
 
 class RequiredAspectsTests(unittest.TestCase):
     """Reads the real eBay-provided CSV templates in templates/ebay/ - no

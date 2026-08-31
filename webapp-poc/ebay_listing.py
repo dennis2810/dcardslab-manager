@@ -94,6 +94,10 @@ def build_aspects(card, listing_type):
         value = str(card.get(key) or "").strip()
         if value:
             aspects[label] = [value]
+    # DCardsLab has no per-card autograph field - "Nein" is the correct
+    # default for the ordinary (non-autographed) card and saves the
+    # seller from having to fill it in by hand on every listing.
+    aspects["Mit Autogramm"] = ["Nein"]
     return aspects
 
 
