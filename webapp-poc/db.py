@@ -258,6 +258,7 @@ def get_cards_by_ids(card_ids):
 EBAY_LISTING_FIELDS = [
     "title", "description", "condition", "condition_id",
     "listing_type", "category_id", "aspects", "price", "quantity",
+    "grader", "grade",
 ]
 EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "status", "scheduled_at", "scheduling_mode",

@@ -620,6 +620,8 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
         "description": fields.get("description") or ebay_listing.generate_description(card),
         "condition": fields.get("condition", "NM"),
         "condition_id": fields.get("condition_id", "4000"),
+        "grader": fields.get("grader", ""),
+        "grade": fields.get("grade", ""),
         "listing_type": listing_type,
         "category_id": fields.get("category_id") or ebay_listing.CATEGORY_IDS[listing_type],
         "aspects": fields.get("aspects") or ebay_listing.build_aspects(card, listing_type),

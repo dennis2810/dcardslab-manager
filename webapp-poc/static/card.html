@@ -663,6 +663,42 @@ function renderEbayEditForm(section, listing) {
   conditionWrapper.appendChild(conditionSelect);
   form.appendChild(conditionWrapper);
 
+  // "Gegradet" (PSA/BGS/...) replaces the plain Zustand-Dropdown with
+  // Gutachter+Note - eBay wants different Condition Descriptors for
+  // graded vs. ungraded cards (see ebay_client.condition_descriptors()).
+  const gradedWrapper = document.createElement("label");
+  const gradedCheckbox = document.createElement("input");
+  gradedCheckbox.type = "checkbox";
+  gradedCheckbox.name = "is_graded";
+  gradedCheckbox.checked = listing.condition_id === "2750";
+  gradedWrapper.append(gradedCheckbox, " Gegradete Karte (PSA/BGS/...)");
+  form.appendChild(gradedWrapper);
+
+  const graderWrapper = document.createElement("label");
+  graderWrapper.textContent = "Gutachter";
+  const graderSelect = document.createElement("select");
+  graderSelect.name = "grader";
+  for (const value of ["PSA", "BGS", "SGC", "CGC", "HGA", "Sonstige"]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if (listing.grader === value) option.selected = true;
+    graderSelect.appendChild(option);
+  }
+  graderWrapper.appendChild(graderSelect);
+  form.appendChild(graderWrapper);
+
+  const gradeInput = field("Note (z. B. 9.5)", "grade", listing.grade);
+
+  function updateGradedVisibility() {
+    const graded = gradedCheckbox.checked;
+    conditionWrapper.hidden = graded;
+    graderWrapper.hidden = !graded;
+    gradeInput.closest("label").hidden = !graded;
+  }
+  gradedCheckbox.addEventListener("change", updateGradedVisibility);
+  updateGradedVisibility();
+
   const priceLinksP = document.createElement("p");
   priceLinksP.className = "price-research-links";
   form.appendChild(priceLinksP);
@@ -754,6 +790,7 @@ function renderEbayEditForm(section, listing) {
       const values = input.value.split(",").map((v) => v.trim()).filter(Boolean);
       if (values.length) aspects[input.dataset.aspectKey] = values;
     }
+    const isGraded = form.elements.is_graded.checked;
     return {
       title: form.elements.title.value,
       description: form.elements.description.value,
@@ -761,6 +798,9 @@ function renderEbayEditForm(section, listing) {
       quantity: form.elements.quantity.value,
       listing_type: form.elements.listing_type.value,
       condition: form.elements.condition.value,
+      condition_id: isGraded ? "2750" : "4000",
+      grader: isGraded ? form.elements.grader.value : "",
+      grade: isGraded ? form.elements.grade.value : "",
       aspects,
     };
   }

@@ -209,6 +209,34 @@ class PutInventoryItemTests(unittest.TestCase):
         _, kwargs = mock_request.call_args
         self.assertNotIn("conditionDescriptors", kwargs["json"])
 
+    def test_graded_card_sends_grader_and_grade_instead_of_card_condition(self):
+        # condition_id "2750" means "Graded" for trading card categories
+        # (see ebay_client.condition_id_to_enum) - eBay expects Grader/
+        # Grade condition descriptors (IDs 27501/27502, per the real
+        # eBay-provided CSV template in templates/ebay/) instead of the
+        # ungraded "Kartenzustand"/Card Condition descriptor (40001).
+        listing = {
+            "title": "x", "condition_id": "2750", "condition": "NM",
+            "grader": "PSA", "grade": "9.5",
+        }
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", listing, None)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(
+            kwargs["json"]["conditionDescriptors"],
+            [
+                {"name": "27501", "values": ["PSA"]},
+                {"name": "27502", "values": ["9.5"]},
+            ],
+        )
+
+    def test_omits_grader_and_grade_descriptors_when_not_set(self):
+        listing = {"title": "x", "condition_id": "2750"}
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.put_inventory_item("tok", "sku-1", listing, None)
+        _, kwargs = mock_request.call_args
+        self.assertNotIn("conditionDescriptors", kwargs["json"])
+
 
 class CreateOfferTests(unittest.TestCase):
     def test_returns_offer_id(self):
