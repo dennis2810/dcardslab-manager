@@ -265,9 +265,15 @@ def withdraw_offer(token, offer_id):
 
 
 def get_orders(token, created_since_iso):
+    # eBay's Fulfillment API "creationdate" filter rejects an explicit UTC
+    # offset (errorId 30810 "Invalid date format" - found live against
+    # production; the "+00:00" datetime.isoformat() produces arrived at
+    # eBay as a literal space instead of a "+"). Its own docs use the "Z"
+    # suffix for UTC, so normalize to that instead.
+    since = created_since_iso.replace("+00:00", "Z")
     # Passed as params (not hand-built into the path) so httpx encodes the
-    # ISO timestamp's ":"/"+" correctly - a raw f-string left them literal,
-    # which eBay's API can reject.
-    params = {"filter": f"creationdate:[{created_since_iso}..]", "limit": "200"}
+    # ISO timestamp's ":" correctly - a raw f-string left it literal, which
+    # eBay's API can reject.
+    params = {"filter": f"creationdate:[{since}..]", "limit": "200"}
     response = _request("GET", token, "/sell/fulfillment/v1/order", params=params)
     return response.json().get("orders", [])
