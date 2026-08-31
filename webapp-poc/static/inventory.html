@@ -25,6 +25,7 @@
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
+        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
         <th data-key="card_title">Karte <span class="sort-arrow"></span></th>
         <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
         <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
@@ -41,7 +42,8 @@ const table = document.getElementById("inventory-table");
 const body = document.getElementById("inventory-body");
 
 let items = [];
-let sortKey = "card_title";
+// SKU-ascending by default - the seller's most-used reference number.
+let sortKey = "sku";
 let sortAsc = true;
 
 async function loadInventory() {
@@ -85,6 +87,10 @@ function render() {
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
     });
+
+    const skuTd = document.createElement("td");
+    skuTd.textContent = item.sku || "";
+    tr.appendChild(skuTd);
 
     const cardTd = document.createElement("td");
     if (item.card?.front_image_url) {

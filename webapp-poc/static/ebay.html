@@ -13,6 +13,8 @@
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
   td.thumb img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
   tr.row-link { cursor: pointer; }
   tr.row-link:hover { background: #f7f7f7; }
@@ -51,7 +53,15 @@
   <p id="status-msg"></p>
   <table id="listings-table" style="display: none;">
     <thead>
-      <tr><th></th><th></th><th>Titel</th><th>Preis</th><th>Status</th><th>Geplant für</th></tr>
+      <tr>
+        <th></th>
+        <th></th>
+        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+        <th data-key="title">Titel <span class="sort-arrow"></span></th>
+        <th data-key="price">Preis <span class="sort-arrow"></span></th>
+        <th data-key="status">Status <span class="sort-arrow"></span></th>
+        <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
+      </tr>
     </thead>
     <tbody id="listings-body"></tbody>
   </table>
@@ -75,6 +85,45 @@ const STATUS_LABELS = {
   Verkauft: "Verkauft", Fehler: "Fehler",
 };
 const SELECTABLE_STATUSES = new Set(["Entwurf", "Fehler"]);
+
+let currentListings = [];
+// SKU-ascending by default - the seller's most-used reference number.
+let sortKey = "sku";
+let sortAsc = true;
+
+function sortedListings() {
+  if (!sortKey) return currentListings;
+  return [...currentListings].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setSortIndicator(key) {
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === key ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
+setSortIndicator(sortKey);
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    setSortIndicator(sortKey);
+    render(sortedListings());
+  });
+}
 
 async function loadOauthStatus() {
   const banner = document.getElementById("oauth-banner");
@@ -115,7 +164,8 @@ async function loadListings() {
       return;
     }
     statusMsg.textContent = `${data.listings.length} Angebot(e)`;
-    render(data.listings);
+    currentListings = data.listings;
+    render(sortedListings());
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -147,6 +197,10 @@ function render(listings) {
       thumbTd.appendChild(img);
     }
     tr.appendChild(thumbTd);
+
+    const skuTd = document.createElement("td");
+    skuTd.textContent = listing.sku || "";
+    tr.appendChild(skuTd);
 
     const titleTd = document.createElement("td");
     titleTd.textContent = listing.title || "(ohne Titel)";
