@@ -97,6 +97,8 @@ create table if not exists ebay_listings (
     description      text default '',
     condition        text default 'NM',
     condition_id     text default '4000',
+    grader           text default '',  -- z.B. "PSA", "BGS" - nur bei condition_id '2750' (Graded)
+    grade            text default '',  -- z.B. "9.5" - nur bei condition_id '2750' (Graded)
     listing_type     text not null default 'sport',  -- 'sport' | 'non_sport'
     category_id      text default '261328',
     aspects          jsonb default '{}'::jsonb,
@@ -117,6 +119,11 @@ create table if not exists ebay_listings (
 create index if not exists ebay_listings_status_idx on ebay_listings(status);
 create index if not exists ebay_listings_scheduled_at_idx
     on ebay_listings(scheduled_at) where scheduled_at is not null;
+
+-- Migration (2026-08-31): Grader/Grade for graded (PSA/BGS/...) cards -
+-- only relevant when condition_id is '2750' (Graded); safe to re-run.
+alter table ebay_listings add column if not exists grader text default '';
+alter table ebay_listings add column if not exists grade text default '';
 
 create table if not exists ebay_sales (
     id                uuid primary key default gen_random_uuid(),

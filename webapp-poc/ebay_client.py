@@ -62,6 +62,15 @@ _CARD_CONDITION_TO_DESCRIPTOR_VALUE = {
     "G": "400013", "GOOD": "400013", "POOR": "400013",
 }
 
+# Graded-card Condition Descriptors ("Bewertungsexperte"/Grader and
+# "Bewertung"/Grade), read directly off the real eBay-provided CSV
+# templates in templates/ebay/ - these take open-text values (a grading
+# company name, a numeric grade), unlike Card Condition's closed set of
+# numeric value IDs.
+GRADER_DESCRIPTOR_ID = "27501"
+GRADE_DESCRIPTOR_ID = "27502"
+GRADED_CONDITION_ID = "2750"
+
 _POLICY_SPECS = {
     "fulfillmentPolicyId": ("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "Versand-Richtlinie (Fulfillment Policy)"),
     "paymentPolicyId": ("payment_policy", "paymentPolicies", "paymentPolicyId", "Zahlungs-Richtlinie (Payment Policy)"),
@@ -98,6 +107,22 @@ def condition_id_to_enum(condition):
 def card_condition_descriptor_value(condition):
     value = str(condition or "").strip().upper()
     return _CARD_CONDITION_TO_DESCRIPTOR_VALUE.get(value, "400010" if value else "")
+
+
+def condition_descriptors(listing):
+    if str(listing.get("condition_id") or "").strip() == GRADED_CONDITION_ID:
+        descriptors = []
+        grader = str(listing.get("grader") or "").strip()
+        grade = str(listing.get("grade") or "").strip()
+        if grader:
+            descriptors.append({"name": GRADER_DESCRIPTOR_ID, "values": [grader]})
+        if grade:
+            descriptors.append({"name": GRADE_DESCRIPTOR_ID, "values": [grade]})
+        return descriptors
+    value_id = card_condition_descriptor_value(listing.get("condition"))
+    if not value_id:
+        return []
+    return [{"name": CARD_CONDITION_DESCRIPTOR_ID, "values": [value_id]}]
 
 
 def _headers(token):
@@ -195,11 +220,9 @@ def put_inventory_item(token, sku, listing, image_urls):
         "condition": condition_id_to_enum(listing.get("condition_id")),
         "availability": {"shipToLocationAvailability": {"quantity": listing.get("quantity") or 1}},
     }
-    condition_descriptor_value = card_condition_descriptor_value(listing.get("condition"))
-    if condition_descriptor_value:
-        payload["conditionDescriptors"] = [
-            {"name": CARD_CONDITION_DESCRIPTOR_ID, "values": [condition_descriptor_value]}
-        ]
+    descriptors = condition_descriptors(listing)
+    if descriptors:
+        payload["conditionDescriptors"] = descriptors
     _request("PUT", token, f"/sell/inventory/v1/inventory_item/{sku}", payload)
 
 
