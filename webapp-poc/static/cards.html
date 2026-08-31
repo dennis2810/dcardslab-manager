@@ -16,6 +16,17 @@
   .status-pruefen { color: #b06000; font-weight: 600; }
   .status-nicht_erkannt { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
+  .ebay-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; }
+  .ebay-badge-Veroeffentlicht { background: #d4edda; color: #155724; }
+  .ebay-badge-Geplant { background: #fff3cd; color: #856404; }
+  .ebay-badge-Verkauft { background: #cce5ff; color: #004085; }
+  .ebay-badge-Fehler { background: #f8d7da; color: #721c24; }
+  .ebay-badge-Entwurf { background: #e2e3e5; color: #383d41; }
+  .list { width: 100%; border-collapse: collapse; }
+  .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
+  .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .list a.row-link { color: inherit; text-decoration: none; display: block; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -34,22 +45,72 @@
       <option value="prüfen">prüfen</option>
       <option value="nicht erkannt">nicht erkannt</option>
     </select>
+    <button type="button" id="view-toggle">Listenansicht</button>
   </div>
 
   <p id="status-msg"></p>
   <div id="grid" class="grid"></div>
+  <table id="list" class="list" hidden>
+    <thead>
+      <tr><th></th><th>Titel</th><th>Team / Saison</th><th>Erkennung</th><th>eBay</th></tr>
+    </thead>
+    <tbody id="list-body"></tbody>
+  </table>
 
 <script>
 const qInput = document.getElementById("q");
 const statusSelect = document.getElementById("status");
 const statusMsg = document.getElementById("status-msg");
 const grid = document.getElementById("grid");
+const list = document.getElementById("list");
+const listBody = document.getElementById("list-body");
+const viewToggle = document.getElementById("view-toggle");
+
+// Same labels as card.html's eBay section, so a status reads identically
+// everywhere in the app.
+const EBAY_STATUS_LABELS = {
+  Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
+  Verkauft: "Verkauft", Fehler: "Fehler",
+};
 
 function statusClass(status) {
   if (status === "prüfen") return "status-pruefen";
   if (status === "nicht erkannt") return "status-nicht_erkannt";
   return "";
 }
+
+function ebayBadge(ebayStatus) {
+  if (!ebayStatus) return null;
+  const badge = document.createElement("span");
+  badge.className = "ebay-badge ebay-badge-" + ebayStatus;
+  badge.textContent = "eBay: " + (EBAY_STATUS_LABELS[ebayStatus] || ebayStatus);
+  return badge;
+}
+
+let currentView = "grid";
+try {
+  currentView = localStorage.getItem("cardsView") || "grid";
+} catch (err) {
+  // localStorage can throw in locked-down browser contexts - grid view
+  // just stays the default then.
+}
+
+function applyView() {
+  grid.hidden = currentView !== "grid";
+  list.hidden = currentView !== "list";
+  viewToggle.textContent = currentView === "grid" ? "Listenansicht" : "Kachelansicht";
+}
+applyView();
+
+viewToggle.addEventListener("click", () => {
+  currentView = currentView === "grid" ? "list" : "grid";
+  applyView();
+  try {
+    localStorage.setItem("cardsView", currentView);
+  } catch (err) {
+    // Non-fatal - the choice just won't be remembered for next time.
+  }
+});
 
 async function loadCards() {
   const params = new URLSearchParams();
@@ -66,6 +127,7 @@ async function loadCards() {
     }
     statusMsg.textContent = `${body.cards.length} Karte(n)`;
     render(body.cards);
+    renderList(body.cards);
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -107,7 +169,48 @@ function render(cards) {
     statusEl.textContent = card.recognition_status || "";
     a.appendChild(statusEl);
 
+    const badge = ebayBadge(card.ebay_status);
+    if (badge) a.appendChild(badge);
+
     grid.appendChild(a);
+  }
+}
+
+function renderList(cards) {
+  listBody.innerHTML = "";
+  for (const card of cards) {
+    const tr = document.createElement("tr");
+
+    const imgTd = document.createElement("td");
+    const img = document.createElement("img");
+    if (card.front_image_url) img.src = card.front_image_url;
+    img.alt = card.title || "";
+    imgTd.appendChild(img);
+    tr.appendChild(imgTd);
+
+    const titleTd = document.createElement("td");
+    titleTd.textContent = card.title || "(ohne Titel)";
+    tr.appendChild(titleTd);
+
+    const metaTd = document.createElement("td");
+    metaTd.textContent = [card.team, card.season_year].filter(Boolean).join(" · ");
+    tr.appendChild(metaTd);
+
+    const statusTd = document.createElement("td");
+    statusTd.className = statusClass(card.recognition_status);
+    statusTd.textContent = card.recognition_status || "";
+    tr.appendChild(statusTd);
+
+    const ebayTd = document.createElement("td");
+    const badge = ebayBadge(card.ebay_status);
+    if (badge) ebayTd.appendChild(badge);
+    tr.appendChild(ebayTd);
+
+    tr.addEventListener("click", () => {
+      window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;
+    });
+    tr.style.cursor = "pointer";
+    listBody.appendChild(tr);
   }
 }
 
