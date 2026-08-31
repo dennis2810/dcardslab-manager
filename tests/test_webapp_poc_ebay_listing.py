@@ -32,14 +32,21 @@ class SkuForCardTests(unittest.TestCase):
 
 
 class GenerateTitleTests(unittest.TestCase):
-    def test_builds_title_from_card_fields(self):
+    def test_builds_title_as_season_manufacturer_player_team(self):
+        # Fixed order: Saison/Jahr + Hersteller + Spieler/Charakter (the
+        # "title" field) + Mannschaft/Bereich.
         title = ebay_listing.generate_title(_card())
-        self.assertIn("Musterkarte", title)
-        self.assertIn("Topps", title)
-        self.assertIn("#12", title)
+        self.assertEqual(title, "2024 Topps Musterkarte FC Beispiel")
+
+    def test_falls_back_to_category_when_team_is_missing(self):
+        # Non-sport cards have no club - "Bereich" (e.g. a franchise like
+        # "Marvel") lives in category instead (see ai_card_recognition.py's
+        # field docs, where "Marvel" is the given example for category).
+        title = ebay_listing.generate_title(_card(team="", category="Marvel"))
+        self.assertIn("Marvel", title)
 
     def test_skips_empty_fields(self):
-        title = ebay_listing.generate_title(_card(manufacturer="", variant=""))
+        title = ebay_listing.generate_title(_card(manufacturer=""))
         self.assertNotIn("  ", title)
 
     def test_truncates_to_max_len(self):

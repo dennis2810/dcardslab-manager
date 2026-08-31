@@ -29,11 +29,15 @@ def sku_for_card(card_no):
 
 
 def generate_title(card, max_len=80):
-    number = card.get("card_number")
+    # Fixed order requested by the seller: Saison/Jahr + Hersteller +
+    # Spieler/Charakter + Mannschaft/Bereich. Sport cards have a team
+    # (Verein); non-sport cards have no team, so "Bereich" (e.g. a
+    # franchise like "Marvel") falls back to category instead - see
+    # ai_card_recognition.py's field docs, which give "Marvel" as the
+    # example category value.
     parts = [
         card.get("season_year", ""), card.get("manufacturer", ""),
-        card.get("set_name", ""), card.get("title", ""), card.get("team", ""),
-        f"#{number}" if number else "", card.get("variant", ""),
+        card.get("title", ""), card.get("team") or card.get("category", ""),
     ]
     return " ".join(p for p in parts if p).strip()[:max_len]
 
