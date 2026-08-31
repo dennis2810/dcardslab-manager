@@ -58,12 +58,12 @@
     <thead>
       <tr>
         <th></th>
+        <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
         <th data-key="title">Titel <span class="sort-arrow"></span></th>
         <th data-key="team">Team <span class="sort-arrow"></span></th>
         <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
         <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
         <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
-        <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
       </tr>
     </thead>
     <tbody id="list-body"></tbody>
@@ -147,7 +147,8 @@ async function loadCards() {
 }
 
 let currentCards = [];
-let sortKey = null;
+// SKU-ascending by default - the seller's most-used reference number.
+let sortKey = "ebay_sku";
 let sortAsc = true;
 
 function sortedCards() {
@@ -161,6 +162,14 @@ function sortedCards() {
   });
 }
 
+function setSortIndicator(key) {
+  for (const th of document.querySelectorAll(".list th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === key ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
+setSortIndicator(sortKey);
+
 for (const th of document.querySelectorAll(".list th[data-key]")) {
   th.addEventListener("click", () => {
     const key = th.dataset.key;
@@ -170,10 +179,7 @@ for (const th of document.querySelectorAll(".list th[data-key]")) {
       sortKey = key;
       sortAsc = true;
     }
-    for (const other of document.querySelectorAll(".list th[data-key]")) {
-      other.querySelector(".sort-arrow").textContent = "";
-    }
-    th.querySelector(".sort-arrow").textContent = sortAsc ? "▲" : "▼";
+    setSortIndicator(sortKey);
     renderList(sortedCards());
   });
 }
@@ -240,6 +246,10 @@ function renderList(cards) {
     imgTd.appendChild(img);
     tr.appendChild(imgTd);
 
+    const skuTd = document.createElement("td");
+    skuTd.textContent = card.ebay_sku || "";
+    tr.appendChild(skuTd);
+
     const titleTd = document.createElement("td");
     titleTd.textContent = card.title || "(ohne Titel)";
     tr.appendChild(titleTd);
@@ -261,10 +271,6 @@ function renderList(cards) {
     const badge = ebayBadge(card.ebay_status);
     if (badge) ebayTd.appendChild(badge);
     tr.appendChild(ebayTd);
-
-    const skuTd = document.createElement("td");
-    skuTd.textContent = card.ebay_sku || "";
-    tr.appendChild(skuTd);
 
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;

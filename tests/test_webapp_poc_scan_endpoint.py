@@ -59,6 +59,7 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             "main.db.create_batch": MagicMock(return_value="batch-1"),
             "main.db.update_batch_status": MagicMock(),
             "main.db.insert_card": MagicMock(side_effect=fake_insert_card),
+            "main.db.create_inventory_item": MagicMock(),
             "main.storage.upload_image": MagicMock(side_effect=lambda batch_id, pos, side, path: f"{batch_id}/{pos}_{side}.jpg"),
             "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
         }
@@ -86,6 +87,22 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
     def test_inserts_nine_cards(self):
         self._post_scan()
         self.assertEqual(self.mocks["main.db.insert_card"].call_count, 9)
+
+    def test_creates_a_default_inventory_item_for_every_scanned_card(self):
+        # The seller physically has the card in hand at scan time - a
+        # quantity-1 "NM" inventory row is created automatically instead of
+        # requiring a separate manual step for the common case.
+        self._post_scan()
+        self.assertEqual(self.mocks["main.db.create_inventory_item"].call_count, 9)
+        self.mocks["main.db.create_inventory_item"].assert_any_call("card-1", {"quantity": 1})
+
+    def test_inventory_item_creation_failure_does_not_fail_the_card(self):
+        self.mocks["main.db.create_inventory_item"].side_effect = RuntimeError("inventory table down")
+        response = self._post_scan()
+        body = response.json()
+        ok_card = next(c for c in body["cards"] if c["number"] == 1)
+        self.assertNotIn("image_error", ok_card)
+        self.assertEqual(ok_card["id"], "card-1")
 
     def test_marks_batch_ok_when_all_cards_succeed(self):
         self._post_scan()
