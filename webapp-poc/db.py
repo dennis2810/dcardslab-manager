@@ -248,14 +248,14 @@ def cards_with_purchase(card_ids):
     return {row["card_id"] for row in response.data}
 
 
-def ebay_status_by_card_id(card_ids):
+def ebay_info_by_card_id(card_ids):
     if not card_ids:
         return {}
     response = (
-        get_client().table("ebay_listings").select("card_id,status")
+        get_client().table("ebay_listings").select("card_id,status,sku")
         .in_("card_id", card_ids).execute()
     )
-    return {row["card_id"]: row["status"] for row in response.data}
+    return {row["card_id"]: {"status": row["status"], "sku": row["sku"]} for row in response.data}
 
 
 def get_cards_by_ids(card_ids):
@@ -405,3 +405,58 @@ def all_ebay_listings():
 
 def all_ebay_sales():
     return get_client().table("ebay_sales").select("*").execute().data
+
+
+def all_inventory():
+    return get_client().table("inventory").select("*").execute().data
+
+
+INVENTORY_FIELDS = ["quantity", "condition", "location", "notes"]
+INVENTORY_NUMERIC_FIELDS = {"quantity"}
+
+
+def create_inventory_item(card_id, fields):
+    row = _blank_numeric_to_none(
+        {name: fields[name] for name in INVENTORY_FIELDS if name in fields},
+        INVENTORY_NUMERIC_FIELDS,
+    )
+    row["card_id"] = card_id
+    response = get_client().table("inventory").insert(row).execute()
+    return response.data[0]
+
+
+def list_inventory():
+    response = get_client().table("inventory").select("*").order("created_at").execute()
+    return response.data
+
+
+def get_inventory_for_card(card_id):
+    response = (
+        get_client().table("inventory").select("*")
+        .eq("card_id", card_id).order("created_at").execute()
+    )
+    return response.data
+
+
+def get_inventory_item(item_id):
+    response = get_client().table("inventory").select("*").eq("id", item_id).execute()
+    return response.data[0] if response.data else None
+
+
+def update_inventory_item(item_id, fields):
+    row = _blank_numeric_to_none(
+        {name: value for name, value in fields.items() if name in INVENTORY_FIELDS},
+        INVENTORY_NUMERIC_FIELDS,
+    )
+    if not row:
+        return get_inventory_item(item_id)
+    response = get_client().table("inventory").update(row).eq("id", item_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_inventory_item(item_id):
+    response = get_client().table("inventory").select("id").eq("id", item_id).execute()
+    if not response.data:
+        return None
+    get_client().table("inventory").delete().eq("id", item_id).execute()
+    return response.data[0]

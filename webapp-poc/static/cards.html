@@ -24,6 +24,9 @@
   .ebay-badge-Entwurf { background: #e2e3e5; color: #383d41; }
   .list { width: 100%; border-collapse: collapse; }
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
+  .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  .list th .sort-arrow { color: #888; font-size: 0.8em; }
+  .card .sku { font-size: 0.75rem; color: #888; }
   .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
   .list a.row-link { color: inherit; text-decoration: none; display: block; }
   [hidden] { display: none !important; }
@@ -34,6 +37,7 @@
   <p><a href="index.html">&larr; Zum Scan-Formular</a></p>
   <p><a href="purchases.html">Zu den Käufen &rarr;</a></p>
   <p><a href="ebay.html">Zu den eBay-Angeboten &rarr;</a></p>
+  <p><a href="inventory.html">Zum Inventar &rarr;</a></p>
   <p><a href="card-new.html">+ Neue Karte anlegen</a></p>
   <p><a href="settings.html">Einstellungen &rarr;</a></p>
 
@@ -52,7 +56,15 @@
   <div id="grid" class="grid"></div>
   <table id="list" class="list" hidden>
     <thead>
-      <tr><th></th><th>Titel</th><th>Team / Saison</th><th>Erkennung</th><th>eBay</th></tr>
+      <tr>
+        <th></th>
+        <th data-key="title">Titel <span class="sort-arrow"></span></th>
+        <th data-key="team">Team <span class="sort-arrow"></span></th>
+        <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
+        <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
+        <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
+        <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
+      </tr>
     </thead>
     <tbody id="list-body"></tbody>
   </table>
@@ -126,11 +138,44 @@ async function loadCards() {
       return;
     }
     statusMsg.textContent = `${body.cards.length} Karte(n)`;
-    render(body.cards);
-    renderList(body.cards);
+    currentCards = body.cards;
+    render(currentCards);
+    renderList(sortedCards());
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
+}
+
+let currentCards = [];
+let sortKey = null;
+let sortAsc = true;
+
+function sortedCards() {
+  if (!sortKey) return currentCards;
+  return [...currentCards].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+for (const th of document.querySelectorAll(".list th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    for (const other of document.querySelectorAll(".list th[data-key]")) {
+      other.querySelector(".sort-arrow").textContent = "";
+    }
+    th.querySelector(".sort-arrow").textContent = sortAsc ? "▲" : "▼";
+    renderList(sortedCards());
+  });
 }
 
 function render(cards) {
@@ -172,6 +217,13 @@ function render(cards) {
     const badge = ebayBadge(card.ebay_status);
     if (badge) a.appendChild(badge);
 
+    if (card.ebay_sku) {
+      const skuEl = document.createElement("div");
+      skuEl.className = "sku";
+      skuEl.textContent = card.ebay_sku;
+      a.appendChild(skuEl);
+    }
+
     grid.appendChild(a);
   }
 }
@@ -192,9 +244,13 @@ function renderList(cards) {
     titleTd.textContent = card.title || "(ohne Titel)";
     tr.appendChild(titleTd);
 
-    const metaTd = document.createElement("td");
-    metaTd.textContent = [card.team, card.season_year].filter(Boolean).join(" · ");
-    tr.appendChild(metaTd);
+    const teamTd = document.createElement("td");
+    teamTd.textContent = card.team || "";
+    tr.appendChild(teamTd);
+
+    const seasonTd = document.createElement("td");
+    seasonTd.textContent = card.season_year || "";
+    tr.appendChild(seasonTd);
 
     const statusTd = document.createElement("td");
     statusTd.className = statusClass(card.recognition_status);
@@ -205,6 +261,10 @@ function renderList(cards) {
     const badge = ebayBadge(card.ebay_status);
     if (badge) ebayTd.appendChild(badge);
     tr.appendChild(ebayTd);
+
+    const skuTd = document.createElement("td");
+    skuTd.textContent = card.ebay_sku || "";
+    tr.appendChild(skuTd);
 
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;

@@ -287,6 +287,30 @@ def _expand_purchase_items(items):
     return expanded
 
 
+def _expand_inventory_items(items):
+    # Same enrichment as _expand_purchase_items() - a lean card summary
+    # (id/title/front_image_url) so inventory.html doesn't need a
+    # per-row /api/cards/{id} request.
+    if not items:
+        return []
+    card_ids = [item["card_id"] for item in items]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    expanded = []
+    for item in items:
+        item = dict(item)
+        card = cards_by_id.get(item["card_id"], {})
+        card_summary = {"id": item["card_id"], "title": card.get("title", "")}
+        front_path = card.get("front_image_path")
+        if front_path:
+            try:
+                card_summary["front_image_url"] = storage.signed_url(front_path)
+            except Exception:
+                pass
+        item["card"] = card_summary
+        expanded.append(item)
+    return expanded
+
+
 def _attach_purchase_items(purchase):
     purchase = dict(purchase)
     purchase["items"] = _expand_purchase_items(purchase.get("items", []))
@@ -320,10 +344,12 @@ async def list_cards(q: str | None = None, status: str | None = None):
     cards = [_attach_signed_urls(c) for c in db.list_cards(q=q, status=status)]
     card_ids = [c["id"] for c in cards]
     linked_ids = db.cards_with_purchase(card_ids)
-    ebay_statuses = db.ebay_status_by_card_id(card_ids)
+    ebay_info = db.ebay_info_by_card_id(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
-        c["ebay_status"] = ebay_statuses.get(c["id"])
+        info = ebay_info.get(c["id"]) or {}
+        c["ebay_status"] = info.get("status")
+        c["ebay_sku"] = info.get("sku")
     return JSONResponse({"cards": cards})
 
 
@@ -335,6 +361,7 @@ async def get_card(card_id: str):
     card = _attach_signed_urls(card)
     card["purchase"] = db.get_purchase_for_card(card_id)
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
+    card["inventory"] = db.get_inventory_for_card(card_id)
     return JSONResponse(card)
 
 
@@ -469,6 +496,35 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
     deleted = db.delete_purchase_item(purchase_id, item_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Kauf-Position {item_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
+@app.get("/api/inventory")
+async def list_inventory():
+    return JSONResponse({"inventory": _expand_inventory_items(db.list_inventory())})
+
+
+@app.post("/api/cards/{card_id}/inventory")
+async def create_inventory_item(card_id: str, fields: dict = Body(default={})):
+    if db.get_card(card_id) is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    item = db.create_inventory_item(card_id, fields)
+    return JSONResponse(_expand_inventory_items([item])[0])
+
+
+@app.patch("/api/inventory/{item_id}")
+async def update_inventory_item(item_id: str, fields: dict = Body(...)):
+    updated = db.update_inventory_item(item_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Inventareintrag {item_id} nicht gefunden.")
+    return JSONResponse(_expand_inventory_items([updated])[0])
+
+
+@app.delete("/api/inventory/{item_id}", status_code=204)
+async def delete_inventory_item(item_id: str):
+    deleted = db.delete_inventory_item(item_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Inventareintrag {item_id} nicht gefunden.")
     return Response(status_code=204)
 
 
