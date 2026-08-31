@@ -318,9 +318,12 @@ def _attach_signed_urls(card):
 @app.get("/api/cards")
 async def list_cards(q: str | None = None, status: str | None = None):
     cards = [_attach_signed_urls(c) for c in db.list_cards(q=q, status=status)]
-    linked_ids = db.cards_with_purchase([c["id"] for c in cards])
+    card_ids = [c["id"] for c in cards]
+    linked_ids = db.cards_with_purchase(card_ids)
+    ebay_statuses = db.ebay_status_by_card_id(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
+        c["ebay_status"] = ebay_statuses.get(c["id"])
     return JSONResponse({"cards": cards})
 
 

@@ -248,6 +248,16 @@ def cards_with_purchase(card_ids):
     return {row["card_id"] for row in response.data}
 
 
+def ebay_status_by_card_id(card_ids):
+    if not card_ids:
+        return {}
+    response = (
+        get_client().table("ebay_listings").select("card_id,status")
+        .in_("card_id", card_ids).execute()
+    )
+    return {row["card_id"]: row["status"] for row in response.data}
+
+
 def get_cards_by_ids(card_ids):
     if not card_ids:
         return []

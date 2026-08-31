@@ -619,6 +619,24 @@ class CardsWithPurchaseTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class EbayStatusByCardIdTests(unittest.TestCase):
+    def test_returns_status_keyed_by_card_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"card_id": "card-1", "status": "Veroeffentlicht"}, {"card_id": "card-2", "status": "Entwurf"}]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.ebay_status_by_card_id(["card-1", "card-2", "card-3"])
+        self.assertEqual(result, {"card-1": "Veroeffentlicht", "card-2": "Entwurf"})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.ebay_status_by_card_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+
 class CreateEbayListingTests(unittest.TestCase):
     def test_inserts_row_with_card_id_and_sku(self):
         mock_client = MagicMock()

@@ -82,13 +82,25 @@
   <div class="ebay-section" id="ebay-section"></div>
 
 <script>
+// Third element is a short explanation shown as a hover tooltip on the
+// field's label - same field meanings as integrations/ai_card_recognition.py's
+// recognition prompt, so the UI and the AI agree on what each field means.
 const FIELDS = [
-  ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
-  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
-  ["season_year", "Saison"], ["card_type", "Typ"], ["variant", "Variante"],
-  ["position", "Position"], ["squad_number", "Trikotnummer"],
-  ["club_debut_season", "Debütsaison"], ["card_number", "Kartennr."],
-  ["serial_number", "Seriennr."], ["print_run", "Auflage"],
+  ["title", "Titel", "Name der abgebildeten Person/des Charakters"],
+  ["category", "Kategorie", "Sportart bzw. übergeordnete Kategorie (z. B. Fußball, Marvel)"],
+  ["theme", "Thema", "Liga/Wettbewerb/Serie, falls auf der Karte aufgedruckt (z. B. Bundesliga)"],
+  ["team", "Team", "Team/Verein, wie auf der Karte angegeben"],
+  ["manufacturer", "Hersteller", "Kartenhersteller (z. B. Topps, Panini)"],
+  ["set_name", "Set", "Set-/Serienname"],
+  ["season_year", "Saison", "Saison oder Jahr (z. B. \"2024\" oder \"2024/25\")"],
+  ["card_type", "Typ", "Parallel-/Variantenbezeichnung (z. B. Gold, Silver, Base, Insert)"],
+  ["variant", "Variante", "Weitere Variantenangabe, falls von Typ verschieden"],
+  ["position", "Position", "Spielposition, falls auf der Karte vermerkt"],
+  ["squad_number", "Trikotnummer", "Trikotnummer, falls auf der Karte vermerkt"],
+  ["club_debut_season", "Debütsaison", "Debütsaison beim Verein, falls vermerkt"],
+  ["card_number", "Kartennr.", "Kartennummer, wie auf der Karte angegeben (z. B. \"#123\")"],
+  ["serial_number", "Seriennr.", "Seriennummer bei limitierten Karten (z. B. \"12/99\")"],
+  ["print_run", "Auflage", "Gesamtauflage bei limitierten Karten (z. B. \"99\")"],
 ];
 
 function showError(container, message) {
@@ -222,9 +234,10 @@ function render(card) {
   if (card.back_image_url) backImg.src = card.back_image_url;
 
   form.innerHTML = "";
-  for (const [key, label] of FIELDS) {
+  for (const [key, label, explanation] of FIELDS) {
     const wrapper = document.createElement("label");
     wrapper.textContent = label;
+    if (explanation) wrapper.title = explanation;
     const input = document.createElement("input");
     input.type = "text";
     input.name = key;

@@ -30,6 +30,7 @@ class ListCardsEndpointTests(unittest.TestCase):
         ]
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_status_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
             response = client.get("/api/cards")
 
@@ -52,6 +53,7 @@ class ListCardsEndpointTests(unittest.TestCase):
 
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_status_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=fake_signed_url):
             response = client.get("/api/cards")
 
@@ -269,11 +271,27 @@ class ListCardsHasPurchaseFieldTests(unittest.TestCase):
             {"id": "card-2", "front_image_path": None, "back_image_path": None},
         ]
         with patch("main.db.list_cards", return_value=rows), \
-             patch("main.db.cards_with_purchase", return_value={"card-1"}):
+             patch("main.db.cards_with_purchase", return_value={"card-1"}), \
+             patch("main.db.ebay_status_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertTrue(cards[0]["has_purchase"])
         self.assertFalse(cards[1]["has_purchase"])
+
+
+class ListCardsEbayStatusFieldTests(unittest.TestCase):
+    def test_attaches_ebay_status_when_a_listing_exists(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None},
+        ]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_status_by_card_id", return_value={"card-1": "Veroeffentlicht"}):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertEqual(cards[0]["ebay_status"], "Veroeffentlicht")
+        self.assertIsNone(cards[1]["ebay_status"])
 
 
 class RecognizeCardImagesEndpointTests(unittest.TestCase):
