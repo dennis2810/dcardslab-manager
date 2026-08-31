@@ -300,16 +300,25 @@ class GetOrdersTests(unittest.TestCase):
         self.assertEqual(orders, [])
 
     def test_filter_query_is_passed_as_params_not_hand_built_into_the_url(self):
-        # A raw f-string into the URL path leaves ":"/"+" in an ISO
-        # timestamp unencoded (e.g. "+00:00" from datetime.isoformat()),
-        # which eBay's API can reject - passing it as httpx `params`
-        # lets httpx handle encoding correctly instead.
+        # A raw f-string into the URL path leaves ":" in an ISO timestamp
+        # unencoded, which eBay's API can reject - passing it as httpx
+        # `params` lets httpx handle encoding correctly instead.
         with patch("ebay_client.httpx.request", return_value=_response(200, {"orders": []})) as mock_request:
-            ebay_client.get_orders("tok", "2026-08-01T00:00:00+00:00")
+            ebay_client.get_orders("tok", "2026-08-01T00:00:00Z")
         args, kwargs = mock_request.call_args
-        self.assertNotIn("+00:00", args[1])
-        self.assertEqual(kwargs["params"]["filter"], "creationdate:[2026-08-01T00:00:00+00:00..]")
+        self.assertEqual(kwargs["params"]["filter"], "creationdate:[2026-08-01T00:00:00Z..]")
         self.assertEqual(kwargs["params"]["limit"], "200")
+
+    def test_normalizes_utc_offset_suffix_to_z(self):
+        # Regression test: found live against real eBay production -
+        # errorId 30810 "Invalid date format", with the "+00:00" suffix
+        # datetime.isoformat() produces arriving at eBay as a literal space
+        # ("...134065 00:00") instead. eBay's Fulfillment API filter wants
+        # the "Z" suffix for UTC, not an explicit "+00:00" offset.
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"orders": []})) as mock_request:
+            ebay_client.get_orders("tok", "2026-06-02T17:42:55.134065+00:00")
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["params"]["filter"], "creationdate:[2026-06-02T17:42:55.134065Z..]")
 
 
 if __name__ == "__main__":
