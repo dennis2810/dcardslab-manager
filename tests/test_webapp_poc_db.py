@@ -620,19 +620,25 @@ class CardsWithPurchaseTests(unittest.TestCase):
 
 
 class EbayStatusByCardIdTests(unittest.TestCase):
-    def test_returns_status_keyed_by_card_id(self):
+    def test_returns_status_and_sku_keyed_by_card_id(self):
         mock_client = MagicMock()
         response = MagicMock()
-        response.data = [{"card_id": "card-1", "status": "Veroeffentlicht"}, {"card_id": "card-2", "status": "Entwurf"}]
+        response.data = [
+            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001"},
+            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002"},
+        ]
         mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
-            result = db.ebay_status_by_card_id(["card-1", "card-2", "card-3"])
-        self.assertEqual(result, {"card-1": "Veroeffentlicht", "card-2": "Entwurf"})
+            result = db.ebay_info_by_card_id(["card-1", "card-2", "card-3"])
+        self.assertEqual(result, {
+            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001"},
+            "card-2": {"status": "Entwurf", "sku": "webapp-000002"},
+        })
 
     def test_empty_input_skips_query(self):
         mock_client = MagicMock()
         with patch("db.get_client", return_value=mock_client):
-            result = db.ebay_status_by_card_id([])
+            result = db.ebay_info_by_card_id([])
         self.assertEqual(result, {})
         mock_client.table.assert_not_called()
 
@@ -883,6 +889,122 @@ class BackupReadFunctionsTests(unittest.TestCase):
 
     def test_all_ebay_sales(self):
         self._assert_reads_table(db.all_ebay_sales, "ebay_sales")
+
+    def test_all_inventory(self):
+        self._assert_reads_table(db.all_inventory, "inventory")
+
+
+class CreateInventoryItemTests(unittest.TestCase):
+    def test_inserts_row_with_card_id(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "inventory", [{"id": "inv-1", "card_id": "card-1", "quantity": 1}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_inventory_item("card-1", {"quantity": 1, "condition": "NM"})
+        self.assertEqual(result["id"], "inv-1")
+        insert_call = mock_client.table.return_value.insert
+        row = insert_call.call_args[0][0]
+        self.assertEqual(row["card_id"], "card-1")
+        self.assertEqual(row["quantity"], 1)
+        self.assertEqual(row["condition"], "NM")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "inventory", [{"id": "inv-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_inventory_item("card-1", {"quantity": 1, "not_a_column": "x"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+
+class ListInventoryTests(unittest.TestCase):
+    def test_returns_rows_ordered_by_created_at(self):
+        mock_client = MagicMock()
+        rows = [{"id": "inv-1"}, {"id": "inv-2"}]
+        _mock_table(mock_client, "inventory", rows)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_inventory()
+        self.assertEqual(result, rows)
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with("created_at")
+
+
+class GetInventoryForCardTests(unittest.TestCase):
+    def test_returns_rows_for_the_card_ordered_by_created_at(self):
+        mock_client = MagicMock()
+        rows = [{"id": "inv-1", "card_id": "card-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value.data = rows
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_inventory_for_card("card-1")
+        self.assertEqual(result, rows)
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+
+class GetInventoryItemTests(unittest.TestCase):
+    def test_returns_item_when_found(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "inventory", [{"id": "inv-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_inventory_item("inv-1")
+        self.assertEqual(result, {"id": "inv-1"})
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "inventory", [])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_inventory_item("does-not-exist")
+        self.assertIsNone(result)
+
+
+class UpdateInventoryItemTests(unittest.TestCase):
+    def test_updates_only_provided_fields(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "inv-1", "location": "Regal 2"}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_inventory_item("inv-1", {"location": "Regal 2"})
+        self.assertEqual(result, saved_row)
+        mock_client.table.return_value.update.assert_called_once_with({"location": "Regal 2"})
+
+    def test_blank_quantity_becomes_none(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "inv-1"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_inventory_item("inv-1", {"quantity": ""})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertIsNone(row["quantity"])
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_inventory_item("does-not-exist", {"location": "x"})
+        self.assertIsNone(result)
+
+
+class DeleteInventoryItemTests(unittest.TestCase):
+    def test_deletes_and_returns_item(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "inv-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_inventory_item("inv-1")
+        self.assertEqual(result, {"id": "inv-1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "inv-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_inventory_item("does-not-exist")
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

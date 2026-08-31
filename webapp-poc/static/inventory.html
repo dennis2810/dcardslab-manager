@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Inventar</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
+  tr.row { cursor: pointer; }
+  tr.row:hover { background: #f7f7f7; }
+  img.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; background: #f0f0f0; vertical-align: middle; margin-right: 0.5rem; }
+  #status-msg { font-style: italic; color: #555; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs – Inventar</h1>
+  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+  <p>Inventareinträge (Menge/Zustand/Lagerort/Notizen) werden auf der jeweiligen Kartenseite angelegt und bearbeitet.</p>
+
+  <p id="status-msg"></p>
+  <table id="inventory-table" style="display: none;">
+    <thead>
+      <tr>
+        <th data-key="card_title">Karte <span class="sort-arrow"></span></th>
+        <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
+        <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
+        <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
+        <th data-key="notes">Notizen <span class="sort-arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody id="inventory-body"></tbody>
+  </table>
+
+<script>
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("inventory-table");
+const body = document.getElementById("inventory-body");
+
+let items = [];
+let sortKey = "card_title";
+let sortAsc = true;
+
+async function loadInventory() {
+  statusMsg.textContent = "Lädt …";
+  table.style.display = "none";
+  try {
+    const res = await fetch("/api/inventory");
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
+    statusMsg.textContent = `${items.length} Eintrag/Einträge`;
+    render();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function render() {
+  const sorted = [...items].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+
+  body.innerHTML = "";
+  table.style.display = sorted.length ? "table" : "none";
+  for (const item of sorted) {
+    const tr = document.createElement("tr");
+    tr.className = "row";
+    tr.addEventListener("click", () => {
+      location.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
+    });
+
+    const cardTd = document.createElement("td");
+    if (item.card?.front_image_url) {
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.src = item.card.front_image_url;
+      img.alt = "";
+      cardTd.appendChild(img);
+    }
+    cardTd.append(item.card_title || "(ohne Titel)");
+    tr.appendChild(cardTd);
+
+    for (const key of ["quantity", "condition", "location", "notes"]) {
+      const td = document.createElement("td");
+      td.textContent = item[key] ?? "";
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    render();
+  });
+}
+
+loadInventory();
+</script>
+</body>
+</html>

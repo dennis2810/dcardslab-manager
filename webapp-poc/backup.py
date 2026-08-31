@@ -10,7 +10,7 @@ import db
 from storage import BUCKET
 from supabase_client import get_client
 
-_TABLE_NAMES = ("scan_batches", "cards", "purchases", "purchase_items", "ebay_listings", "ebay_sales")
+_TABLE_NAMES = ("scan_batches", "cards", "purchases", "purchase_items", "ebay_listings", "ebay_sales", "inventory")
 
 
 def build_backup_zip():

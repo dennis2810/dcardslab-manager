@@ -30,7 +30,7 @@ class ListCardsEndpointTests(unittest.TestCase):
         ]
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
-             patch("main.db.ebay_status_by_card_id", return_value={}), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
             response = client.get("/api/cards")
 
@@ -53,7 +53,7 @@ class ListCardsEndpointTests(unittest.TestCase):
 
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
-             patch("main.db.ebay_status_by_card_id", return_value={}), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=fake_signed_url):
             response = client.get("/api/cards")
 
@@ -78,6 +78,7 @@ class GetCardEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value=row), \
              patch("main.db.get_purchase_for_card", return_value=None), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
             response = client.get("/api/cards/card-1")
 
@@ -95,6 +96,7 @@ class GetCardEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value=row), \
              patch("main.db.get_purchase_for_card", return_value=None), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.storage.signed_url", side_effect=RuntimeError("Supabase Storage hiccup")):
             response = client.get("/api/cards/card-1")
 
@@ -232,7 +234,8 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
         purchase_info = {"purchase_id": "p1", "item_id": "item-1", "platform": "eBay"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.db.get_purchase_for_card", return_value=purchase_info), \
-             patch("main.db.get_ebay_listing_for_card", return_value=None):
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["purchase"], purchase_info)
 
@@ -240,7 +243,8 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
         with patch("main.db.get_card", return_value=card), \
              patch("main.db.get_purchase_for_card", return_value=None), \
-             patch("main.db.get_ebay_listing_for_card", return_value=None):
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["purchase"])
 
@@ -251,7 +255,8 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
         listing = {"id": "listing-1", "card_id": "card-1", "status": "Entwurf"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.db.get_purchase_for_card", return_value=None), \
-             patch("main.db.get_ebay_listing_for_card", return_value=listing):
+             patch("main.db.get_ebay_listing_for_card", return_value=listing), \
+             patch("main.db.get_inventory_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["ebay_listing"], listing)
 
@@ -259,9 +264,31 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
         with patch("main.db.get_card", return_value=card), \
              patch("main.db.get_purchase_for_card", return_value=None), \
-             patch("main.db.get_ebay_listing_for_card", return_value=None):
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["ebay_listing"])
+
+
+class GetCardInventoryFieldTests(unittest.TestCase):
+    def test_includes_inventory_items_for_the_card(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        items = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=items):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.json()["inventory"], items)
+
+    def test_inventory_is_empty_list_when_none_exists(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.json()["inventory"], [])
 
 
 class ListCardsHasPurchaseFieldTests(unittest.TestCase):
@@ -272,7 +299,7 @@ class ListCardsHasPurchaseFieldTests(unittest.TestCase):
         ]
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value={"card-1"}), \
-             patch("main.db.ebay_status_by_card_id", return_value={}):
+             patch("main.db.ebay_info_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertTrue(cards[0]["has_purchase"])
@@ -280,18 +307,21 @@ class ListCardsHasPurchaseFieldTests(unittest.TestCase):
 
 
 class ListCardsEbayStatusFieldTests(unittest.TestCase):
-    def test_attaches_ebay_status_when_a_listing_exists(self):
+    def test_attaches_ebay_status_and_sku_when_a_listing_exists(self):
         rows = [
             {"id": "card-1", "front_image_path": None, "back_image_path": None},
             {"id": "card-2", "front_image_path": None, "back_image_path": None},
         ]
+        info = {"card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001"}}
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
-             patch("main.db.ebay_status_by_card_id", return_value={"card-1": "Veroeffentlicht"}):
+             patch("main.db.ebay_info_by_card_id", return_value=info):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertEqual(cards[0]["ebay_status"], "Veroeffentlicht")
+        self.assertEqual(cards[0]["ebay_sku"], "webapp-000001")
         self.assertIsNone(cards[1]["ebay_status"])
+        self.assertIsNone(cards[1]["ebay_sku"])
 
 
 class RecognizeCardImagesEndpointTests(unittest.TestCase):

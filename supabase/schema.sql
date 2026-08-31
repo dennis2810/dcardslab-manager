@@ -152,3 +152,19 @@ create table if not exists google_sheets_settings (
     connected_at    timestamptz,
     last_synced_at  timestamptz
 );
+
+-- Physical-stock ledger, ported from the desktop app's "inventory" table
+-- (SQLite, card_id/quantity/condition/location/notes) - a card can have
+-- more than one inventory row (e.g. tracked separately per location),
+-- same as the desktop app allowed.
+create table if not exists inventory (
+    id          uuid primary key default gen_random_uuid(),
+    card_id     uuid not null references cards(id) on delete cascade,
+    quantity    int default 1,
+    condition   text default 'NM',
+    location    text default '',
+    notes       text default '',
+    created_at  timestamptz not null default now()
+);
+
+create index if not exists inventory_card_id_idx on inventory(card_id);
