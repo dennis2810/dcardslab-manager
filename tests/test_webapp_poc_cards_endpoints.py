@@ -352,12 +352,16 @@ class RecognizeCardImagesEndpointTests(unittest.TestCase):
 
 
 class CreateCardManualEndpointTests(unittest.TestCase):
-    def _post_create(self, fields=None):
+    def _post_create(self, fields=None, location=None, notes=None):
         files = {
             "front": ("front.jpg", b"fake-front-bytes", "image/jpeg"),
             "back": ("back.jpg", b"fake-back-bytes", "image/jpeg"),
         }
         data = {"fields": json.dumps(fields if fields is not None else {"title": "Max Mustermann"})}
+        if location is not None:
+            data["location"] = location
+        if notes is not None:
+            data["notes"] = notes
         return client.post("/api/cards", files=files, data=data)
 
     def _patch_all(self, **overrides):
@@ -384,7 +388,16 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         # inventory row is created automatically here as well.
         mocks = self._patch_all()
         self._post_create()
-        mocks["main.db.create_inventory_item"].assert_called_once_with("card-1", {"quantity": 1})
+        mocks["main.db.create_inventory_item"].assert_called_once_with(
+            "card-1", {"quantity": 1, "location": "", "notes": ""}
+        )
+
+    def test_passes_location_and_notes_from_the_form(self):
+        mocks = self._patch_all()
+        self._post_create(location="Regal B", notes="Einzelkarte")
+        mocks["main.db.create_inventory_item"].assert_called_once_with(
+            "card-1", {"quantity": 1, "location": "Regal B", "notes": "Einzelkarte"}
+        )
 
     def test_inventory_item_creation_failure_does_not_fail_the_request(self):
         mocks = self._patch_all()

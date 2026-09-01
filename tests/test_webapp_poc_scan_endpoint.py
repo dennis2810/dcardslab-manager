@@ -69,12 +69,17 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             self.mocks[target] = p.start()
             self.addCleanup(p.stop)
 
-    def _post_scan(self):
+    def _post_scan(self, location=None, notes=None):
         files = {
             "front": ("front.jpg", b"fake-front-bytes", "image/jpeg"),
             "back": ("back.jpg", b"fake-back-bytes", "image/jpeg"),
         }
-        return client.post("/api/scan", files=files)
+        data = {}
+        if location is not None:
+            data["location"] = location
+        if notes is not None:
+            data["notes"] = notes
+        return client.post("/api/scan", files=files, data=data)
 
     def test_creates_one_batch_for_the_scan(self):
         self._post_scan()
@@ -94,7 +99,17 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         # requiring a separate manual step for the common case.
         self._post_scan()
         self.assertEqual(self.mocks["main.db.create_inventory_item"].call_count, 9)
-        self.mocks["main.db.create_inventory_item"].assert_any_call("card-1", {"quantity": 1})
+        self.mocks["main.db.create_inventory_item"].assert_any_call(
+            "card-1", {"quantity": 1, "location": "", "notes": ""}
+        )
+
+    def test_passes_location_and_notes_from_the_scan_form_to_every_card(self):
+        # One shared storage spot/note for the whole 9-up batch - asking per
+        # card would be tedious, and a batch usually ends up in one place.
+        self._post_scan(location="Regal A", notes="Aus Sammlung X")
+        self.mocks["main.db.create_inventory_item"].assert_any_call(
+            "card-1", {"quantity": 1, "location": "Regal A", "notes": "Aus Sammlung X"}
+        )
 
     def test_inventory_item_creation_failure_does_not_fail_the_card(self):
         self.mocks["main.db.create_inventory_item"].side_effect = RuntimeError("inventory table down")

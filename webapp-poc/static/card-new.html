@@ -91,6 +91,19 @@ for (const [key, label] of FIELDS) {
   form.insertBefore(wrapper, statusEl);
 }
 
+// Inventory fields (not card master data) - collected here so the seller
+// doesn't need a second trip through card.html's Inventar section just to
+// record where the card physically ended up.
+for (const [key, label] of [["location", "Lagerort"], ["notes", "Notiz"]]) {
+  const wrapper = document.createElement("label");
+  wrapper.textContent = label;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.name = key;
+  wrapper.appendChild(input);
+  form.insertBefore(wrapper, statusEl);
+}
+
 function updatePreview(side) {
   const img = document.getElementById(`${side}-preview`);
   const rotateButtons = document.getElementById(`${side}-rotate`);
@@ -212,6 +225,8 @@ form.addEventListener("submit", async (ev) => {
   data.append("front", sideBlobs.front, "front.jpg");
   data.append("back", sideBlobs.back, "back.jpg");
   data.append("fields", JSON.stringify(fields));
+  data.append("location", form.elements.location.value);
+  data.append("notes", form.elements.notes.value);
 
   try {
     const res = await fetch("/api/cards", { method: "POST", body: data });

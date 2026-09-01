@@ -104,21 +104,28 @@ def _crop_side(upload_path, out_dir):
     return [Path(p) for p in files]
 
 
-def _create_default_inventory_item(card_id):
+def _create_default_inventory_item(card_id, location="", notes=""):
     # Every scanned card gets a quantity-1 "NM" inventory row automatically -
     # the seller physically has the card in hand at scan time, so requiring
     # a separate manual step for the common case would just be busywork.
+    # location/notes come from the same scan/manual-add form (one shared
+    # storage spot for a whole scan batch, or per-card for a manual add) so
+    # they don't need a second trip through card.html's Inventar section
+    # just to record where the card physically ended up.
     # Isolated from the card-insert's own error handling on purpose: this
     # failing must not make an otherwise-successful card insert look failed
     # to the caller (see process_one() below) - it's a soft warning only.
     try:
-        db.create_inventory_item(card_id, {"quantity": 1})
+        db.create_inventory_item(card_id, {"quantity": 1, "location": location, "notes": notes})
     except Exception:
         logger.exception("Automatischer Inventareintrag fuer Karte %s fehlgeschlagen", card_id)
 
 
 @app.post("/api/scan")
-async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
+async def scan(
+    front: UploadFile = File(...), back: UploadFile = File(...),
+    location: str = Form(""), notes: str = Form(""),
+):
     with tempfile.TemporaryDirectory(prefix="dcardslab_poc_") as tmp_str:
         tmp = Path(tmp_str)
         front_path = tmp / f"front{Path(front.filename or 'front.jpg').suffix}"
@@ -159,7 +166,7 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
                         **fields,
                         "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
                     }
-                _create_default_inventory_item(card_row["id"])
+                _create_default_inventory_item(card_row["id"], location, notes)
                 return {"number": number, **fields, "id": card_row["id"]}
 
             fields = recognize_card(front_path=fp, back_path=bp)
@@ -182,7 +189,7 @@ async def scan(front: UploadFile = File(...), back: UploadFile = File(...)):
                     image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
                 result["image_error"] = image_error
                 return result
-            _create_default_inventory_item(card_row["id"])
+            _create_default_inventory_item(card_row["id"], location, notes)
 
             if front_image_path:
                 try:
@@ -245,6 +252,7 @@ async def recognize_card_images(front: UploadFile = File(...), back: UploadFile 
 @app.post("/api/cards")
 async def create_card_manual(
     front: UploadFile = File(...), back: UploadFile = File(...), fields: str = Form("{}"),
+    location: str = Form(""), notes: str = Form(""),
 ):
     try:
         parsed_fields = json.loads(fields)
@@ -275,7 +283,7 @@ async def create_card_manual(
             ) from exc
 
     db.update_batch_status(batch_id, "ok")
-    _create_default_inventory_item(card_row["id"])
+    _create_default_inventory_item(card_row["id"], location, notes)
     return JSONResponse(_attach_signed_urls(card_row))
 
 
