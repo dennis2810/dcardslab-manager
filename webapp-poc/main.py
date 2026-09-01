@@ -275,6 +275,7 @@ async def create_card_manual(
             ) from exc
 
     db.update_batch_status(batch_id, "ok")
+    _create_default_inventory_item(card_row["id"])
     return JSONResponse(_attach_signed_urls(card_row))
 
 
