@@ -370,12 +370,28 @@ class CreateCardManualEndpointTests(unittest.TestCase):
             }),
             "main.storage.upload_image": MagicMock(side_effect=lambda b, p, side, path: f"{b}/{p}_{side}.jpg"),
             "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
+            "main.db.create_inventory_item": MagicMock(),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
         for p in patchers:
             self.addCleanup(p.stop)
         return {target: p.start() for target, p in zip(patches, patchers)}
+
+    def test_creates_a_default_inventory_item(self):
+        # Same rationale as /api/scan's - the seller physically has the
+        # card in hand when adding it manually too, so a quantity-1 "NM"
+        # inventory row is created automatically here as well.
+        mocks = self._patch_all()
+        self._post_create()
+        mocks["main.db.create_inventory_item"].assert_called_once_with("card-1", {"quantity": 1})
+
+    def test_inventory_item_creation_failure_does_not_fail_the_request(self):
+        mocks = self._patch_all()
+        mocks["main.db.create_inventory_item"].side_effect = RuntimeError("inventory table down")
+        response = self._post_create()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], "card-1")
 
     def test_creates_batch_with_count_one(self):
         mocks = self._patch_all()
