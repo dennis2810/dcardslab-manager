@@ -46,6 +46,10 @@
         <button type="button" data-side="back" data-dir="right">&#8635; Rechts drehen</button>
       </div>
     </div>
+    <label for="location">Lagerort (für alle Karten dieses Scans)</label>
+    <input type="text" id="location" name="location">
+    <label for="notes">Notiz (optional, für alle Karten dieses Scans)</label>
+    <input type="text" id="notes" name="notes">
     <button type="submit">Scannen &amp; erkennen</button>
   </form>
 
@@ -142,6 +146,8 @@ form.addEventListener("submit", async (ev) => {
   const data = new FormData();
   data.append("front", sideBlobs.front, "front.jpg");
   data.append("back", sideBlobs.back, "back.jpg");
+  data.append("location", document.getElementById("location").value);
+  data.append("notes", document.getElementById("notes").value);
 
   try {
     const res = await fetch("/api/scan", { method: "POST", body: data });
