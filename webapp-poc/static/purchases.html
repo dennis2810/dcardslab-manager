@@ -22,12 +22,15 @@
 </head>
 <body>
   <h1>DCardLabs – Käufe</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+  <p><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
 
   <div class="controls">
     <input type="text" id="q" placeholder="Suche (Plattform, Verkäufer, Notizen)">
+    <label>Von <input type="date" id="date-from"></label>
+    <label>Bis <input type="date" id="date-to"></label>
     <button type="button" id="toggle-new">+ Neuer Kauf</button>
   </div>
+  <p id="sums"></p>
 
   <form id="new-purchase-form">
     <label>Kaufdatum <input type="date" name="purchase_date" required></label>
@@ -52,11 +55,32 @@
 
 <script>
 const qInput = document.getElementById("q");
+const dateFromInput = document.getElementById("date-from");
+const dateToInput = document.getElementById("date-to");
 const statusMsg = document.getElementById("status-msg");
+const sumsEl = document.getElementById("sums");
 const table = document.getElementById("purchases-table");
 const body = document.getElementById("purchases-body");
 const toggleNewBtn = document.getElementById("toggle-new");
 const newForm = document.getElementById("new-purchase-form");
+
+let currentPurchases = [];
+
+function filteredPurchases() {
+  const from = dateFromInput.value;
+  const to = dateToInput.value;
+  if (!from && !to) return currentPurchases;
+  return currentPurchases.filter((p) => {
+    if (from && p.purchase_date < from) return false;
+    if (to && p.purchase_date > to) return false;
+    return true;
+  });
+}
+
+function renderSums(purchases) {
+  const total = purchases.reduce((sum, p) => sum + (Number(p.total_price) || 0) + (Number(p.shipping) || 0), 0);
+  sumsEl.textContent = `${purchases.length} Kauf/Käufe im Filter · Summe (inkl. Versand): ${total.toFixed(2)} €`;
+}
 
 toggleNewBtn.addEventListener("click", () => {
   newForm.style.display = newForm.style.display === "grid" ? "none" : "grid";
@@ -76,10 +100,21 @@ async function loadPurchases() {
       return;
     }
     statusMsg.textContent = `${data.purchases.length} Kauf/Käufe`;
-    render(data.purchases);
+    currentPurchases = data.purchases;
+    const filtered = filteredPurchases();
+    render(filtered);
+    renderSums(filtered);
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
+}
+
+for (const input of [dateFromInput, dateToInput]) {
+  input.addEventListener("change", () => {
+    const filtered = filteredPurchases();
+    render(filtered);
+    renderSums(filtered);
+  });
 }
 
 function render(purchases) {

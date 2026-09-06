@@ -18,10 +18,11 @@
 </head>
 <body>
   <h1>DCardLabs – Inventar</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+  <p><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
   <p>Inventareinträge (Menge/Zustand/Lagerort/Notizen) werden auf der jeweiligen Kartenseite angelegt und bearbeitet.</p>
 
   <p id="status-msg"></p>
+  <p id="total-value"></p>
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
@@ -31,6 +32,7 @@
         <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
         <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
         <th data-key="notes">Notizen <span class="sort-arrow"></span></th>
+        <th data-key="value">Wert <span class="sort-arrow"></span></th>
       </tr>
     </thead>
     <tbody id="inventory-body"></tbody>
@@ -38,6 +40,7 @@
 
 <script>
 const statusMsg = document.getElementById("status-msg");
+const totalValueEl = document.getElementById("total-value");
 const table = document.getElementById("inventory-table");
 const body = document.getElementById("inventory-body");
 
@@ -58,6 +61,7 @@ async function loadInventory() {
     }
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
     statusMsg.textContent = `${items.length} Eintrag/Einträge`;
+    totalValueEl.textContent = `Gesamtwert: ${(data.total_value ?? 0).toFixed(2)} €`;
     render();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -108,6 +112,11 @@ function render() {
       td.textContent = item[key] ?? "";
       tr.appendChild(td);
     }
+
+    const valueTd = document.createElement("td");
+    valueTd.textContent = item.value != null ? `${item.value.toFixed(2)} €` : "";
+    tr.appendChild(valueTd);
+
     body.appendChild(tr);
   }
 }
