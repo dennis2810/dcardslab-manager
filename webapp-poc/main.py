@@ -637,15 +637,18 @@ async def get_statistics():
 
         if row.get("sale_date"):
             month_key = str(row["sale_date"])[:7]
-            bucket = monthly.setdefault(month_key, {"month": month_key, "count": 0, "revenue": 0.0})
+            bucket = monthly.setdefault(month_key, {"month": month_key, "count": 0, "revenue": 0.0, "profit": 0.0})
             bucket["count"] += 1
             bucket["revenue"] += float(sale_price or 0)
+            if profit is not None:
+                bucket["profit"] += profit
 
         enriched.append({**row, "profit": profit, "margin_pct": margin_pct, "holding_days": holding_days})
 
     monthly_list = sorted(monthly.values(), key=lambda m: m["month"])
     for bucket in monthly_list:
         bucket["revenue"] = round(bucket["revenue"], 2)
+        bucket["profit"] = round(bucket["profit"], 2)
 
     summary = {
         "total_cost": round(total_cost, 2),
