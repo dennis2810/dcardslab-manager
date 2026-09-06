@@ -320,6 +320,14 @@ function render(card) {
   statusWrapper.appendChild(statusSelect);
   form.appendChild(statusWrapper);
 
+  const shippedWrapper = document.createElement("label");
+  const shippedCheckbox = document.createElement("input");
+  shippedCheckbox.type = "checkbox";
+  shippedCheckbox.name = "shipped";
+  shippedCheckbox.checked = Boolean(card.shipped);
+  shippedWrapper.append(shippedCheckbox, " Versendet");
+  form.appendChild(shippedWrapper);
+
   const actions = document.createElement("div");
   actions.className = "actions";
 
@@ -349,6 +357,7 @@ form.addEventListener("submit", async (ev) => {
     fields[key] = form.elements[key].value;
   }
   fields.recognition_status = form.elements["recognition_status"].value;
+  fields.shipped = form.elements["shipped"].checked;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
   statusP.className = "";
@@ -1194,15 +1203,24 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale) 
 function renderSaleStats(purchase, sale) {
   const dl = document.createElement("dl");
   const saleDate = sale.sale_date ? new Date(sale.sale_date) : null;
+  // Versand als durchlaufender Posten: eingenommener Versand (automatisch
+  // aus der eBay-Bestellung) zaehlt als Einnahme, das tatsaechlich gezahlte
+  // Porto (manuell, s.u.) als Ausgabe - decken sie sich, heben sie sich im
+  // Gewinn gegenseitig auf; nur eine Differenz wirkt sich aus. Gleiche
+  // Formel wie im /api/statistics-Endpunkt.
+  const shippingCharged = Number(sale.shipping_charged || 0);
+  const shippingCost = Number(sale.shipping_cost || 0);
   const rows = [
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
+    ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
-    const profit = Number(sale.gross_price) - Number(purchase.allocated_cost);
+    const cost = Number(purchase.allocated_cost);
+    const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost;
     rows.push(["Gewinn", `${profit.toFixed(2)} €`]);
-    if (Number(purchase.allocated_cost)) {
-      rows.push(["Marge", `${((profit / Number(purchase.allocated_cost)) * 100).toFixed(1)} %`]);
+    if (cost) {
+      rows.push(["Marge", `${((profit / cost) * 100).toFixed(1)} %`]);
     }
   }
   if (purchase && purchase.purchase_date && saleDate) {
@@ -1217,6 +1235,46 @@ function renderSaleStats(purchase, sale) {
     const dd = document.createElement("dd"); dd.textContent = value; dl.appendChild(dd);
   }
   wrapper.appendChild(dl);
+
+  const shippingCostP = document.createElement("p");
+  const shippingCostLabel = document.createElement("label");
+  shippingCostLabel.textContent = "Versand-Kosten (Porto) ";
+  const shippingCostInput = document.createElement("input");
+  shippingCostInput.type = "number";
+  shippingCostInput.step = "0.01";
+  shippingCostInput.value = sale.shipping_cost ?? 0;
+  shippingCostLabel.appendChild(shippingCostInput);
+  shippingCostP.appendChild(shippingCostLabel);
+  shippingCostP.appendChild(document.createTextNode(" €"));
+  const saveShippingBtn = document.createElement("button");
+  saveShippingBtn.type = "button";
+  saveShippingBtn.textContent = "Speichern";
+  const shippingStatus = document.createElement("span");
+  saveShippingBtn.addEventListener("click", async () => {
+    shippingStatus.textContent = "Speichert …";
+    shippingStatus.className = "";
+    try {
+      const res = await fetch(`/api/ebay/sales/${encodeURIComponent(sale.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipping_cost: shippingCostInput.value }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        shippingStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+        shippingStatus.className = "error";
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      shippingStatus.textContent = "Fehler: " + err;
+      shippingStatus.className = "error";
+    }
+  });
+  shippingCostP.appendChild(saveShippingBtn);
+  shippingCostP.appendChild(shippingStatus);
+  wrapper.appendChild(shippingCostP);
+
   return wrapper;
 }
 </script>

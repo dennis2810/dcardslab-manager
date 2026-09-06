@@ -336,6 +336,7 @@ def _expand_inventory_items(items):
         item["card"] = card_summary
         info = ebay_info.get(item["card_id"]) or {}
         item["sku"] = info.get("sku")
+        item["ebay_status"] = info.get("status")
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -591,7 +592,11 @@ async def get_statistics():
     rows = db.statistics_rows()
 
     total_cost = total_revenue = realized_profit = 0.0
+    total_shipping_charged = total_shipping_cost = 0.0
+    sold_cost = 0.0
+    open_count = 0
     margins = []
+    sale_prices = []
     holding_days_list = []
     monthly = {}
     enriched = []
@@ -599,18 +604,30 @@ async def get_statistics():
     for row in rows:
         cost = row.get("cost")
         sale_price = row.get("sale_price")
+        shipping_charged = row.get("shipping_charged") or 0
+        shipping_cost = row.get("shipping_cost") or 0
         profit = margin_pct = holding_days = None
 
         if cost is not None:
             total_cost += float(cost)
         if sale_price is not None:
             total_revenue += float(sale_price)
+            total_shipping_charged += float(shipping_charged)
+            total_shipping_cost += float(shipping_cost)
+            sale_prices.append(float(sale_price))
         if cost is not None and sale_price is not None:
-            profit = float(sale_price) - float(cost)
+            # Versand als durchlaufender Posten: eingenommener Versand zaehlt
+            # als Einnahme, gezahltes Porto als Ausgabe - decken sie sich,
+            # heben sie sich im Gewinn gegenseitig auf; nur eine Differenz
+            # wirkt sich aus.
+            profit = float(sale_price) + float(shipping_charged) - float(cost) - float(shipping_cost)
             realized_profit += profit
+            sold_cost += float(cost)
             if cost:
                 margin_pct = round((profit / float(cost)) * 100, 1)
                 margins.append(margin_pct)
+        elif cost is not None and sale_price is None:
+            open_count += 1
 
         purchase_dt = _parse_date_like(row.get("purchase_date"))
         sale_dt = _parse_date_like(row.get("sale_date"))
@@ -633,10 +650,15 @@ async def get_statistics():
     summary = {
         "total_cost": round(total_cost, 2),
         "total_revenue": round(total_revenue, 2),
+        "total_shipping_charged": round(total_shipping_charged, 2),
+        "total_shipping_cost": round(total_shipping_cost, 2),
         "realized_profit": round(realized_profit, 2),
         "sold_count": len([r for r in enriched if r["profit"] is not None]),
+        "open_count": open_count,
+        "avg_sale_price": round(sum(sale_prices) / len(sale_prices), 2) if sale_prices else None,
         "avg_margin_pct": round(sum(margins) / len(margins), 1) if margins else None,
         "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,
+        "roi_pct": round((realized_profit / sold_cost) * 100, 1) if sold_cost else None,
     }
     return JSONResponse({"summary": summary, "monthly": monthly_list, "rows": enriched})
 
@@ -908,6 +930,14 @@ async def ebay_oauth_status():
     return JSONResponse(response.json(), status_code=response.status_code)
 
 
+@app.patch("/api/ebay/sales/{sale_id}")
+async def update_ebay_sale(sale_id: str, fields: dict = Body(...)):
+    updated = db.update_ebay_sale(sale_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
 @app.post("/api/ebay/sync-sales")
 async def sync_ebay_sales():
     try:
@@ -929,6 +959,7 @@ async def sync_ebay_sales():
             if listing is None:
                 skipped += 1
                 continue
+            delivery_cost = (line_item.get("deliveryCost") or {}).get("shippingCost") or {}
             db.upsert_ebay_sale({
                 "listing_id": listing["id"], "card_id": listing["card_id"],
                 "ebay_order_id": order.get("orderId", ""),
@@ -936,6 +967,9 @@ async def sync_ebay_sales():
                 "sale_date": order.get("creationDate"),
                 "quantity": line_item.get("quantity", 1),
                 "gross_price": float((line_item.get("total") or {}).get("value", 0) or 0),
+                # Vom Kaeufer gezahlter Versand - durchlaufender Posten, siehe
+                # shipping_cost (manuell, tatsaechliches Porto) im Gewinn.
+                "shipping_charged": float(delivery_cost.get("value", 0) or 0),
             })
             db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
             try:

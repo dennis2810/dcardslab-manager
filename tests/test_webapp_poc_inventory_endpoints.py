@@ -44,6 +44,15 @@ class ListInventoryEndpointTests(unittest.TestCase):
             response = client.get("/api/inventory")
         self.assertEqual(response.json()["inventory"][0]["sku"], "webapp-000001")
 
+    def test_attaches_the_ebay_status_as_sold_flag(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 0}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
+             patch("main.db.ebay_info_by_card_id", return_value={"card-1": {"status": "Verkauft", "sku": "webapp-000001", "price": 0}}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
+            response = client.get("/api/inventory")
+        self.assertEqual(response.json()["inventory"][0]["ebay_status"], "Verkauft")
+
     def test_returns_empty_list_when_no_rows(self):
         with patch("main.db.list_inventory", return_value=[]):
             response = client.get("/api/inventory")
