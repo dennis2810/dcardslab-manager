@@ -126,6 +126,9 @@ function render(purchase) {
     wrapper.textContent = label;
     const input = document.createElement("input");
     input.type = type;
+    // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
+    // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
+    if (type === "number") input.step = "0.01";
     input.name = key;
     input.value = purchase[key] ?? "";
     if (key === "purchase_date") input.required = true;

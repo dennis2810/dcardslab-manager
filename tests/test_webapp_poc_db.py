@@ -279,6 +279,15 @@ class CreatePurchaseTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertNotIn("not_a_real_column", row)
 
+    def test_rounds_total_price_and_shipping_to_two_decimals(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "purchases", [{"id": "purchase-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_purchase({"purchase_date": "2026-08-27", "total_price": "9.999", "shipping": "1.005"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["total_price"], 10.0)
+        self.assertEqual(row["shipping"], 1.0)
+
     def test_blank_numeric_fields_become_none(self):
         # <input type=number> that's left empty sends "" - Postgres rejects
         # "" on a numeric column, so it must become NULL instead.
@@ -563,6 +572,19 @@ class AddPurchaseItemTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertIsNone(row["allocated_cost"])
 
+    def test_rounds_allocated_cost_to_two_decimals(self):
+        mock_client = MagicMock()
+        dup_check = MagicMock()
+        dup_check.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = dup_check
+        insert_response = MagicMock()
+        insert_response.data = [{"id": "item-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = insert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.add_purchase_item("p1", {"card_id": "card-1", "allocated_cost": "0.333"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["allocated_cost"], 0.33)
+
 
 class UpdatePurchaseItemTests(unittest.TestCase):
     def test_updates_only_provided_fields(self):
@@ -582,6 +604,16 @@ class UpdatePurchaseItemTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.update_purchase_item("p1", "does-not-exist", {"notes": "x"})
         self.assertIsNone(result)
+
+    def test_rounds_manually_entered_allocated_cost(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "item-1", "allocated_cost": 4.2}]
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_purchase_item("p1", "item-1", {"allocated_cost": "4.196"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["allocated_cost"], 4.2)
 
 
 class DeletePurchaseItemTests(unittest.TestCase):
@@ -772,6 +804,14 @@ class CreateEbayListingTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertNotIn("not_a_real_column", row)
 
+    def test_rounds_price_to_two_decimals(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_ebay_listing("card-1", "sku-1", {"title": "x", "price": "9.999"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["price"], 10.0)
+
 
 class GetEbayListingTests(unittest.TestCase):
     def test_returns_none_when_not_found(self):
@@ -847,6 +887,14 @@ class UpdateEbayListingTests(unittest.TestCase):
         _mock_table(mock_client, "ebay_listings", [])
         with patch("db.get_client", return_value=mock_client):
             self.assertIsNone(db.update_ebay_listing("does-not-exist", {"price": 1}))
+
+    def test_rounds_price_to_two_decimals(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_listing("listing-1", {"price": "12.996"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["price"], 13.0)
 
 
 class DeleteEbayListingTests(unittest.TestCase):

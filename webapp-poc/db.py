@@ -85,8 +85,10 @@ def delete_card(card_id):
 
 PURCHASE_FIELDS = ["purchase_date", "platform", "seller", "shipping", "total_price", "notes"]
 PURCHASE_NUMERIC_FIELDS = {"shipping", "total_price"}
+PURCHASE_MONEY_FIELDS = {"shipping", "total_price"}
 PURCHASE_ITEM_DEFAULTS = {"allocated_cost": 0, "quantity": 1, "notes": ""}
 PURCHASE_ITEM_NUMERIC_FIELDS = {"allocated_cost", "quantity"}
+PURCHASE_ITEM_MONEY_FIELDS = {"allocated_cost"}
 
 
 class CardAlreadyLinkedError(Exception):
@@ -106,10 +108,28 @@ def _blank_numeric_to_none(row, numeric_fields):
     return row
 
 
+def _round_money(row, money_fields):
+    # Rundet Geldbetraege konsequent auf 2 Nachkommastellen - unabhaengig
+    # davon, was das Frontend an Praezision durchlaesst (z.B. ein manuell
+    # eingetragener Anteil-Preis mit mehr Nachkommastellen). Greift nach
+    # _blank_numeric_to_none(), das leere Strings bereits zu None gemacht hat.
+    for name in money_fields:
+        value = row.get(name)
+        if value not in (None, ""):
+            try:
+                row[name] = round(float(value), 2)
+            except (TypeError, ValueError):
+                pass
+    return row
+
+
 def create_purchase(fields, items=None):
-    row = _blank_numeric_to_none(
-        {name: fields[name] for name in PURCHASE_FIELDS if name in fields},
-        PURCHASE_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in PURCHASE_FIELDS if name in fields},
+            PURCHASE_NUMERIC_FIELDS,
+        ),
+        PURCHASE_MONEY_FIELDS,
     )
     response = get_client().table("purchases").insert(row).execute()
     purchase = response.data[0]
@@ -165,9 +185,12 @@ def get_purchase(purchase_id):
 
 
 def update_purchase(purchase_id, fields):
-    row = _blank_numeric_to_none(
-        {name: value for name, value in fields.items() if name in PURCHASE_FIELDS},
-        PURCHASE_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: value for name, value in fields.items() if name in PURCHASE_FIELDS},
+            PURCHASE_NUMERIC_FIELDS,
+        ),
+        PURCHASE_MONEY_FIELDS,
     )
     if not row:
         return get_purchase(purchase_id)
@@ -197,9 +220,12 @@ def add_purchase_item(purchase_id, fields):
     existing = get_client().table("purchase_items").select("id").eq("card_id", card_id).execute()
     if existing.data:
         raise CardAlreadyLinkedError(card_id)
-    row = _blank_numeric_to_none(
-        {name: fields.get(name, default) for name, default in PURCHASE_ITEM_DEFAULTS.items()},
-        PURCHASE_ITEM_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields.get(name, default) for name, default in PURCHASE_ITEM_DEFAULTS.items()},
+            PURCHASE_ITEM_NUMERIC_FIELDS,
+        ),
+        PURCHASE_ITEM_MONEY_FIELDS,
     )
     row.update({"purchase_id": purchase_id, "card_id": card_id})
     response = get_client().table("purchase_items").insert(row).execute()
@@ -207,9 +233,12 @@ def add_purchase_item(purchase_id, fields):
 
 
 def update_purchase_item(purchase_id, item_id, fields):
-    row = _blank_numeric_to_none(
-        {name: value for name, value in fields.items() if name in PURCHASE_ITEM_DEFAULTS},
-        PURCHASE_ITEM_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: value for name, value in fields.items() if name in PURCHASE_ITEM_DEFAULTS},
+            PURCHASE_ITEM_NUMERIC_FIELDS,
+        ),
+        PURCHASE_ITEM_MONEY_FIELDS,
     )
     query = get_client().table("purchase_items")
     if not row:
@@ -324,12 +353,16 @@ EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "ebay_offer_id", "ebay_listing_id", "last_error", "published_at",
 }
 EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity"}
+EBAY_LISTING_MONEY_FIELDS = {"price"}
 
 
 def create_ebay_listing(card_id, sku, fields):
-    row = _blank_numeric_to_none(
-        {name: fields[name] for name in EBAY_LISTING_FIELDS if name in fields},
-        EBAY_LISTING_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in EBAY_LISTING_FIELDS if name in fields},
+            EBAY_LISTING_NUMERIC_FIELDS,
+        ),
+        EBAY_LISTING_MONEY_FIELDS,
     )
     row.update({"card_id": card_id, "sku": sku})
     response = get_client().table("ebay_listings").insert(row).execute()
@@ -358,9 +391,12 @@ def list_ebay_listings(status=None, q=None):
 
 def update_ebay_listing(listing_id, fields):
     allowed = set(EBAY_LISTING_FIELDS) | EBAY_LISTING_WRITABLE_STATUS_FIELDS
-    row = _blank_numeric_to_none(
-        {name: value for name, value in fields.items() if name in allowed},
-        EBAY_LISTING_NUMERIC_FIELDS,
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: value for name, value in fields.items() if name in allowed},
+            EBAY_LISTING_NUMERIC_FIELDS,
+        ),
+        EBAY_LISTING_MONEY_FIELDS,
     )
     if not row:
         return get_ebay_listing(listing_id)
