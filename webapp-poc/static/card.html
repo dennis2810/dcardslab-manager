@@ -144,6 +144,13 @@ function formatDateTime(value) {
   return `${formatDate(value)} ${time}`;
 }
 
+// Einheitlich immer 2 Nachkommastellen bei Geldbetraegen - roher String-
+// Concat (z.B. "9.5 €") liess Cent-Betraege inkonsistent mit nur einer
+// Nachkommastelle erscheinen.
+function fmtEuro(value) {
+  return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+}
+
 function showError(container, message) {
   container.innerHTML = "";
   const p = document.createElement("p");
@@ -388,7 +395,7 @@ function renderPurchaseSection(purchase) {
     dl.className = "purchase-info";
     const rows = [
       ["Kaufdatum", formatDate(purchase.purchase_date)], ["Plattform", purchase.platform],
-      ["Verkäufer", purchase.seller], ["Anteil-Preis", purchase.allocated_cost],
+      ["Verkäufer", purchase.seller], ["Anteil-Preis", fmtEuro(purchase.allocated_cost)],
       ["Notizen", purchase.notes],
     ];
     for (const [label, value] of rows) {
@@ -805,11 +812,12 @@ function renderEbayEditForm(section, listing) {
   const form = document.createElement("form");
   form.className = "ebay-form";
 
-  function field(label, name, value, type = "text") {
+  function field(label, name, value, type = "text", step) {
     const wrapper = document.createElement("label");
     wrapper.textContent = label;
     const input = document.createElement(type === "textarea" ? "textarea" : "input");
     if (type !== "textarea") input.type = type;
+    if (step) input.step = step;
     input.name = name;
     input.value = value ?? "";
     wrapper.appendChild(input);
@@ -825,7 +833,9 @@ function renderEbayEditForm(section, listing) {
 
   const titleInput = field("Titel", "title", listing.title);
   field("Beschreibung (HTML)", "description", listing.description, "textarea");
-  field("Preis (€)", "price", listing.price, "number");
+  // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
+  // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
+  field("Preis (€)", "price", listing.price, "number", "0.01");
   field("Menge", "quantity", listing.quantity ?? 1, "number");
 
   const typeWrapper = document.createElement("label");
@@ -1067,7 +1077,7 @@ function renderEbayScheduledView(section, listing, environment) {
   readonly.className = "ebay-readonly";
   const scheduledDate = formatDateTime(listing.scheduled_at);
   const dl = document.createElement("dl");
-  const rows = [["SKU", listing.sku], ["Geplant für", scheduledDate], ["Titel", listing.title], ["Preis", listing.price + " €"]];
+  const rows = [["SKU", listing.sku], ["Geplant für", scheduledDate], ["Titel", listing.title], ["Preis", fmtEuro(listing.price)]];
   for (const [label, value] of rows) {
     const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
     const dd = document.createElement("dd"); dd.textContent = value || ""; dl.appendChild(dd);
@@ -1141,7 +1151,7 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale) 
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const dl = document.createElement("dl");
-  const rows = [["SKU", listing.sku], ["Titel", listing.title], ["Preis", listing.price + " €"], ["Zustand", listing.condition]];
+  const rows = [["SKU", listing.sku], ["Titel", listing.title], ["Preis", fmtEuro(listing.price)], ["Zustand", listing.condition]];
   for (const [label, value] of rows) {
     const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
     const dd = document.createElement("dd"); dd.textContent = value || ""; dl.appendChild(dd);
@@ -1186,7 +1196,7 @@ function renderSaleStats(purchase, sale) {
   const saleDate = sale.sale_date ? new Date(sale.sale_date) : null;
   const rows = [
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
-    ["Verkaufspreis", sale.gross_price != null ? `${sale.gross_price} €` : ""],
+    ["Verkaufspreis", fmtEuro(sale.gross_price)],
   ];
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
     const profit = Number(sale.gross_price) - Number(purchase.allocated_cost);

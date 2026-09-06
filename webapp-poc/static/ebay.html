@@ -117,6 +117,11 @@ function formatDateTime(value) {
   return `${formatDate(value)} ${time}`;
 }
 
+// Einheitlich immer 2 Nachkommastellen bei Geldbetraegen.
+function fmtEuro(value) {
+  return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+}
+
 const qInput = document.getElementById("q");
 const statusSelect = document.getElementById("status");
 const statusMsg = document.getElementById("status-msg");
@@ -261,7 +266,7 @@ function render(listings) {
     tr.appendChild(titleTd);
 
     const priceTd = document.createElement("td");
-    priceTd.textContent = listing.price != null ? `${listing.price} €` : "";
+    priceTd.textContent = fmtEuro(listing.price);
     tr.appendChild(priceTd);
 
     const statusTd = document.createElement("td");
@@ -278,7 +283,7 @@ function render(listings) {
     tr.appendChild(saleDateTd);
 
     const salePriceTd = document.createElement("td");
-    salePriceTd.textContent = listing.sale_price != null ? `${listing.sale_price} €` : "";
+    salePriceTd.textContent = fmtEuro(listing.sale_price);
     tr.appendChild(salePriceTd);
 
     const updatedTd = document.createElement("td");

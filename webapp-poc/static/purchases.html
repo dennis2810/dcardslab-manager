@@ -83,6 +83,11 @@ function formatDate(value) {
   return d && m && y ? `${d}.${m}.${y}` : value;
 }
 
+// Einheitlich immer 2 Nachkommastellen bei Geldbetraegen.
+function fmtEuro(value) {
+  return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+}
+
 function filteredPurchases() {
   const from = dateFromInput.value;
   const to = dateToInput.value;
@@ -151,7 +156,7 @@ function render(purchases) {
     });
     const cells = [
       formatDate(p.purchase_date), p.platform || "", p.seller || "",
-      String(p.item_count ?? 0), p.total_price ?? "", p.shipping ?? "",
+      String(p.item_count ?? 0), fmtEuro(p.total_price), fmtEuro(p.shipping),
     ];
     for (const text of cells) {
       const td = document.createElement("td");
