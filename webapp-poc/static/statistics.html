@@ -45,6 +45,7 @@
     </label>
     <label>Von <input type="date" id="date-from"></label>
     <label>Bis <input type="date" id="date-to"></label>
+    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
   </div>
 
   <p id="status-msg">Lädt …</p>
@@ -119,6 +120,22 @@ function formatMonth(value) {
   return m && y ? `${m}.${y}` : value;
 }
 
+// Aktueller Inventarwert - ein Momentaufnahme-Wert (was die Karten JETZT
+// im Bestand wert sind), daher unabhaengig vom Kauf-/Verkaufsdatums-Filter
+// unten immer der gleiche; separat geladen, da /api/statistics nichts
+// zum Lagerbestand weiss.
+let inventoryValue = null;
+
+async function loadInventoryValue() {
+  try {
+    const res = await fetch("/api/inventory");
+    const data = await res.json();
+    if (res.ok) inventoryValue = data.total_value ?? null;
+  } catch (err) {
+    inventoryValue = null;
+  }
+}
+
 async function load() {
   try {
     const res = await fetch("/api/statistics");
@@ -130,6 +147,7 @@ async function load() {
     statusMsg.textContent = "";
     renderMonthly(data.monthly);
     allRows = data.rows;
+    await loadInventoryValue();
     renderRows();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -141,6 +159,7 @@ function renderSummary(summary) {
   cards.style.display = "flex";
   const entries = [
     ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
+    ["Aktueller Inventarwert", fmtEuro(summary.inventory_value)],
     ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
     ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
     ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
@@ -270,7 +289,7 @@ function setSortIndicator() {
 }
 
 function renderRows() {
-  renderSummary(computeSummary(dateFilteredRows()));
+  renderSummary({ ...computeSummary(dateFilteredRows()), inventory_value: inventoryValue });
   const allFiltered = sortedRows(filteredRows());
   setSortIndicator();
   const table = document.getElementById("rows-table");
@@ -348,6 +367,13 @@ for (const id of ["date-field", "date-from", "date-to"]) {
     renderRows();
   });
 }
+
+document.getElementById("reset-date-filter").addEventListener("click", () => {
+  document.getElementById("date-from").value = "";
+  document.getElementById("date-to").value = "";
+  currentPage = 0;
+  renderRows();
+});
 
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);

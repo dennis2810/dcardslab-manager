@@ -61,6 +61,7 @@
   <div class="controls no-print">
     <label>Verkauft von <input type="date" id="sold-from"></label>
     <label>bis <input type="date" id="sold-to"></label>
+    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
   </div>
   <p id="sync-status"></p>
 
@@ -319,6 +320,11 @@ function renderSums(listings) {
 
 document.getElementById("sold-from").addEventListener("change", () => render(sortedListings()));
 document.getElementById("sold-to").addEventListener("change", () => render(sortedListings()));
+document.getElementById("reset-date-filter").addEventListener("click", () => {
+  document.getElementById("sold-from").value = "";
+  document.getElementById("sold-to").value = "";
+  render(sortedListings());
+});
 
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);
