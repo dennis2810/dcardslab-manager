@@ -516,6 +516,11 @@ async def add_purchase_item(purchase_id: str, fields: dict = Body(...)):
             status_code=409,
             detail=f"Karte {exc.args[0]} ist bereits einem Kauf zugeordnet.",
         ) from exc
+    # Neue Verknuepfung aendert die Anzahl Karten im Kauf -> Kaufpreis wird
+    # gleichmaessig neu auf alle Karten (inkl. der gerade hinzugefuegten)
+    # aufgeteilt, statt bei 0 zu bleiben.
+    updated_items = db.recompute_purchase_item_costs(purchase_id)
+    item = next((i for i in updated_items if i["id"] == item["id"]), item)
     return JSONResponse(_expand_purchase_items([item])[0])
 
 
@@ -532,6 +537,8 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
     deleted = db.delete_purchase_item(purchase_id, item_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Kauf-Position {item_id} nicht gefunden.")
+    # Verbleibende Karten im Kauf bekommen einen neuen, groesseren Anteil.
+    db.recompute_purchase_item_costs(purchase_id)
     return Response(status_code=204)
 
 

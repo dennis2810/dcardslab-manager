@@ -20,6 +20,8 @@
   .item-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #ddd; }
   .item-row img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
   .item-row .title { flex: 1; }
+  .item-row .cost-input { width: 5rem; }
+  .item-hint { font-size: 0.85rem; color: #555; }
   #add-item { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
 </style>
 </head>
@@ -37,6 +39,7 @@
 
   <div class="items">
     <h2>Verknüpfte Karten</h2>
+    <p class="item-hint">Der Kaufpreis (inkl. Versand) wird standardmäßig gleichmäßig auf alle verknüpften Karten aufgeteilt und bei jeder Verknüpfung/Entfernung neu berechnet. Der Anteil pro Karte kann unten manuell überschrieben werden - bleibt aber nur bis zur nächsten Verknüpfungsänderung erhalten.</p>
     <div id="items-list"></div>
     <div id="add-item">
       <input type="text" id="card-search" placeholder="Karte suchen (Titel, Team, Set, Kartennr.)">
@@ -168,9 +171,47 @@ function renderItems(items) {
     title.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
     title.textContent = item.card?.title || "(ohne Titel)";
     row.appendChild(title);
-    const cost = document.createElement("span");
-    cost.textContent = item.allocated_cost != null ? `${item.allocated_cost} €` : "";
-    row.appendChild(cost);
+
+    const costInput = document.createElement("input");
+    costInput.type = "number";
+    costInput.step = "0.01";
+    costInput.className = "cost-input";
+    costInput.value = item.allocated_cost ?? 0;
+    row.appendChild(costInput);
+    row.appendChild(document.createTextNode(" €"));
+
+    const costStatus = document.createElement("span");
+    row.appendChild(costStatus);
+
+    const saveCostBtn = document.createElement("button");
+    saveCostBtn.type = "button";
+    saveCostBtn.textContent = "Anteil speichern";
+    saveCostBtn.addEventListener("click", async () => {
+      costStatus.textContent = "Speichert …";
+      costStatus.className = "";
+      try {
+        const res = await fetch(
+          `/api/purchases/${encodeURIComponent(purchaseId)}/items/${encodeURIComponent(item.id)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ allocated_cost: costInput.value }),
+          }
+        );
+        const body = await res.json();
+        if (!res.ok) {
+          costStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+          costStatus.className = "error";
+          return;
+        }
+        costStatus.textContent = "Gespeichert.";
+      } catch (err) {
+        costStatus.textContent = "Fehler: " + err;
+        costStatus.className = "error";
+      }
+    });
+    row.appendChild(saveCostBtn);
+
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.textContent = "Entfernen";

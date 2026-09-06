@@ -20,6 +20,7 @@
   #new-purchase-form input { font-weight: normal; margin-top: 0.2rem; }
   #new-purchase-form .actions { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
 </style>
 </head>
 <body>
@@ -35,7 +36,7 @@
     <label>Bis <input type="date" id="date-to"></label>
     <button type="button" id="toggle-new">+ Neuer Kauf</button>
   </div>
-  <p id="sums"></p>
+  <p id="sums" class="sums-block"></p>
 
   <form id="new-purchase-form">
     <label>Kaufdatum <input type="date" name="purchase_date" required></label>

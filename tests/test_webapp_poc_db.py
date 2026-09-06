@@ -316,20 +316,33 @@ class CreatePurchaseTests(unittest.TestCase):
         purchases_response = MagicMock()
         purchases_response.data = [{"id": "purchase-1"}]
         purchases_builder.insert.return_value.execute.return_value = purchases_response
+        price_response = MagicMock()
+        price_response.data = [{"total_price": 10.0, "shipping": 0}]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = price_response
 
         items_builder = MagicMock()
         dup_check = MagicMock()
         dup_check.data = []
-        items_builder.select.return_value.eq.return_value.execute.return_value = dup_check
         insert_response = MagicMock()
         insert_response.data = [{"id": "item-1", "purchase_id": "purchase-1", "card_id": "card-1"}]
         items_builder.insert.return_value.execute.return_value = insert_response
+        # add_purchase_item()'s dup-check, then _recompute_allocated_costs()'s
+        # id lookup, then _list_purchase_items()'s final refresh - all three
+        # go through the same select().eq().execute() chain, so they're
+        # distinguished by call order via side_effect.
+        recompute_ids = MagicMock()
+        recompute_ids.data = [{"id": "item-1"}]
+        final_items = MagicMock()
+        final_items.data = [{"id": "item-1", "purchase_id": "purchase-1", "card_id": "card-1", "allocated_cost": 10.0}]
+        items_builder.select.return_value.eq.return_value.execute.side_effect = [dup_check, recompute_ids, final_items]
 
         mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
         with patch("db.get_client", return_value=mock_client):
-            result = db.create_purchase({"purchase_date": "2026-08-27"}, items=[{"card_id": "card-1"}])
+            result = db.create_purchase({"purchase_date": "2026-08-27", "total_price": 10.0}, items=[{"card_id": "card-1"}])
         self.assertEqual(len(result["items"]), 1)
         self.assertEqual(result["items"][0]["card_id"], "card-1")
+        self.assertEqual(result["items"][0]["allocated_cost"], 10.0)
+        items_builder.update.assert_called_once_with({"allocated_cost": 10.0})
 
     def test_rolls_back_purchase_and_items_when_an_item_is_already_linked(self):
         purchases_builder = MagicMock()
@@ -435,6 +448,33 @@ class UpdatePurchaseTests(unittest.TestCase):
             result = db.update_purchase("p1", {"platform": "Kleinanzeigen"})
         self.assertEqual(result["platform"], "Kleinanzeigen")
         self.assertEqual(result["items"], [{"id": "item-1"}])
+        # platform ist nicht total_price/shipping -> keine Neuberechnung der
+        # Kostenaufteilung noetig, purchases_builder.select() (der Preis-
+        # Lookup in _recompute_allocated_costs()) darf daher nicht aufgerufen
+        # werden.
+        purchases_builder.select.assert_not_called()
+
+    def test_recomputes_allocated_costs_when_total_price_changes(self):
+        purchases_builder = MagicMock()
+        update_response = MagicMock()
+        update_response.data = [{"id": "p1", "total_price": 20.0}]
+        purchases_builder.update.return_value.eq.return_value.execute.return_value = update_response
+        price_response = MagicMock()
+        price_response.data = [{"total_price": 20.0, "shipping": 0}]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = price_response
+
+        items_builder = MagicMock()
+        ids_response = MagicMock()
+        ids_response.data = [{"id": "item-1"}, {"id": "item-2"}]
+        final_items = MagicMock()
+        final_items.data = [{"id": "item-1", "allocated_cost": 10.0}, {"id": "item-2", "allocated_cost": 10.0}]
+        items_builder.select.return_value.eq.return_value.execute.side_effect = [ids_response, final_items]
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_purchase("p1", {"total_price": 20.0})
+        self.assertEqual(result["items"], final_items.data)
+        items_builder.update.assert_called_with({"allocated_cost": 10.0})
 
     def test_returns_none_when_not_found(self):
         mock_client = MagicMock()
@@ -564,6 +604,57 @@ class DeletePurchaseItemTests(unittest.TestCase):
             result = db.delete_purchase_item("p1", "does-not-exist")
         self.assertIsNone(result)
         mock_client.table.return_value.delete.assert_not_called()
+
+
+class RecomputeAllocatedCostsTests(unittest.TestCase):
+    def test_splits_total_and_shipping_evenly_across_items(self):
+        purchases_builder = MagicMock()
+        price_response = MagicMock()
+        price_response.data = [{"total_price": 30.0, "shipping": 6.0}]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = price_response
+
+        items_builder = MagicMock()
+        ids_response = MagicMock()
+        ids_response.data = [{"id": "item-1"}, {"id": "item-2"}, {"id": "item-3"}]
+        final_items = MagicMock()
+        final_items.data = [
+            {"id": "item-1", "allocated_cost": 12.0},
+            {"id": "item-2", "allocated_cost": 12.0},
+            {"id": "item-3", "allocated_cost": 12.0},
+        ]
+        items_builder.select.return_value.eq.return_value.execute.side_effect = [ids_response, final_items]
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.recompute_purchase_item_costs("p1")
+        self.assertEqual(result, final_items.data)
+        self.assertEqual(items_builder.update.call_count, 3)
+        items_builder.update.assert_called_with({"allocated_cost": 12.0})
+
+    def test_noop_when_purchase_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.recompute_purchase_item_costs("does-not-exist")
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_noop_when_no_items_linked(self):
+        purchases_builder = MagicMock()
+        price_response = MagicMock()
+        price_response.data = [{"total_price": 10.0, "shipping": 0}]
+        purchases_builder.select.return_value.eq.return_value.execute.return_value = price_response
+
+        items_builder = MagicMock()
+        empty = MagicMock()
+        empty.data = []
+        items_builder.select.return_value.eq.return_value.execute.return_value = empty
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            db.recompute_purchase_item_costs("p1")
+        items_builder.update.assert_not_called()
 
 
 class GetPurchaseForCardTests(unittest.TestCase):

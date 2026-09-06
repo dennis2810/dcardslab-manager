@@ -114,14 +114,29 @@ class DeletePurchaseEndpointTests(unittest.TestCase):
 
 class AddPurchaseItemEndpointTests(unittest.TestCase):
     def test_links_card_to_purchase(self):
-        item = {"id": "item-1", "purchase_id": "p1", "card_id": "card-1"}
+        item = {"id": "item-1", "purchase_id": "p1", "card_id": "card-1", "allocated_cost": 0}
         with patch("main.db.get_purchase", return_value={"id": "p1", "items": []}), \
              patch("main.db.get_card", return_value={"id": "card-1"}), \
              patch("main.db.add_purchase_item", return_value=item) as mock_add, \
+             patch("main.db.recompute_purchase_item_costs", return_value=[item]), \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]):
             response = client.post("/api/purchases/p1/items", json={"card_id": "card-1"})
         self.assertEqual(response.status_code, 200)
         mock_add.assert_called_once_with("p1", {"card_id": "card-1"})
+
+    def test_returns_the_recomputed_allocated_cost(self):
+        # Verknüpfen einer weiteren Karte teilt den Kaufpreis auf alle
+        # Karten (inkl. der neuen) neu auf - die Response muss den frisch
+        # berechneten Wert zeigen, nicht den Rohwert (0) aus add_purchase_item().
+        item = {"id": "item-1", "purchase_id": "p1", "card_id": "card-1", "allocated_cost": 0}
+        recomputed = {"id": "item-1", "purchase_id": "p1", "card_id": "card-1", "allocated_cost": 5.0}
+        with patch("main.db.get_purchase", return_value={"id": "p1", "items": []}), \
+             patch("main.db.get_card", return_value={"id": "card-1"}), \
+             patch("main.db.add_purchase_item", return_value=item), \
+             patch("main.db.recompute_purchase_item_costs", return_value=[recomputed]), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]):
+            response = client.post("/api/purchases/p1/items", json={"card_id": "card-1"})
+        self.assertEqual(response.json()["allocated_cost"], 5.0)
 
     def test_returns_404_when_purchase_not_found(self):
         with patch("main.db.get_purchase", return_value=None):
@@ -159,10 +174,13 @@ class UpdatePurchaseItemEndpointTests(unittest.TestCase):
 
 class DeletePurchaseItemEndpointTests(unittest.TestCase):
     def test_unlinks_card(self):
-        with patch("main.db.delete_purchase_item", return_value={"id": "item-1"}) as mock_delete:
+        with patch("main.db.delete_purchase_item", return_value={"id": "item-1"}) as mock_delete, \
+             patch("main.db.recompute_purchase_item_costs") as mock_recompute:
             response = client.delete("/api/purchases/p1/items/item-1")
         self.assertEqual(response.status_code, 204)
         mock_delete.assert_called_once_with("p1", "item-1")
+        # Die verbleibenden Karten im Kauf bekommen einen groesseren Anteil.
+        mock_recompute.assert_called_once_with("p1")
 
     def test_returns_404_when_not_found(self):
         with patch("main.db.delete_purchase_item", return_value=None):
