@@ -42,6 +42,36 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(body["summary"]["sold_count"], 1)
         self.assertEqual(body["summary"]["avg_margin_pct"], 50.0)
         self.assertEqual(body["summary"]["avg_holding_days"], 10.0)
+        self.assertEqual(body["summary"]["avg_sale_price"], 15.0)
+        self.assertEqual(body["summary"]["roi_pct"], 50.0)
+        self.assertEqual(body["summary"]["open_count"], 0)
+
+    def test_shipping_charged_and_cost_net_into_profit_as_pass_through(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+            "shipping_charged": 4.0, "shipping_cost": 4.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        # Gleich hohe Einnahme/Ausgabe beim Versand -> hebt sich im Gewinn auf.
+        self.assertEqual(body["rows"][0]["profit"], 5.0)
+        self.assertEqual(body["summary"]["total_shipping_charged"], 4.0)
+        self.assertEqual(body["summary"]["total_shipping_cost"], 4.0)
+
+    def test_shipping_difference_affects_profit(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+            "shipping_charged": 5.0, "shipping_cost": 3.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        # 15 + 5 - 10 - 3 = 7 statt 5 ohne Versand-Differenz.
+        self.assertEqual(response.json()["rows"][0]["profit"], 7.0)
 
     def test_card_with_only_a_purchase_has_no_profit_fields(self):
         rows = [{
@@ -59,7 +89,9 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(summary["total_cost"], 10.0)
         self.assertEqual(summary["total_revenue"], 0)
         self.assertEqual(summary["sold_count"], 0)
+        self.assertEqual(summary["open_count"], 1)
         self.assertIsNone(summary["avg_margin_pct"])
+        self.assertIsNone(summary["roi_pct"])
 
     def test_groups_sold_cards_by_month(self):
         rows = [
@@ -92,8 +124,11 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(body["rows"], [])
         self.assertEqual(body["monthly"], [])
         self.assertEqual(body["summary"]["sold_count"], 0)
+        self.assertEqual(body["summary"]["open_count"], 0)
         self.assertIsNone(body["summary"]["avg_margin_pct"])
         self.assertIsNone(body["summary"]["avg_holding_days"])
+        self.assertIsNone(body["summary"]["avg_sale_price"])
+        self.assertIsNone(body["summary"]["roi_pct"])
 
 
 if __name__ == "__main__":

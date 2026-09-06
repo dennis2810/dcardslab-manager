@@ -18,6 +18,11 @@
   #status-msg { font-style: italic; color: #555; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  .controls { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
+  .status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+  .status-sold { background: #dce8fb; color: #0b3d91; }
+  .status-in-stock { background: #e6f4ea; color: #1e4620; }
+  .status-out { background: #eee; color: #555; }
   @media print {
     .no-print { display: none !important; }
   }
@@ -33,6 +38,9 @@
 
   <p id="status-msg"></p>
   <p id="total-value" class="sums-block"></p>
+  <div class="controls no-print">
+    <label><input type="checkbox" id="only-in-stock"> Nur Menge &gt; 0</label>
+  </div>
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
@@ -43,6 +51,7 @@
         <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
         <th data-key="notes">Notizen <span class="sort-arrow"></span></th>
         <th data-key="value">Wert <span class="sort-arrow"></span></th>
+        <th data-key="ebay_status">Status <span class="sort-arrow"></span></th>
       </tr>
     </thead>
     <tbody id="inventory-body"></tbody>
@@ -86,8 +95,19 @@ async function loadInventory() {
   }
 }
 
+function statusInfo(item) {
+  if (item.ebay_status === "Verkauft") return ["Verkauft", "status-sold"];
+  if ((item.quantity ?? 0) > 0) return ["Auf Lager", "status-in-stock"];
+  return ["Nicht vorrätig", "status-out"];
+}
+
+function filteredItems() {
+  if (!document.getElementById("only-in-stock").checked) return items;
+  return items.filter((item) => (item.quantity ?? 0) > 0);
+}
+
 function render() {
-  const sorted = [...items].sort((a, b) => {
+  const sorted = [...filteredItems()].sort((a, b) => {
     const av = a[sortKey] ?? "";
     const bv = b[sortKey] ?? "";
     if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
@@ -142,6 +162,14 @@ function render() {
     valueTd.textContent = item.value != null ? `${item.value.toFixed(2)} €` : "";
     tr.appendChild(valueTd);
 
+    const [statusLabel, statusClass] = statusInfo(item);
+    const statusTd = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "status-badge " + statusClass;
+    badge.textContent = statusLabel;
+    statusTd.appendChild(badge);
+    tr.appendChild(statusTd);
+
     body.appendChild(tr);
   }
 }
@@ -169,6 +197,10 @@ document.getElementById("next-page").addEventListener("click", () => {
   render();
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+document.getElementById("only-in-stock").addEventListener("change", () => {
+  currentPage = 0;
+  render();
+});
 
 loadInventory();
 </script>

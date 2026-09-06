@@ -67,7 +67,7 @@ def get_card(card_id):
 def update_card(card_id, fields):
     row = {
         name: value for name, value in fields.items()
-        if name in CARD_FIELDS or name == "recognition_status"
+        if name in CARD_FIELDS or name in ("recognition_status", "shipped")
     }
     if not row:
         return get_card(card_id)
@@ -450,6 +450,27 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
+EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost"}
+EBAY_SALE_MONEY_FIELDS = {"shipping_cost"}
+
+
+def update_ebay_sale(sale_id, fields):
+    # Only shipping_cost is meant to be user-editable - everything else on
+    # ebay_sales comes from the eBay order sync (sync_ebay_sales()).
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: value for name, value in fields.items() if name in EBAY_SALE_WRITABLE_FIELDS},
+            EBAY_SALE_WRITABLE_FIELDS,
+        ),
+        EBAY_SALE_MONEY_FIELDS,
+    )
+    if not row:
+        response = get_client().table("ebay_sales").select("*").eq("id", sale_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("ebay_sales").update(row).eq("id", sale_id).execute()
+    return response.data[0] if response.data else None
+
+
 def get_sale_for_card(card_id):
     response = (
         get_client().table("ebay_sales").select("*")
@@ -612,7 +633,8 @@ def statistics_rows():
         purchases_by_id = {row["id"]: row for row in purchases_response.data}
 
     sales_response = (
-        get_client().table("ebay_sales").select("card_id,sale_date,gross_price")
+        get_client().table("ebay_sales")
+        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost")
         .in_("card_id", card_ids).order("sale_date", desc=True).execute()
     )
     sales_by_card = {}
@@ -635,5 +657,7 @@ def statistics_rows():
             "cost": item.get("allocated_cost") if item else None,
             "sale_date": sale.get("sale_date") if sale else None,
             "sale_price": sale.get("gross_price") if sale else None,
+            "shipping_charged": sale.get("shipping_charged") if sale else None,
+            "shipping_cost": sale.get("shipping_cost") if sale else None,
         })
     return rows

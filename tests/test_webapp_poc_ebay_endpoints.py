@@ -454,6 +454,44 @@ class SyncSalesEndpointTests(unittest.TestCase):
         mock_update.assert_called_once_with("listing-1", {"status": "Verkauft"})
         mock_zero.assert_called_once_with("card-1")
 
+    def test_captures_shipping_charged_from_delivery_cost(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "lineItems": [{
+                "sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1,
+                "total": {"value": "9.99"},
+                "deliveryCost": {"shippingCost": {"value": "3.50", "currency": "EUR"}},
+            }],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["shipping_charged"], 3.5)
+
+    def test_missing_delivery_cost_defaults_shipping_charged_to_zero(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["shipping_charged"], 0.0)
+
     def test_inventory_zeroing_failure_does_not_fail_the_sync(self):
         matched_listing = _listing(id="listing-1", sku="webapp-card-1")
         orders = [{
@@ -482,6 +520,20 @@ class SyncSalesEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/sync-sales")
         self.assertEqual(response.status_code, 502)
         self.assertIn("eBay lehnt die Anfrage ab", response.json()["detail"])
+
+
+class UpdateEbaySaleEndpointTests(unittest.TestCase):
+    def test_updates_shipping_cost(self):
+        with patch("main.db.update_ebay_sale", return_value={"id": "sale-1", "shipping_cost": 3.5}) as mock_update:
+            response = client.patch("/api/ebay/sales/sale-1", json={"shipping_cost": 3.5})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["shipping_cost"], 3.5)
+        mock_update.assert_called_once_with("sale-1", {"shipping_cost": 3.5})
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.update_ebay_sale", return_value=None):
+            response = client.patch("/api/ebay/sales/does-not-exist", json={"shipping_cost": 1})
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

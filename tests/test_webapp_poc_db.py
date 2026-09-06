@@ -141,6 +141,17 @@ class UpdateCardTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"team": "FC Bayern"})
 
+    def test_shipped_flag_is_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "shipped": True}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"shipped": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"shipped": True})
+
     def test_never_writes_structural_columns(self):
         mock_client = MagicMock()
         saved_row = {"id": "card-1", "title": "x"}
@@ -974,6 +985,37 @@ class UpsertEbaySaleTests(unittest.TestCase):
             {"ebay_order_id": "O1", "ebay_line_item_id": "LI1"},
             on_conflict="ebay_order_id,ebay_line_item_id",
         )
+
+
+class UpdateEbaySaleTests(unittest.TestCase):
+    def test_updates_shipping_cost_rounded(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "shipping_cost": 3.5}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"shipping_cost": "3.499"})
+        self.assertEqual(result["shipping_cost"], 3.5)
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["shipping_cost"], 3.5)
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_sale("sale-1", {"gross_price": 999, "notes": "hack"})
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("does-not-exist", {"shipping_cost": 1})
+        self.assertIsNone(result)
 
 
 class GetSaleForCardTests(unittest.TestCase):

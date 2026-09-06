@@ -168,3 +168,12 @@ create table if not exists inventory (
 );
 
 create index if not exists inventory_card_id_idx on inventory(card_id);
+
+-- Migration (2026-09-06): manuell setzbares "Versendet"-Flag pro Karte.
+alter table cards add column if not exists shipped boolean not null default false;
+
+-- Migration (2026-09-06): tatsaechliche Portokosten pro Verkauf (manuell
+-- eingetragen) - Gegenstueck zu shipping_charged (vom Kaeufer bezahlt, ab
+-- jetzt beim sync-sales automatisch aus der eBay-Bestellung befuellt).
+-- Zusammen ergeben sie den Versand als durchlaufenden Posten im Gewinn.
+alter table ebay_sales add column if not exists shipping_cost numeric default 0;

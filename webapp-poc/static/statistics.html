@@ -36,6 +36,17 @@
   </div>
   <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a></p>
 
+  <div class="controls no-print">
+    <label>Zeitraum nach
+      <select id="date-field">
+        <option value="purchase_date">Kaufdatum</option>
+        <option value="sale_date">Verkaufsdatum</option>
+      </select>
+    </label>
+    <label>Von <input type="date" id="date-from"></label>
+    <label>Bis <input type="date" id="date-to"></label>
+  </div>
+
   <p id="status-msg">Lädt …</p>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
@@ -117,7 +128,6 @@ async function load() {
       return;
     }
     statusMsg.textContent = "";
-    renderSummary(data.summary);
     renderMonthly(data.monthly);
     allRows = data.rows;
     renderRows();
@@ -132,8 +142,13 @@ function renderSummary(summary) {
   const entries = [
     ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
     ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
+    ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
+    ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
     ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
+    ["ROI (verkauft)", summary.roi_pct != null ? `${summary.roi_pct.toFixed(1)} %` : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],
+    ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
+    ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
     ["⌀ Marge", summary.avg_margin_pct != null ? `${summary.avg_margin_pct.toFixed(1)} %` : "–"],
     ["⌀ Liegedauer", summary.avg_holding_days != null ? `${summary.avg_holding_days.toFixed(1)} Tage` : "–"],
   ];
@@ -169,12 +184,70 @@ function renderMonthly(monthly) {
   }
 }
 
+// Zeitraum-Filter nach Kauf- ODER Verkaufsdatum (separat waehlbar) - wirkt
+// auf die Summenkarten UND die Tabelle, aber bewusst NICHT auf "Verkaeufe
+// pro Monat" (die bleibt eine Gesamtuebersicht ueber alle Monate).
+function dateFilteredRows() {
+  const field = document.getElementById("date-field").value;
+  const from = document.getElementById("date-from").value;
+  const to = document.getElementById("date-to").value;
+  if (!from && !to) return allRows;
+  return allRows.filter((r) => {
+    const raw = r[field];
+    if (!raw) return false;
+    const day = String(raw).slice(0, 10);
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  });
+}
+
 function filteredRows() {
   const q = qInput.value.trim().toLowerCase();
-  if (!q) return allRows;
-  return allRows.filter((r) =>
+  const rows = dateFilteredRows();
+  if (!q) return rows;
+  return rows.filter((r) =>
     (r.title || "").toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)
   );
+}
+
+// Spiegelt die Summenlogik von GET /api/statistics, aber auf einer
+// (Datums-)gefilterten Teilmenge der bereits vom Server angereicherten
+// Zeilen (profit/margin_pct/holding_days) - reine Aggregation, keine
+// Neuberechnung der Gewinn-Formel noetig.
+function computeSummary(rows) {
+  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0;
+  let realizedProfit = 0, soldCost = 0, openCount = 0;
+  const margins = [], salePrices = [], holdingDays = [];
+  for (const r of rows) {
+    if (r.cost != null) totalCost += Number(r.cost);
+    if (r.sale_price != null) {
+      totalRevenue += Number(r.sale_price);
+      totalShippingCharged += Number(r.shipping_charged || 0);
+      totalShippingCost += Number(r.shipping_cost || 0);
+      salePrices.push(Number(r.sale_price));
+    }
+    if (r.profit != null) {
+      realizedProfit += r.profit;
+      soldCost += Number(r.cost);
+      if (r.margin_pct != null) margins.push(r.margin_pct);
+    } else if (r.cost != null && r.sale_price == null) {
+      openCount += 1;
+    }
+    if (r.holding_days != null) holdingDays.push(r.holding_days);
+  }
+  const avg = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null);
+  return {
+    total_cost: totalCost, total_revenue: totalRevenue,
+    total_shipping_charged: totalShippingCharged, total_shipping_cost: totalShippingCost,
+    realized_profit: realizedProfit,
+    sold_count: rows.filter((r) => r.profit != null).length,
+    open_count: openCount,
+    avg_sale_price: avg(salePrices),
+    avg_margin_pct: avg(margins),
+    avg_holding_days: avg(holdingDays),
+    roi_pct: soldCost ? (realizedProfit / soldCost) * 100 : null,
+  };
 }
 
 function sortedRows(rows) {
@@ -197,6 +270,7 @@ function setSortIndicator() {
 }
 
 function renderRows() {
+  renderSummary(computeSummary(dateFilteredRows()));
   const allFiltered = sortedRows(filteredRows());
   setSortIndicator();
   const table = document.getElementById("rows-table");
@@ -267,6 +341,13 @@ qInput.addEventListener("input", () => {
   clearTimeout(qInput._debounce);
   qInput._debounce = setTimeout(() => { currentPage = 0; renderRows(); }, 200);
 });
+
+for (const id of ["date-field", "date-from", "date-to"]) {
+  document.getElementById(id).addEventListener("change", () => {
+    currentPage = 0;
+    renderRows();
+  });
+}
 
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);
