@@ -221,7 +221,7 @@ class ListCardsFilterTests(unittest.TestCase):
         self.assertEqual(result, [{"id": "card-1"}])
         mock_client.table.return_value.select.return_value.or_.assert_not_called()
 
-    def test_q_filters_across_four_columns(self):
+    def test_q_filters_across_five_columns(self):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = []
@@ -234,6 +234,7 @@ class ListCardsFilterTests(unittest.TestCase):
         self.assertIn("team.ilike.%Bayern%", filter_arg)
         self.assertIn("set_name.ilike.%Bayern%", filter_arg)
         self.assertIn("card_number.ilike.%Bayern%", filter_arg)
+        self.assertIn("season_year.ilike.%Bayern%", filter_arg)
 
     def test_q_strips_commas_and_parens_before_building_filter(self):
         mock_client = MagicMock()
@@ -244,7 +245,7 @@ class ListCardsFilterTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             db.list_cards(q="a,b(c)")
         filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
-        self.assertEqual(filter_arg.count(","), 3)  # exactly the 3 clause separators between the 4 ilike terms
+        self.assertEqual(filter_arg.count(","), 4)  # exactly the 4 clause separators between the 5 ilike terms
         self.assertNotIn("(", filter_arg)
         self.assertNotIn(")", filter_arg)
 
@@ -259,6 +260,61 @@ class ListCardsFilterTests(unittest.TestCase):
         mock_client.table.return_value.select.return_value.eq.assert_called_once_with(
             "recognition_status", "prüfen"
         )
+
+
+class ListCardsBySkuTests(unittest.TestCase):
+    def test_returns_cards_linked_to_a_matching_sku(self):
+        mock_client = _mock_client_for_tables(
+            ebay_listings=MagicMock(),
+            cards=MagicMock(),
+        )
+        mock_client.table("ebay_listings").select.return_value.ilike.return_value.execute.return_value.data = [
+            {"card_id": "card-1"},
+        ]
+        mock_client.table("cards").select.return_value.in_.return_value.execute.return_value.data = [
+            {"id": "card-1", "title": "Karte 1"},
+        ]
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_cards_by_sku("webapp-000001")
+        self.assertEqual(result, [{"id": "card-1", "title": "Karte 1"}])
+        mock_client.table("ebay_listings").select.return_value.ilike.assert_called_once_with(
+            "sku", "%webapp-000001%"
+        )
+
+    def test_returns_empty_list_when_no_listing_matches(self):
+        mock_client = _mock_client_for_tables(ebay_listings=MagicMock())
+        mock_client.table("ebay_listings").select.return_value.ilike.return_value.execute.return_value.data = []
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_cards_by_sku("nichts-da")
+        self.assertEqual(result, [])
+
+
+class FindDuplicateCardTests(unittest.TestCase):
+    def test_returns_none_when_any_field_is_blank(self):
+        with patch("db.get_client") as mock_get_client:
+            result = db.find_duplicate_card("", "Set", "1")
+        self.assertIsNone(result)
+        mock_get_client.assert_not_called()
+
+    def test_returns_matching_card_when_title_set_and_number_all_match(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "title": "Karte 1", "set_name": "Set A", "card_number": "5", "card_no": 3}]
+        chain = mock_client.table.return_value.select.return_value.ilike.return_value.ilike.return_value.ilike.return_value
+        chain.limit.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card("Karte 1", "Set A", "5")
+        self.assertEqual(result["id"], "card-1")
+
+    def test_returns_none_when_no_match(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        chain = mock_client.table.return_value.select.return_value.ilike.return_value.ilike.return_value.ilike.return_value
+        chain.limit.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card("Karte 1", "Set A", "5")
+        self.assertIsNone(result)
 
 
 def _mock_client_for_tables(**table_builders):
@@ -871,6 +927,17 @@ class ListEbayListingsTests(unittest.TestCase):
         filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
         self.assertIn("title.ilike.%Musterkarte%", filter_arg)
 
+    def test_q_filters_sku_too(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        or_builder = mock_client.table.return_value.select.return_value.or_.return_value
+        or_builder.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_ebay_listings(q="webapp-000001")
+        filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
+        self.assertIn("sku.ilike.%webapp-000001%", filter_arg)
+
 
 class UpdateEbayListingTests(unittest.TestCase):
     def test_updates_only_allowed_fields(self):
@@ -1261,6 +1328,61 @@ class ZeroInventoryForCardTests(unittest.TestCase):
         self.assertEqual(result, [{"id": "inv-1", "quantity": 0}])
         mock_client.table.return_value.update.assert_called_once_with({"quantity": 0})
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+
+class CreatePriceResearchEntryTests(unittest.TestCase):
+    def test_inserts_row_with_card_id_and_rounded_price(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "price_research", [{"id": "pr-1", "card_id": "card-1", "price": 12.5}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_price_research_entry("card-1", {"price": 12.499, "note": "eBay sold", "checked_at": "2026-09-01"})
+        self.assertEqual(result["id"], "pr-1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["card_id"], "card-1")
+        self.assertEqual(row["price"], 12.5)
+        self.assertEqual(row["note"], "eBay sold")
+        self.assertEqual(row["checked_at"], "2026-09-01")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "price_research", [{"id": "pr-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_price_research_entry("card-1", {"price": 5, "not_a_column": "x"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+
+class ListPriceResearchForCardTests(unittest.TestCase):
+    def test_returns_rows_for_the_card_ordered_by_checked_at(self):
+        mock_client = MagicMock()
+        rows = [{"id": "pr-1", "card_id": "card-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value.data = rows
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_price_research_for_card("card-1")
+        self.assertEqual(result, rows)
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("card_id", "card-1")
+        mock_client.table.return_value.select.return_value.eq.return_value.order.assert_called_once_with("checked_at")
+
+
+class DeletePriceResearchEntryTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "pr-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_price_research_entry("pr-1")
+        self.assertEqual(result, {"id": "pr-1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "pr-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_price_research_entry("does-not-exist")
+        self.assertIsNone(result)
 
 
 class StatisticsRowsTests(unittest.TestCase):

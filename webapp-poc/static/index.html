@@ -23,6 +23,8 @@
   .preview { display: none; max-width: 100%; max-height: 420px; border: 1px solid #ccc; border-radius: 6px; }
   .rotate-buttons { display: none; gap: 0.5rem; }
   .rotate-buttons button { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  tr.possible-duplicate { background: #fff3cd; }
+  .duplicate-note { font-size: 0.85rem; color: #7a5c00; }
 </style>
 </head>
 <body>
@@ -36,6 +38,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -208,6 +211,9 @@ function renderTable(cards) {
     th.textContent = label;
     thead.appendChild(th);
   }
+  const duplicateTh = document.createElement("th");
+  duplicateTh.textContent = "Duplikat?";
+  thead.appendChild(duplicateTh);
   table.appendChild(thead);
 
   for (const card of cards) {
@@ -217,6 +223,18 @@ function renderTable(cards) {
       td.textContent = card[key] ?? "";
       tr.appendChild(td);
     }
+    const duplicateTd = document.createElement("td");
+    if (card.possible_duplicate) {
+      tr.classList.add("possible-duplicate");
+      const link = document.createElement("a");
+      link.href = `card.html?id=${encodeURIComponent(card.possible_duplicate.id)}`;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.className = "duplicate-note";
+      link.textContent = `⚠ evtl. bereits vorhanden (Karte #${card.possible_duplicate.card_no ?? "?"})`;
+      duplicateTd.appendChild(link);
+    }
+    tr.appendChild(duplicateTd);
     table.appendChild(tr);
   }
   resultEl.appendChild(table);

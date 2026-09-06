@@ -29,6 +29,7 @@ class BuildBackupZipTests(unittest.TestCase):
             "backup.db.all_ebay_listings": MagicMock(return_value=[]),
             "backup.db.all_ebay_sales": MagicMock(return_value=[]),
             "backup.db.all_inventory": MagicMock(return_value=[]),
+            "backup.db.all_price_research": MagicMock(return_value=[]),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
@@ -44,7 +45,10 @@ class BuildBackupZipTests(unittest.TestCase):
             data = backup.build_backup_zip()
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             names = zf.namelist()
-        for table in ("scan_batches", "cards", "purchases", "purchase_items", "ebay_listings", "ebay_sales", "inventory"):
+        for table in (
+            "scan_batches", "cards", "purchases", "purchase_items",
+            "ebay_listings", "ebay_sales", "inventory", "price_research",
+        ):
             self.assertIn(f"{table}.json", names)
 
     def test_includes_images_for_cards_that_have_them(self):

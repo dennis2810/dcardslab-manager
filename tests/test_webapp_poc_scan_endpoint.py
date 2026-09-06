@@ -60,6 +60,7 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             "main.db.update_batch_status": MagicMock(),
             "main.db.insert_card": MagicMock(side_effect=fake_insert_card),
             "main.db.create_inventory_item": MagicMock(),
+            "main.db.find_duplicate_card": MagicMock(return_value=None),
             "main.storage.upload_image": MagicMock(side_effect=lambda batch_id, pos, side, path: f"{batch_id}/{pos}_{side}.jpg"),
             "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
         }
@@ -122,6 +123,26 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
     def test_marks_batch_ok_when_all_cards_succeed(self):
         self._post_scan()
         self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "ok")
+
+    def test_flags_possible_duplicate_when_db_finds_a_matching_card(self):
+        duplicate = {"id": "card-existing", "title": "Max Mustermann", "set_name": "", "card_number": "12", "card_no": 7}
+        self.mocks["main.db.find_duplicate_card"].return_value = duplicate
+        response = self._post_scan()
+        body = response.json()
+        self.assertEqual(body["cards"][0]["possible_duplicate"], duplicate)
+
+    def test_no_possible_duplicate_key_when_none_found(self):
+        response = self._post_scan()
+        body = response.json()
+        self.assertNotIn("possible_duplicate", body["cards"][0])
+
+    def test_duplicate_check_failure_does_not_fail_the_card(self):
+        self.mocks["main.db.find_duplicate_card"].side_effect = RuntimeError("cards table down")
+        response = self._post_scan()
+        body = response.json()
+        ok_card = next(c for c in body["cards"] if c["number"] == 1)
+        self.assertNotIn("image_error", ok_card)
+        self.assertNotIn("possible_duplicate", ok_card)
 
     def test_response_includes_batch_id_and_card_ids_and_urls(self):
         response = self._post_scan()

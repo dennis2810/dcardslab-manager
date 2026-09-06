@@ -177,3 +177,17 @@ alter table cards add column if not exists shipped boolean not null default fals
 -- jetzt beim sync-sales automatisch aus der eBay-Bestellung befuellt).
 -- Zusammen ergeben sie den Versand als durchlaufenden Posten im Gewinn.
 alter table ebay_sales add column if not exists shipping_cost numeric default 0;
+
+-- Migration (2026-09-06): Preisrecherche-Verlauf pro Karte - manuell
+-- eingetragene Marktpreis-Beobachtungen ueber die Zeit (z.B. "eBay verkaufte
+-- Artikel" am X. Datum bei Y Euro), unabhaengig vom eigenen eBay-Angebot.
+create table if not exists price_research (
+    id          uuid primary key default gen_random_uuid(),
+    card_id     uuid not null references cards(id) on delete cascade,
+    price       numeric not null,
+    note        text default '',
+    checked_at  date not null default current_date,
+    created_at  timestamptz not null default now()
+);
+
+create index if not exists price_research_card_id_idx on price_research(card_id);

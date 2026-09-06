@@ -116,31 +116,39 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
             response = client.post("/api/sheets/sync")
         self.assertEqual(response.status_code, 400)
 
-    def test_syncs_four_tabs_on_success(self):
+    def _patch_sheets_data_sources(self):
+        return [
+            patch("main.db.all_cards", return_value=[]),
+            patch("main.db.all_purchases", return_value=[]),
+            patch("main.db.all_purchase_items", return_value=[]),
+            patch("main.db.all_ebay_listings", return_value=[]),
+            patch("main.db.all_ebay_sales", return_value=[]),
+            patch("main.db.list_inventory", return_value=[]),
+            patch("main.db.statistics_rows", return_value=[]),
+        ]
+
+    def test_syncs_seven_tabs_on_success(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
+        patchers = self._patch_sheets_data_sources()
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
         with patch("main.db.get_google_sheets_settings", return_value=settings), \
-             patch("main.db.all_cards", return_value=[]), \
-             patch("main.db.all_purchases", return_value=[]), \
-             patch("main.db.all_purchase_items", return_value=[]), \
-             patch("main.db.all_ebay_listings", return_value=[]), \
-             patch("main.db.all_ebay_sales", return_value=[]), \
              patch("main.db.save_google_sheets_settings") as mock_save, \
              patch("main.google_sheets_client.refresh_access_token", return_value="access-tok"), \
              patch("main.google_sheets_client.sync_to_sheets") as mock_sync:
             response = client.post("/api/sheets/sync")
         self.assertEqual(response.status_code, 200)
         tabs = mock_sync.call_args[0][2]
-        self.assertEqual(set(tabs.keys()), {"Karten", "Käufe", "eBay", "Sync_Info"})
+        self.assertEqual(
+            set(tabs.keys()),
+            {"Karten", "Käufe", "eBay", "Inventar", "Statistiken", "Dashboard", "Sync_Info"},
+        )
         self.assertIn("last_synced_at", mock_save.call_args[0][0])
 
     def test_returns_502_on_google_api_error(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
         with patch("main.db.get_google_sheets_settings", return_value=settings), \
-             patch("main.db.all_cards", return_value=[]), \
-             patch("main.db.all_purchases", return_value=[]), \
-             patch("main.db.all_purchase_items", return_value=[]), \
-             patch("main.db.all_ebay_listings", return_value=[]), \
-             patch("main.db.all_ebay_sales", return_value=[]), \
              patch("main.google_sheets_client.refresh_access_token", side_effect=google_sheets_client.GoogleApiError("boom")):
             response = client.post("/api/sheets/sync")
         self.assertEqual(response.status_code, 502)

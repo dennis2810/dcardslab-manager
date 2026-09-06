@@ -24,6 +24,10 @@
   #new-purchase-form .actions { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -35,6 +39,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -46,7 +51,7 @@
     </label>
   </nav>
 
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Plattform, Verkäufer, Notizen)">
     <label>Von <input type="date" id="date-from"></label>
     <label>Bis <input type="date" id="date-to"></label>
@@ -55,7 +60,7 @@
   </div>
   <p id="sums" class="sums-block"></p>
 
-  <form id="new-purchase-form">
+  <form id="new-purchase-form" class="no-print">
     <label>Kaufdatum <input type="date" name="purchase_date" required></label>
     <label>Plattform <input type="text" name="platform"></label>
     <label>Verkäufer <input type="text" name="seller"></label>
@@ -75,6 +80,13 @@
     </thead>
     <tbody id="purchases-body"></tbody>
   </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
+  </div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -90,6 +102,9 @@
     if (nav.value) location.href = nav.value;
   });
 })();
+
+const PAGE_SIZE = 40;
+let currentPage = 0;
 
 const qInput = document.getElementById("q");
 const dateFromInput = document.getElementById("date-from");
@@ -154,9 +169,8 @@ async function loadPurchases() {
     }
     statusMsg.textContent = `${data.purchases.length} Kauf/Käufe`;
     currentPurchases = data.purchases;
-    const filtered = filteredPurchases();
-    render(filtered);
-    renderSums(filtered);
+    currentPage = 0;
+    renderCurrentView();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -164,25 +178,37 @@ async function loadPurchases() {
 
 for (const input of [dateFromInput, dateToInput]) {
   input.addEventListener("change", () => {
-    const filtered = filteredPurchases();
-    render(filtered);
-    renderSums(filtered);
+    currentPage = 0;
+    renderCurrentView();
   });
 }
 
 document.getElementById("reset-date-filter").addEventListener("click", () => {
   dateFromInput.value = "";
   dateToInput.value = "";
-  const filtered = filteredPurchases();
-  render(filtered);
-  renderSums(filtered);
+  currentPage = 0;
+  renderCurrentView();
 });
 
-function render(purchases) {
+function renderCurrentView() {
+  const filtered = filteredPurchases();
+  renderSums(filtered);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${filtered.length} Kauf/Käufe, max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  render(pageItems, filtered);
+}
+
+function render(purchases, allFiltered) {
   body.innerHTML = "";
   table.style.display = purchases.length ? "table" : "none";
   try {
-    sessionStorage.setItem("purchaseListIds", JSON.stringify(purchases.map((p) => p.id)));
+    sessionStorage.setItem("purchaseListIds", JSON.stringify((allFiltered || purchases).map((p) => p.id)));
   } catch (err) {
     // sessionStorage kann in eingeschraenkten Browser-Kontexten werfen -
     // Vor-/Zurueck-Navigation ist dann einfach nicht verfuegbar.
@@ -237,6 +263,45 @@ newForm.addEventListener("submit", async (ev) => {
 qInput.addEventListener("input", () => {
   clearTimeout(qInput._debounce);
   qInput._debounce = setTimeout(loadPurchases, 300);
+});
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  renderCurrentView();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  renderCurrentView();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["Datum", "Plattform", "Verkäufer", "Karten", "Gesamt", "Versand"];
+  const rows = filteredPurchases().map((p) => [
+    formatDate(p.purchase_date), p.platform || "", p.seller || "",
+    p.item_count ?? 0, p.total_price ?? "", p.shipping ?? "",
+  ]);
+  downloadCsv("kaeufe.csv", headers, rows);
 });
 
 loadPurchases();

@@ -31,6 +31,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -61,8 +62,9 @@
 
   <section id="backup-section">
     <h2>Backup</h2>
-    <p>Lädt eine ZIP-Datei mit allen Daten (Karten, Käufe, eBay-Angebote)
-      als JSON sowie allen Kartenbildern herunter.</p>
+    <p>Lädt eine ZIP-Datei mit allen Daten (Scans, Karten, Käufe, eBay-Angebote
+      und -Verkäufe, Inventar, Preisrecherche-Verlauf) als JSON sowie allen
+      Kartenbildern herunter.</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
   </section>
 

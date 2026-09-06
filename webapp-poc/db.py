@@ -52,11 +52,43 @@ def _ilike_search_filter(q, columns):
 def list_cards(q=None, status=None):
     query = get_client().table("cards").select("*")
     if q:
-        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number"]))
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year"]))
     if status:
         query = query.eq("recognition_status", status)
     response = query.order("created_at", desc=True).execute()
     return response.data
+
+
+def list_cards_by_sku(q):
+    """Karten, deren verknuepftes eBay-Angebot eine passende SKU hat - die
+    SKU lebt in ebay_listings, nicht in cards, daher kein Teil von
+    list_cards()/_ilike_search_filter() selbst; main.py's /api/cards
+    mischt das Ergebnis in die normale Suche."""
+    safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
+    listing_response = (
+        get_client().table("ebay_listings").select("card_id")
+        .ilike("sku", f"%{safe_q}%").execute()
+    )
+    card_ids = [row["card_id"] for row in listing_response.data]
+    if not card_ids:
+        return []
+    response = get_client().table("cards").select("*").in_("id", card_ids).execute()
+    return response.data
+
+
+def find_duplicate_card(title, set_name, card_number):
+    """Warnt beim Scannen, wenn eine Karte mit demselben Titel/Set/
+    Kartennummer bereits im Bestand ist - rein informativ (blockiert das
+    Anlegen nicht), da Karten mit identischem Titel+Set+Nummer sehr
+    wahrscheinlich echte Duplikate (zweimal gescannt) statt Zufall sind."""
+    if not (title and set_name and card_number):
+        return None
+    response = (
+        get_client().table("cards").select("id,title,set_name,card_number,card_no")
+        .ilike("title", title).ilike("set_name", set_name).ilike("card_number", card_number)
+        .limit(1).execute()
+    )
+    return response.data[0] if response.data else None
 
 
 def get_card(card_id):
@@ -384,7 +416,7 @@ def list_ebay_listings(status=None, q=None):
     if status:
         query = query.eq("status", status)
     if q:
-        query = query.or_(_ilike_search_filter(q, ["title"]))
+        query = query.or_(_ilike_search_filter(q, ["title", "sku"]))
     response = query.order("updated_at", desc=True).execute()
     return response.data
 
@@ -604,6 +636,44 @@ def zero_inventory_for_card(card_id):
         .eq("card_id", card_id).execute()
     )
     return response.data
+
+
+def all_price_research():
+    return get_client().table("price_research").select("*").execute().data
+
+
+PRICE_RESEARCH_FIELDS = ["price", "note", "checked_at"]
+PRICE_RESEARCH_NUMERIC_FIELDS = {"price"}
+PRICE_RESEARCH_MONEY_FIELDS = {"price"}
+
+
+def create_price_research_entry(card_id, fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in PRICE_RESEARCH_FIELDS if name in fields},
+            PRICE_RESEARCH_NUMERIC_FIELDS,
+        ),
+        PRICE_RESEARCH_MONEY_FIELDS,
+    )
+    row["card_id"] = card_id
+    response = get_client().table("price_research").insert(row).execute()
+    return response.data[0]
+
+
+def list_price_research_for_card(card_id):
+    response = (
+        get_client().table("price_research").select("*")
+        .eq("card_id", card_id).order("checked_at").execute()
+    )
+    return response.data
+
+
+def delete_price_research_entry(entry_id):
+    response = get_client().table("price_research").select("id").eq("id", entry_id).execute()
+    if not response.data:
+        return None
+    get_client().table("price_research").delete().eq("id", entry_id).execute()
+    return response.data[0]
 
 
 def statistics_rows():

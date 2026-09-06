@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Dashboard</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  #status-msg { font-style: italic; color: #555; }
+  .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 170px; }
+  .summary-card .label { font-size: 0.8rem; color: #555; }
+  .summary-card .value { font-size: 1.2rem; font-weight: 600; }
+  .action-list { list-style: none; padding: 0; margin: 0; }
+  .action-list li { border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 0.9rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .action-list a { color: inherit; }
+  .action-empty { color: #555; font-style: italic; }
+  .activity-list { list-style: none; padding: 0; margin: 0; }
+  .activity-list li { padding: 0.5rem 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; gap: 0.75rem; }
+  .activity-list a { color: inherit; text-decoration: none; }
+  .activity-list a:hover { text-decoration: underline; }
+  .activity-date { color: #555; font-size: 0.85rem; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Dashboard</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="summary-cards" id="summary-cards" style="display: none;"></div>
+
+  <h2>Was jetzt tun?</h2>
+  <ul class="action-list" id="action-list"></ul>
+
+  <h2>Letzte Aktivität</h2>
+  <ul class="activity-list" id="activity-list"></ul>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Gleicher Schwellwert wie ebay.html/main.py's _sheets_tabs() - eBay-
+// Angebote, die laenger als das "Geplant" sind, deuten meist auf einen
+// haengengebliebenen Scheduling-Job hin.
+const STALE_GEPLANT_DAYS = 3;
+// Karten, die laenger als das ohne Verkauf im Bestand liegen, werden als
+// "lange Liegedauer" markiert - willkuerlicher, aber sinnvoller Richtwert.
+const LONG_HOLDING_DAYS = 90;
+
+function fmtEuro(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "–";
+}
+
+function fmtPercent(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %` : "–";
+}
+
+// Einheitliches Datumsformat (DD.MM.YYYY) - purchase_date ist ein reiner
+// Datums-String ("YYYY-MM-DD"), sale_date/created_at sind volle Zeitstempel.
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function daysSince(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d)) return null;
+  return Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function addAction(items, html) {
+  const li = document.createElement("li");
+  li.innerHTML = html;
+  items.appendChild(li);
+}
+
+async function load() {
+  try {
+    const [statsRes, invRes, cardsRes, geplantRes, sheetsRes] = await Promise.all([
+      fetch("/api/statistics"), fetch("/api/inventory"), fetch("/api/cards"),
+      fetch("/api/ebay/listings?status=Geplant"), fetch("/api/sheets/status"),
+    ]);
+    const stats = await statsRes.json();
+    const inventory = await invRes.json();
+    const cardsBody = await cardsRes.json();
+    const geplant = await geplantRes.json();
+    const sheets = await sheetsRes.json();
+
+    document.getElementById("status-msg").style.display = "none";
+    renderSummary(stats, inventory);
+    renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets);
+    renderActivity(stats);
+  } catch (err) {
+    document.getElementById("status-msg").textContent = "Fehler: " + err;
+  }
+}
+
+function renderSummary(stats, inventory) {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const monthBucket = (stats.monthly || []).find((m) => m.month === currentMonth) || { revenue: 0, profit: 0 };
+
+  const cards = document.getElementById("summary-cards");
+  cards.style.display = "flex";
+  const entries = [
+    ["Aktueller Inventarwert", fmtEuro(inventory.total_value)],
+    ["Umsatz laufender Monat", fmtEuro(monthBucket.revenue)],
+    ["Gewinn laufender Monat", fmtEuro(monthBucket.profit)],
+    ["Realisierter Gewinn (gesamt)", fmtEuro(stats.summary.realized_profit)],
+    ["ROI (verkauft)", fmtPercent(stats.summary.roi_pct)],
+    ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count)],
+    ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count)],
+  ];
+  cards.innerHTML = "";
+  for (const [label, value] of entries) {
+    const card = document.createElement("div");
+    card.className = "summary-card";
+    card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    cards.appendChild(card);
+  }
+}
+
+function renderActions(stats, cards, geplantListings, sheets) {
+  const list = document.getElementById("action-list");
+  list.innerHTML = "";
+  let count = 0;
+
+  const unshipped = cards.filter((c) => c.ebay_status === "Verkauft" && !c.shipped);
+  if (unshipped.length) {
+    count++;
+    addAction(list, `📦 ${unshipped.length} verkaufte Karte(n) noch nicht versendet – <a href="cards.html">zu den Karten &rarr;</a>`);
+  }
+
+  const longHolding = (stats.rows || []).filter((r) => {
+    if (r.cost == null || r.sale_price != null || !r.purchase_date) return false;
+    const days = daysSince(r.purchase_date);
+    return days != null && days > LONG_HOLDING_DAYS;
+  });
+  if (longHolding.length) {
+    count++;
+    addAction(list, `⏳ ${longHolding.length} Karte(n) seit über ${LONG_HOLDING_DAYS} Tagen unverkauft im Bestand – <a href="statistics.html">zu den Statistiken &rarr;</a>`);
+  }
+
+  const staleGeplant = geplantListings.filter((l) => {
+    const days = daysSince(l.scheduled_at || l.created_at);
+    return days != null && days > STALE_GEPLANT_DAYS;
+  });
+  if (staleGeplant.length) {
+    count++;
+    addAction(list, `⚠️ ${staleGeplant.length} eBay-Angebot(e) seit über ${STALE_GEPLANT_DAYS} Tagen "Geplant", aber nicht veröffentlicht – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
+  }
+
+  if (!sheets.connected) {
+    count++;
+    addAction(list, `🔌 Google Sheets ist nicht verbunden – <a href="settings.html">zu den Einstellungen &rarr;</a>`);
+  }
+
+  if (!count) {
+    const li = document.createElement("li");
+    li.className = "action-empty";
+    li.textContent = "Alles im grünen Bereich – nichts zu tun.";
+    list.appendChild(li);
+  }
+}
+
+function renderActivity(stats) {
+  const list = document.getElementById("activity-list");
+  list.innerHTML = "";
+
+  const rows = stats.rows || [];
+  const sales = rows
+    .filter((r) => r.sale_date)
+    .map((r) => ({ date: r.sale_date, text: `Verkauft: ${r.title || "(ohne Titel)"} für ${fmtEuro(r.sale_price)}`, href: `card.html?id=${encodeURIComponent(r.card_id)}` }));
+  const purchases = rows
+    .filter((r) => r.purchase_date)
+    .map((r) => ({ date: r.purchase_date, text: `Gekauft: ${r.title || "(ohne Titel)"}${r.cost != null ? ` für ${fmtEuro(r.cost)}` : ""}`, href: `card.html?id=${encodeURIComponent(r.card_id)}` }));
+
+  const combined = [...sales, ...purchases]
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 10);
+
+  if (!combined.length) {
+    const li = document.createElement("li");
+    li.textContent = "Noch keine Aktivität.";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const entry of combined) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = entry.href;
+    a.textContent = entry.text;
+    li.appendChild(a);
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "activity-date";
+    dateSpan.textContent = formatDate(entry.date);
+    li.appendChild(dateSpan);
+    list.appendChild(li);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
