@@ -6,6 +6,9 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
   .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
@@ -59,7 +62,10 @@
 </style>
 </head>
 <body>
-  <h1>Karte bearbeiten</h1>
+  <div class="page-header">
+    <h1>Karte bearbeiten</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
   <p><a href="cards.html">&larr; Zur Liste</a></p>
   <p id="prev-next-nav"></p>
 
@@ -111,6 +117,33 @@ const FIELDS = [
   ["serial_number", "Seriennr.", "Seriennummer bei limitierten Karten (z. B. \"12/99\")"],
   ["print_run", "Auflage", "Gesamtauflage bei limitierten Karten (z. B. \"99\")"],
 ];
+
+// Einheitliches Datumsformat (DD.MM.YYYY) fuer die ganze App - manuell statt
+// ueber toLocaleDateString("de-DE"), da dessen Default-Ausgabe Tag/Monat
+// NICHT nullt-pollstert (z.B. "5.1.2026" statt "05.01.2026"). Reine
+// Datums-Strings (purchase_date, "YYYY-MM-DD") werden per String-Split
+// statt ueber new Date() zerlegt, damit ein Aufruf in einer Zeitzone
+// westlich von UTC nicht durch die UTC-Mitternachts-Interpretation auf den
+// Vortag zurueckfaellt.
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${formatDate(value)} ${time}`;
+}
 
 function showError(container, message) {
   container.innerHTML = "";
@@ -355,7 +388,7 @@ function renderPurchaseSection(purchase) {
     const dl = document.createElement("dl");
     dl.className = "purchase-info";
     const rows = [
-      ["Kaufdatum", purchase.purchase_date], ["Plattform", purchase.platform],
+      ["Kaufdatum", formatDate(purchase.purchase_date)], ["Plattform", purchase.platform],
       ["Verkäufer", purchase.seller], ["Anteil-Preis", purchase.allocated_cost],
       ["Notizen", purchase.notes],
     ];
@@ -1033,7 +1066,7 @@ function renderEbayEditForm(section, listing) {
 function renderEbayScheduledView(section, listing, environment) {
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
-  const scheduledDate = listing.scheduled_at ? new Date(listing.scheduled_at).toLocaleString("de-DE") : "";
+  const scheduledDate = formatDateTime(listing.scheduled_at);
   const dl = document.createElement("dl");
   const rows = [["SKU", listing.sku], ["Geplant für", scheduledDate], ["Titel", listing.title], ["Preis", listing.price + " €"]];
   for (const [label, value] of rows) {
@@ -1118,9 +1151,8 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale) 
 
   if (listing.published_at) {
     const updatedP = document.createElement("p");
-    const updatedDate = new Date(listing.published_at);
-    const isRecent = Date.now() - updatedDate.getTime() <= RECENTLY_UPDATED_WINDOW_MS;
-    updatedP.textContent = `Zuletzt aktualisiert: ${updatedDate.toLocaleString("de-DE")}`
+    const isRecent = Date.now() - new Date(listing.published_at).getTime() <= RECENTLY_UPDATED_WINDOW_MS;
+    updatedP.textContent = `Zuletzt aktualisiert: ${formatDateTime(listing.published_at)}`
       + (isRecent ? " 🕓 kürzlich geändert" : "");
     readonly.appendChild(updatedP);
   }
@@ -1154,7 +1186,7 @@ function renderSaleStats(purchase, sale) {
   const dl = document.createElement("dl");
   const saleDate = sale.sale_date ? new Date(sale.sale_date) : null;
   const rows = [
-    ["Verkauft am (WA)", saleDate ? saleDate.toLocaleDateString("de-DE") : ""],
+    ["Verkauft am (WA)", formatDate(sale.sale_date)],
     ["Verkaufspreis", sale.gross_price != null ? `${sale.gross_price} €` : ""],
   ];
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {

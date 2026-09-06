@@ -7,6 +7,13 @@
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
   .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
   .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
@@ -24,8 +31,11 @@
 </style>
 </head>
 <body>
-  <h1>DCardLabs – Statistiken</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+  <div class="page-header">
+    <h1>DCardLabs – Statistiken</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
+  <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a></p>
 
   <p id="status-msg">Lädt …</p>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
@@ -38,8 +48,9 @@
   <p id="monthly-empty"></p>
 
   <h2>Alle Karten</h2>
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
+    <button type="button" id="print-btn">🖨 Drucken</button>
   </div>
   <table id="rows-table" style="display: none;">
     <thead>
@@ -57,8 +68,16 @@
     </thead>
     <tbody id="rows-body"></tbody>
   </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+  </div>
 
 <script>
+const PAGE_SIZE = 40;
+let currentPage = 0;
+
 const statusMsg = document.getElementById("status-msg");
 const qInput = document.getElementById("q");
 let allRows = [];
@@ -67,6 +86,27 @@ let sortAsc = true;
 
 function fmtEuro(v) {
   return v != null ? `${Number(v).toFixed(2)} €` : "";
+}
+
+// Einheitliches Datumsformat (DD.MM.YYYY) - purchase_date ist ein reiner
+// Datums-String ("YYYY-MM-DD"), daher per String-Split statt new Date()
+// zerlegt, um Zeitzonen-Verschiebungen zu vermeiden; sale_date ist ein
+// voller Zeitstempel und wird ueber new Date() geparst.
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function formatMonth(value) {
+  const [y, m] = (value || "").split("-");
+  return m && y ? `${m}.${y}` : value;
 }
 
 async function load() {
@@ -121,7 +161,7 @@ function renderMonthly(monthly) {
   empty.textContent = "";
   for (const m of monthly) {
     const tr = document.createElement("tr");
-    for (const text of [m.month, String(m.count), fmtEuro(m.revenue)]) {
+    for (const text of [formatMonth(m.month), String(m.count), fmtEuro(m.revenue)]) {
       const td = document.createElement("td");
       td.textContent = text;
       tr.appendChild(td);
@@ -158,12 +198,20 @@ function setSortIndicator() {
 }
 
 function renderRows() {
-  const rows = sortedRows(filteredRows());
+  const allFiltered = sortedRows(filteredRows());
   setSortIndicator();
   const table = document.getElementById("rows-table");
   const body = document.getElementById("rows-body");
+
+  const pageCount = Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const rows = allFiltered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${allFiltered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
   body.innerHTML = "";
-  table.style.display = rows.length ? "table" : "none";
+  table.style.display = allFiltered.length ? "table" : "none";
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.className = "row-link";
@@ -173,8 +221,8 @@ function renderRows() {
 
     const cells = [
       row.sku || "", row.title || "(ohne Titel)",
-      row.purchase_date || "", fmtEuro(row.cost),
-      row.sale_date ? new Date(row.sale_date).toLocaleDateString("de-DE") : "",
+      formatDate(row.purchase_date), fmtEuro(row.cost),
+      formatDate(row.sale_date),
       fmtEuro(row.sale_price),
     ];
     for (const text of cells) {
@@ -211,14 +259,25 @@ for (const th of document.querySelectorAll("th[data-key]")) {
       sortKey = key;
       sortAsc = true;
     }
+    currentPage = 0;
     renderRows();
   });
 }
 
 qInput.addEventListener("input", () => {
   clearTimeout(qInput._debounce);
-  qInput._debounce = setTimeout(renderRows, 200);
+  qInput._debounce = setTimeout(() => { currentPage = 0; renderRows(); }, 200);
 });
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  renderRows();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  renderRows();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 load();
 </script>

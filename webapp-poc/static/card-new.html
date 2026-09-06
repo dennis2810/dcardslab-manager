@@ -6,6 +6,9 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .side { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.5rem; }
   label { font-weight: 600; }
@@ -25,7 +28,10 @@
 </style>
 </head>
 <body>
-  <h1>Neue Karte anlegen</h1>
+  <div class="page-header">
+    <h1>Neue Karte anlegen</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
   <p><a href="cards.html">&larr; Zur Liste</a></p>
 
   <div class="images">

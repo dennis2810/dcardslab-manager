@@ -6,6 +6,9 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   th { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -14,15 +17,23 @@
   tr.row:hover { background: #f7f7f7; }
   img.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; background: #f0f0f0; vertical-align: middle; margin-right: 0.5rem; }
   #status-msg { font-style: italic; color: #555; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
 </style>
 </head>
 <body>
-  <h1>DCardLabs – Inventar</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
-  <p>Inventareinträge (Menge/Zustand/Lagerort/Notizen) werden auf der jeweiligen Kartenseite angelegt und bearbeitet.</p>
+  <div class="page-header">
+    <h1>DCardLabs – Inventar</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
+  <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
+  <p class="no-print">Inventareinträge (Menge/Zustand/Lagerort/Notizen) werden auf der jeweiligen Kartenseite angelegt und bearbeitet.</p>
 
   <p id="status-msg"></p>
-  <p id="total-value"></p>
+  <p id="total-value" class="sums-block"></p>
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
@@ -37,8 +48,16 @@
     </thead>
     <tbody id="inventory-body"></tbody>
   </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+  </div>
 
 <script>
+const PAGE_SIZE = 40;
+let currentPage = 0;
 const statusMsg = document.getElementById("status-msg");
 const totalValueEl = document.getElementById("total-value");
 const table = document.getElementById("inventory-table");
@@ -83,9 +102,16 @@ function render() {
     arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
   }
 
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const pageItems = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge, max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
   body.innerHTML = "";
   table.style.display = sorted.length ? "table" : "none";
-  for (const item of sorted) {
+  for (const item of pageItems) {
     const tr = document.createElement("tr");
     tr.className = "row";
     tr.addEventListener("click", () => {
@@ -130,9 +156,20 @@ for (const th of document.querySelectorAll("th[data-key]")) {
       sortKey = key;
       sortAsc = true;
     }
+    currentPage = 0;
     render();
   });
 }
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 loadInventory();
 </script>

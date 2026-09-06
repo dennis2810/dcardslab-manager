@@ -6,6 +6,9 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
   form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
   label { font-weight: 600; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; width: fit-content; }
@@ -21,7 +24,10 @@
 </style>
 </head>
 <body>
-  <h1>DCardLabs Web PoC – Scan &rarr; Zuschnitt &rarr; KI-Erkennung</h1>
+  <div class="page-header">
+    <h1>DCardLabs Web PoC – Scan &rarr; Zuschnitt &rarr; KI-Erkennung</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
   <p>Lädt Vorder- und Rückseiten-Scanbogen hoch, schneidet die 9 Karten zu und lässt sie per Claude
   Vision erkennen. Kein Speichern, kein eBay, keine Datenbank – nur der Kern-Workflow.</p>
   <p><a href="cards.html">Zur Karten-Liste &rarr;</a></p>

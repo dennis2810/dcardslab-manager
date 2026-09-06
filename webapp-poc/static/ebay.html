@@ -6,6 +6,14 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; color: #1b3a5c; white-space: nowrap; }
+  .brand-logo span { color: #c9962c; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
   #oauth-banner { padding: 0.6rem 0.9rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
   #oauth-banner.ok { background: #e6f4ea; color: #1e4620; }
   #oauth-banner.warn { background: #fdecea; color: #611a15; }
@@ -31,12 +39,15 @@
 </style>
 </head>
 <body>
-  <h1>DCardLabs – eBay-Angebote</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
+  <div class="page-header">
+    <h1>DCardLabs – eBay-Angebote</h1>
+    <div class="brand-logo">DCards<span>Lab</span></div>
+  </div>
+  <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
 
-  <div id="oauth-banner">eBay-Status wird geprüft …</div>
+  <div id="oauth-banner" class="no-print">eBay-Status wird geprüft …</div>
 
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel)">
     <select id="status">
       <option value="">Alle Status</option>
@@ -48,14 +59,14 @@
     </select>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
   </div>
-  <div class="controls">
+  <div class="controls no-print">
     <label>Verkauft von <input type="date" id="sold-from"></label>
     <label>bis <input type="date" id="sold-to"></label>
   </div>
   <p id="sync-status"></p>
 
   <p id="status-msg"></p>
-  <p id="sums"></p>
+  <p id="sums" class="sums-block"></p>
   <table id="listings-table" style="display: none;">
     <thead>
       <tr>
@@ -73,13 +84,40 @@
     </thead>
     <tbody id="listings-body"></tbody>
   </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+  </div>
 
-  <div class="actions-bar">
+  <div class="actions-bar no-print">
     <button type="button" id="publish-selected-btn" disabled>Ausgewählte veröffentlichen</button>
   </div>
   <div id="bulk-results"></div>
 
 <script>
+const PAGE_SIZE = 40;
+let currentPage = 0;
+
+// Einheitliches Datumsformat (DD.MM.YYYY[, HH:MM]) - manuell statt ueber
+// toLocaleDateString/toLocaleString("de-DE"), da deren Default-Ausgabe
+// Tag/Monat nicht nullgepolstert liefert (z.B. "5.1.2026" statt
+// "05.01.2026").
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${formatDate(value)} ${time}`;
+}
+
 const qInput = document.getElementById("q");
 const statusSelect = document.getElementById("status");
 const statusMsg = document.getElementById("status-msg");
@@ -129,6 +167,7 @@ for (const th of document.querySelectorAll("th[data-key]")) {
       sortAsc = true;
     }
     setSortIndicator(sortKey);
+    currentPage = 0;
     render(sortedListings());
   });
 }
@@ -173,6 +212,7 @@ async function loadListings() {
     }
     statusMsg.textContent = `${data.listings.length} Angebot(e)`;
     currentListings = data.listings;
+    currentPage = 0;
     render(sortedListings());
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -180,9 +220,16 @@ async function loadListings() {
 }
 
 function render(listings) {
+  const pageCount = Math.max(1, Math.ceil(listings.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const pageItems = listings.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${listings.length} Angebot(e), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
   body.innerHTML = "";
   table.style.display = listings.length ? "table" : "none";
-  for (const listing of listings) {
+  for (const listing of pageItems) {
     const tr = document.createElement("tr");
 
     const checkboxTd = document.createElement("td");
@@ -224,13 +271,11 @@ function render(listings) {
     tr.appendChild(statusTd);
 
     const scheduledTd = document.createElement("td");
-    scheduledTd.textContent = listing.scheduled_at
-      ? new Date(listing.scheduled_at).toLocaleString("de-DE")
-      : "";
+    scheduledTd.textContent = formatDateTime(listing.scheduled_at);
     tr.appendChild(scheduledTd);
 
     const saleDateTd = document.createElement("td");
-    saleDateTd.textContent = listing.sale_date ? new Date(listing.sale_date).toLocaleDateString("de-DE") : "";
+    saleDateTd.textContent = formatDate(listing.sale_date);
     tr.appendChild(saleDateTd);
 
     const salePriceTd = document.createElement("td");
@@ -238,7 +283,7 @@ function render(listings) {
     tr.appendChild(salePriceTd);
 
     const updatedTd = document.createElement("td");
-    updatedTd.textContent = listing.published_at ? new Date(listing.published_at).toLocaleString("de-DE") : "";
+    updatedTd.textContent = formatDateTime(listing.published_at);
     tr.appendChild(updatedTd);
 
     tr.classList.add("row-link");
@@ -270,6 +315,16 @@ function renderSums(listings) {
 
 document.getElementById("sold-from").addEventListener("change", () => render(sortedListings()));
 document.getElementById("sold-to").addEventListener("change", () => render(sortedListings()));
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render(sortedListings());
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render(sortedListings());
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 publishSelectedBtn.addEventListener("click", async () => {
   const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
