@@ -6,6 +6,8 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   section h2 { font-size: 1.1rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; max-width: 400px; margin-bottom: 0.75rem; }
@@ -18,7 +20,10 @@
 </style>
 </head>
 <body>
-  <h1>Einstellungen</h1>
+  <div class="page-header">
+    <h1>Einstellungen</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
   <p><a href="cards.html">&larr; Zur Liste</a></p>
 
   <section id="sheets-section">
