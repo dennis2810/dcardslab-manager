@@ -87,6 +87,9 @@
     <span id="bulk-count"></span>
     <button type="button" id="bulk-mark-shipped">Als versendet markieren</button>
     <button type="button" id="bulk-unmark-shipped">Versand-Markierung entfernen</button>
+    <button type="button" id="bulk-create-ebay-draft">eBay-Entwürfe anlegen</button>
+    <button type="button" id="bulk-print-labels">🏷️ Etiketten drucken</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-status"></span>
   </div>
 
@@ -463,6 +466,96 @@ async function bulkSetShipped(shipped) {
 
 document.getElementById("bulk-mark-shipped").addEventListener("click", () => bulkSetShipped(true));
 document.getElementById("bulk-unmark-shipped").addEventListener("click", () => bulkSetShipped(false));
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  renderCurrentView();
+});
+
+// Erzeugt ein leeres eBay-Angebot ("Entwurf") pro ausgewaehlter Karte, die
+// noch keins hat - main.py's POST .../ebay-listing befuellt Titel/
+// Beschreibung/Aspects bereits automatisch aus den Kartendaten, wenn keine
+// Felder mitgeschickt werden.
+async function bulkCreateEbayDrafts() {
+  const ids = [...selectedIds];
+  const cardsById = new Map(currentCards.map((c) => [c.id, c]));
+  const targets = ids.filter((id) => !(cardsById.get(id)?.ebay_status));
+  const skipped = ids.length - targets.length;
+  if (!targets.length) {
+    bulkStatusEl.textContent = "Alle ausgewählten Karten haben bereits ein eBay-Angebot.";
+    return;
+  }
+  bulkStatusEl.textContent = "Lege Entwürfe an …";
+  try {
+    const results = await Promise.all(targets.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}/ebay-listing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    ));
+    const failed = results.filter((r) => !r.ok).length;
+    const created = targets.length - failed;
+    let message = `${created} Entwurf/Entwürfe angelegt.`;
+    if (skipped) message += ` ${skipped} übersprungen (bereits vorhanden).`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkStatusEl.textContent = message;
+    selectedIds.clear();
+    updateBulkBar();
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+  }
+}
+
+document.getElementById("bulk-create-ebay-draft").addEventListener("click", bulkCreateEbayDrafts);
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// Einfache Text-Etiketten (SKU/Team/Saison/Titel), kein echtes Barcode-
+// Symbol - vermeidet eine externe Barcode-Bibliothek fuer ein Nice-to-have;
+// oeffnet ein eigenes Fenster statt window.print() auf der Kartenseite
+// selbst, damit Filter/Layout der Kartenliste unberuehrt bleiben.
+function printLabels(cards) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const rows = cards.map((c) => `
+    <div class="label">
+      <div class="sku">${escapeHtml(c.ebay_sku || "(keine SKU)")}</div>
+      <div class="meta">${escapeHtml([c.team, c.season_year].filter(Boolean).join(" · "))}</div>
+      <div class="title">${escapeHtml(c.title || "(ohne Titel)")}</div>
+    </div>
+  `).join("");
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Etiketten</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; }
+  .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+  .label { border: 1px solid #999; border-radius: 4px; padding: 0.4rem 0.5rem; page-break-inside: avoid; }
+  .label .sku { font-weight: 700; font-size: 0.85rem; }
+  .label .meta { font-size: 0.7rem; color: #555; }
+  .label .title { font-size: 0.75rem; margin-top: 0.15rem; }
+</style></head>
+<body>
+  <div class="labels">${rows}</div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+document.getElementById("bulk-print-labels").addEventListener("click", () => {
+  const ids = [...selectedIds];
+  const selected = currentCards.filter((c) => ids.includes(c.id));
+  printLabels(selected);
+});
 
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);

@@ -182,6 +182,19 @@ function renderActions(stats, cards, geplantListings, sheets) {
     addAction(list, `⏳ ${longHolding.length} Karte(n) seit über ${LONG_HOLDING_DAYS} Tagen unverkauft im Bestand – <a href="statistics.html">zu den Statistiken &rarr;</a>`);
   }
 
+  const cardsById = new Map(cards.map((c) => [c.id, c]));
+  const noListingYet = (stats.rows || []).filter((r) => {
+    if (r.cost == null || r.sale_price != null || !r.purchase_date) return false;
+    const days = daysSince(r.purchase_date);
+    if (days == null || days <= LONG_HOLDING_DAYS) return false;
+    const card = cardsById.get(r.card_id);
+    return card && !card.ebay_status;
+  });
+  if (noListingYet.length) {
+    count++;
+    addAction(list, `🏷️ ${noListingYet.length} Karte(n) seit über ${LONG_HOLDING_DAYS} Tagen im Bestand, aber noch ohne eBay-Angebot – <a href="cards.html">zu den Karten &rarr;</a>`);
+  }
+
   const staleGeplant = geplantListings.filter((l) => {
     const days = daysSince(l.scheduled_at || l.created_at);
     return days != null && days > STALE_GEPLANT_DAYS;

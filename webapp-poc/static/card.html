@@ -21,6 +21,7 @@
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  label.checkbox-field { flex-direction: row; align-items: center; gap: 0.4rem; }
   input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
   .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
@@ -49,6 +50,10 @@
   .ebay-aspects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .ebay-aspects label { flex: 1 1 160px; }
   .ebay-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+  .price-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; background: #f5f5f5; border-radius: 6px; padding: 0.5rem 0.75rem; }
+  .price-calc label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
+  .price-calc input { font-weight: normal; padding: 0.3rem; width: 5rem; }
+  .price-calc .price-calc-hint { color: #555; }
   .ebay-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
   .ebay-readonly dt { font-weight: 600; }
   .ebay-readonly dd { margin: 0; }
@@ -366,6 +371,7 @@ function render(card) {
   form.appendChild(statusWrapper);
 
   const shippedWrapper = document.createElement("label");
+  shippedWrapper.className = "checkbox-field";
   const shippedCheckbox = document.createElement("input");
   shippedCheckbox.type = "checkbox";
   shippedCheckbox.name = "shipped";
@@ -938,7 +944,7 @@ async function renderEbaySection(listing, purchase, sale) {
       err.textContent = listing.last_error;
       section.appendChild(err);
     }
-    renderEbayEditForm(section, listing);
+    renderEbayEditForm(section, listing, purchase);
   } else if (listing.status === "Geplant") {
     const environment = await getEbayEnvironment();
     renderEbayScheduledView(section, listing, environment);
@@ -982,7 +988,7 @@ function renderEbayCreateForm(section) {
   });
 }
 
-function renderEbayEditForm(section, listing) {
+function renderEbayEditForm(section, listing, purchase) {
   const form = document.createElement("form");
   form.className = "ebay-form";
 
@@ -1009,8 +1015,43 @@ function renderEbayEditForm(section, listing) {
   field("Beschreibung (HTML)", "description", listing.description, "textarea");
   // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
   // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
-  field("Preis (€)", "price", listing.price, "number", "0.01");
+  const priceInputEl = field("Preis (€)", "price", listing.price, "number", "0.01");
   field("Menge", "quantity", listing.quantity ?? 1, "number");
+
+  // Einfacher Preisrechner: Zielmarge -> Preisvorschlag aus dem
+  // Einstandspreis, nur anzeigbar wenn die Karte ueberhaupt einen
+  // (automatisch aufgeteilten oder manuell gesetzten) Einstandspreis hat.
+  if (purchase && purchase.allocated_cost != null) {
+    const cost = Number(purchase.allocated_cost);
+    const calcWrapper = document.createElement("div");
+    calcWrapper.className = "price-calc";
+
+    const hint = document.createElement("span");
+    hint.className = "price-calc-hint";
+    hint.textContent = `Einstandspreis: ${cost.toFixed(2)} €`;
+    calcWrapper.appendChild(hint);
+
+    const marginLabel = document.createElement("label");
+    marginLabel.textContent = "Zielmarge (%)";
+    const marginInput = document.createElement("input");
+    marginInput.type = "number";
+    marginInput.step = "1";
+    marginInput.placeholder = "z.B. 50";
+    marginLabel.appendChild(marginInput);
+    calcWrapper.appendChild(marginLabel);
+
+    const suggestBtn = document.createElement("button");
+    suggestBtn.type = "button";
+    suggestBtn.textContent = "Preis übernehmen";
+    suggestBtn.addEventListener("click", () => {
+      if (marginInput.value === "") return;
+      const suggested = cost * (1 + Number(marginInput.value) / 100);
+      priceInputEl.value = suggested.toFixed(2);
+    });
+    calcWrapper.appendChild(suggestBtn);
+
+    form.appendChild(calcWrapper);
+  }
 
   const typeWrapper = document.createElement("label");
   typeWrapper.textContent = "Kartentyp";
