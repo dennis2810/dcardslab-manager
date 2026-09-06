@@ -34,6 +34,10 @@
   .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
   .list a.row-link { color: inherit; text-decoration: none; display: block; }
   [hidden] { display: none !important; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -41,7 +45,7 @@
     <h1>DCardLabs – Karten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
-  <nav class="nav-menu">
+  <nav class="nav-menu no-print">
     <a href="index.html">&larr; Zum Scan-Formular</a>
     <a href="purchases.html">Zu den Käufen &rarr;</a>
     <a href="ebay.html">Zu den eBay-Angeboten &rarr;</a>
@@ -51,7 +55,7 @@
     <a href="settings.html">Einstellungen &rarr;</a>
   </nav>
 
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr.)">
     <select id="status">
       <option value="">Alle Status</option>
@@ -59,7 +63,16 @@
       <option value="prüfen">prüfen</option>
       <option value="nicht erkannt">nicht erkannt</option>
     </select>
+    <select id="ebay-filter">
+      <option value="">Alle eBay-Status</option>
+      <option value="Entwurf">Entwurf</option>
+      <option value="Geplant">Geplant</option>
+      <option value="Veroeffentlicht">Veröffentlicht</option>
+      <option value="Verkauft">Verkauft</option>
+      <option value="Fehler">Fehler</option>
+    </select>
     <button type="button" id="view-toggle">Listenansicht</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
   </div>
 
   <p id="status-msg"></p>
@@ -79,10 +92,19 @@
     </thead>
     <tbody id="list-body"></tbody>
   </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+  </div>
 
 <script>
+const PAGE_SIZE = 40;
+let currentPage = 0;
+
 const qInput = document.getElementById("q");
 const statusSelect = document.getElementById("status");
+const ebayFilterSelect = document.getElementById("ebay-filter");
 const statusMsg = document.getElementById("status-msg");
 const grid = document.getElementById("grid");
 const list = document.getElementById("list");
@@ -158,8 +180,8 @@ async function loadCards() {
     }
     statusMsg.textContent = `${body.cards.length} Karte(n)`;
     currentCards = body.cards;
-    render(currentCards);
-    renderList(sortedCards());
+    currentPage = 0;
+    renderCurrentView();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -181,6 +203,36 @@ function sortedCards() {
   });
 }
 
+function visibleCards() {
+  const sorted = sortedCards();
+  if (!ebayFilterSelect.value) return sorted;
+  return sorted.filter((c) => (c.ebay_status || "") === ebayFilterSelect.value);
+}
+
+function renderCurrentView() {
+  const filtered = visibleCards();
+  // card.html reads this to render "vorherige/nächste" navigation within
+  // the current search/filter order (across all pages, not just the
+  // current one), without a dedicated backend endpoint.
+  try {
+    sessionStorage.setItem("cardListIds", JSON.stringify(filtered.map((c) => c.id)));
+  } catch (err) {
+    // sessionStorage can throw in locked-down browser contexts (private
+    // mode quirks, storage disabled) - prev/next navigation just won't be
+    // available then, the list itself still renders fine.
+  }
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${filtered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  render(pageItems);
+  renderList(pageItems);
+}
+
 function setSortIndicator(key) {
   for (const th of document.querySelectorAll(".list th[data-key]")) {
     const arrow = th.querySelector(".sort-arrow");
@@ -199,21 +251,13 @@ for (const th of document.querySelectorAll(".list th[data-key]")) {
       sortAsc = true;
     }
     setSortIndicator(sortKey);
-    renderList(sortedCards());
+    currentPage = 0;
+    renderCurrentView();
   });
 }
 
 function render(cards) {
   grid.innerHTML = "";
-  // card.html reads this to render "vorherige/nächste" navigation within
-  // the current search/filter order, without a dedicated backend endpoint.
-  try {
-    sessionStorage.setItem("cardListIds", JSON.stringify(cards.map((c) => c.id)));
-  } catch (err) {
-    // sessionStorage can throw in locked-down browser contexts (private
-    // mode quirks, storage disabled) - prev/next navigation just won't be
-    // available then, the list itself still renders fine.
-  }
   for (const card of cards) {
     const a = document.createElement("a");
     a.className = "card";
@@ -312,6 +356,20 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(loadCards, 300);
 });
 statusSelect.addEventListener("change", loadCards);
+ebayFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  renderCurrentView();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  renderCurrentView();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 loadCards();
 </script>

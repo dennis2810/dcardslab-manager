@@ -34,6 +34,7 @@
     <input type="text" id="q" placeholder="Suche (Plattform, Verkäufer, Notizen)">
     <label>Von <input type="date" id="date-from"></label>
     <label>Bis <input type="date" id="date-to"></label>
+    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
     <button type="button" id="toggle-new">+ Neuer Kauf</button>
   </div>
   <p id="sums" class="sums-block"></p>
@@ -138,6 +139,14 @@ for (const input of [dateFromInput, dateToInput]) {
     renderSums(filtered);
   });
 }
+
+document.getElementById("reset-date-filter").addEventListener("click", () => {
+  dateFromInput.value = "";
+  dateToInput.value = "";
+  const filtered = filteredPurchases();
+  render(filtered);
+  renderSums(filtered);
+});
 
 function render(purchases) {
   body.innerHTML = "";
