@@ -27,7 +27,8 @@ class ListInventoryEndpointTests(unittest.TestCase):
         rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
         with patch("main.db.list_inventory", return_value=rows), \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
-             patch("main.db.ebay_info_by_card_id", return_value={}):
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
             response = client.get("/api/inventory")
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -38,7 +39,8 @@ class ListInventoryEndpointTests(unittest.TestCase):
         rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
         with patch("main.db.list_inventory", return_value=rows), \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
-             patch("main.db.ebay_info_by_card_id", return_value={"card-1": {"status": "Entwurf", "sku": "webapp-000001"}}):
+             patch("main.db.ebay_info_by_card_id", return_value={"card-1": {"status": "Entwurf", "sku": "webapp-000001", "price": 0}}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
             response = client.get("/api/inventory")
         self.assertEqual(response.json()["inventory"][0]["sku"], "webapp-000001")
 
@@ -47,6 +49,40 @@ class ListInventoryEndpointTests(unittest.TestCase):
             response = client.get("/api/inventory")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["inventory"], [])
+        self.assertEqual(response.json()["total_value"], 0)
+
+
+class InventoryValueTests(unittest.TestCase):
+    def test_uses_ebay_price_when_available(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
+             patch("main.db.ebay_info_by_card_id", return_value={"card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 10.0}}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={"card-1": 3.0}):
+            response = client.get("/api/inventory")
+        body = response.json()
+        self.assertEqual(body["inventory"][0]["value"], 20.0)
+        self.assertEqual(body["total_value"], 20.0)
+
+    def test_falls_back_to_purchase_cost_without_ebay_price(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={"card-1": 3.0}):
+            response = client.get("/api/inventory")
+        self.assertEqual(response.json()["inventory"][0]["value"], 6.0)
+
+    def test_value_is_none_without_price_or_cost(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
+            response = client.get("/api/inventory")
+        body = response.json()
+        self.assertIsNone(body["inventory"][0]["value"])
+        self.assertEqual(body["total_value"], 0)
 
 
 class CreateInventoryItemEndpointTests(unittest.TestCase):
@@ -55,7 +91,8 @@ class CreateInventoryItemEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value={"id": "card-1"}), \
              patch("main.db.create_inventory_item", return_value=created) as mock_create, \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
-             patch("main.db.ebay_info_by_card_id", return_value={}):
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
             response = client.post("/api/cards/card-1/inventory", json={"quantity": 1})
         self.assertEqual(response.status_code, 200)
         mock_create.assert_called_once_with("card-1", {"quantity": 1})
@@ -74,7 +111,8 @@ class UpdateInventoryItemEndpointTests(unittest.TestCase):
         updated = {"id": "inv-1", "card_id": "card-1", "location": "Regal 2"}
         with patch("main.db.update_inventory_item", return_value=updated) as mock_update, \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
-             patch("main.db.ebay_info_by_card_id", return_value={}):
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
             response = client.patch("/api/inventory/inv-1", json={"location": "Regal 2"})
         self.assertEqual(response.status_code, 200)
         mock_update.assert_called_once_with("inv-1", {"location": "Regal 2"})

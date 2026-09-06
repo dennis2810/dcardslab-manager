@@ -624,21 +624,39 @@ class EbayStatusByCardIdTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [
-            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001"},
-            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002"},
+            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99},
+            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0},
         ]
         mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.ebay_info_by_card_id(["card-1", "card-2", "card-3"])
         self.assertEqual(result, {
-            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001"},
-            "card-2": {"status": "Entwurf", "sku": "webapp-000002"},
+            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99},
+            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0},
         })
 
     def test_empty_input_skips_query(self):
         mock_client = MagicMock()
         with patch("db.get_client", return_value=mock_client):
             result = db.ebay_info_by_card_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+
+class PurchaseCostByCardIdTests(unittest.TestCase):
+    def test_returns_allocated_cost_keyed_by_card_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"card_id": "card-1", "allocated_cost": 12.5}]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.purchase_cost_by_card_id(["card-1", "card-2"])
+        self.assertEqual(result, {"card-1": 12.5})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.purchase_cost_by_card_id([])
         self.assertEqual(result, {})
         mock_client.table.assert_not_called()
 
@@ -817,6 +835,50 @@ class UpsertEbaySaleTests(unittest.TestCase):
             {"ebay_order_id": "O1", "ebay_line_item_id": "LI1"},
             on_conflict="ebay_order_id,ebay_line_item_id",
         )
+
+
+class GetSaleForCardTests(unittest.TestCase):
+    def test_returns_most_recent_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"card_id": "card-1", "sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 20.0}]
+        chain = mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value
+        chain.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_sale_for_card("card-1")
+        self.assertEqual(result["gross_price"], 20.0)
+
+    def test_returns_none_when_no_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        chain = mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value
+        chain.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.get_sale_for_card("card-1"))
+
+
+class SalesByListingIdTests(unittest.TestCase):
+    def test_keeps_most_recent_sale_per_listing(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"listing_id": "listing-1", "sale_date": "2026-08-02T00:00:00+00:00", "gross_price": 25.0},
+            {"listing_id": "listing-1", "sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 20.0},
+            {"listing_id": "listing-2", "sale_date": "2026-08-03T00:00:00+00:00", "gross_price": 5.0},
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sales_by_listing_id(["listing-1", "listing-2"])
+        self.assertEqual(result["listing-1"]["gross_price"], 25.0)
+        self.assertEqual(result["listing-2"]["gross_price"], 5.0)
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sales_by_listing_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
 
 
 class GoogleSheetsSettingsTests(unittest.TestCase):
@@ -1005,6 +1067,64 @@ class DeleteInventoryItemTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.delete_inventory_item("does-not-exist")
         self.assertIsNone(result)
+
+
+class ZeroInventoryForCardTests(unittest.TestCase):
+    def test_sets_quantity_to_zero_for_all_rows_of_the_card(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "inv-1", "quantity": 0}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.zero_inventory_for_card("card-1")
+        self.assertEqual(result, [{"id": "inv-1", "quantity": 0}])
+        mock_client.table.return_value.update.assert_called_once_with({"quantity": 0})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+
+class StatisticsRowsTests(unittest.TestCase):
+    def test_joins_purchase_and_sale_info_per_card(self):
+        mock_client = MagicMock()
+
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "cards":
+                response.data = [
+                    {"id": "card-1", "title": "Karte 1", "card_no": 1},
+                    {"id": "card-2", "title": "Karte 2", "card_no": 2},
+                ]
+                builder.select.return_value.execute.return_value = response
+            elif name == "purchase_items":
+                response.data = [{"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 10.0}]
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            elif name == "purchases":
+                response.data = [{"id": "p1", "purchase_date": "2026-01-01"}]
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            elif name == "ebay_sales":
+                response.data = [{"card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00", "gross_price": 15.0}]
+                builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+            elif name == "ebay_listings":
+                response.data = []
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+
+        mock_client.table.side_effect = table
+        with patch("db.get_client", return_value=mock_client):
+            rows = db.statistics_rows()
+
+        by_id = {r["card_id"]: r for r in rows}
+        self.assertEqual(by_id["card-1"]["cost"], 10.0)
+        self.assertEqual(by_id["card-1"]["purchase_date"], "2026-01-01")
+        self.assertEqual(by_id["card-1"]["sale_price"], 15.0)
+        self.assertIsNone(by_id["card-2"]["cost"])
+        self.assertIsNone(by_id["card-2"]["sale_price"])
+
+    def test_returns_empty_list_when_no_cards(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [])
+        with patch("db.get_client", return_value=mock_client):
+            self.assertEqual(db.statistics_rows(), [])
 
 
 if __name__ == "__main__":

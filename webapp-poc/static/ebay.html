@@ -32,7 +32,7 @@
 </head>
 <body>
   <h1>DCardLabs – eBay-Angebote</h1>
-  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+  <p><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
 
   <div id="oauth-banner">eBay-Status wird geprüft …</div>
 
@@ -48,9 +48,14 @@
     </select>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
   </div>
+  <div class="controls">
+    <label>Verkauft von <input type="date" id="sold-from"></label>
+    <label>bis <input type="date" id="sold-to"></label>
+  </div>
   <p id="sync-status"></p>
 
   <p id="status-msg"></p>
+  <p id="sums"></p>
   <table id="listings-table" style="display: none;">
     <thead>
       <tr>
@@ -61,6 +66,9 @@
         <th data-key="price">Preis <span class="sort-arrow"></span></th>
         <th data-key="status">Status <span class="sort-arrow"></span></th>
         <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
+        <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
+        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+        <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
       </tr>
     </thead>
     <tbody id="listings-body"></tbody>
@@ -221,6 +229,18 @@ function render(listings) {
       : "";
     tr.appendChild(scheduledTd);
 
+    const saleDateTd = document.createElement("td");
+    saleDateTd.textContent = listing.sale_date ? new Date(listing.sale_date).toLocaleDateString("de-DE") : "";
+    tr.appendChild(saleDateTd);
+
+    const salePriceTd = document.createElement("td");
+    salePriceTd.textContent = listing.sale_price != null ? `${listing.sale_price} €` : "";
+    tr.appendChild(salePriceTd);
+
+    const updatedTd = document.createElement("td");
+    updatedTd.textContent = listing.published_at ? new Date(listing.published_at).toLocaleString("de-DE") : "";
+    tr.appendChild(updatedTd);
+
     tr.classList.add("row-link");
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
@@ -228,7 +248,28 @@ function render(listings) {
     body.appendChild(tr);
   }
   updatePublishButtonState();
+  renderSums(listings);
 }
+
+function renderSums(listings) {
+  const priceSum = listings.reduce((sum, l) => sum + (l.price || 0), 0);
+  const from = document.getElementById("sold-from").value;
+  const to = document.getElementById("sold-to").value;
+  const soldInRange = listings.filter((l) => {
+    if (l.status !== "Verkauft" || !l.sale_date) return false;
+    const day = l.sale_date.slice(0, 10);
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  });
+  const revenueSum = soldInRange.reduce((sum, l) => sum + (l.sale_price || 0), 0);
+  document.getElementById("sums").textContent =
+    `Summe Angebotspreise (sichtbar): ${priceSum.toFixed(2)} € · `
+    + `Summe Verkaufserlös${from || to ? " (Zeitraum)" : ""}: ${revenueSum.toFixed(2)} € (${soldInRange.length} Verkäufe)`;
+}
+
+document.getElementById("sold-from").addEventListener("change", () => render(sortedListings()));
+document.getElementById("sold-to").addEventListener("change", () => render(sortedListings()));
 
 publishSelectedBtn.addEventListener("click", async () => {
   const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))

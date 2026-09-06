@@ -321,6 +321,7 @@ def _expand_inventory_items(items):
     card_ids = [item["card_id"] for item in items]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
     ebay_info = db.ebay_info_by_card_id(card_ids)
+    purchase_costs = db.purchase_cost_by_card_id(card_ids)
     expanded = []
     for item in items:
         item = dict(item)
@@ -333,7 +334,14 @@ def _expand_inventory_items(items):
             except Exception:
                 pass
         item["card"] = card_summary
-        item["sku"] = (ebay_info.get(item["card_id"]) or {}).get("sku")
+        info = ebay_info.get(item["card_id"]) or {}
+        item["sku"] = info.get("sku")
+        # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
+        # (was die Karte JETZT wert sein soll), sonst ersatzweise der
+        # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
+        # der Wert unbekannt (None) statt mit 0 zu rechnen.
+        unit_value = info.get("price") or purchase_costs.get(item["card_id"])
+        item["value"] = unit_value * item.get("quantity", 0) if unit_value is not None else None
         expanded.append(item)
     return expanded
 
@@ -389,6 +397,7 @@ async def get_card(card_id: str):
     card["purchase"] = db.get_purchase_for_card(card_id)
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     card["inventory"] = db.get_inventory_for_card(card_id)
+    card["ebay_sale"] = db.get_sale_for_card(card_id)
     return JSONResponse(card)
 
 
@@ -528,7 +537,9 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
 
 @app.get("/api/inventory")
 async def list_inventory():
-    return JSONResponse({"inventory": _expand_inventory_items(db.list_inventory())})
+    items = _expand_inventory_items(db.list_inventory())
+    total_value = sum(item["value"] for item in items if item["value"] is not None)
+    return JSONResponse({"inventory": items, "total_value": round(total_value, 2)})
 
 
 @app.post("/api/cards/{card_id}/inventory")
@@ -555,6 +566,74 @@ async def delete_inventory_item(item_id: str):
     return Response(status_code=204)
 
 
+def _parse_date_like(value):
+    # purchase_date is a plain "YYYY-MM-DD" date, sale_date a timestamptz
+    # ISO string - both parse fine via fromisoformat() on Python 3.11+
+    # (it accepts a trailing "Z" too), so one helper covers both instead
+    # of two separate parsing paths.
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+@app.get("/api/statistics")
+async def get_statistics():
+    rows = db.statistics_rows()
+
+    total_cost = total_revenue = realized_profit = 0.0
+    margins = []
+    holding_days_list = []
+    monthly = {}
+    enriched = []
+
+    for row in rows:
+        cost = row.get("cost")
+        sale_price = row.get("sale_price")
+        profit = margin_pct = holding_days = None
+
+        if cost is not None:
+            total_cost += float(cost)
+        if sale_price is not None:
+            total_revenue += float(sale_price)
+        if cost is not None and sale_price is not None:
+            profit = float(sale_price) - float(cost)
+            realized_profit += profit
+            if cost:
+                margin_pct = round((profit / float(cost)) * 100, 1)
+                margins.append(margin_pct)
+
+        purchase_dt = _parse_date_like(row.get("purchase_date"))
+        sale_dt = _parse_date_like(row.get("sale_date"))
+        if purchase_dt and sale_dt:
+            holding_days = (sale_dt.date() - purchase_dt.date()).days
+            holding_days_list.append(holding_days)
+
+        if row.get("sale_date"):
+            month_key = str(row["sale_date"])[:7]
+            bucket = monthly.setdefault(month_key, {"month": month_key, "count": 0, "revenue": 0.0})
+            bucket["count"] += 1
+            bucket["revenue"] += float(sale_price or 0)
+
+        enriched.append({**row, "profit": profit, "margin_pct": margin_pct, "holding_days": holding_days})
+
+    monthly_list = sorted(monthly.values(), key=lambda m: m["month"])
+    for bucket in monthly_list:
+        bucket["revenue"] = round(bucket["revenue"], 2)
+
+    summary = {
+        "total_cost": round(total_cost, 2),
+        "total_revenue": round(total_revenue, 2),
+        "realized_profit": round(realized_profit, 2),
+        "sold_count": len([r for r in enriched if r["profit"] is not None]),
+        "avg_margin_pct": round(sum(margins) / len(margins), 1) if margins else None,
+        "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,
+    }
+    return JSONResponse({"summary": summary, "monthly": monthly_list, "rows": enriched})
+
+
 def _expand_ebay_listings(listings):
     # Enriches each ebay_listings row with a thin card summary
     # (id/title/front_image_url), same purpose and batching approach as
@@ -564,6 +643,11 @@ def _expand_ebay_listings(listings):
         return []
     card_ids = [l["card_id"] for l in listings]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    # Sale info is only looked up for listings that actually sold - keeps
+    # the common case (no "Verkauft" rows in this page) free of an extra
+    # query, same guard style as the card_ids/listing_ids checks above.
+    sold_ids = [l["id"] for l in listings if l.get("status") == "Verkauft"]
+    sales_by_listing = db.sales_by_listing_id(sold_ids) if sold_ids else {}
     expanded = []
     for listing in listings:
         listing = dict(listing)
@@ -576,6 +660,9 @@ def _expand_ebay_listings(listings):
             except Exception:
                 pass
         listing["card"] = card_summary
+        sale = sales_by_listing.get(listing["id"])
+        listing["sale_date"] = sale.get("sale_date") if sale else None
+        listing["sale_price"] = sale.get("gross_price") if sale else None
         expanded.append(listing)
     return expanded
 
@@ -844,6 +931,15 @@ async def sync_ebay_sales():
                 "gross_price": float((line_item.get("total") or {}).get("value", 0) or 0),
             })
             db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
+            try:
+                db.zero_inventory_for_card(listing["card_id"])
+            except Exception:
+                # Same isolation principle as elsewhere in this file (e.g.
+                # _create_default_inventory_item): the sale itself is
+                # already recorded above, so a Supabase hiccup here must
+                # not turn an otherwise-successful sync into a 500 - it
+                # just leaves the inventory row(s) to be zeroed manually.
+                logger.exception("Inventar-Nullung für Karte %s fehlgeschlagen", listing["card_id"])
             synced += 1
     return JSONResponse({"synced": synced, "skipped": skipped})
 

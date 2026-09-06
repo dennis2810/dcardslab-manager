@@ -48,6 +48,8 @@
   .ebay-readonly dt { font-weight: 600; }
   .ebay-readonly dd { margin: 0; }
   .price-research-links { font-size: 0.85rem; margin: 0.4rem 0; }
+  .workflow-hint { background: #fff3cd; color: #7a5c00; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
+  .sale-stats { font-size: 0.85rem; }
   .inventory-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .inventory-section h2 { font-size: 1.1rem; }
   .inventory-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 0.6rem; margin-bottom: 0.5rem; }
@@ -229,7 +231,7 @@ async function loadCard() {
     render(card);
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
-    renderEbaySection(card.ebay_listing);
+    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -692,13 +694,23 @@ function renderInventoryRow(item) {
   return row;
 }
 
-async function renderEbaySection(listing) {
+async function renderEbaySection(listing, purchase, sale) {
   const section = document.getElementById("ebay-section");
   section.innerHTML = "<h2>eBay</h2>";
 
   if (!listing) {
     renderEbayCreateForm(section);
     return;
+  }
+
+  // Reiner Hinweis, kein technischer Zwang (bewusste Entscheidung) - eine
+  // Karte kann auch ohne Kauf-Verknuepfung veroeffentlicht/verkauft werden,
+  // aber dann fehlen spaeter Einstandspreis/Gewinn in den Statistiken.
+  if (!purchase && (listing.status === "Geplant" || listing.status === "Veroeffentlicht" || listing.status === "Verkauft")) {
+    const hint = document.createElement("p");
+    hint.className = "workflow-hint";
+    hint.textContent = "Hinweis: Diese Karte ist noch keinem Kauf zugeordnet (siehe Abschnitt „Kauf“ oben).";
+    section.appendChild(hint);
   }
 
   const badge = document.createElement("span");
@@ -719,7 +731,7 @@ async function renderEbaySection(listing) {
     renderEbayScheduledView(section, listing, environment);
   } else {
     const environment = await getEbayEnvironment();
-    renderEbayPublishedView(section, listing, environment);
+    renderEbayPublishedView(section, listing, environment, purchase, sale);
   }
 }
 
@@ -1085,7 +1097,15 @@ function renderEbayScheduledView(section, listing, environment) {
   section.appendChild(actions);
 }
 
-function renderEbayPublishedView(section, listing, environment) {
+// "Kürzlich aktualisiert" ist bewusst an published_at aufgehaengt statt an
+// einem eigenen Feld: das Bearbeiten eines bereits veroeffentlichten
+// Angebots stoesst in update_ebay_listing() sofort einen Re-Publish an, der
+// published_at neu setzt (main.py, _publish_listing()) - der Zeitstempel
+// spiegelt also schon "zuletzt zu eBay geschickt" wider, egal ob das die
+// Erstveroeffentlichung oder eine spaetere Bearbeitung war.
+const RECENTLY_UPDATED_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+function renderEbayPublishedView(section, listing, environment, purchase, sale) {
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const dl = document.createElement("dl");
@@ -1096,6 +1116,15 @@ function renderEbayPublishedView(section, listing, environment) {
   }
   readonly.appendChild(dl);
 
+  if (listing.published_at) {
+    const updatedP = document.createElement("p");
+    const updatedDate = new Date(listing.published_at);
+    const isRecent = Date.now() - updatedDate.getTime() <= RECENTLY_UPDATED_WINDOW_MS;
+    updatedP.textContent = `Zuletzt aktualisiert: ${updatedDate.toLocaleString("de-DE")}`
+      + (isRecent ? " 🕓 kürzlich geändert" : "");
+    readonly.appendChild(updatedP);
+  }
+
   if (listing.ebay_listing_id) {
     const a = document.createElement("a");
     a.href = ebayListingUrl(listing, environment);
@@ -1105,6 +1134,10 @@ function renderEbayPublishedView(section, listing, environment) {
   }
   section.appendChild(readonly);
 
+  if (listing.status === "Verkauft" && sale) {
+    section.appendChild(renderSaleStats(purchase, sale));
+  }
+
   if (listing.status === "Veroeffentlicht") {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -1112,6 +1145,38 @@ function renderEbayPublishedView(section, listing, environment) {
     editBtn.addEventListener("click", () => renderEbayEditForm(section, listing));
     section.appendChild(editBtn);
   }
+}
+
+// WE-Datum (Wareneingang) = Kaufdatum, WA-Datum (Warenausgang) = Verkaufs-
+// datum - Liegedauer/Marge werden nur angezeigt, wenn beide Seiten
+// (Kauf-Verknuepfung UND Verkauf) tatsaechlich vorliegen.
+function renderSaleStats(purchase, sale) {
+  const dl = document.createElement("dl");
+  const saleDate = sale.sale_date ? new Date(sale.sale_date) : null;
+  const rows = [
+    ["Verkauft am (WA)", saleDate ? saleDate.toLocaleDateString("de-DE") : ""],
+    ["Verkaufspreis", sale.gross_price != null ? `${sale.gross_price} €` : ""],
+  ];
+  if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
+    const profit = Number(sale.gross_price) - Number(purchase.allocated_cost);
+    rows.push(["Gewinn", `${profit.toFixed(2)} €`]);
+    if (Number(purchase.allocated_cost)) {
+      rows.push(["Marge", `${((profit / Number(purchase.allocated_cost)) * 100).toFixed(1)} %`]);
+    }
+  }
+  if (purchase && purchase.purchase_date && saleDate) {
+    const purchaseDate = new Date(purchase.purchase_date);
+    const days = Math.round((saleDate - purchaseDate) / (24 * 60 * 60 * 1000));
+    rows.push(["Liegedauer", `${days} Tag(e)`]);
+  }
+  const wrapper = document.createElement("div");
+  wrapper.className = "ebay-readonly sale-stats";
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
+    const dd = document.createElement("dd"); dd.textContent = value; dl.appendChild(dd);
+  }
+  wrapper.appendChild(dl);
+  return wrapper;
 }
 </script>
 </body>

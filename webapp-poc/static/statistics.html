@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Statistiken</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
+  .summary-card .label { font-size: 0.8rem; color: #555; }
+  .summary-card .value { font-size: 1.2rem; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
+  tr.row-link { cursor: pointer; }
+  tr.row-link:hover { background: #f7f7f7; }
+  .profit-positive { color: #1e4620; }
+  .profit-negative { color: #b00020; }
+  #status-msg { font-style: italic; color: #555; }
+  .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+  <h1>DCardLabs – Statistiken</h1>
+  <p><a href="cards.html">&larr; Zu den Karten</a></p>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="summary-cards" id="summary-cards" style="display: none;"></div>
+
+  <h2>Verkäufe pro Monat</h2>
+  <table id="monthly-table" style="display: none;">
+    <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th></tr></thead>
+    <tbody id="monthly-body"></tbody>
+  </table>
+  <p id="monthly-empty"></p>
+
+  <h2>Alle Karten</h2>
+  <div class="controls">
+    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
+  </div>
+  <table id="rows-table" style="display: none;">
+    <thead>
+      <tr>
+        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+        <th data-key="title">Karte <span class="sort-arrow"></span></th>
+        <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
+        <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
+        <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
+        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+        <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
+        <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
+        <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody id="rows-body"></tbody>
+  </table>
+
+<script>
+const statusMsg = document.getElementById("status-msg");
+const qInput = document.getElementById("q");
+let allRows = [];
+let sortKey = "sku";
+let sortAsc = true;
+
+function fmtEuro(v) {
+  return v != null ? `${Number(v).toFixed(2)} €` : "";
+}
+
+async function load() {
+  try {
+    const res = await fetch("/api/statistics");
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = "";
+    renderSummary(data.summary);
+    renderMonthly(data.monthly);
+    allRows = data.rows;
+    renderRows();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function renderSummary(summary) {
+  const cards = document.getElementById("summary-cards");
+  cards.style.display = "flex";
+  const entries = [
+    ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
+    ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
+    ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
+    ["Verkaufte Karten", String(summary.sold_count)],
+    ["⌀ Marge", summary.avg_margin_pct != null ? `${summary.avg_margin_pct.toFixed(1)} %` : "–"],
+    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${summary.avg_holding_days.toFixed(1)} Tage` : "–"],
+  ];
+  cards.innerHTML = "";
+  for (const [label, value] of entries) {
+    const card = document.createElement("div");
+    card.className = "summary-card";
+    card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    cards.appendChild(card);
+  }
+}
+
+function renderMonthly(monthly) {
+  const table = document.getElementById("monthly-table");
+  const body = document.getElementById("monthly-body");
+  const empty = document.getElementById("monthly-empty");
+  body.innerHTML = "";
+  if (!monthly.length) {
+    table.style.display = "none";
+    empty.textContent = "Noch keine Verkäufe.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const m of monthly) {
+    const tr = document.createElement("tr");
+    for (const text of [m.month, String(m.count), fmtEuro(m.revenue)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+function filteredRows() {
+  const q = qInput.value.trim().toLowerCase();
+  if (!q) return allRows;
+  return allRows.filter((r) =>
+    (r.title || "").toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)
+  );
+}
+
+function sortedRows(rows) {
+  if (!sortKey) return rows;
+  return [...rows].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setSortIndicator() {
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
+
+function renderRows() {
+  const rows = sortedRows(filteredRows());
+  setSortIndicator();
+  const table = document.getElementById("rows-table");
+  const body = document.getElementById("rows-body");
+  body.innerHTML = "";
+  table.style.display = rows.length ? "table" : "none";
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.className = "row-link";
+    tr.addEventListener("click", () => {
+      location.href = `card.html?id=${encodeURIComponent(row.card_id)}`;
+    });
+
+    const cells = [
+      row.sku || "", row.title || "(ohne Titel)",
+      row.purchase_date || "", fmtEuro(row.cost),
+      row.sale_date ? new Date(row.sale_date).toLocaleDateString("de-DE") : "",
+      fmtEuro(row.sale_price),
+    ];
+    for (const text of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    const profitTd = document.createElement("td");
+    if (row.profit != null) {
+      profitTd.textContent = fmtEuro(row.profit);
+      profitTd.className = row.profit >= 0 ? "profit-positive" : "profit-negative";
+    }
+    tr.appendChild(profitTd);
+
+    const marginTd = document.createElement("td");
+    marginTd.textContent = row.margin_pct != null ? `${row.margin_pct.toFixed(1)} %` : "";
+    tr.appendChild(marginTd);
+
+    const holdingTd = document.createElement("td");
+    holdingTd.textContent = row.holding_days != null ? `${row.holding_days} Tag(e)` : "";
+    tr.appendChild(holdingTd);
+
+    body.appendChild(tr);
+  }
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    renderRows();
+  });
+}
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(renderRows, 200);
+});
+
+load();
+</script>
+</body>
+</html>
