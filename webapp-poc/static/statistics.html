@@ -53,7 +53,7 @@
 
   <h2>Verkäufe pro Monat</h2>
   <table id="monthly-table" style="display: none;">
-    <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th></tr></thead>
+    <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
     <tbody id="monthly-body"></tbody>
   </table>
   <p id="monthly-empty"></p>
@@ -95,8 +95,18 @@ let allRows = [];
 let sortKey = "sku";
 let sortAsc = true;
 
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().
 function fmtEuro(v) {
-  return v != null ? `${Number(v).toFixed(2)} €` : "";
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "";
+}
+
+function fmtPercent(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %` : "";
+}
+
+function fmtNumber(v, decimals) {
+  return v != null ? Number(v).toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "";
 }
 
 // Einheitliches Datumsformat (DD.MM.YYYY) - purchase_date ist ein reiner
@@ -164,12 +174,12 @@ function renderSummary(summary) {
     ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
     ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
     ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
-    ["ROI (verkauft)", summary.roi_pct != null ? `${summary.roi_pct.toFixed(1)} %` : "–"],
+    ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],
     ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
     ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
-    ["⌀ Marge", summary.avg_margin_pct != null ? `${summary.avg_margin_pct.toFixed(1)} %` : "–"],
-    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${summary.avg_holding_days.toFixed(1)} Tage` : "–"],
+    ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–"],
+    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–"],
   ];
   cards.innerHTML = "";
   for (const [label, value] of entries) {
@@ -199,6 +209,10 @@ function renderMonthly(monthly) {
       td.textContent = text;
       tr.appendChild(td);
     }
+    const profitTd = document.createElement("td");
+    profitTd.textContent = fmtEuro(m.profit);
+    profitTd.className = m.profit >= 0 ? "profit-positive" : "profit-negative";
+    tr.appendChild(profitTd);
     body.appendChild(tr);
   }
 }
@@ -331,7 +345,7 @@ function renderRows() {
     tr.appendChild(profitTd);
 
     const marginTd = document.createElement("td");
-    marginTd.textContent = row.margin_pct != null ? `${row.margin_pct.toFixed(1)} %` : "";
+    marginTd.textContent = row.margin_pct != null ? fmtPercent(row.margin_pct) : "";
     tr.appendChild(marginTd);
 
     const holdingTd = document.createElement("td");

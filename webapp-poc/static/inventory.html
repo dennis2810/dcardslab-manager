@@ -18,7 +18,7 @@
   #status-msg { font-style: italic; color: #555; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
-  .controls { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
+  .controls { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; flex-wrap: wrap; }
   .status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
   .status-sold { background: #dce8fb; color: #0b3d91; }
   .status-in-stock { background: #e6f4ea; color: #1e4620; }
@@ -26,6 +26,12 @@
   @media print {
     .no-print { display: none !important; }
   }
+  #add-item-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin: 0.75rem 0; }
+  #add-item-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  #add-item-form input, #add-item-form select { font-weight: normal; margin-top: 0.2rem; padding: 0.4rem; }
+  #add-item-form .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; align-items: center; }
+  #add-item-form .full-row { grid-column: 1 / -1; }
+  .error { color: #b00020; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -34,13 +40,36 @@
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
   <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a> · <a href="statistics.html">Zu den Statistiken &rarr;</a></p>
-  <p class="no-print">Inventareinträge (Menge/Zustand/Lagerort/Notizen) werden auf der jeweiligen Kartenseite angelegt und bearbeitet.</p>
 
   <p id="status-msg"></p>
   <p id="total-value" class="sums-block"></p>
   <div class="controls no-print">
-    <label><input type="checkbox" id="only-in-stock"> Nur Menge &gt; 0</label>
+    <label>Status
+      <select id="status-filter">
+        <option value="">Alle</option>
+        <option value="Auf Lager">Auf Lager</option>
+        <option value="Verkauft">Verkauft</option>
+        <option value="Nicht vorrätig">Nicht vorrätig</option>
+      </select>
+    </label>
+    <button type="button" id="toggle-add-item">+ Eintrag hinzufügen</button>
   </div>
+
+  <form id="add-item-form">
+    <div class="full-row">
+      <input type="text" id="card-search" placeholder="Karte suchen (Titel, Team, Set, Kartennr.)">
+      <select id="card-results"></select>
+    </div>
+    <label>Menge <input type="number" name="quantity" value="1" min="0" step="1"></label>
+    <label>Zustand <input type="text" name="condition"></label>
+    <label>Lagerort <input type="text" name="location"></label>
+    <label>Notizen <input type="text" name="notes"></label>
+    <div class="actions">
+      <button type="submit">Speichern</button>
+      <span id="add-item-status"></span>
+    </div>
+  </form>
+
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
@@ -102,8 +131,9 @@ function statusInfo(item) {
 }
 
 function filteredItems() {
-  if (!document.getElementById("only-in-stock").checked) return items;
-  return items.filter((item) => (item.quantity ?? 0) > 0);
+  const status = document.getElementById("status-filter").value;
+  if (!status) return items;
+  return items.filter((item) => statusInfo(item)[0] === status);
 }
 
 function render() {
@@ -197,11 +227,82 @@ document.getElementById("next-page").addEventListener("click", () => {
   render();
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
-document.getElementById("only-in-stock").addEventListener("change", () => {
+document.getElementById("status-filter").addEventListener("change", () => {
   currentPage = 0;
   render();
 });
 
+const addItemForm = document.getElementById("add-item-form");
+const toggleAddItemBtn = document.getElementById("toggle-add-item");
+const cardSearch = document.getElementById("card-search");
+const cardResults = document.getElementById("card-results");
+
+toggleAddItemBtn.addEventListener("click", () => {
+  addItemForm.style.display = addItemForm.style.display === "grid" ? "none" : "grid";
+});
+
+// Gleiches Debounced-Suche-dann-Auswahl-Muster wie purchase.html's
+// Karten-Verknuepfung: Freitextsuche gegen GET /api/cards, Ergebnisse in
+// einem <select>, aus dem die Karte fuer den neuen Inventareintrag gewaehlt wird.
+async function searchCards() {
+  const q = cardSearch.value.trim();
+  cardResults.innerHTML = "";
+  try {
+    const url = q ? `/api/cards?q=${encodeURIComponent(q)}` : "/api/cards";
+    const res = await fetch(url);
+    const body = await res.json();
+    for (const c of (body.cards || []).slice(0, 20)) {
+      const option = document.createElement("option");
+      option.value = c.id;
+      option.textContent = c.title || "(ohne Titel)";
+      cardResults.appendChild(option);
+    }
+  } catch (err) {
+    // Suche schlaegt fehl -> Dropdown bleibt leer, kein Blocker fuer den Rest der Seite.
+  }
+}
+
+cardSearch.addEventListener("input", () => {
+  clearTimeout(cardSearch._debounce);
+  cardSearch._debounce = setTimeout(searchCards, 300);
+});
+
+addItemForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("add-item-status");
+  const cardId = cardResults.value;
+  if (!cardId) {
+    statusEl.textContent = "Bitte erst eine Karte suchen und auswählen.";
+    statusEl.className = "error";
+    return;
+  }
+  const fields = Object.fromEntries(new FormData(addItemForm).entries());
+  statusEl.textContent = "Speichert …";
+  statusEl.className = "";
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/inventory`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    addItemForm.reset();
+    cardResults.innerHTML = "";
+    addItemForm.style.display = "none";
+    statusEl.textContent = "";
+    loadInventory();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  }
+});
+
+searchCards();
 loadInventory();
 </script>
 </body>
