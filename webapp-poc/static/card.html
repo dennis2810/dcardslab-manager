@@ -8,6 +8,9 @@
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
   .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
@@ -65,7 +68,20 @@
     <h1>Karte bearbeiten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
-  <p><a href="cards.html">&larr; Zur Liste</a></p>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
   <p id="prev-next-nav"></p>
 
   <div class="images">
@@ -96,6 +112,24 @@
   <div class="ebay-section" id="ebay-section"></div>
 
 <script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Schwellwert fuer die "auffaellig hohe Marge"-Markierung - deckungsgleich
+// mit statistics.html.
+const OUTLIER_MARGIN_THRESHOLD = 300;
+
 // Third element is a short explanation shown as a hover tooltip on the
 // field's label - same field meanings as integrations/ai_card_recognition.py's
 // recognition prompt, so the UI and the AI agree on what each field means.
@@ -1220,7 +1254,16 @@ function renderSaleStats(purchase, sale) {
     const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost;
     rows.push(["Gewinn", `${profit.toFixed(2)} €`]);
     if (cost) {
-      rows.push(["Marge", `${((profit / cost) * 100).toFixed(1)} %`]);
+      const marginPct = (profit / cost) * 100;
+      let marginText = `${marginPct.toFixed(1)} %`;
+      // Auffaellig hohe Marge deutet meist auf einen sehr klein automatisch
+      // aufgeteilten Einstandspreis hin (Sammel-Kauf ueber viele Karten) -
+      // rechnerisch korrekt, aber einen Hinweis wert (gleicher Schwellwert
+      // wie statistics.html's Ausreisser-Markierung).
+      if (marginPct > OUTLIER_MARGIN_THRESHOLD) {
+        marginText += " ⚠️ auffällig hoch – ggf. automatisch aufgeteilten Einstandspreis auf der Kaufseite prüfen";
+      }
+      rows.push(["Marge", marginText]);
     }
   }
   if (purchase && purchase.purchase_date && saleDate) {

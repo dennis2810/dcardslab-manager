@@ -8,7 +8,9 @@
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .nav-menu { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
   label { font-weight: 600; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; width: fit-content; }
@@ -30,10 +32,19 @@
   </div>
   <p>Lädt Vorder- und Rückseiten-Scanbogen hoch, schneidet die 9 Karten zu und lässt sie per Claude
   Vision erkennen. Kein Speichern, kein eBay, keine Datenbank – nur der Kern-Workflow.</p>
-  <nav class="nav-menu">
-    <a href="cards.html">Zur Karten-Liste &rarr;</a>
-    <a href="purchases.html">Zu den Käufen &rarr;</a>
-    <a href="statistics.html">Zu den Statistiken &rarr;</a>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
   </nav>
 
   <form id="scan-form">
@@ -66,6 +77,21 @@
   <div id="result"></div>
 
 <script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen, ohne dass jede Seite die vollstaendige
+// Liste an Links vorhalten muss; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
 const form = document.getElementById("scan-form");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
