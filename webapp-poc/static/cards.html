@@ -113,6 +113,7 @@
     <span id="page-info"></span>
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
 
 <script>
@@ -472,6 +473,36 @@ document.getElementById("next-page").addEventListener("click", () => {
   renderCurrentView();
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status", "Versendet"];
+  const rows = visibleCards().map((c) => [
+    c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
+    c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
+    c.shipped ? "Ja" : "Nein",
+  ]);
+  downloadCsv("karten.csv", headers, rows);
+});
 
 loadCards();
 </script>
