@@ -127,6 +127,9 @@ def create_purchase(fields, items=None):
             get_client().table("purchase_items").delete().eq("id", inserted["id"]).execute()
         get_client().table("purchases").delete().eq("id", purchase["id"]).execute()
         raise
+    if inserted_items:
+        _recompute_allocated_costs(purchase["id"])
+        inserted_items = _list_purchase_items(purchase["id"])
     purchase["items"] = inserted_items
     return purchase
 
@@ -172,6 +175,11 @@ def update_purchase(purchase_id, fields):
     if not response.data:
         return None
     purchase = response.data[0]
+    # Kaufpreis/Versand geaendert -> die gleichmaessige Aufteilung auf die
+    # verknuepften Karten muss neu gerechnet werden, sonst bliebe sie auf
+    # dem alten Gesamtpreis stehen.
+    if "total_price" in row or "shipping" in row:
+        _recompute_allocated_costs(purchase_id)
     purchase["items"] = _list_purchase_items(purchase_id)
     return purchase
 
@@ -218,6 +226,31 @@ def delete_purchase_item(purchase_id, item_id):
         return None
     get_client().table("purchase_items").delete().eq("id", item_id).execute()
     return response.data[0]
+
+
+def _recompute_allocated_costs(purchase_id):
+    # Even split of (total_price + shipping) across every card currently
+    # linked to this purchase - the default answer to "how is the price
+    # split", since the UI never asks the seller for a per-card price when
+    # linking. A manual edit made afterward via update_purchase_item()
+    # survives until the next such recompute (a card added/removed, or the
+    # purchase's own price edited) - a deliberate trade-off, not a bug.
+    purchase_response = get_client().table("purchases").select("total_price,shipping").eq("id", purchase_id).execute()
+    if not purchase_response.data:
+        return
+    purchase = purchase_response.data[0]
+    total = float(purchase.get("total_price") or 0) + float(purchase.get("shipping") or 0)
+    items = get_client().table("purchase_items").select("id").eq("purchase_id", purchase_id).execute().data
+    if not items:
+        return
+    share = round(total / len(items), 2)
+    for item in items:
+        get_client().table("purchase_items").update({"allocated_cost": share}).eq("id", item["id"]).execute()
+
+
+def recompute_purchase_item_costs(purchase_id):
+    _recompute_allocated_costs(purchase_id)
+    return _list_purchase_items(purchase_id)
 
 
 def get_purchase_for_card(card_id):
