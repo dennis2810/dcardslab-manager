@@ -46,6 +46,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -106,6 +107,7 @@
     <span id="page-info"></span>
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
 
 <script>
@@ -166,8 +168,8 @@ function filteredItems() {
   return items.filter((item) => statusInfo(item)[0] === status);
 }
 
-function render() {
-  const sorted = [...filteredItems()].sort((a, b) => {
+function sortedFilteredItems() {
+  return [...filteredItems()].sort((a, b) => {
     const av = a[sortKey] ?? "";
     const bv = b[sortKey] ?? "";
     if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
@@ -175,6 +177,10 @@ function render() {
       ? String(av).localeCompare(String(bv), "de")
       : String(bv).localeCompare(String(av), "de");
   });
+}
+
+function render() {
+  const sorted = sortedFilteredItems();
 
   for (const th of document.querySelectorAll("th[data-key]")) {
     const arrow = th.querySelector(".sort-arrow");
@@ -260,6 +266,36 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 document.getElementById("status-filter").addEventListener("change", () => {
   currentPage = 0;
   render();
+});
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["SKU", "Karte", "Menge", "Zustand", "Lagerort", "Notizen", "Wert", "Status"];
+  const rows = sortedFilteredItems().map((item) => [
+    item.sku || "", item.card_title || "", item.quantity ?? "", item.condition || "",
+    item.location || "", item.notes || "", item.value != null ? item.value.toFixed(2) : "",
+    statusInfo(item)[0],
+  ]);
+  downloadCsv("inventar.csv", headers, rows);
 });
 
 const addItemForm = document.getElementById("add-item-form");

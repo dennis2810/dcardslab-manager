@@ -51,6 +51,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -63,7 +64,7 @@
   </nav>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr.)">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., SKU, Saison)">
     <select id="status">
       <option value="">Alle Status</option>
       <option value="ok">ok</option>
@@ -79,7 +80,6 @@
       <option value="Fehler">Fehler</option>
     </select>
     <button type="button" id="view-toggle">Listenansicht</button>
-    <button type="button" id="print-btn">🖨 Drucken</button>
     <a href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
@@ -112,6 +112,7 @@
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
     <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
   </div>
 
 <script>

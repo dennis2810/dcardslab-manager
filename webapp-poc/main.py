@@ -104,6 +104,17 @@ def _crop_side(upload_path, out_dir):
     return [Path(p) for p in files]
 
 
+def _find_duplicate_card_safe(fields):
+    # Isolated from process_one()'s own error handling, same reasoning as
+    # _create_default_inventory_item(): a failed duplicate check (Supabase
+    # hiccup) must not make an otherwise-successful scan look failed.
+    try:
+        return db.find_duplicate_card(fields.get("title"), fields.get("set_name"), fields.get("card_number"))
+    except Exception:
+        logger.exception("Duplikat-Pruefung fehlgeschlagen")
+        return None
+
+
 def _create_default_inventory_item(card_id, location="", notes=""):
     # Every scanned card gets a quantity-1 "NM" inventory row automatically -
     # the seller physically has the card in hand at scan time, so requiring
@@ -170,6 +181,7 @@ async def scan(
                 return {"number": number, **fields, "id": card_row["id"]}
 
             fields = recognize_card(front_path=fp, back_path=bp)
+            duplicate = _find_duplicate_card_safe(fields)
 
             front_image_path = back_image_path = None
             image_error = None
@@ -181,6 +193,8 @@ async def scan(
                 image_error = f"{stage} fehlgeschlagen: {type(exc).__name__}: {exc}"
 
             result = {"number": number, **fields}
+            if duplicate:
+                result["possible_duplicate"] = duplicate
             try:
                 card_row = db.insert_card(batch_id, number, fields, front_image_path, back_image_path)
                 result["id"] = card_row["id"]
@@ -377,7 +391,13 @@ def _attach_signed_urls(card):
 
 @app.get("/api/cards")
 async def list_cards(q: str | None = None, status: str | None = None):
-    cards = [_attach_signed_urls(c) for c in db.list_cards(q=q, status=status)]
+    matched = db.list_cards(q=q, status=status)
+    if q:
+        # SKU lebt in ebay_listings, nicht in cards - per SKU gefundene
+        # Karten (z.B. Suche nach der Bestandsnummer) zusaetzlich mischen.
+        existing_ids = {c["id"] for c in matched}
+        matched += [c for c in db.list_cards_by_sku(q) if c["id"] not in existing_ids]
+    cards = [_attach_signed_urls(c) for c in matched]
     card_ids = [c["id"] for c in cards]
     linked_ids = db.cards_with_purchase(card_ids)
     ebay_info = db.ebay_info_by_card_id(card_ids)
@@ -399,6 +419,7 @@ async def get_card(card_id: str):
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     card["inventory"] = db.get_inventory_for_card(card_id)
     card["ebay_sale"] = db.get_sale_for_card(card_id)
+    card["price_research"] = db.list_price_research_for_card(card_id)
     return JSONResponse(card)
 
 
@@ -574,6 +595,22 @@ async def delete_inventory_item(item_id: str):
     return Response(status_code=204)
 
 
+@app.post("/api/cards/{card_id}/price-research")
+async def create_price_research_entry(card_id: str, fields: dict = Body(default={})):
+    if db.get_card(card_id) is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    entry = db.create_price_research_entry(card_id, fields)
+    return JSONResponse(entry)
+
+
+@app.delete("/api/price-research/{entry_id}", status_code=204)
+async def delete_price_research_entry(entry_id: str):
+    deleted = db.delete_price_research_entry(entry_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Preisrecherche-Eintrag {entry_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
 def _parse_date_like(value):
     # purchase_date is a plain "YYYY-MM-DD" date, sale_date a timestamptz
     # ISO string - both parse fine via fromisoformat() on Python 3.11+
@@ -587,8 +624,27 @@ def _parse_date_like(value):
         return None
 
 
-@app.get("/api/statistics")
-async def get_statistics():
+# Schwellwert fuer die "seit X Tagen geplant, aber nicht veroeffentlicht"-
+# Erinnerung auf ebay.html/im Dashboard - ein eBay-Angebot im nativen/App-
+# Scheduling sollte planmaessig binnen weniger Tage veroeffentlicht werden;
+# laenger "Geplant" deutet meist auf einen haengengebliebenen Job hin.
+STALE_GEPLANT_DAYS = 3
+
+
+def _days_pending(listing):
+    reference = listing.get("scheduled_at") or listing.get("created_at")
+    dt = _parse_date_like(reference)
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - dt).days
+
+
+def _compute_statistics():
+    # Factored out of GET /api/statistics so _sheets_tabs() (Google-Sheets-
+    # Export) can reuse the exact same summary/monthly/rows computation
+    # instead of re-implementing the profit/margin formula a second time.
     rows = db.statistics_rows()
 
     total_cost = total_revenue = realized_profit = 0.0
@@ -663,7 +719,12 @@ async def get_statistics():
         "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,
         "roi_pct": round((realized_profit / sold_cost) * 100, 1) if sold_cost else None,
     }
-    return JSONResponse({"summary": summary, "monthly": monthly_list, "rows": enriched})
+    return {"summary": summary, "monthly": monthly_list, "rows": enriched}
+
+
+@app.get("/api/statistics")
+async def get_statistics():
+    return JSONResponse(_compute_statistics())
 
 
 def _expand_ebay_listings(listings):
@@ -1094,6 +1155,38 @@ def _sheets_tabs():
             str(sale.get("sale_date") or ""), str(sale.get("gross_price") or ""),
         ])
 
+    inventory_items = _expand_inventory_items(db.list_inventory())
+    inventory_headers = ["sku", "card_title", "quantity", "condition", "location", "notes", "value", "ebay_status"]
+    inventory_rows = []
+    for item in inventory_items:
+        row = dict(item, card_title=item.get("card", {}).get("title", ""))
+        inventory_rows.append([str(row.get(h, "") or "") for h in inventory_headers])
+    inventory_value = sum(item["value"] for item in inventory_items if item["value"] is not None)
+
+    stats_summary = _compute_statistics()["summary"]
+    statistics_rows = [
+        ["Gesamt-Einkaufswert", str(stats_summary["total_cost"])],
+        ["Gesamtumsatz", str(stats_summary["total_revenue"])],
+        ["Realisierter Gewinn", str(stats_summary["realized_profit"])],
+        ["ROI (verkauft)", "" if stats_summary["roi_pct"] is None else str(stats_summary["roi_pct"])],
+        ["Verkaufte Karten", str(stats_summary["sold_count"])],
+        ["Offene Karten (Kauf, unverkauft)", str(stats_summary["open_count"])],
+        ["Durchschnittliche Marge (%)", "" if stats_summary["avg_margin_pct"] is None else str(stats_summary["avg_margin_pct"])],
+        ["Durchschnittliche Liegedauer (Tage)", "" if stats_summary["avg_holding_days"] is None else str(stats_summary["avg_holding_days"])],
+    ]
+
+    stale_geplant = sum(
+        1 for listing in listings
+        if listing.get("status") == "Geplant" and (_days_pending(listing) or 0) > STALE_GEPLANT_DAYS
+    )
+    dashboard_rows = [
+        ["Aktueller Inventarwert", str(round(inventory_value, 2))],
+        ["Verkaufte Karten (gesamt)", str(stats_summary["sold_count"])],
+        ["Offene Karten (Kauf, unverkauft)", str(stats_summary["open_count"])],
+        ["Realisierter Gewinn (gesamt)", str(stats_summary["realized_profit"])],
+        [f"'Geplant' seit über {STALE_GEPLANT_DAYS} Tagen ohne Veröffentlichung", str(stale_geplant)],
+    ]
+
     sync_info = (["Information", "Wert"], [
         ["Quelle", "DCardsLab Supabase"],
         ["Synchronisiert", datetime.now(timezone.utc).isoformat(timespec="seconds")],
@@ -1103,7 +1196,10 @@ def _sheets_tabs():
 
     return {
         "Karten": (card_headers, card_rows), "Käufe": (purchase_headers, purchase_rows),
-        "eBay": (ebay_headers, ebay_rows), "Sync_Info": sync_info,
+        "eBay": (ebay_headers, ebay_rows), "Inventar": (inventory_headers, inventory_rows),
+        "Statistiken": (["Kennzahl", "Wert"], statistics_rows),
+        "Dashboard": (["Kennzahl", "Wert"], dashboard_rows),
+        "Sync_Info": sync_info,
     }
 
 

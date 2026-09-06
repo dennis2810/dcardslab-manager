@@ -49,6 +49,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -63,7 +64,7 @@
   <div id="oauth-banner" class="no-print">eBay-Status wird geprüft …</div>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel)">
+    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
     <select id="status">
       <option value="">Alle Status</option>
       <option value="Entwurf">Entwurf</option>
@@ -105,6 +106,7 @@
     <span id="page-info"></span>
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
 
   <div class="actions-bar no-print">
@@ -165,6 +167,18 @@ const STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
   Verkauft: "Verkauft", Fehler: "Fehler",
 };
+
+// Gleicher Schwellwert wie main.py's _sheets_tabs()/Dashboard-Kennzahl
+// ("'Geplant' seit ueber X Tagen ohne Veroeffentlichung").
+const STALE_GEPLANT_DAYS = 3;
+
+function daysPending(listing) {
+  const reference = listing.scheduled_at || listing.created_at;
+  if (!reference) return 0;
+  const dt = new Date(reference);
+  if (isNaN(dt)) return 0;
+  return Math.floor((Date.now() - dt.getTime()) / (24 * 60 * 60 * 1000));
+}
 const SELECTABLE_STATUSES = new Set(["Entwurf", "Fehler"]);
 
 let currentListings = [];
@@ -303,6 +317,12 @@ function render(listings) {
     const statusTd = document.createElement("td");
     statusTd.className = "status-" + listing.status;
     statusTd.textContent = STATUS_LABELS[listing.status] || listing.status;
+    if (listing.status === "Geplant" && daysPending(listing) > STALE_GEPLANT_DAYS) {
+      const warn = document.createElement("span");
+      warn.textContent = " ⚠️";
+      warn.title = `Seit über ${STALE_GEPLANT_DAYS} Tagen "Geplant", aber nicht veröffentlicht - ggf. haengengebliebenen Scheduling-Job pruefen.`;
+      statusTd.appendChild(warn);
+    }
     tr.appendChild(statusTd);
 
     const scheduledTd = document.createElement("td");
@@ -365,6 +385,35 @@ document.getElementById("next-page").addEventListener("click", () => {
   render(sortedListings());
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["SKU", "Titel", "Preis", "Status", "Geplant für", "Verkauft am", "Verkaufspreis", "Zuletzt aktualisiert"];
+  const rows = sortedListings().map((l) => [
+    l.sku || "", l.title || "", l.price ?? "", STATUS_LABELS[l.status] || l.status || "",
+    formatDateTime(l.scheduled_at), formatDate(l.sale_date), l.sale_price ?? "", formatDateTime(l.published_at),
+  ]);
+  downloadCsv("ebay.csv", headers, rows);
+});
 
 publishSelectedBtn.addEventListener("click", async () => {
   const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))

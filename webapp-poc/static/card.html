@@ -61,6 +61,14 @@
   .inventory-row label { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; }
   .inventory-row input, .inventory-row select { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
   .inventory-row .notes-field { flex: 1 1 200px; }
+  .price-research-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .price-research-section h2 { font-size: 1.1rem; }
+  .price-research-table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; }
+  .price-research-table th, .price-research-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+  .price-research-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; }
+  .price-research-form label { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; }
+  .price-research-form input { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
+  .price-research-form .note-field { flex: 1 1 200px; }
 </style>
 </head>
 <body>
@@ -72,6 +80,7 @@
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
@@ -110,6 +119,7 @@
   <div class="purchase-section" id="purchase-section"></div>
   <div class="inventory-section" id="inventory-section"></div>
   <div class="ebay-section" id="ebay-section"></div>
+  <div class="price-research-section" id="price-research-section"></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -305,6 +315,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
+    renderPriceResearchSection(card.price_research);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -774,6 +785,126 @@ function renderInventoryRow(item) {
   }
 
   return row;
+}
+
+// Preisrecherche-Verlauf: manuell eingetragene Marktpreis-Beobachtungen
+// ueber die Zeit (z.B. "eBay verkaufte Artikel" am X. Datum bei Y Euro) -
+// unabhaengig vom eigenen eBay-Angebot, hilft bei der Preisfindung.
+function renderPriceResearchSection(entries) {
+  const section = document.getElementById("price-research-section");
+  section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
+
+  if (entries && entries.length) {
+    const table = document.createElement("table");
+    table.className = "price-research-table";
+    const thead = document.createElement("tr");
+    for (const label of ["Datum", "Preis", "Notiz", ""]) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      thead.appendChild(th);
+    }
+    table.appendChild(thead);
+    for (const entry of entries) {
+      const tr = document.createElement("tr");
+      const dateTd = document.createElement("td");
+      dateTd.textContent = formatDate(entry.checked_at);
+      tr.appendChild(dateTd);
+      const priceTd = document.createElement("td");
+      priceTd.textContent = entry.price != null ? `${Number(entry.price).toFixed(2)} €` : "";
+      tr.appendChild(priceTd);
+      const noteTd = document.createElement("td");
+      noteTd.textContent = entry.note || "";
+      tr.appendChild(noteTd);
+      const actionsTd = document.createElement("td");
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = "Löschen";
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm("Diesen Preisrecherche-Eintrag wirklich löschen?")) return;
+        try {
+          const res = await fetch(`/api/price-research/${encodeURIComponent(entry.id)}`, { method: "DELETE" });
+          if (!res.ok && res.status !== 204) {
+            const body = await res.json();
+            alert("Fehler: " + (body.detail || res.statusText));
+            return;
+          }
+          loadCard();
+        } catch (err) {
+          alert("Fehler: " + err);
+        }
+      });
+      actionsTd.appendChild(deleteBtn);
+      tr.appendChild(actionsTd);
+      table.appendChild(tr);
+    }
+    section.appendChild(table);
+  } else {
+    const emptyP = document.createElement("p");
+    emptyP.textContent = "Noch keine Preisrecherche erfasst.";
+    section.appendChild(emptyP);
+  }
+
+  const form = document.createElement("div");
+  form.className = "price-research-form";
+
+  const dateWrapper = document.createElement("label");
+  dateWrapper.textContent = "Datum";
+  const dateInput = document.createElement("input");
+  dateInput.type = "date";
+  dateInput.value = new Date().toISOString().slice(0, 10);
+  dateWrapper.appendChild(dateInput);
+  form.appendChild(dateWrapper);
+
+  const priceWrapper = document.createElement("label");
+  priceWrapper.textContent = "Preis";
+  const priceInput = document.createElement("input");
+  priceInput.type = "number";
+  priceInput.step = "0.01";
+  priceWrapper.appendChild(priceInput);
+  form.appendChild(priceWrapper);
+
+  const noteWrapper = document.createElement("label");
+  noteWrapper.className = "note-field";
+  noteWrapper.textContent = "Notiz";
+  const noteInput = document.createElement("input");
+  noteInput.type = "text";
+  noteInput.placeholder = "z.B. eBay verkaufte Artikel";
+  noteWrapper.appendChild(noteInput);
+  form.appendChild(noteWrapper);
+
+  const statusEl = document.createElement("span");
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.textContent = "Hinzufügen";
+  addBtn.addEventListener("click", async () => {
+    if (!priceInput.value) {
+      statusEl.textContent = "Bitte einen Preis eingeben.";
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = "Speichert …";
+    statusEl.className = "";
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/price-research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price: priceInput.value, note: noteInput.value, checked_at: dateInput.value }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        return;
+      }
+      loadCard();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+    }
+  });
+  form.appendChild(addBtn);
+  form.appendChild(statusEl);
+  section.appendChild(form);
 }
 
 async function renderEbaySection(listing, purchase, sale) {
