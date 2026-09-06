@@ -252,10 +252,26 @@ def ebay_info_by_card_id(card_ids):
     if not card_ids:
         return {}
     response = (
-        get_client().table("ebay_listings").select("card_id,status,sku")
+        get_client().table("ebay_listings").select("card_id,status,sku,price")
         .in_("card_id", card_ids).execute()
     )
-    return {row["card_id"]: {"status": row["status"], "sku": row["sku"]} for row in response.data}
+    return {
+        row["card_id"]: {"status": row["status"], "sku": row["sku"], "price": row["price"]}
+        for row in response.data
+    }
+
+
+def purchase_cost_by_card_id(card_ids):
+    # Bulk-lookup companion to get_purchase_for_card() - used where the cost
+    # basis of many cards is needed at once (e.g. inventory valuation)
+    # without a purchase_items round trip per card.
+    if not card_ids:
+        return {}
+    response = (
+        get_client().table("purchase_items").select("card_id,allocated_cost")
+        .in_("card_id", card_ids).execute()
+    )
+    return {row["card_id"]: row["allocated_cost"] for row in response.data}
 
 
 def get_cards_by_ids(card_ids):
@@ -365,6 +381,32 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
+def get_sale_for_card(card_id):
+    response = (
+        get_client().table("ebay_sales").select("*")
+        .eq("card_id", card_id).order("sale_date", desc=True).limit(1).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def sales_by_listing_id(listing_ids):
+    # Bulk companion to get_sale_for_card() - one query for a whole table
+    # page (e.g. ebay.html's listing overview) instead of one per row.
+    # Keeps only the most recent sale per listing_id (order by sale_date
+    # desc + first-write-wins via setdefault), same pattern as
+    # ebay_info_by_card_id()/cards_with_purchase() above.
+    if not listing_ids:
+        return {}
+    response = (
+        get_client().table("ebay_sales").select("listing_id,sale_date,gross_price")
+        .in_("listing_id", listing_ids).order("sale_date", desc=True).execute()
+    )
+    result = {}
+    for row in response.data:
+        result.setdefault(row["listing_id"], {"sale_date": row["sale_date"], "gross_price": row["gross_price"]})
+    return result
+
+
 GOOGLE_SHEETS_SETTINGS_FIELDS = {"refresh_token", "spreadsheet_id", "connected_at", "last_synced_at"}
 
 
@@ -460,3 +502,69 @@ def delete_inventory_item(item_id):
         return None
     get_client().table("inventory").delete().eq("id", item_id).execute()
     return response.data[0]
+
+
+def zero_inventory_for_card(card_id):
+    # Called when a card sells on eBay - the physical stock for it drops to
+    # 0 across all of its inventory rows (a card can have more than one,
+    # e.g. tracked per location) rather than being decremented, since the
+    # webapp only ever lists one eBay quantity per card today.
+    response = (
+        get_client().table("inventory").update({"quantity": 0})
+        .eq("card_id", card_id).execute()
+    )
+    return response.data
+
+
+def statistics_rows():
+    # One row per card, joining in its purchase cost (if any) and its most
+    # recent eBay sale (if any) - python-side joins across three tables,
+    # same style as _expand_purchase_items()/_expand_inventory_items() in
+    # main.py, kept here since it's pure data assembly with no business
+    # logic (profit/margin/holding-days math lives in the /api/statistics
+    # endpoint instead).
+    cards = get_client().table("cards").select("id,title,card_no").execute().data
+    if not cards:
+        return []
+    card_ids = [c["id"] for c in cards]
+
+    items_response = (
+        get_client().table("purchase_items").select("card_id,purchase_id,allocated_cost")
+        .in_("card_id", card_ids).execute()
+    )
+    items_by_card = {row["card_id"]: row for row in items_response.data}
+    purchase_ids = [row["purchase_id"] for row in items_response.data]
+    purchases_by_id = {}
+    if purchase_ids:
+        purchases_response = (
+            get_client().table("purchases").select("id,purchase_date")
+            .in_("id", purchase_ids).execute()
+        )
+        purchases_by_id = {row["id"]: row for row in purchases_response.data}
+
+    sales_response = (
+        get_client().table("ebay_sales").select("card_id,sale_date,gross_price")
+        .in_("card_id", card_ids).order("sale_date", desc=True).execute()
+    )
+    sales_by_card = {}
+    for row in sales_response.data:
+        sales_by_card.setdefault(row["card_id"], row)
+
+    ebay_info = ebay_info_by_card_id(card_ids)
+
+    rows = []
+    for card in cards:
+        item = items_by_card.get(card["id"])
+        purchase = purchases_by_id.get(item["purchase_id"]) if item else None
+        sale = sales_by_card.get(card["id"])
+        rows.append({
+            "card_id": card["id"],
+            "title": card.get("title", ""),
+            "card_no": card.get("card_no"),
+            "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
+            "purchase_date": purchase.get("purchase_date") if purchase else None,
+            "cost": item.get("allocated_cost") if item else None,
+            "sale_date": sale.get("sale_date") if sale else None,
+            "sale_price": sale.get("gross_price") if sale else None,
+        })
+    return rows

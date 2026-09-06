@@ -84,6 +84,27 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         mock_list.assert_called_once_with(status="Entwurf", q="Muster")
 
+    def test_attaches_sale_info_for_sold_listings(self):
+        sold_listing = _listing(status="Verkauft")
+        with patch("main.db.list_ebay_listings", return_value=[sold_listing]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.sales_by_listing_id", return_value={
+                 "listing-1": {"sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 12.5}
+             }) as mock_sales:
+            response = client.get("/api/ebay/listings")
+        listing = response.json()["listings"][0]
+        self.assertEqual(listing["sale_price"], 12.5)
+        self.assertEqual(listing["sale_date"], "2026-08-01T00:00:00+00:00")
+        mock_sales.assert_called_once_with(["listing-1"])
+
+    def test_skips_sale_lookup_when_nothing_sold(self):
+        with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.sales_by_listing_id") as mock_sales:
+            response = client.get("/api/ebay/listings")
+        self.assertIsNone(response.json()["listings"][0]["sale_price"])
+        mock_sales.assert_not_called()
+
 
 class GetEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
@@ -423,13 +444,32 @@ class SyncSalesEndpointTests(unittest.TestCase):
              patch("main.ebay_client.get_orders", return_value=orders), \
              patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
              patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
-             patch("main.db.update_ebay_listing", return_value=matched_listing) as mock_update:
+             patch("main.db.update_ebay_listing", return_value=matched_listing) as mock_update, \
+             patch("main.db.zero_inventory_for_card") as mock_zero:
             response = client.post("/api/ebay/sync-sales")
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body, {"synced": 1, "skipped": 1})
         mock_upsert.assert_called_once()
         mock_update.assert_called_once_with("listing-1", {"status": "Verkauft"})
+        mock_zero.assert_called_once_with("card-1")
+
+    def test_inventory_zeroing_failure_does_not_fail_the_sync(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}), \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card", side_effect=RuntimeError("boom")):
+            response = client.post("/api/ebay/sync-sales")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"synced": 1, "skipped": 0})
 
     def test_returns_502_instead_of_crashing_when_get_orders_fails(self):
         # A regression test: get_orders() raising EbayApiError (eBay
