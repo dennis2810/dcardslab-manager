@@ -8,7 +8,9 @@
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .nav-menu { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
@@ -45,14 +47,19 @@
     <h1>DCardLabs – Karten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
-  <nav class="nav-menu no-print">
-    <a href="index.html">&larr; Zum Scan-Formular</a>
-    <a href="purchases.html">Zu den Käufen &rarr;</a>
-    <a href="ebay.html">Zu den eBay-Angeboten &rarr;</a>
-    <a href="inventory.html">Zum Inventar &rarr;</a>
-    <a href="statistics.html">Zu den Statistiken &rarr;</a>
-    <a href="card-new.html">+ Neue Karte anlegen</a>
-    <a href="settings.html">Einstellungen &rarr;</a>
+  <nav class="page-nav no-print">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
   </nav>
 
   <div class="controls no-print">
@@ -73,6 +80,14 @@
     </select>
     <button type="button" id="view-toggle">Listenansicht</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
+    <a href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
+  </div>
+
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <button type="button" id="bulk-mark-shipped">Als versendet markieren</button>
+    <button type="button" id="bulk-unmark-shipped">Versand-Markierung entfernen</button>
+    <span id="bulk-status"></span>
   </div>
 
   <p id="status-msg"></p>
@@ -80,6 +95,7 @@
   <table id="list" class="list" hidden>
     <thead>
       <tr>
+        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
         <th></th>
         <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
         <th data-key="title">Titel <span class="sort-arrow"></span></th>
@@ -99,6 +115,20 @@
   </div>
 
 <script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
 const PAGE_SIZE = 40;
 let currentPage = 0;
 
@@ -110,6 +140,20 @@ const grid = document.getElementById("grid");
 const list = document.getElementById("list");
 const listBody = document.getElementById("list-body");
 const viewToggle = document.getElementById("view-toggle");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const bulkStatusEl = document.getElementById("bulk-status");
+
+// Massenaktionen (Karten-ID -> ausgewaehlt) - nur in der Listenansicht
+// nutzbar; wird bei jedem Neuladen/Filterwechsel zurueckgesetzt, damit nie
+// eine nicht mehr sichtbare Karte "unsichtbar ausgewaehlt" bleibt.
+let selectedIds = new Set();
+
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Karte(n) ausgewählt`;
+}
 
 // Same labels as card.html's eBay section, so a status reads identically
 // everywhere in the app.
@@ -181,6 +225,8 @@ async function loadCards() {
     statusMsg.textContent = `${body.cards.length} Karte(n)`;
     currentCards = body.cards;
     currentPage = 0;
+    selectedIds.clear();
+    updateBulkBar();
     renderCurrentView();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -188,6 +234,10 @@ async function loadCards() {
 }
 
 let currentCards = [];
+// Zuletzt gerenderte Seite (fuer Massenaktionen "Alle auswaehlen" - bezieht
+// sich bewusst nur auf die aktuell sichtbare Seite, nicht alle gefilterten
+// Karten ueber alle Seiten hinweg).
+let currentPageItems = [];
 // SKU-ascending by default - the seller's most-used reference number.
 let sortKey = "ebay_sku";
 let sortAsc = true;
@@ -225,6 +275,7 @@ function renderCurrentView() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  currentPageItems = pageItems;
   document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${filtered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
@@ -302,8 +353,23 @@ function render(cards) {
 
 function renderList(cards) {
   listBody.innerHTML = "";
+  selectAllCheckbox.checked = cards.length > 0 && cards.every((c) => selectedIds.has(c.id));
   for (const card of cards) {
     const tr = document.createElement("tr");
+
+    const checkboxTd = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(card.id);
+    checkbox.addEventListener("click", (ev) => ev.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(card.id);
+      else selectedIds.delete(card.id);
+      selectAllCheckbox.checked = cards.length > 0 && cards.every((c) => selectedIds.has(c.id));
+      updateBulkBar();
+    });
+    checkboxTd.appendChild(checkbox);
+    tr.appendChild(checkboxTd);
 
     const imgTd = document.createElement("td");
     const img = document.createElement("img");
@@ -360,6 +426,41 @@ ebayFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const card of currentPageItems) {
+    if (selectAllCheckbox.checked) selectedIds.add(card.id);
+    else selectedIds.delete(card.id);
+  }
+  updateBulkBar();
+  renderCurrentView();
+});
+
+// Keine eigener Bulk-Endpoint noetig - feuert einfach ein PATCH pro
+// ausgewaehlter Karte ab (gleiche Semantik wie card.html's einzelnes
+// "Versendet"-Kontrollkaestchen), da die Selektion ueblicherweise klein ist.
+async function bulkSetShipped(shipped) {
+  bulkStatusEl.textContent = "Speichert …";
+  const ids = [...selectedIds];
+  try {
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipped }),
+      })
+    ));
+    bulkStatusEl.textContent = "";
+    selectedIds.clear();
+    updateBulkBar();
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+  }
+}
+
+document.getElementById("bulk-mark-shipped").addEventListener("click", () => bulkSetShipped(true));
+document.getElementById("bulk-unmark-shipped").addEventListener("click", () => bulkSetShipped(false));
 
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);

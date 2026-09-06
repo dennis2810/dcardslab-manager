@@ -9,6 +9,9 @@
   h2 { font-size: 1.05rem; margin-top: 2rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }
@@ -34,7 +37,20 @@
     <h1>DCardLabs – Statistiken</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
-  <p class="no-print"><a href="cards.html">&larr; Zu den Karten</a></p>
+  <nav class="page-nav no-print">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
 
   <div class="controls no-print">
     <label>Zeitraum nach
@@ -86,8 +102,28 @@
   </div>
 
 <script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
 const PAGE_SIZE = 40;
 let currentPage = 0;
+
+// Schwellwert fuer die "auffaellig hohe Marge"-Markierung - typischerweise
+// die Folge eines automatisch auf sehr viele Karten aufgeteilten
+// Sammel-Kaufpreises (winziger Einstandspreis pro Karte); rechnerisch
+// korrekt, aber ein Hinweis wert. Gleicher Wert wie card.html.
+const OUTLIER_MARGIN_THRESHOLD = 300;
 
 const statusMsg = document.getElementById("status-msg");
 const qInput = document.getElementById("q");
@@ -345,7 +381,15 @@ function renderRows() {
     tr.appendChild(profitTd);
 
     const marginTd = document.createElement("td");
-    marginTd.textContent = row.margin_pct != null ? fmtPercent(row.margin_pct) : "";
+    if (row.margin_pct != null) {
+      marginTd.textContent = fmtPercent(row.margin_pct);
+      if (row.margin_pct > OUTLIER_MARGIN_THRESHOLD) {
+        const warn = document.createElement("span");
+        warn.textContent = " ⚠️";
+        warn.title = "Auffällig hohe Marge – ggf. wurde der Einstandspreis durch einen automatischen Kauf-Split zu niedrig angesetzt. Auf der Kaufseite prüfen.";
+        marginTd.appendChild(warn);
+      }
+    }
     tr.appendChild(marginTd);
 
     const holdingTd = document.createElement("td");
