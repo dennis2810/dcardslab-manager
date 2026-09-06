@@ -82,6 +82,20 @@ class BuildBackupZipTests(unittest.TestCase):
         # Only 2 downloads (front+back for c1) - c2 has no image paths.
         self.assertEqual(mock_client.storage.from_.return_value.download.call_count, 2)
 
+    def test_skips_a_table_that_does_not_exist_yet_instead_of_crashing(self):
+        # z.B. eine Migration (wie price_research), die in dieser Supabase-
+        # Instanz noch nicht eingespielt wurde - der Rest des Backups muss
+        # trotzdem fertig werden.
+        self._patch_db(**{"backup.db.all_price_research": MagicMock(side_effect=RuntimeError('relation "price_research" does not exist'))})
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()  # must not raise
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertIn("cards.json", names)
+        self.assertNotIn("price_research.json", names)
+
 
 if __name__ == "__main__":
     unittest.main()

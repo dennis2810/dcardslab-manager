@@ -419,7 +419,14 @@ async def get_card(card_id: str):
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     card["inventory"] = db.get_inventory_for_card(card_id)
     card["ebay_sale"] = db.get_sale_for_card(card_id)
-    card["price_research"] = db.list_price_research_for_card(card_id)
+    try:
+        card["price_research"] = db.list_price_research_for_card(card_id)
+    except Exception:
+        # Faellt zurueck auf eine leere Liste statt die ganze Kartenseite mit
+        # einem 500 zu blockieren, z.B. wenn die price_research-Migration in
+        # dieser Supabase-Instanz noch nicht eingespielt wurde.
+        logger.exception("Preisrecherche-Verlauf konnte nicht geladen werden fuer Karte %s", card_id)
+        card["price_research"] = []
     return JSONResponse(card)
 
 

@@ -24,7 +24,14 @@ def build_backup_zip():
             # Looked up on db at call time (not bound into a module-level
             # dict at import time) so that patching db.all_*() in tests
             # actually takes effect.
-            rows = getattr(db, f"all_{table}")()
+            try:
+                rows = getattr(db, f"all_{table}")()
+            except Exception:
+                # A table that doesn't exist yet in this Supabase instance
+                # (e.g. a migration not applied yet) must not abort the
+                # whole backup - it's just skipped, same resilience as the
+                # per-image download below.
+                continue
             if table == "cards":
                 cards = rows
             zf.writestr(f"{table}.json", json.dumps(rows, ensure_ascii=False, indent=2, default=str))

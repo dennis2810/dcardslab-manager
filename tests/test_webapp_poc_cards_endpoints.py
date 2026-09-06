@@ -382,6 +382,21 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["price_research"], [])
 
+    def test_falls_back_to_empty_list_when_the_table_is_missing(self):
+        # z.B. wenn die price_research-Migration in dieser Supabase-Instanz
+        # noch nicht eingespielt wurde - die Kartenseite darf dadurch nicht
+        # mit einem 500 komplett blockiert werden.
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.list_price_research_for_card", side_effect=RuntimeError('relation "price_research" does not exist')):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["price_research"], [])
+
 
 class CreatePriceResearchEntryEndpointTests(unittest.TestCase):
     def test_creates_entry_for_an_existing_card(self):
