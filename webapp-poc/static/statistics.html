@@ -53,18 +53,6 @@
     </label>
   </nav>
 
-  <div class="controls no-print">
-    <label>Zeitraum nach
-      <select id="date-field">
-        <option value="purchase_date">Kaufdatum</option>
-        <option value="sale_date">Verkaufsdatum</option>
-      </select>
-    </label>
-    <label>Von <input type="date" id="date-from"></label>
-    <label>Bis <input type="date" id="date-to"></label>
-    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
-  </div>
-
   <p id="status-msg">Lädt …</p>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
@@ -77,6 +65,15 @@
 
   <h2>Alle Karten</h2>
   <div class="controls no-print">
+    <label>Zeitraum nach
+      <select id="date-field">
+        <option value="purchase_date">Kaufdatum</option>
+        <option value="sale_date">Verkaufsdatum</option>
+      </select>
+    </label>
+    <label>Von <input type="date" id="date-from"></label>
+    <label>Bis <input type="date" id="date-to"></label>
+    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
   </div>
   <table id="rows-table" style="display: none;">
