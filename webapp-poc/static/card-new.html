@@ -27,6 +27,9 @@
   button:disabled { opacity: 0.5; cursor: default; }
   #status { font-style: italic; color: #555; grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
+  .duplicate-warning { font-weight: 600; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; background: #fff3cd; color: #7a5c00; }
+  .duplicate-warning .actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -80,6 +83,8 @@
       <button type="button" id="cancel-btn">Abbrechen</button>
     </div>
   </form>
+
+  <div id="duplicate-warning" class="duplicate-warning" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -250,6 +255,66 @@ recognizeBtn.addEventListener("click", async () => {
   }
 });
 
+// Karte wurde bereits angelegt (siehe main.py's create_card_manual) - die
+// Warnung fragt nur noch, ob sie mit der vermuteten Alt-Karte
+// zusammengefuehrt werden soll, statt das Anlegen selbst zu blockieren
+// (gleiche Semantik wie beim Scannen, siehe index.html's mergeDuplicate()).
+function showDuplicateWarning(newCardId, duplicate) {
+  const box = document.getElementById("duplicate-warning");
+  box.innerHTML = "";
+  box.hidden = false;
+
+  const text = document.createElement("p");
+  text.textContent = `⚠ Evtl. bereits vorhanden: Karte #${duplicate.card_no ?? "?"} mit gleichem Titel/Set/Kartennummer.`;
+  box.appendChild(text);
+
+  const link = document.createElement("a");
+  link.href = `card.html?id=${encodeURIComponent(duplicate.id)}`;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "Bestehende Karte ansehen";
+  box.appendChild(link);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const mergeBtn = document.createElement("button");
+  mergeBtn.type = "button";
+  mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+  mergeBtn.addEventListener("click", async () => {
+    mergeBtn.disabled = true;
+    mergeBtn.textContent = "Führe zusammen …";
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(newCardId)}/merge-into/${encodeURIComponent(duplicate.id)}`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        alert("Fehler beim Zusammenführen: " + (errBody.detail || res.statusText));
+        mergeBtn.disabled = false;
+        mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+        return;
+      }
+      window.location.href = `card.html?id=${encodeURIComponent(duplicate.id)}`;
+    } catch (err) {
+      alert("Fehler beim Zusammenführen: " + err);
+      mergeBtn.disabled = false;
+      mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+    }
+  });
+  actions.appendChild(mergeBtn);
+
+  const keepBtn = document.createElement("button");
+  keepBtn.type = "button";
+  keepBtn.textContent = "Als neue Karte behalten";
+  keepBtn.addEventListener("click", () => {
+    window.location.href = `card.html?id=${encodeURIComponent(newCardId)}`;
+  });
+  actions.appendChild(keepBtn);
+
+  box.appendChild(actions);
+}
+
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   if (!sideBlobs.front || !sideBlobs.back) return;
@@ -276,6 +341,10 @@ form.addEventListener("submit", async (ev) => {
       statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
       statusEl.className = "error";
       saveBtn.disabled = false;
+      return;
+    }
+    if (body.possible_duplicate) {
+      showDuplicateWarning(body.id, body.possible_duplicate);
       return;
     }
     window.location.href = `card.html?id=${encodeURIComponent(body.id)}`;

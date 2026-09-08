@@ -198,6 +198,36 @@ class UpdateCardTests(unittest.TestCase):
         mock_client.table.return_value.update.assert_not_called()
 
 
+class SetCardImagePathTests(unittest.TestCase):
+    def test_writes_front_image_path(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "front_image_path": "b1/1_front.jpg"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_card_image_path("card-1", "front", "b1/1_front.jpg")
+        self.assertEqual(result["front_image_path"], "b1/1_front.jpg")
+        mock_client.table.return_value.update.assert_called_once_with({"front_image_path": "b1/1_front.jpg"})
+
+    def test_writes_back_image_path(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "back_image_path": "b1/1_back.jpg"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_card_image_path("card-1", "back", "b1/1_back.jpg")
+        mock_client.table.return_value.update.assert_called_once_with({"back_image_path": "b1/1_back.jpg"})
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_card_image_path("does-not-exist", "front", "x.jpg")
+        self.assertIsNone(result)
+
+
 class DeleteCardTests(unittest.TestCase):
     def test_deletes_card_and_returns_it(self):
         mock_client = MagicMock()

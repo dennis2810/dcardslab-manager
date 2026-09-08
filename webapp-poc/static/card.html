@@ -27,6 +27,7 @@
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
   .error { color: #b00020; font-weight: 600; }
+  [hidden] { display: none !important; }
   .purchase-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .purchase-section h2 { font-size: 1.1rem; }
   .purchase-info { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin-bottom: 0.75rem; }
@@ -113,6 +114,8 @@
       <div class="rotate-buttons">
         <button type="button" id="front-rotate-left">&#8634; Links</button>
         <button type="button" id="front-rotate-right">&#8635; Rechts</button>
+        <button type="button" id="front-replace-btn">Foto ersetzen</button>
+        <input type="file" id="front-replace-file" accept="image/*" hidden>
         <span class="rotate-status" id="front-rotate-status"></span>
       </div>
     </div>
@@ -121,6 +124,8 @@
       <div class="rotate-buttons">
         <button type="button" id="back-rotate-left">&#8634; Links</button>
         <button type="button" id="back-rotate-right">&#8635; Rechts</button>
+        <button type="button" id="back-replace-btn">Foto ersetzen</button>
+        <input type="file" id="back-replace-file" accept="image/*" hidden>
         <span class="rotate-status" id="back-rotate-status"></span>
       </div>
     </div>
@@ -323,6 +328,55 @@ document.getElementById("front-rotate-left").addEventListener("click", () => rot
 document.getElementById("front-rotate-right").addEventListener("click", () => rotateImage("front", 90));
 document.getElementById("back-rotate-left").addEventListener("click", () => rotateImage("back", 270));
 document.getElementById("back-rotate-right").addEventListener("click", () => rotateImage("back", 90));
+
+// Ersetzt ein einzelnes Foto, ohne die ganze Karte neu anzulegen - bisher
+// liess sich ein unscharfes/falsches Foto nur drehen, nicht austauschen.
+async function replaceImage(side, file) {
+  const leftBtn = document.getElementById(`${side}-rotate-left`);
+  const rightBtn = document.getElementById(`${side}-rotate-right`);
+  const replaceBtn = document.getElementById(`${side}-replace-btn`);
+  const statusEl = document.getElementById(`${side}-rotate-status`);
+
+  leftBtn.disabled = true;
+  rightBtn.disabled = true;
+  replaceBtn.disabled = true;
+  statusEl.textContent = "Lädt hoch …";
+  try {
+    const formData = new FormData();
+    formData.append("side", side);
+    formData.append("file", file);
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/image`, {
+      method: "POST",
+      body: formData,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      alert("Fehler beim Ersetzen: " + (body.detail || res.statusText));
+      return;
+    }
+    if (body.replaced_image_data_uri) {
+      const imgId = side === "front" ? "front-img" : "back-img";
+      document.getElementById(imgId).src = body.replaced_image_data_uri;
+    }
+  } catch (err) {
+    alert("Fehler beim Ersetzen: " + err);
+  } finally {
+    leftBtn.disabled = false;
+    rightBtn.disabled = false;
+    replaceBtn.disabled = false;
+    statusEl.textContent = "";
+  }
+}
+
+for (const side of ["front", "back"]) {
+  const fileInput = document.getElementById(`${side}-replace-file`);
+  document.getElementById(`${side}-replace-btn`).addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    fileInput.value = "";
+    if (file) replaceImage(side, file);
+  });
+}
 
 async function loadCard() {
   try {

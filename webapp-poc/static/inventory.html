@@ -152,6 +152,17 @@ let sortAsc = true;
 
 const qInput = document.getElementById("q");
 
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
+
 // de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
 // groessere Betraege deutlich lesbarer ist als toFixed().
 function fmtEuro(value) {

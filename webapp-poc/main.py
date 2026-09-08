@@ -280,6 +280,8 @@ async def create_card_manual(
         front_path.write_bytes(await front.read())
         back_path.write_bytes(await back.read())
 
+        duplicate = _find_duplicate_card_safe(parsed_fields)
+
         batch_id = db.create_batch(card_count=1)
         try:
             front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
@@ -298,7 +300,13 @@ async def create_card_manual(
 
     db.update_batch_status(batch_id, "ok")
     _create_default_inventory_item(card_row["id"], location, notes)
-    return JSONResponse(_attach_signed_urls(card_row))
+    result = _attach_signed_urls(card_row)
+    if duplicate:
+        # Gleiche Warnung wie beim Scannen (siehe process_one()) - bisher
+        # gab es diese Pruefung nur fuer gescannte Karten, obwohl eine
+        # manuell angelegte Karte genauso ein Duplikat sein kann.
+        result["possible_duplicate"] = duplicate
+    return JSONResponse(result)
 
 
 def _expand_purchase_items(items):
@@ -524,6 +532,40 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
     # already in memory from rotate_image()'s return value, so they're sent
     # straight back as a data URI - no read-after-write race possible.
     result["rotated_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(rotated_bytes).decode("ascii")
+    return JSONResponse(result)
+
+
+@app.post("/api/cards/{card_id}/image")
+async def replace_card_image(card_id: str, side: str = Form(...), file: UploadFile = File(...)):
+    if side not in ("front", "back"):
+        raise HTTPException(status_code=400, detail="side muss 'front' oder 'back' sein.")
+
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_replace_") as tmp_str:
+        tmp_path = Path(tmp_str) / f"{side}{Path(file.filename or f'{side}.jpg').suffix}"
+        tmp_path.write_bytes(await file.read())
+        try:
+            # batch_id/position_in_batch sind fix pro Karte -> ergibt denselben
+            # Objekt-Pfad wie beim urspruenglichen Upload und ueberschreibt ihn
+            # per upsert (siehe storage.upload_image), egal ob vorher schon ein
+            # Bild da war oder nicht.
+            compressed = storage.compress_image(tmp_path)
+            object_path = storage.upload_image(card["batch_id"], card["position_in_batch"], side, tmp_path)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    updated = db.set_card_image_path(card_id, side, object_path)
+    result = _attach_signed_urls(updated)
+    # Gleiche Begruendung wie beim Dreh-Endpunkt: Supabase Storage's CDN kann
+    # kurz nach dem Ueberschreiben noch eine veraltete Kopie ausliefern, selbst
+    # bei frisch signierter URL - die Data-URI kommt direkt aus der gerade
+    # hochgeladenen Kompression und kann nicht veraltet sein.
+    result["replaced_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(compressed).decode("ascii")
     return JSONResponse(result)
 
 

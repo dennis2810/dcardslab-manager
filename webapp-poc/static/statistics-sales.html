@@ -119,6 +119,17 @@ const OUTLIER_MARGIN_THRESHOLD = 300;
 
 const statusMsg = document.getElementById("status-msg");
 const qInput = document.getElementById("q");
+
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
 let allRows = [];
 let sortKey = "sku";
 let sortAsc = true;

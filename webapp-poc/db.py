@@ -107,6 +107,16 @@ def update_card(card_id, fields):
     return response.data[0] if response.data else None
 
 
+def set_card_image_path(card_id, side, object_path):
+    """Writes front_image_path/back_image_path directly, bypassing
+    update_card()'s CARD_FIELDS whitelist - these are server-managed
+    Storage-object references (like purchases.receipt_path), not
+    user-editable recognition fields."""
+    column = "front_image_path" if side == "front" else "back_image_path"
+    response = get_client().table("cards").update({column: object_path}).eq("id", card_id).execute()
+    return response.data[0] if response.data else None
+
+
 def delete_card(card_id):
     card = get_card(card_id)
     if card is None:
