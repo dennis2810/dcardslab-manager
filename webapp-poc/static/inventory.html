@@ -94,6 +94,7 @@
     <label>Notizen <input type="text" name="notes"></label>
     <div class="actions">
       <button type="submit">Speichern</button>
+      <button type="button" id="add-item-cancel">Abbrechen</button>
       <span id="add-item-status"></span>
     </div>
   </form>
@@ -151,6 +152,14 @@ let sortAsc = true;
 
 const qInput = document.getElementById("q");
 
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege deutlich lesbarer ist als toFixed().
+function fmtEuro(value) {
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
 async function loadInventory() {
   statusMsg.textContent = "Lädt …";
   table.style.display = "none";
@@ -163,7 +172,7 @@ async function loadInventory() {
     }
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
     statusMsg.textContent = `${items.length} Eintrag/Einträge`;
-    totalValueEl.textContent = `Gesamtwert: ${(data.total_value ?? 0).toFixed(2)} €`;
+    totalValueEl.textContent = `Gesamtwert: ${fmtEuro(data.total_value ?? 0)}`;
     renderWarnings();
     renderLocationOverview();
     render();
@@ -236,7 +245,7 @@ function renderLocationOverview() {
   empty.textContent = "";
   for (const [location, group] of sorted) {
     const tr = document.createElement("tr");
-    for (const text of [location, String(group.count), `${group.value.toFixed(2)} €`]) {
+    for (const text of [location, String(group.count), fmtEuro(group.value)]) {
       const td = document.createElement("td");
       td.textContent = text;
       tr.appendChild(td);
@@ -315,7 +324,7 @@ function render() {
     }
 
     const valueTd = document.createElement("td");
-    valueTd.textContent = item.value != null ? `${item.value.toFixed(2)} €` : "";
+    valueTd.textContent = fmtEuro(item.value);
     tr.appendChild(valueTd);
 
     const [statusLabel, statusClass] = statusInfo(item);
@@ -399,6 +408,12 @@ const cardResults = document.getElementById("card-results");
 
 toggleAddItemBtn.addEventListener("click", () => {
   addItemForm.style.display = addItemForm.style.display === "grid" ? "none" : "grid";
+});
+
+document.getElementById("add-item-cancel").addEventListener("click", () => {
+  addItemForm.reset();
+  addItemForm.style.display = "none";
+  document.getElementById("add-item-status").textContent = "";
 });
 
 // Gleiches Debounced-Suche-dann-Auswahl-Muster wie purchase.html's

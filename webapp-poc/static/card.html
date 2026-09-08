@@ -202,11 +202,18 @@ function formatDateTime(value) {
   return `${formatDate(value)} ${time}`;
 }
 
-// Einheitlich immer 2 Nachkommastellen bei Geldbetraegen - roher String-
-// Concat (z.B. "9.5 €") liess Cent-Betraege inkonsistent mit nur einer
-// Nachkommastelle erscheinen.
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().
 function fmtEuro(value) {
-  return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
+function fmtPercent(value) {
+  return value != null
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+    : "";
 }
 
 function showError(container, message) {
@@ -836,8 +843,8 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
       alertP.className = "price-alert";
       const direction = diffPct > 0 ? "über" : "unter";
       alertP.textContent =
-        `⚠ Angebotspreis (${Number(listingPrice).toFixed(2)} €) liegt ${Math.abs(diffPct).toFixed(0)}% ${direction} ` +
-        `dem Marktdurchschnitt (${avg.toFixed(2)} €).`;
+        `⚠ Angebotspreis (${fmtEuro(listingPrice)}) liegt ${Math.abs(diffPct).toFixed(0)}% ${direction} ` +
+        `dem Marktdurchschnitt (${fmtEuro(avg)}).`;
       section.appendChild(alertP);
     }
   }
@@ -858,7 +865,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
       dateTd.textContent = formatDate(entry.checked_at);
       tr.appendChild(dateTd);
       const priceTd = document.createElement("td");
-      priceTd.textContent = entry.price != null ? `${Number(entry.price).toFixed(2)} €` : "";
+      priceTd.textContent = fmtEuro(entry.price);
       tr.appendChild(priceTd);
       const noteTd = document.createElement("td");
       noteTd.textContent = entry.note || "";
@@ -993,7 +1000,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
         link.href = item.item_web_url;
         link.target = "_blank";
         link.rel = "noopener";
-        link.textContent = `${item.title} – ${item.price != null ? item.price.toFixed(2) + " €" : "?"}`;
+        link.textContent = `${item.title} – ${item.price != null ? fmtEuro(item.price) : "?"}`;
         li.appendChild(link);
         const useBtn = document.createElement("button");
         useBtn.type = "button";
@@ -1133,7 +1140,7 @@ function renderEbayEditForm(section, listing, purchase) {
 
     const hint = document.createElement("span");
     hint.className = "price-calc-hint";
-    hint.textContent = `Einstandspreis: ${cost.toFixed(2)} €`;
+    hint.textContent = `Einstandspreis: ${fmtEuro(cost)}`;
     calcWrapper.appendChild(hint);
 
     const marginLabel = document.createElement("label");
@@ -1533,10 +1540,10 @@ function renderSaleStats(purchase, sale) {
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
     const cost = Number(purchase.allocated_cost);
     const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost - ebayFees;
-    rows.push(["Gewinn", `${profit.toFixed(2)} €`]);
+    rows.push(["Gewinn", fmtEuro(profit)]);
     if (cost) {
       const marginPct = (profit / cost) * 100;
-      let marginText = `${marginPct.toFixed(1)} %`;
+      let marginText = fmtPercent(marginPct);
       // Auffaellig hohe Marge deutet meist auf einen sehr klein automatisch
       // aufgeteilten Einstandspreis hin (Sammel-Kauf ueber viele Karten) -
       // rechnerisch korrekt, aber einen Hinweis wert (gleicher Schwellwert
