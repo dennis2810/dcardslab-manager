@@ -1518,6 +1518,10 @@ function renderSaleStats(purchase, sale) {
   // Formel wie im /api/statistics-Endpunkt.
   const shippingCharged = Number(sale.shipping_charged || 0);
   const shippingCost = Number(sale.shipping_cost || 0);
+  // eBay-Verkaufsgebuehren - eBays Order-API (fuer den Sync genutzt) liefert
+  // sie nicht mit, daher aktuell nur manuell erfassbar (s.u.), analog zu
+  // shipping_cost. Faellt in den Gewinn mit rein, sobald eingetragen.
+  const ebayFees = Number(sale.ebay_fees || 0);
   const rows = [
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
@@ -1525,7 +1529,7 @@ function renderSaleStats(purchase, sale) {
   ];
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
     const cost = Number(purchase.allocated_cost);
-    const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost;
+    const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost - ebayFees;
     rows.push(["Gewinn", `${profit.toFixed(2)} €`]);
     if (cost) {
       const marginPct = (profit / cost) * 100;
@@ -1563,6 +1567,24 @@ function renderSaleStats(purchase, sale) {
   shippingCostLabel.appendChild(shippingCostInput);
   shippingCostP.appendChild(shippingCostLabel);
   shippingCostP.appendChild(document.createTextNode(" €"));
+  wrapper.appendChild(shippingCostP);
+
+  // eBay zieht bei einem Verkauf ueblicherweise eine Verkaufsgebuehr (aktuell
+  // ~10-13 % vom Verkaufspreis) ab, die die Order-API nicht mitliefert -
+  // daher manuell erfassbar, analog zu Versand-Kosten oben. Ohne Eintrag
+  // (0) bleibt der Gewinn wie bisher unveraendert.
+  const ebayFeesP = document.createElement("p");
+  const ebayFeesLabel = document.createElement("label");
+  ebayFeesLabel.textContent = "eBay-Gebühren ";
+  const ebayFeesInput = document.createElement("input");
+  ebayFeesInput.type = "number";
+  ebayFeesInput.step = "0.01";
+  ebayFeesInput.value = sale.ebay_fees ?? 0;
+  ebayFeesLabel.appendChild(ebayFeesInput);
+  ebayFeesP.appendChild(ebayFeesLabel);
+  ebayFeesP.appendChild(document.createTextNode(" €"));
+  wrapper.appendChild(ebayFeesP);
+
   const saveShippingBtn = document.createElement("button");
   saveShippingBtn.type = "button";
   saveShippingBtn.textContent = "Speichern";
@@ -1574,7 +1596,7 @@ function renderSaleStats(purchase, sale) {
       const res = await fetch(`/api/ebay/sales/${encodeURIComponent(sale.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shipping_cost: shippingCostInput.value }),
+        body: JSON.stringify({ shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -1588,9 +1610,8 @@ function renderSaleStats(purchase, sale) {
       shippingStatus.className = "error";
     }
   });
-  shippingCostP.appendChild(saveShippingBtn);
-  shippingCostP.appendChild(shippingStatus);
-  wrapper.appendChild(shippingCostP);
+  ebayFeesP.appendChild(saveShippingBtn);
+  ebayFeesP.appendChild(shippingStatus);
 
   return wrapper;
 }

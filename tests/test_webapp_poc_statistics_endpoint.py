@@ -73,6 +73,33 @@ class StatisticsEndpointTests(unittest.TestCase):
         # 15 + 5 - 10 - 3 = 7 statt 5 ohne Versand-Differenz.
         self.assertEqual(response.json()["rows"][0]["profit"], 7.0)
 
+    def test_ebay_fees_reduce_profit(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+            "ebay_fees": 1.5,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        # 15 - 10 - 1.5 = 3.5 statt 5 ohne Gebuehr.
+        self.assertEqual(body["rows"][0]["profit"], 3.5)
+        self.assertEqual(body["summary"]["realized_profit"], 3.5)
+        self.assertEqual(body["summary"]["total_ebay_fees"], 1.5)
+
+    def test_missing_ebay_fees_defaults_to_zero(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        self.assertEqual(body["rows"][0]["profit"], 5.0)
+        self.assertEqual(body["summary"]["total_ebay_fees"], 0)
+
     def test_card_with_only_a_purchase_has_no_profit_fields(self):
         rows = [{
             "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,

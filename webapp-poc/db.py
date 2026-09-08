@@ -482,13 +482,16 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
-EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost"}
-EBAY_SALE_MONEY_FIELDS = {"shipping_cost"}
+EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees"}
+EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees"}
 
 
 def update_ebay_sale(sale_id, fields):
-    # Only shipping_cost is meant to be user-editable - everything else on
-    # ebay_sales comes from the eBay order sync (sync_ebay_sales()).
+    # shipping_cost and ebay_fees are the only user-editable fields on
+    # ebay_sales - everything else comes from the eBay order sync
+    # (sync_ebay_sales()). eBay's Order API (used for that sync) doesn't
+    # report the marketplace fee itself (that lives in the separate
+    # Finances API, not integrated here), so it's manually entered for now.
     row = _round_money(
         _blank_numeric_to_none(
             {name: value for name, value in fields.items() if name in EBAY_SALE_WRITABLE_FIELDS},
@@ -544,6 +547,22 @@ def save_google_sheets_settings(fields):
     row = {name: value for name, value in fields.items() if name in GOOGLE_SHEETS_SETTINGS_FIELDS}
     row["id"] = True
     response = get_client().table("google_sheets_settings").upsert(row).execute()
+    return response.data[0]
+
+
+DASHBOARD_GOAL_FIELDS = {"metric", "amount"}
+
+
+def get_dashboard_goal(year):
+    response = get_client().table("dashboard_goals").select("*").eq("year", year).execute()
+    return response.data[0] if response.data else None
+
+
+def set_dashboard_goal(year, fields):
+    # Upsert auf year (Primary Key) - ein Ziel pro Jahr, siehe schema.sql.
+    row = {name: value for name, value in fields.items() if name in DASHBOARD_GOAL_FIELDS}
+    row["year"] = year
+    response = get_client().table("dashboard_goals").upsert(row, on_conflict="year").execute()
     return response.data[0]
 
 
@@ -704,7 +723,7 @@ def statistics_rows():
 
     sales_response = (
         get_client().table("ebay_sales")
-        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost")
+        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost,ebay_fees")
         .in_("card_id", card_ids).order("sale_date", desc=True).execute()
     )
     sales_by_card = {}
@@ -731,5 +750,6 @@ def statistics_rows():
             "sale_price": sale.get("gross_price") if sale else None,
             "shipping_charged": sale.get("shipping_charged") if sale else None,
             "shipping_cost": sale.get("shipping_cost") if sale else None,
+            "ebay_fees": sale.get("ebay_fees") if sale else None,
         })
     return rows

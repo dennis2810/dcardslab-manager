@@ -413,6 +413,77 @@ class PublishBulkEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["results"][0]["status"], "Fehler")
 
 
+class PriceBulkEndpointTests(unittest.TestCase):
+    def test_applies_negative_percent_and_rounds(self):
+        listing = _listing(price=10.0, status="Entwurf")
+        with patch("main.db.get_ebay_listing", return_value=listing), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**listing, **updates}) as mock_update, \
+             patch("main.ebay_client.get_access_token") as mock_token:
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["listing-1"], "percent": -10},
+            )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["results"][0]
+        self.assertEqual(result["price"], 9.0)
+        mock_update.assert_called_once_with("listing-1", {"price": 9.0})
+        mock_token.assert_not_called()
+
+    def test_applies_positive_percent(self):
+        listing = _listing(price=10.0, status="Entwurf")
+        with patch("main.db.get_ebay_listing", return_value=listing), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**listing, **updates}):
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["listing-1"], "percent": 20},
+            )
+        self.assertEqual(response.json()["results"][0]["price"], 12.0)
+
+    def test_never_goes_below_zero(self):
+        listing = _listing(price=10.0, status="Entwurf")
+        with patch("main.db.get_ebay_listing", return_value=listing), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**listing, **updates}):
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["listing-1"], "percent": -500},
+            )
+        self.assertEqual(response.json()["results"][0]["price"], 0.0)
+
+    def test_republishes_when_already_published(self):
+        published = _listing(price=10.0, status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**published, **updates}), \
+             patch("main.db.get_card", return_value=_card(front_image_path="b1/1_front.jpg")), \
+             patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
+             patch("main.storage.public_url", return_value="https://img/x.jpg"), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
+             patch("main.ebay_client.get_listing_policies", return_value={}), \
+             patch("main.ebay_client.put_inventory_item") as mock_put, \
+             patch("main.ebay_client.update_offer") as mock_update_offer, \
+             patch("main.ebay_client.publish_offer", return_value="L1"):
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["listing-1"], "percent": -10},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_put.assert_called_once()
+        mock_update_offer.assert_called_once()
+
+    def test_unknown_listing_id_reports_error_without_raising(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["does-not-exist"], "percent": -10},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.json()["results"][0])
+
+    def test_missing_percent_is_400(self):
+        response = client.post("/api/ebay/listings/price-bulk", json={"listing_ids": ["listing-1"]})
+        self.assertEqual(response.status_code, 400)
+
+
 class OauthStatusEndpointTests(unittest.TestCase):
     def test_proxies_oauth_server_response(self):
         mock_response = MagicMock()

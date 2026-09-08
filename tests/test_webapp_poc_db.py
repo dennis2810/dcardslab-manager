@@ -1078,6 +1078,17 @@ class UpdateEbaySaleTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row["shipping_cost"], 3.5)
 
+    def test_updates_ebay_fees_rounded(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "ebay_fees": 2.15}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"ebay_fees": "2.149"})
+        self.assertEqual(result["ebay_fees"], 2.15)
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["ebay_fees"], 2.15)
+
     def test_ignores_unknown_fields(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -1178,6 +1189,48 @@ class GoogleSheetsSettingsTests(unittest.TestCase):
         mock_client.table.return_value.upsert.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             db.save_google_sheets_settings({"spreadsheet_id": "s1", "not_a_real_column": "x"})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertNotIn("not_a_real_column", row)
+
+
+class DashboardGoalTests(unittest.TestCase):
+    def test_get_returns_none_when_no_row_for_year(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_dashboard_goal(2026)
+        self.assertIsNone(result)
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("year", 2026)
+
+    def test_get_returns_the_row_for_year(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2026, "metric": "revenue", "amount": 5000.0}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_dashboard_goal(2026)
+        self.assertEqual(result["amount"], 5000.0)
+
+    def test_set_upserts_on_year(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2026, "metric": "profit", "amount": 3000.0}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_dashboard_goal(2026, {"metric": "profit", "amount": 3000.0})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"metric": "profit", "amount": 3000.0, "year": 2026})
+        self.assertEqual(mock_client.table.return_value.upsert.call_args[1], {"on_conflict": "year"})
+
+    def test_set_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2026}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_dashboard_goal(2026, {"metric": "revenue", "amount": 1, "not_a_real_column": "x"})
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertNotIn("not_a_real_column", row)
 
@@ -1417,7 +1470,10 @@ class StatisticsRowsTests(unittest.TestCase):
                 response.data = [{"id": "p1", "purchase_date": "2026-01-01"}]
                 builder.select.return_value.in_.return_value.execute.return_value = response
             elif name == "ebay_sales":
-                response.data = [{"card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00", "gross_price": 15.0}]
+                response.data = [{
+                    "card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00",
+                    "gross_price": 15.0, "ebay_fees": 1.75,
+                }]
                 builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
             elif name == "ebay_listings":
                 response.data = []
@@ -1436,6 +1492,8 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertIsNone(by_id["card-2"]["sale_price"])
         self.assertEqual(by_id["card-1"]["team"], "FC Bayern")
         self.assertEqual(by_id["card-1"]["set_name"], "Topps 2026")
+        self.assertEqual(by_id["card-1"]["ebay_fees"], 1.75)
+        self.assertIsNone(by_id["card-2"]["ebay_fees"])
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()
