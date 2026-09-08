@@ -683,7 +683,7 @@ def statistics_rows():
     # main.py, kept here since it's pure data assembly with no business
     # logic (profit/margin/holding-days math lives in the /api/statistics
     # endpoint instead).
-    cards = get_client().table("cards").select("id,title,card_no").execute().data
+    cards = get_client().table("cards").select("id,title,card_no,team,set_name").execute().data
     if not cards:
         return []
     card_ids = [c["id"] for c in cards]
@@ -722,6 +722,8 @@ def statistics_rows():
             "card_id": card["id"],
             "title": card.get("title", ""),
             "card_no": card.get("card_no"),
+            "team": card.get("team", ""),
+            "set_name": card.get("set_name", ""),
             "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
             "purchase_date": purchase.get("purchase_date") if purchase else None,
             "cost": item.get("allocated_cost") if item else None,

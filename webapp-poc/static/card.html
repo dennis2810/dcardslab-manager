@@ -58,6 +58,7 @@
   .ebay-readonly dt { font-weight: 600; }
   .ebay-readonly dd { margin: 0; }
   .price-research-links { font-size: 0.85rem; margin: 0.4rem 0; }
+  .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: #fff3cd; color: #7a5c00; }
   .workflow-hint { background: #fff3cd; color: #7a5c00; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
   .sale-stats { font-size: 0.85rem; }
   .inventory-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
@@ -85,6 +86,7 @@
     <h1>Karte bearbeiten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
+  <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a></p>
   <nav class="page-nav">
     <label>Seite
       <select id="page-nav-select">
@@ -324,7 +326,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
-    renderPriceResearchSection(card.price_research, card.title);
+    renderPriceResearchSection(card.price_research, card.title, card.ebay_listing?.price);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -812,9 +814,30 @@ function renderInventoryRow(item) {
 // Preisrecherche-Verlauf: manuell eingetragene Marktpreis-Beobachtungen
 // ueber die Zeit (z.B. "eBay verkaufte Artikel" am X. Datum bei Y Euro) -
 // unabhaengig vom eigenen eBay-Angebot, hilft bei der Preisfindung.
-function renderPriceResearchSection(entries, cardTitle) {
+function renderPriceResearchSection(entries, cardTitle, listingPrice) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
+
+  // Preis-Alarm: warnt in beide Richtungen, wenn der eigene Angebotspreis um
+  // mindestens 20% vom Durchschnitt der erfassten Preisrecherche-Einträge
+  // abweicht - sowohl "zu teuer" (verkauft sich schlecht) als auch "zu
+  // billig" (Geld liegen gelassen) sind für den Verkäufer relevant.
+  const knownPrices = (entries || [])
+    .map((entry) => Number(entry.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  if (listingPrice != null && knownPrices.length) {
+    const avg = knownPrices.reduce((sum, price) => sum + price, 0) / knownPrices.length;
+    const diffPct = ((Number(listingPrice) - avg) / avg) * 100;
+    if (avg > 0 && Math.abs(diffPct) >= 20) {
+      const alertP = document.createElement("p");
+      alertP.className = "price-alert";
+      const direction = diffPct > 0 ? "über" : "unter";
+      alertP.textContent =
+        `⚠ Angebotspreis (${Number(listingPrice).toFixed(2)} €) liegt ${Math.abs(diffPct).toFixed(0)}% ${direction} ` +
+        `dem Marktdurchschnitt (${avg.toFixed(2)} €).`;
+      section.appendChild(alertP);
+    }
+  }
 
   if (entries && entries.length) {
     const table = document.createElement("table");

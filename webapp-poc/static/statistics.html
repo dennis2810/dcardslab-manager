@@ -12,7 +12,6 @@
   .page-nav { margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
-  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }
   }
@@ -26,10 +25,6 @@
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
-  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
-  th .sort-arrow { color: #888; font-size: 0.8em; }
-  tr.row-link { cursor: pointer; }
-  tr.row-link:hover { background: #f7f7f7; }
   .profit-positive { color: #1e4620; }
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
@@ -68,6 +63,20 @@
   </table>
   <p id="monthly-empty"></p>
 
+  <h2>Team-Ranking (nach Gewinn)</h2>
+  <table id="team-ranking-table" style="display: none;">
+    <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+    <tbody id="team-ranking-body"></tbody>
+  </table>
+  <p id="team-ranking-empty"></p>
+
+  <h2>Set-Ranking (nach Gewinn)</h2>
+  <table id="set-ranking-table" style="display: none;">
+    <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+    <tbody id="set-ranking-body"></tbody>
+  </table>
+  <p id="set-ranking-empty"></p>
+
   <h2>Jahresübersicht (Steuer)</h2>
   <div class="controls no-print">
     <button type="button" id="yearly-csv-btn">⭳ CSV-Export</button>
@@ -78,42 +87,7 @@
   </table>
   <p id="yearly-overview-empty"></p>
 
-  <h2>Alle Karten</h2>
-  <div class="controls no-print">
-    <label>Zeitraum nach
-      <select id="date-field">
-        <option value="purchase_date">Kaufdatum</option>
-        <option value="sale_date">Verkaufsdatum</option>
-      </select>
-    </label>
-    <label>Von <input type="date" id="date-from"></label>
-    <label>Bis <input type="date" id="date-to"></label>
-    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
-    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
-  </div>
-  <table id="rows-table" style="display: none;">
-    <thead>
-      <tr>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Karte <span class="sort-arrow"></span></th>
-        <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
-        <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
-        <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
-        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-        <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
-        <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
-        <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="rows-body"></tbody>
-  </table>
-  <div class="pagination no-print">
-    <button type="button" id="prev-page">&larr; Zurück</button>
-    <span id="page-info"></span>
-    <button type="button" id="next-page">Weiter &rarr;</button>
-    <button type="button" id="print-btn">🖨 Drucken</button>
-    <button type="button" id="csv-btn">⭳ CSV-Export</button>
-  </div>
+  <p><a href="statistics-sales.html">Alle Verkäufe (mit Filtern &amp; Suche) &rarr;</a></p>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -130,20 +104,7 @@
   });
 })();
 
-const PAGE_SIZE = 40;
-let currentPage = 0;
-
-// Schwellwert fuer die "auffaellig hohe Marge"-Markierung - typischerweise
-// die Folge eines automatisch auf sehr viele Karten aufgeteilten
-// Sammel-Kaufpreises (winziger Einstandspreis pro Karte); rechnerisch
-// korrekt, aber ein Hinweis wert. Gleicher Wert wie card.html.
-const OUTLIER_MARGIN_THRESHOLD = 300;
-
 const statusMsg = document.getElementById("status-msg");
-const qInput = document.getElementById("q");
-let allRows = [];
-let sortKey = "sku";
-let sortAsc = true;
 
 // de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
 // groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().
@@ -179,22 +140,6 @@ function downloadCsv(filename, headers, rows) {
   URL.revokeObjectURL(url);
 }
 
-// Einheitliches Datumsformat (DD.MM.YYYY) - purchase_date ist ein reiner
-// Datums-String ("YYYY-MM-DD"), daher per String-Split statt new Date()
-// zerlegt, um Zeitzonen-Verschiebungen zu vermeiden; sale_date ist ein
-// voller Zeitstempel und wird ueber new Date() geparst.
-function formatDate(value) {
-  if (!value) return "";
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (dateOnly) {
-    const [, y, m, d] = dateOnly;
-    return `${d}.${m}.${y}`;
-  }
-  const d = new Date(value);
-  if (isNaN(d)) return value;
-  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
-}
-
 function formatMonth(value) {
   const [y, m] = (value || "").split("-");
   return m && y ? `${m}.${y}` : value;
@@ -225,14 +170,44 @@ async function load() {
       return;
     }
     statusMsg.textContent = "";
+    await loadInventoryValue();
+    renderSummary({ ...data.summary, inventory_value: inventoryValue });
     renderMonthly(data.monthly);
     renderMonthlyChart(data.monthly);
+    renderRanking("team-ranking-table", "team-ranking-body", "team-ranking-empty", data.team_ranking);
+    renderRanking("set-ranking-table", "set-ranking-body", "set-ranking-empty", data.set_ranking);
     renderYearlyOverview(data.monthly);
-    allRows = data.rows;
-    await loadInventoryValue();
-    renderRows();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+// Team-/Set-Ranking: gleiche Zeilenstruktur wie die Monatstabelle, nur mit
+// einem frei benennbaren Namensfeld statt einem Monat.
+function renderRanking(tableId, bodyId, emptyId, entries) {
+  const table = document.getElementById(tableId);
+  const body = document.getElementById(bodyId);
+  const empty = document.getElementById(emptyId);
+  body.innerHTML = "";
+  if (!entries || !entries.length) {
+    table.style.display = "none";
+    empty.textContent = "Noch keine Daten.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const entry of entries) {
+    const tr = document.createElement("tr");
+    for (const text of [entry.name, String(entry.count), fmtEuro(entry.revenue)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    const profitTd = document.createElement("td");
+    profitTd.textContent = fmtEuro(entry.profit);
+    profitTd.className = entry.profit >= 0 ? "profit-positive" : "profit-negative";
+    tr.appendChild(profitTd);
+    body.appendChild(tr);
   }
 }
 
@@ -441,209 +416,6 @@ function renderYearlyOverview(monthly) {
     body.appendChild(totalTr);
   }
 }
-
-// Zeitraum-Filter nach Kauf- ODER Verkaufsdatum (separat waehlbar) - wirkt
-// auf die Summenkarten UND die Tabelle, aber bewusst NICHT auf "Verkaeufe
-// pro Monat" (die bleibt eine Gesamtuebersicht ueber alle Monate).
-function dateFilteredRows() {
-  const field = document.getElementById("date-field").value;
-  const from = document.getElementById("date-from").value;
-  const to = document.getElementById("date-to").value;
-  if (!from && !to) return allRows;
-  return allRows.filter((r) => {
-    const raw = r[field];
-    if (!raw) return false;
-    const day = String(raw).slice(0, 10);
-    if (from && day < from) return false;
-    if (to && day > to) return false;
-    return true;
-  });
-}
-
-function filteredRows() {
-  const q = qInput.value.trim().toLowerCase();
-  const rows = dateFilteredRows();
-  if (!q) return rows;
-  return rows.filter((r) =>
-    (r.title || "").toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)
-  );
-}
-
-// Spiegelt die Summenlogik von GET /api/statistics, aber auf einer
-// (Datums-)gefilterten Teilmenge der bereits vom Server angereicherten
-// Zeilen (profit/margin_pct/holding_days) - reine Aggregation, keine
-// Neuberechnung der Gewinn-Formel noetig.
-function computeSummary(rows) {
-  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0;
-  let realizedProfit = 0, soldCost = 0, openCount = 0;
-  const margins = [], salePrices = [], holdingDays = [];
-  for (const r of rows) {
-    if (r.cost != null) totalCost += Number(r.cost);
-    if (r.sale_price != null) {
-      totalRevenue += Number(r.sale_price);
-      totalShippingCharged += Number(r.shipping_charged || 0);
-      totalShippingCost += Number(r.shipping_cost || 0);
-      salePrices.push(Number(r.sale_price));
-    }
-    if (r.profit != null) {
-      realizedProfit += r.profit;
-      soldCost += Number(r.cost);
-      if (r.margin_pct != null) margins.push(r.margin_pct);
-    } else if (r.cost != null && r.sale_price == null) {
-      openCount += 1;
-    }
-    if (r.holding_days != null) holdingDays.push(r.holding_days);
-  }
-  const avg = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null);
-  return {
-    total_cost: totalCost, total_revenue: totalRevenue,
-    total_shipping_charged: totalShippingCharged, total_shipping_cost: totalShippingCost,
-    realized_profit: realizedProfit,
-    sold_count: rows.filter((r) => r.profit != null).length,
-    open_count: openCount,
-    avg_sale_price: avg(salePrices),
-    avg_margin_pct: avg(margins),
-    avg_holding_days: avg(holdingDays),
-    roi_pct: soldCost ? (realizedProfit / soldCost) * 100 : null,
-  };
-}
-
-function sortedRows(rows) {
-  if (!sortKey) return rows;
-  return [...rows].sort((a, b) => {
-    const av = a[sortKey] ?? "";
-    const bv = b[sortKey] ?? "";
-    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
-    return sortAsc
-      ? String(av).localeCompare(String(bv), "de")
-      : String(bv).localeCompare(String(av), "de");
-  });
-}
-
-function setSortIndicator() {
-  for (const th of document.querySelectorAll("th[data-key]")) {
-    const arrow = th.querySelector(".sort-arrow");
-    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
-  }
-}
-
-function renderRows() {
-  renderSummary({ ...computeSummary(dateFilteredRows()), inventory_value: inventoryValue });
-  const allFiltered = sortedRows(filteredRows());
-  setSortIndicator();
-  const table = document.getElementById("rows-table");
-  const body = document.getElementById("rows-body");
-
-  const pageCount = Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE));
-  currentPage = Math.min(currentPage, pageCount - 1);
-  const rows = allFiltered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${allFiltered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
-  document.getElementById("prev-page").disabled = currentPage === 0;
-  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
-
-  body.innerHTML = "";
-  table.style.display = allFiltered.length ? "table" : "none";
-  for (const row of rows) {
-    const tr = document.createElement("tr");
-    tr.className = "row-link";
-    tr.addEventListener("click", () => {
-      location.href = `card.html?id=${encodeURIComponent(row.card_id)}`;
-    });
-
-    const cells = [
-      row.sku || "", row.title || "(ohne Titel)",
-      formatDate(row.purchase_date), fmtEuro(row.cost),
-      formatDate(row.sale_date),
-      fmtEuro(row.sale_price),
-    ];
-    for (const text of cells) {
-      const td = document.createElement("td");
-      td.textContent = text;
-      tr.appendChild(td);
-    }
-
-    const profitTd = document.createElement("td");
-    if (row.profit != null) {
-      profitTd.textContent = fmtEuro(row.profit);
-      profitTd.className = row.profit >= 0 ? "profit-positive" : "profit-negative";
-    }
-    tr.appendChild(profitTd);
-
-    const marginTd = document.createElement("td");
-    if (row.margin_pct != null) {
-      marginTd.textContent = fmtPercent(row.margin_pct);
-      if (row.margin_pct > OUTLIER_MARGIN_THRESHOLD) {
-        const warn = document.createElement("span");
-        warn.textContent = " ⚠️";
-        warn.title = "Auffällig hohe Marge – ggf. wurde der Einstandspreis durch einen automatischen Kauf-Split zu niedrig angesetzt. Auf der Kaufseite prüfen.";
-        marginTd.appendChild(warn);
-      }
-    }
-    tr.appendChild(marginTd);
-
-    const holdingTd = document.createElement("td");
-    holdingTd.textContent = row.holding_days != null ? `${row.holding_days} Tag(e)` : "";
-    tr.appendChild(holdingTd);
-
-    body.appendChild(tr);
-  }
-}
-
-for (const th of document.querySelectorAll("th[data-key]")) {
-  th.addEventListener("click", () => {
-    const key = th.dataset.key;
-    if (sortKey === key) {
-      sortAsc = !sortAsc;
-    } else {
-      sortKey = key;
-      sortAsc = true;
-    }
-    currentPage = 0;
-    renderRows();
-  });
-}
-
-qInput.addEventListener("input", () => {
-  clearTimeout(qInput._debounce);
-  qInput._debounce = setTimeout(() => { currentPage = 0; renderRows(); }, 200);
-});
-
-for (const id of ["date-field", "date-from", "date-to"]) {
-  document.getElementById(id).addEventListener("change", () => {
-    currentPage = 0;
-    renderRows();
-  });
-}
-
-document.getElementById("reset-date-filter").addEventListener("click", () => {
-  document.getElementById("date-from").value = "";
-  document.getElementById("date-to").value = "";
-  currentPage = 0;
-  renderRows();
-});
-
-document.getElementById("prev-page").addEventListener("click", () => {
-  currentPage = Math.max(0, currentPage - 1);
-  renderRows();
-});
-document.getElementById("next-page").addEventListener("click", () => {
-  currentPage += 1;
-  renderRows();
-});
-document.getElementById("print-btn").addEventListener("click", () => window.print());
-
-document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = [
-    "SKU", "Karte", "Kaufdatum (WE)", "Einstandspreis", "Verkaufsdatum (WA)",
-    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)",
-  ];
-  const rows = sortedRows(filteredRows()).map((row) => [
-    row.sku || "", row.title || "", formatDate(row.purchase_date), fmtNumber(row.cost, 2),
-    formatDate(row.sale_date), fmtNumber(row.sale_price, 2), fmtNumber(row.profit, 2),
-    fmtNumber(row.margin_pct, 1), row.holding_days ?? "",
-  ]);
-  downloadCsv("statistiken.csv", headers, rows);
-});
 
 document.getElementById("yearly-csv-btn").addEventListener("click", () => {
   const headers = ["Jahr", "Quartal", "Verkäufe", "Umsatz", "Einstandspreis", "Gewinn"];

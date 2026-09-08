@@ -191,6 +191,53 @@ class DeleteCardEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+class MergeDuplicateCardEndpointTests(unittest.TestCase):
+    def test_adds_duplicate_quantity_to_existing_inventory_item_and_deletes_duplicate(self):
+        card = {"id": "card-2", "front_image_path": None, "back_image_path": None}
+        target = {"id": "card-1", "title": "Original"}
+        with patch("main.db.get_card", side_effect=[card, target, target]) as mock_get, \
+             patch("main.db.get_inventory_for_card", side_effect=[
+                 [{"id": "inv-2", "quantity": 1}], [{"id": "inv-1", "quantity": 2}],
+             ]), \
+             patch("main.db.update_inventory_item") as mock_update, \
+             patch("main.db.create_inventory_item") as mock_create, \
+             patch("main.db.delete_card", return_value=card) as mock_delete:
+            response = client.post("/api/cards/card-2/merge-into/card-1")
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_called_once_with("inv-1", {"quantity": 3})
+        mock_create.assert_not_called()
+        mock_delete.assert_called_once_with("card-2")
+        self.assertEqual(response.json()["id"], "card-1")
+
+    def test_creates_inventory_item_when_target_has_none(self):
+        card = {"id": "card-2", "front_image_path": None, "back_image_path": None}
+        target = {"id": "card-1"}
+        with patch("main.db.get_card", side_effect=[card, target, target]), \
+             patch("main.db.get_inventory_for_card", side_effect=[[{"id": "inv-2", "quantity": 1}], []]), \
+             patch("main.db.update_inventory_item") as mock_update, \
+             patch("main.db.create_inventory_item") as mock_create, \
+             patch("main.db.delete_card", return_value=card):
+            response = client.post("/api/cards/card-2/merge-into/card-1")
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_not_called()
+        mock_create.assert_called_once_with("card-1", {"quantity": 1})
+
+    def test_rejects_merging_a_card_with_itself(self):
+        response = client.post("/api/cards/card-1/merge-into/card-1")
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_404_when_duplicate_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = client.post("/api/cards/does-not-exist/merge-into/card-1")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_404_when_target_not_found(self):
+        card = {"id": "card-2"}
+        with patch("main.db.get_card", side_effect=[card, None]):
+            response = client.post("/api/cards/card-2/merge-into/does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+
 class RotateCardImageEndpointTests(unittest.TestCase):
     def test_rotates_front_image_and_returns_card_with_fresh_signed_urls(self):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}

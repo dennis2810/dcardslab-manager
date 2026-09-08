@@ -141,12 +141,67 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(monthly["2026-01"]["profit"], 6.0)
         self.assertEqual(monthly["2026-01"]["cost"], 4.0)
 
+    def test_team_and_set_ranking_group_sold_cards_by_profit(self):
+        rows = [
+            {
+                "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+                "team": "FC Bayern", "set_name": "Topps 2026",
+                "purchase_date": "2026-01-01", "cost": 4.0,
+                "sale_date": "2026-01-15T00:00:00+00:00", "sale_price": 10.0,
+            },
+            {
+                "card_id": "card-2", "title": "Karte 2", "card_no": 2, "sku": None,
+                "team": "FC Bayern", "set_name": "Topps 2026",
+                "purchase_date": "2026-01-01", "cost": 2.0,
+                "sale_date": "2026-01-20T00:00:00+00:00", "sale_price": 5.0,
+            },
+            {
+                "card_id": "card-3", "title": "Karte 3", "card_no": 3, "sku": None,
+                "team": "Real Madrid", "set_name": "Panini 2026",
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 20.0,
+            },
+            {
+                # Kein Team/Set -> darf im Ranking nicht auftauchen.
+                "card_id": "card-4", "title": "Karte 4", "card_no": 4, "sku": None,
+                "team": "", "set_name": "",
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 3.0,
+            },
+            {
+                # Noch nicht verkauft -> darf im Ranking nicht auftauchen.
+                "card_id": "card-5", "title": "Karte 5", "card_no": 5, "sku": None,
+                "team": "FC Bayern", "set_name": "Topps 2026",
+                "purchase_date": "2026-01-01", "cost": 5.0,
+                "sale_date": None, "sale_price": None,
+            },
+        ]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+
+        team_ranking = body["team_ranking"]
+        self.assertEqual(len(team_ranking), 2)
+        self.assertEqual(team_ranking[0]["name"], "Real Madrid")
+        self.assertEqual(team_ranking[0]["profit"], 19.0)
+        self.assertEqual(team_ranking[0]["count"], 1)
+        self.assertEqual(team_ranking[1]["name"], "FC Bayern")
+        self.assertEqual(team_ranking[1]["profit"], 9.0)
+        self.assertEqual(team_ranking[1]["count"], 2)
+
+        set_ranking = body["set_ranking"]
+        self.assertEqual(len(set_ranking), 2)
+        self.assertEqual(set_ranking[0]["name"], "Panini 2026")
+        self.assertEqual(set_ranking[1]["name"], "Topps 2026")
+
     def test_empty_rows_produce_empty_summary(self):
         with patch("main.db.statistics_rows", return_value=[]):
             response = client.get("/api/statistics")
         body = response.json()
         self.assertEqual(body["rows"], [])
         self.assertEqual(body["monthly"], [])
+        self.assertEqual(body["team_ranking"], [])
+        self.assertEqual(body["set_ranking"], [])
         self.assertEqual(body["summary"]["sold_count"], 0)
         self.assertEqual(body["summary"]["open_count"], 0)
         self.assertIsNone(body["summary"]["avg_margin_pct"])

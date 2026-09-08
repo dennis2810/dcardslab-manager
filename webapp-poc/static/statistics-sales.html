@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Alle Verkäufe</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
+  .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
+  .summary-card .label { font-size: 0.8rem; color: #555; }
+  .summary-card .value { font-size: 1.2rem; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
+  tr.row-link { cursor: pointer; }
+  tr.row-link:hover { background: #f7f7f7; }
+  .profit-positive { color: #1e4620; }
+  .profit-negative { color: #b00020; }
+  #status-msg { font-style: italic; color: #555; }
+  .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Alle Verkäufe</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <p><a href="statistics.html">&larr; Zurück zur Statistik-Übersicht</a></p>
+  <nav class="page-nav no-print">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="summary-cards" id="summary-cards" style="display: none;"></div>
+
+  <div class="controls no-print">
+    <label>Zeitraum nach
+      <select id="date-field">
+        <option value="purchase_date">Kaufdatum</option>
+        <option value="sale_date">Verkaufsdatum</option>
+      </select>
+    </label>
+    <label>Von <input type="date" id="date-from"></label>
+    <label>Bis <input type="date" id="date-to"></label>
+    <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
+    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
+  </div>
+  <table id="rows-table" style="display: none;">
+    <thead>
+      <tr>
+        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+        <th data-key="title">Karte <span class="sort-arrow"></span></th>
+        <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
+        <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
+        <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
+        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+        <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
+        <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
+        <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody id="rows-body"></tbody>
+  </table>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="datev-csv-btn">⭳ Buchhaltungsexport (DATEV/Lexoffice)</button>
+  </div>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+const PAGE_SIZE = 40;
+let currentPage = 0;
+
+// Schwellwert fuer die "auffaellig hohe Marge"-Markierung - typischerweise
+// die Folge eines automatisch auf sehr viele Karten aufgeteilten
+// Sammel-Kaufpreises (winziger Einstandspreis pro Karte); rechnerisch
+// korrekt, aber ein Hinweis wert. Gleicher Wert wie card.html.
+const OUTLIER_MARGIN_THRESHOLD = 300;
+
+const statusMsg = document.getElementById("status-msg");
+const qInput = document.getElementById("q");
+let allRows = [];
+let sortKey = "sku";
+let sortAsc = true;
+
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().
+function fmtEuro(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "";
+}
+
+function fmtPercent(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %` : "";
+}
+
+function fmtNumber(v, decimals) {
+  return v != null ? Number(v).toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "";
+}
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Einheitliches Datumsformat (DD.MM.YYYY) - purchase_date ist ein reiner
+// Datums-String ("YYYY-MM-DD"), daher per String-Split statt new Date()
+// zerlegt, um Zeitzonen-Verschiebungen zu vermeiden; sale_date ist ein
+// voller Zeitstempel und wird ueber new Date() geparst.
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+async function load() {
+  try {
+    const res = await fetch("/api/statistics");
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = "";
+    allRows = data.rows;
+    renderRows();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function renderSummary(summary) {
+  const cards = document.getElementById("summary-cards");
+  cards.style.display = "flex";
+  const entries = [
+    ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
+    ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
+    ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
+    ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
+    ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
+    ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
+    ["Verkaufte Karten", String(summary.sold_count)],
+    ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
+    ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
+    ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–"],
+    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–"],
+  ];
+  cards.innerHTML = "";
+  for (const [label, value] of entries) {
+    const card = document.createElement("div");
+    card.className = "summary-card";
+    card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    cards.appendChild(card);
+  }
+}
+
+// Zeitraum-Filter nach Kauf- ODER Verkaufsdatum (separat waehlbar) - wirkt
+// auf die Summenkarten UND die Tabelle dieser Seite.
+function dateFilteredRows() {
+  const field = document.getElementById("date-field").value;
+  const from = document.getElementById("date-from").value;
+  const to = document.getElementById("date-to").value;
+  if (!from && !to) return allRows;
+  return allRows.filter((r) => {
+    const raw = r[field];
+    if (!raw) return false;
+    const day = String(raw).slice(0, 10);
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  });
+}
+
+function filteredRows() {
+  const q = qInput.value.trim().toLowerCase();
+  const rows = dateFilteredRows();
+  if (!q) return rows;
+  return rows.filter((r) =>
+    (r.title || "").toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)
+  );
+}
+
+// Spiegelt die Summenlogik von GET /api/statistics, aber auf einer
+// (Datums-)gefilterten Teilmenge der bereits vom Server angereicherten
+// Zeilen (profit/margin_pct/holding_days) - reine Aggregation, keine
+// Neuberechnung der Gewinn-Formel noetig.
+function computeSummary(rows) {
+  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0;
+  let realizedProfit = 0, soldCost = 0, openCount = 0;
+  const margins = [], salePrices = [], holdingDays = [];
+  for (const r of rows) {
+    if (r.cost != null) totalCost += Number(r.cost);
+    if (r.sale_price != null) {
+      totalRevenue += Number(r.sale_price);
+      totalShippingCharged += Number(r.shipping_charged || 0);
+      totalShippingCost += Number(r.shipping_cost || 0);
+      salePrices.push(Number(r.sale_price));
+    }
+    if (r.profit != null) {
+      realizedProfit += r.profit;
+      soldCost += Number(r.cost);
+      if (r.margin_pct != null) margins.push(r.margin_pct);
+    } else if (r.cost != null && r.sale_price == null) {
+      openCount += 1;
+    }
+    if (r.holding_days != null) holdingDays.push(r.holding_days);
+  }
+  const avg = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null);
+  return {
+    total_cost: totalCost, total_revenue: totalRevenue,
+    total_shipping_charged: totalShippingCharged, total_shipping_cost: totalShippingCost,
+    realized_profit: realizedProfit,
+    sold_count: rows.filter((r) => r.profit != null).length,
+    open_count: openCount,
+    avg_sale_price: avg(salePrices),
+    avg_margin_pct: avg(margins),
+    avg_holding_days: avg(holdingDays),
+    roi_pct: soldCost ? (realizedProfit / soldCost) * 100 : null,
+  };
+}
+
+function sortedRows(rows) {
+  if (!sortKey) return rows;
+  return [...rows].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setSortIndicator() {
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
+
+function renderRows() {
+  renderSummary(computeSummary(dateFilteredRows()));
+  const allFiltered = sortedRows(filteredRows());
+  setSortIndicator();
+  const table = document.getElementById("rows-table");
+  const body = document.getElementById("rows-body");
+
+  const pageCount = Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const rows = allFiltered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${allFiltered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  body.innerHTML = "";
+  table.style.display = allFiltered.length ? "table" : "none";
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.className = "row-link";
+    tr.addEventListener("click", () => {
+      location.href = `card.html?id=${encodeURIComponent(row.card_id)}`;
+    });
+
+    const cells = [
+      row.sku || "", row.title || "(ohne Titel)",
+      formatDate(row.purchase_date), fmtEuro(row.cost),
+      formatDate(row.sale_date),
+      fmtEuro(row.sale_price),
+    ];
+    for (const text of cells) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    const profitTd = document.createElement("td");
+    if (row.profit != null) {
+      profitTd.textContent = fmtEuro(row.profit);
+      profitTd.className = row.profit >= 0 ? "profit-positive" : "profit-negative";
+    }
+    tr.appendChild(profitTd);
+
+    const marginTd = document.createElement("td");
+    if (row.margin_pct != null) {
+      marginTd.textContent = fmtPercent(row.margin_pct);
+      if (row.margin_pct > OUTLIER_MARGIN_THRESHOLD) {
+        const warn = document.createElement("span");
+        warn.textContent = " ⚠️";
+        warn.title = "Auffällig hohe Marge – ggf. wurde der Einstandspreis durch einen automatischen Kauf-Split zu niedrig angesetzt. Auf der Kaufseite prüfen.";
+        marginTd.appendChild(warn);
+      }
+    }
+    tr.appendChild(marginTd);
+
+    const holdingTd = document.createElement("td");
+    holdingTd.textContent = row.holding_days != null ? `${row.holding_days} Tag(e)` : "";
+    tr.appendChild(holdingTd);
+
+    body.appendChild(tr);
+  }
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    renderRows();
+  });
+}
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(() => { currentPage = 0; renderRows(); }, 200);
+});
+
+for (const id of ["date-field", "date-from", "date-to"]) {
+  document.getElementById(id).addEventListener("change", () => {
+    currentPage = 0;
+    renderRows();
+  });
+}
+
+document.getElementById("reset-date-filter").addEventListener("click", () => {
+  document.getElementById("date-from").value = "";
+  document.getElementById("date-to").value = "";
+  currentPage = 0;
+  renderRows();
+});
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  renderRows();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  renderRows();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = [
+    "SKU", "Karte", "Kaufdatum (WE)", "Einstandspreis", "Verkaufsdatum (WA)",
+    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)",
+  ];
+  const rows = sortedRows(filteredRows()).map((row) => [
+    row.sku || "", row.title || "", formatDate(row.purchase_date), fmtNumber(row.cost, 2),
+    formatDate(row.sale_date), fmtNumber(row.sale_price, 2), fmtNumber(row.profit, 2),
+    fmtNumber(row.margin_pct, 1), row.holding_days ?? "",
+  ]);
+  downloadCsv("statistiken.csv", headers, rows);
+});
+
+// Generischer, zeilenweiser Buchhaltungsexport (ein Beleg pro Kauf- bzw.
+// Verkaufsvorgang) - kompatibel mit dem CSV-Import gaengiger Buchhaltungs-
+// software (z.B. Lexoffice "Belege"-Import). Kein offizielles DATEV-EXTF-
+// Format (das braucht eine an den eigenen Kontenplan angepasste Config, die
+// nur der Steuerberater vorgeben kann), sondern ein allgemein lesbarer
+// Beleg-Export mit Datum/Text/Betrag/Kategorie je Zeile.
+document.getElementById("datev-csv-btn").addEventListener("click", () => {
+  const headers = ["Belegdatum", "Belegtext", "Betrag", "Währung", "Kategorie"];
+  const rows = [];
+  for (const row of sortedRows(filteredRows())) {
+    const label = `${row.title || "(ohne Titel)"}${row.sku ? ` (${row.sku})` : ""}`;
+    if (row.sale_date && row.sale_price != null) {
+      rows.push([formatDate(row.sale_date), label, fmtNumber(row.sale_price, 2), "EUR", "Verkaufserlös"]);
+    }
+    if (row.purchase_date && row.cost != null) {
+      rows.push([formatDate(row.purchase_date), label, fmtNumber(-row.cost, 2), "EUR", "Wareneinsatz"]);
+    }
+  }
+  downloadCsv("buchhaltungsexport.csv", headers, rows);
+});
+
+load();
+</script>
+</body>
+</html>

@@ -438,18 +438,52 @@ async def update_card(card_id: str, fields: dict = Body(...)):
     return JSONResponse(_attach_signed_urls(updated))
 
 
-@app.delete("/api/cards/{card_id}", status_code=204)
-async def delete_card(card_id: str):
+def _delete_card_and_images(card_id):
     deleted = db.delete_card(card_id)
     if deleted is None:
-        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+        return None
     paths = [p for p in (deleted.get("front_image_path"), deleted.get("back_image_path")) if p]
     if paths:
         try:
             storage.delete_images(paths)
         except Exception as exc:
             print(f"Bild-Löschung fehlgeschlagen für {paths}: {type(exc).__name__}: {exc}")
+    return deleted
+
+
+@app.delete("/api/cards/{card_id}", status_code=204)
+async def delete_card(card_id: str):
+    deleted = _delete_card_and_images(card_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     return Response(status_code=204)
+
+
+@app.post("/api/cards/{card_id}/merge-into/{target_id}")
+async def merge_duplicate_card(card_id: str, target_id: str):
+    # Beim Scannen erkannte moegliche Duplikate (siehe _find_duplicate_card_safe)
+    # sollen sich zusammenfuehren lassen, statt als zweite eigenstaendige Karte
+    # stehen zu bleiben: die neu gescannte Karte wird verworfen, ihre
+    # Inventar-Menge wandert auf die bestehende Karte.
+    if card_id == target_id:
+        raise HTTPException(status_code=400, detail="Eine Karte kann nicht mit sich selbst zusammengeführt werden.")
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    target = db.get_card(target_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Karte {target_id} nicht gefunden.")
+
+    added_quantity = sum(item.get("quantity") or 0 for item in db.get_inventory_for_card(card_id)) or 1
+    target_items = db.get_inventory_for_card(target_id)
+    if target_items:
+        item = target_items[0]
+        db.update_inventory_item(item["id"], {"quantity": (item.get("quantity") or 0) + added_quantity})
+    else:
+        db.create_inventory_item(target_id, {"quantity": added_quantity})
+
+    _delete_card_and_images(card_id)
+    return JSONResponse(_attach_signed_urls(db.get_card(target_id)))
 
 
 @app.post("/api/cards/{card_id}/rotate")
@@ -734,7 +768,35 @@ def _compute_statistics():
         "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,
         "roi_pct": round((realized_profit / sold_cost) * 100, 1) if sold_cost else None,
     }
-    return {"summary": summary, "monthly": monthly_list, "rows": enriched}
+    return {
+        "summary": summary, "monthly": monthly_list, "rows": enriched,
+        "team_ranking": _rank_statistics_by(enriched, "team"),
+        "set_ranking": _rank_statistics_by(enriched, "set_name"),
+    }
+
+
+def _rank_statistics_by(enriched_rows, field):
+    # Team-/Set-Ranking auf der Statistik-Uebersichtsseite: gruppiert nur
+    # tatsaechlich verkaufte Karten (profit bekannt) nach Team bzw. Set und
+    # sortiert nach Gesamtgewinn absteigend - Karten ohne Team/Set-Angabe
+    # (leerer String) fliessen nicht mit ein, da sie keine sinnvolle Gruppe
+    # bilden wuerden.
+    groups = {}
+    for row in enriched_rows:
+        if row["profit"] is None:
+            continue
+        key = (row.get(field) or "").strip()
+        if not key:
+            continue
+        group = groups.setdefault(key, {"name": key, "count": 0, "revenue": 0.0, "profit": 0.0})
+        group["count"] += 1
+        group["revenue"] += float(row.get("sale_price") or 0)
+        group["profit"] += row["profit"]
+    ranked = sorted(groups.values(), key=lambda g: g["profit"], reverse=True)
+    for group in ranked:
+        group["revenue"] = round(group["revenue"], 2)
+        group["profit"] = round(group["profit"], 2)
+    return ranked
 
 
 @app.get("/api/statistics")

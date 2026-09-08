@@ -1406,8 +1406,8 @@ class StatisticsRowsTests(unittest.TestCase):
             response = MagicMock()
             if name == "cards":
                 response.data = [
-                    {"id": "card-1", "title": "Karte 1", "card_no": 1},
-                    {"id": "card-2", "title": "Karte 2", "card_no": 2},
+                    {"id": "card-1", "title": "Karte 1", "card_no": 1, "team": "FC Bayern", "set_name": "Topps 2026"},
+                    {"id": "card-2", "title": "Karte 2", "card_no": 2, "team": "", "set_name": ""},
                 ]
                 builder.select.return_value.execute.return_value = response
             elif name == "purchase_items":
@@ -1434,6 +1434,8 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertEqual(by_id["card-1"]["sale_price"], 15.0)
         self.assertIsNone(by_id["card-2"]["cost"])
         self.assertIsNone(by_id["card-2"]["sale_price"])
+        self.assertEqual(by_id["card-1"]["team"], "FC Bayern")
+        self.assertEqual(by_id["card-1"]["set_name"], "Topps 2026")
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()

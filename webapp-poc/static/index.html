@@ -50,7 +50,10 @@
     </label>
   </nav>
 
-  <p><a href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a></p>
+  <p>
+    <a href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
+    <button type="button" id="open-scan-tool">📷 Scan-Tool öffnen</button>
+  </p>
 
   <form id="scan-form">
     <div class="side">
@@ -96,6 +99,10 @@
     if (nav.value) location.href = nav.value;
   });
 })();
+
+document.getElementById("open-scan-tool").addEventListener("click", () => {
+  window.open("http://192.168.2.94:8088/#/scan", "_blank");
+});
 
 const form = document.getElementById("scan-form");
 const statusEl = document.getElementById("status");
@@ -235,11 +242,48 @@ function renderTable(cards) {
       link.className = "duplicate-note";
       link.textContent = `⚠ evtl. bereits vorhanden (Karte #${card.possible_duplicate.card_no ?? "?"})`;
       duplicateTd.appendChild(link);
+      duplicateTd.appendChild(document.createElement("br"));
+      if (card.id) {
+        const mergeBtn = document.createElement("button");
+        mergeBtn.type = "button";
+        mergeBtn.textContent = "Zusammenführen";
+        mergeBtn.addEventListener("click", () => mergeDuplicate(card.id, card.possible_duplicate.id, mergeBtn, tr));
+        duplicateTd.appendChild(mergeBtn);
+      }
     }
     tr.appendChild(duplicateTd);
     table.appendChild(tr);
   }
   resultEl.appendChild(table);
+}
+
+async function mergeDuplicate(cardId, targetId, button, row) {
+  button.disabled = true;
+  button.textContent = "Führe zusammen …";
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/merge-into/${encodeURIComponent(targetId)}`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      button.disabled = false;
+      button.textContent = "Fehler – erneut versuchen";
+      button.title = body.detail || res.statusText;
+      return;
+    }
+    row.style.opacity = "0.5";
+    row.querySelectorAll("td, a, button").forEach((el) => {
+      if (el.tagName === "BUTTON") el.remove();
+    });
+    const note = document.createElement("span");
+    note.className = "duplicate-note";
+    note.textContent = "✓ zusammengeführt, Menge auf Original übertragen";
+    row.lastElementChild.appendChild(note);
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = "Fehler – erneut versuchen";
+    button.title = String(err);
+  }
 }
 </script>
 </body>
