@@ -205,3 +205,7 @@ create table if not exists dashboard_goals (
     amount      numeric not null default 0,
     updated_at  timestamptz not null default now()
 );
+
+-- Migration (2026-09-08): Beleg (Foto/PDF der Rechnung) pro Kauf, fuer die
+-- Steuer - Pfad in den privaten purchase-receipts-Bucket (siehe README).
+alter table purchases add column if not exists receipt_path text default '';

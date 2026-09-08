@@ -247,6 +247,20 @@ def delete_purchase(purchase_id):
     return response.data[0]
 
 
+def set_purchase_receipt(purchase_id, receipt_path):
+    """Writes receipt_path directly, bypassing PURCHASE_FIELDS - that
+    whitelist is for the user-editable form fields on purchase.html, not
+    this server-managed Storage-object reference."""
+    response = (
+        get_client().table("purchases").update({"receipt_path": receipt_path}).eq("id", purchase_id).execute()
+    )
+    if not response.data:
+        return None
+    purchase = response.data[0]
+    purchase["items"] = _list_purchase_items(purchase_id)
+    return purchase
+
+
 def add_purchase_item(purchase_id, fields):
     card_id = fields.get("card_id")
     existing = get_client().table("purchase_items").select("id").eq("card_id", card_id).execute()
@@ -716,7 +730,7 @@ def statistics_rows():
     purchases_by_id = {}
     if purchase_ids:
         purchases_response = (
-            get_client().table("purchases").select("id,purchase_date")
+            get_client().table("purchases").select("id,purchase_date,platform")
             .in_("id", purchase_ids).execute()
         )
         purchases_by_id = {row["id"]: row for row in purchases_response.data}
@@ -743,6 +757,7 @@ def statistics_rows():
             "card_no": card.get("card_no"),
             "team": card.get("team", ""),
             "set_name": card.get("set_name", ""),
+            "platform": purchase.get("platform", "") if purchase else "",
             "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
             "purchase_date": purchase.get("purchase_date") if purchase else None,
             "cost": item.get("allocated_cost") if item else None,

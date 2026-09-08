@@ -188,5 +188,97 @@ class DeletePurchaseItemEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class UploadPurchaseReceiptEndpointTests(unittest.TestCase):
+    def test_uploads_receipt_and_returns_updated_purchase(self):
+        purchase = {"id": "p1", "receipt_path": "", "items": []}
+        updated = {"id": "p1", "receipt_path": "p1/receipt.pdf", "items": []}
+        with patch("main.db.get_purchase", return_value=purchase), \
+             patch("main.storage.upload_receipt", return_value="p1/receipt.pdf") as mock_upload, \
+             patch("main.storage.delete_receipt") as mock_delete, \
+             patch("main.db.set_purchase_receipt", return_value=updated) as mock_set, \
+             patch("main.storage.receipt_signed_url", return_value="https://signed/p1/receipt.pdf"):
+            response = client.post(
+                "/api/purchases/p1/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_upload.assert_called_once_with("p1", "application/pdf", b"%PDF-fake")
+        mock_delete.assert_not_called()
+        mock_set.assert_called_once_with("p1", "p1/receipt.pdf")
+        self.assertEqual(response.json()["receipt_url"], "https://signed/p1/receipt.pdf")
+
+    def test_deletes_old_receipt_when_replacing(self):
+        purchase = {"id": "p1", "receipt_path": "p1/receipt.jpg", "items": []}
+        updated = {"id": "p1", "receipt_path": "p1/receipt.pdf", "items": []}
+        with patch("main.db.get_purchase", return_value=purchase), \
+             patch("main.storage.upload_receipt", return_value="p1/receipt.pdf"), \
+             patch("main.storage.delete_receipt") as mock_delete, \
+             patch("main.db.set_purchase_receipt", return_value=updated):
+            response = client.post(
+                "/api/purchases/p1/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_called_once_with("p1/receipt.jpg")
+
+    def test_returns_400_for_unsupported_content_type(self):
+        with patch("main.db.get_purchase", return_value={"id": "p1", "items": []}), \
+             patch("main.storage.upload_receipt") as mock_upload:
+            response = client.post(
+                "/api/purchases/p1/receipt",
+                files={"file": ("beleg.txt", b"hello", "text/plain")},
+            )
+        self.assertEqual(response.status_code, 400)
+        mock_upload.assert_not_called()
+
+    def test_returns_404_when_purchase_not_found(self):
+        with patch("main.db.get_purchase", return_value=None):
+            response = client.post(
+                "/api/purchases/does-not-exist/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_400_when_file_too_large(self):
+        oversized = b"0" * (10 * 1024 * 1024 + 1)
+        with patch("main.db.get_purchase", return_value={"id": "p1", "items": []}), \
+             patch("main.storage.upload_receipt") as mock_upload:
+            response = client.post(
+                "/api/purchases/p1/receipt",
+                files={"file": ("beleg.pdf", oversized, "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 400)
+        mock_upload.assert_not_called()
+
+
+class DeletePurchaseReceiptEndpointTests(unittest.TestCase):
+    def test_deletes_receipt_and_clears_path(self):
+        purchase = {"id": "p1", "receipt_path": "p1/receipt.pdf", "items": []}
+        updated = {"id": "p1", "receipt_path": "", "items": []}
+        with patch("main.db.get_purchase", return_value=purchase), \
+             patch("main.storage.delete_receipt") as mock_delete, \
+             patch("main.db.set_purchase_receipt", return_value=updated) as mock_set:
+            response = client.delete("/api/purchases/p1/receipt")
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_called_once_with("p1/receipt.pdf")
+        mock_set.assert_called_once_with("p1", "")
+        self.assertNotIn("receipt_url", response.json())
+
+    def test_noop_when_no_receipt_present(self):
+        purchase = {"id": "p1", "receipt_path": "", "items": []}
+        updated = {"id": "p1", "receipt_path": "", "items": []}
+        with patch("main.db.get_purchase", return_value=purchase), \
+             patch("main.storage.delete_receipt") as mock_delete, \
+             patch("main.db.set_purchase_receipt", return_value=updated):
+            response = client.delete("/api/purchases/p1/receipt")
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_not_called()
+
+    def test_returns_404_when_purchase_not_found(self):
+        with patch("main.db.get_purchase", return_value=None):
+            response = client.delete("/api/purchases/does-not-exist/receipt")
+        self.assertEqual(response.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

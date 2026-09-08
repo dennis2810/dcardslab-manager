@@ -17,11 +17,16 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
    die eigene Anzeige, nur die eBay-Bildübergabe braucht die öffentliche
    URL). Bereits bestehende Projekte: Storage → `card-images` → Bucket
    nachträglich auf public umstellen.
-4. Unter Project Settings → API: `Project URL` und `service_role`
+4. Unter Storage einen zweiten Bucket `purchase-receipts` anlegen,
+   **"Public bucket" AUSGESCHALTET lassen** (Kaufbelege sind private
+   Steuerunterlagen, kein externer Dienst braucht eine dauerhafte URL
+   dafür — die WebApp nutzt ausschließlich signierte, zeitlich begrenzte
+   URLs zur Anzeige).
+5. Unter Project Settings → API: `Project URL` und `service_role`
    Secret Key kopieren (NICHT den `anon`-Key – der Service-Role-Key hat
    vollen Server-Zugriff und gehört nur ins Backend-Environment, niemals
    in Frontend-Code).
-5. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
+6. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
    `SUPABASE_URL` = Project URL, `SUPABASE_SERVICE_KEY` = service_role-Key.
 
 Bekannte Free-Tier-Einschränkung: Projekte pausieren nach 1 Woche ohne

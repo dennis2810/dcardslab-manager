@@ -35,6 +35,8 @@
   #add-item-form .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; align-items: center; }
   #add-item-form .full-row { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
+  .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: #fff3cd; color: #7a5c00; }
+  h2 { font-size: 1.05rem; margin-top: 1.5rem; }
 </style>
 </head>
 <body>
@@ -60,7 +62,9 @@
 
   <p id="status-msg"></p>
   <p id="total-value" class="sums-block"></p>
+  <div id="inventory-warnings"></div>
   <div class="controls no-print">
+    <input type="text" id="q" placeholder="Suche (Titel, SKU, Lagerort)">
     <label>Status
       <select id="status-filter">
         <option value="">Alle</option>
@@ -71,6 +75,13 @@
     </label>
     <button type="button" id="toggle-add-item">+ Eintrag hinzufügen</button>
   </div>
+
+  <h2>Lagerort-Übersicht</h2>
+  <table id="location-overview-table" style="display: none;">
+    <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th></tr></thead>
+    <tbody id="location-overview-body"></tbody>
+  </table>
+  <p id="location-overview-empty"></p>
 
   <form id="add-item-form">
     <div class="full-row">
@@ -87,6 +98,7 @@
     </div>
   </form>
 
+  <h2>Alle Einträge</h2>
   <table id="inventory-table" style="display: none;">
     <thead>
       <tr>
@@ -137,6 +149,8 @@ let items = [];
 let sortKey = "sku";
 let sortAsc = true;
 
+const qInput = document.getElementById("q");
+
 async function loadInventory() {
   statusMsg.textContent = "Lädt …";
   table.style.display = "none";
@@ -150,6 +164,8 @@ async function loadInventory() {
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
     statusMsg.textContent = `${items.length} Eintrag/Einträge`;
     totalValueEl.textContent = `Gesamtwert: ${(data.total_value ?? 0).toFixed(2)} €`;
+    renderWarnings();
+    renderLocationOverview();
     render();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -162,10 +178,84 @@ function statusInfo(item) {
   return ["Nicht vorrätig", "status-out"];
 }
 
+// Zwei Faelle, die auf ein Problem hindeuten, statt nur einen normalen
+// Zustand zu beschreiben: eine vorrätige Karte ohne erfassten Lagerort
+// (nicht auffindbar) bzw. eine Karte mit Menge 0, die aber nicht ueber
+// einen eBay-Verkauf als "Verkauft" erfasst wurde (z.B. verloren,
+// beschaedigt oder ausserhalb von eBay verkauft, ohne das hier
+// nachzutragen).
+function renderWarnings() {
+  const container = document.getElementById("inventory-warnings");
+  container.innerHTML = "";
+  const noLocation = items.filter((item) => (item.quantity ?? 0) > 0 && !(item.location || "").trim());
+  const unexplainedZero = items.filter((item) => (item.quantity ?? 0) === 0 && item.ebay_status !== "Verkauft");
+
+  const warnings = [];
+  if (noLocation.length) {
+    warnings.push(`📦 ${noLocation.length} vorrätige Karte(n) ohne Lagerort.`);
+  }
+  if (unexplainedZero.length) {
+    warnings.push(`❓ ${unexplainedZero.length} Karte(n) mit Menge 0, aber nicht als verkauft markiert.`);
+  }
+  for (const text of warnings) {
+    const p = document.createElement("p");
+    p.className = "warning-box";
+    p.textContent = text;
+    container.appendChild(p);
+  }
+}
+
+// Gruppiert nur vorrätige Eintraege (Menge > 0) nach Lagerort - "Verkauft"/
+// "Nicht vorrätig" tragen nichts zum aktuellen physischen Bestand pro Ort
+// bei. Ein leerer Lagerort landet in einer eigenen "(kein Lagerort)"-
+// Gruppe, damit er hier genauso auffaellt wie in den Warnungen oben.
+function renderLocationOverview() {
+  const table = document.getElementById("location-overview-table");
+  const body = document.getElementById("location-overview-body");
+  const empty = document.getElementById("location-overview-empty");
+  body.innerHTML = "";
+
+  const inStock = items.filter((item) => (item.quantity ?? 0) > 0);
+  if (!inStock.length) {
+    table.style.display = "none";
+    empty.textContent = "Keine vorrätigen Karten.";
+    return;
+  }
+
+  const groups = new Map();
+  for (const item of inStock) {
+    const location = (item.location || "").trim() || "(kein Lagerort)";
+    const group = groups.get(location) || { count: 0, value: 0 };
+    group.count += 1;
+    group.value += Number(item.value || 0);
+    groups.set(location, group);
+  }
+
+  const sorted = [...groups.entries()].sort((a, b) => b[1].count - a[1].count);
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const [location, group] of sorted) {
+    const tr = document.createElement("tr");
+    for (const text of [location, String(group.count), `${group.value.toFixed(2)} €`]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
 function filteredItems() {
   const status = document.getElementById("status-filter").value;
-  if (!status) return items;
-  return items.filter((item) => statusInfo(item)[0] === status);
+  const q = qInput.value.trim().toLowerCase();
+  return items.filter((item) => {
+    if (status && statusInfo(item)[0] !== status) return false;
+    if (q) {
+      const haystack = `${item.card_title || ""} ${item.sku || ""} ${item.location || ""}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
 }
 
 function sortedFilteredItems() {
@@ -266,6 +356,10 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 document.getElementById("status-filter").addEventListener("change", () => {
   currentPage = 0;
   render();
+});
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(() => { currentPage = 0; render(); }, 200);
 });
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei

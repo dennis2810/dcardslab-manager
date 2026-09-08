@@ -6,13 +6,16 @@
 <style>
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .profit-positive { color: #1e4620; }
+  .profit-negative { color: #b00020; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
-  input { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -22,7 +25,7 @@
   #status-msg { font-style: italic; color: #555; }
   #new-purchase-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
   #new-purchase-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
-  #new-purchase-form input { font-weight: normal; margin-top: 0.2rem; }
+  #new-purchase-form input, #new-purchase-form select { font-weight: normal; margin-top: 0.2rem; }
   #new-purchase-form .actions { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
@@ -62,9 +65,24 @@
   </div>
   <p id="sums" class="sums-block"></p>
 
+  <h2>Plattform-Auswertung</h2>
+  <table id="platform-ranking-table" style="display: none;">
+    <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
+    <tbody id="platform-ranking-body"></tbody>
+  </table>
+  <p id="platform-ranking-empty"></p>
+
   <form id="new-purchase-form" class="no-print">
     <label>Kaufdatum <input type="date" name="purchase_date" required></label>
-    <label>Plattform <input type="text" name="platform"></label>
+    <label>Plattform
+      <select name="platform">
+        <option value="">– wählen –</option>
+        <option value="eBay">eBay</option>
+        <option value="Kleinanzeigen">Kleinanzeigen</option>
+        <option value="Vinted">Vinted</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+    </label>
     <label>Verkäufer <input type="text" name="seller"></label>
     <label>Versand <input type="number" step="0.01" name="shipping"></label>
     <label>Gesamtpreis <input type="number" step="0.01" name="total_price"></label>
@@ -145,6 +163,51 @@ function formatDate(value) {
 // Einheitlich immer 2 Nachkommastellen bei Geldbetraegen.
 function fmtEuro(value) {
   return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+}
+
+// Nutzt /api/statistics mit (spiegelt main.py's _rank_platforms(): nur
+// verkaufte Karten mit bekannter Einkaufsplattform fliessen ein, gruppiert
+// nach Plattform mit Durchschnitts- statt Summenwerten), damit hier keine
+// zweite Gewinn-Berechnung noetig ist.
+async function loadPlatformRanking() {
+  const table = document.getElementById("platform-ranking-table");
+  const body = document.getElementById("platform-ranking-body");
+  const empty = document.getElementById("platform-ranking-empty");
+  try {
+    const res = await fetch("/api/statistics");
+    const data = await res.json();
+    if (!res.ok) {
+      empty.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    const ranking = data.platform_ranking || [];
+    body.innerHTML = "";
+    if (!ranking.length) {
+      table.style.display = "none";
+      empty.textContent = "Noch keine verkauften Karten mit erfasster Einkaufsplattform.";
+      return;
+    }
+    table.style.display = "table";
+    empty.textContent = "";
+    for (const entry of ranking) {
+      const tr = document.createElement("tr");
+      for (const text of [entry.name, String(entry.count)]) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      const profitTd = document.createElement("td");
+      profitTd.textContent = fmtEuro(entry.avg_profit);
+      profitTd.className = entry.avg_profit >= 0 ? "profit-positive" : "profit-negative";
+      tr.appendChild(profitTd);
+      const marginTd = document.createElement("td");
+      marginTd.textContent = entry.avg_margin_pct != null ? `${entry.avg_margin_pct.toFixed(1)} %` : "";
+      tr.appendChild(marginTd);
+      body.appendChild(tr);
+    }
+  } catch (err) {
+    empty.textContent = "Fehler: " + err;
+  }
 }
 
 function filteredPurchases() {
@@ -352,6 +415,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
 });
 
 loadPurchases();
+loadPlatformRanking();
 </script>
 </body>
 </html>
