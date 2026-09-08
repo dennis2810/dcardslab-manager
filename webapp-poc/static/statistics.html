@@ -17,6 +17,10 @@
     .no-print { display: none !important; }
   }
   .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+  #monthly-chart { margin: 0.5rem 0 1rem; overflow-x: auto; }
+  .chart-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #555; margin-top: 0.3rem; }
+  .chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: middle; }
+  .year-total-row { font-weight: 700; background: #f7f7f7; }
   .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
@@ -57,11 +61,22 @@
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <h2>Verkäufe pro Monat</h2>
+  <div id="monthly-chart"></div>
   <table id="monthly-table" style="display: none;">
     <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
     <tbody id="monthly-body"></tbody>
   </table>
   <p id="monthly-empty"></p>
+
+  <h2>Jahresübersicht (Steuer)</h2>
+  <div class="controls no-print">
+    <button type="button" id="yearly-csv-btn">⭳ CSV-Export</button>
+  </div>
+  <table id="yearly-overview-table" style="display: none;">
+    <thead><tr><th>Jahr</th><th>Quartal</th><th>Verkäufe</th><th>Umsatz</th><th>Einstandspreis</th><th>Gewinn</th></tr></thead>
+    <tbody id="yearly-overview-body"></tbody>
+  </table>
+  <p id="yearly-overview-empty"></p>
 
   <h2>Alle Karten</h2>
   <div class="controls no-print">
@@ -211,6 +226,8 @@ async function load() {
     }
     statusMsg.textContent = "";
     renderMonthly(data.monthly);
+    renderMonthlyChart(data.monthly);
+    renderYearlyOverview(data.monthly);
     allRows = data.rows;
     await loadInventoryValue();
     renderRows();
@@ -245,6 +262,91 @@ function renderSummary(summary) {
   }
 }
 
+// Handgebautes SVG statt einer Chart-Bibliothek, um keine neue externe
+// Abhaengigkeit in dieses Projekt einzufuehren - reicht fuer einen simplen
+// gruppierten Balken pro Monat (Umsatz/Gewinn).
+function renderMonthlyChart(monthly) {
+  const container = document.getElementById("monthly-chart");
+  container.innerHTML = "";
+  if (!monthly.length) return;
+
+  const svgNs = "http://www.w3.org/2000/svg";
+  const width = Math.max(400, monthly.length * 70);
+  const height = 220;
+  const padding = { top: 10, right: 10, bottom: 26, left: 10 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  const maxValue = Math.max(1, ...monthly.map((m) => Math.max(m.revenue, m.profit, 0)));
+  const minValue = Math.min(0, ...monthly.map((m) => Math.min(m.profit, 0)));
+  const range = maxValue - minValue || 1;
+  const zeroY = padding.top + chartHeight * (maxValue / range);
+
+  const groupWidth = chartWidth / monthly.length;
+  const barWidth = Math.min(22, groupWidth / 3);
+
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", height);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Umsatz und Gewinn pro Monat");
+
+  const zeroLine = document.createElementNS(svgNs, "line");
+  zeroLine.setAttribute("x1", padding.left);
+  zeroLine.setAttribute("x2", width - padding.right);
+  zeroLine.setAttribute("y1", zeroY);
+  zeroLine.setAttribute("y2", zeroY);
+  zeroLine.setAttribute("stroke", "#ccc");
+  svg.appendChild(zeroLine);
+
+  monthly.forEach((m, i) => {
+    const groupX = padding.left + i * groupWidth;
+
+    const revenueHeight = (m.revenue / range) * chartHeight;
+    const revenueBar = document.createElementNS(svgNs, "rect");
+    revenueBar.setAttribute("x", groupX + groupWidth / 2 - barWidth - 2);
+    revenueBar.setAttribute("y", zeroY - revenueHeight);
+    revenueBar.setAttribute("width", barWidth);
+    revenueBar.setAttribute("height", Math.max(0, revenueHeight));
+    revenueBar.setAttribute("fill", "#8ab4f8");
+    const revenueTitle = document.createElementNS(svgNs, "title");
+    revenueTitle.textContent = `${formatMonth(m.month)} – Umsatz: ${fmtEuro(m.revenue)}`;
+    revenueBar.appendChild(revenueTitle);
+    svg.appendChild(revenueBar);
+
+    const profitHeight = Math.abs(m.profit / range) * chartHeight;
+    const profitBar = document.createElementNS(svgNs, "rect");
+    profitBar.setAttribute("x", groupX + groupWidth / 2 + 2);
+    profitBar.setAttribute("y", m.profit >= 0 ? zeroY - profitHeight : zeroY);
+    profitBar.setAttribute("width", barWidth);
+    profitBar.setAttribute("height", Math.max(0, profitHeight));
+    profitBar.setAttribute("fill", m.profit >= 0 ? "#1e8e3e" : "#d93025");
+    const profitTitle = document.createElementNS(svgNs, "title");
+    profitTitle.textContent = `${formatMonth(m.month)} – Gewinn: ${fmtEuro(m.profit)}`;
+    profitBar.appendChild(profitTitle);
+    svg.appendChild(profitBar);
+
+    const label = document.createElementNS(svgNs, "text");
+    label.setAttribute("x", groupX + groupWidth / 2);
+    label.setAttribute("y", height - padding.bottom + 16);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("font-size", "11");
+    label.setAttribute("fill", "#555");
+    label.textContent = formatMonth(m.month);
+    svg.appendChild(label);
+  });
+
+  container.appendChild(svg);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML =
+    '<span><span class="chart-swatch" style="background:#8ab4f8"></span>Umsatz</span>' +
+    '<span><span class="chart-swatch" style="background:#1e8e3e"></span>Gewinn</span>';
+  container.appendChild(legend);
+}
+
 function renderMonthly(monthly) {
   const table = document.getElementById("monthly-table");
   const body = document.getElementById("monthly-body");
@@ -269,6 +371,74 @@ function renderMonthly(monthly) {
     profitTd.className = m.profit >= 0 ? "profit-positive" : "profit-negative";
     tr.appendChild(profitTd);
     body.appendChild(tr);
+  }
+}
+
+function quarterOf(monthStr) {
+  const monthNum = Number(monthStr.split("-")[1]);
+  return Math.floor((monthNum - 1) / 3) + 1;
+}
+
+// Gruppiert die (nach Verkaufsdatum bereits monatsweise vorliegenden) Umsatz-
+// /Einstandspreis-/Gewinn-Werte zu Quartalen + Jahressummen - fuer die
+// Steuererklaerung (Kleinunternehmer-Grenze, Gewinn pro Quartal/Jahr).
+let yearlyOverviewRows = [];
+
+function renderYearlyOverview(monthly) {
+  const table = document.getElementById("yearly-overview-table");
+  const body = document.getElementById("yearly-overview-body");
+  const empty = document.getElementById("yearly-overview-empty");
+  body.innerHTML = "";
+  yearlyOverviewRows = [];
+
+  if (!monthly.length) {
+    table.style.display = "none";
+    empty.textContent = "Noch keine Verkäufe.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+
+  const byYear = new Map();
+  for (const m of monthly) {
+    const year = m.month.split("-")[0];
+    const quarter = quarterOf(m.month);
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const quarters = byYear.get(year);
+    const g = quarters.get(quarter) || { quarter, count: 0, revenue: 0, cost: 0, profit: 0 };
+    g.count += m.count;
+    g.revenue += m.revenue;
+    g.cost += m.cost;
+    g.profit += m.profit;
+    quarters.set(quarter, g);
+  }
+
+  for (const year of [...byYear.keys()].sort()) {
+    const quarters = [...byYear.get(year).values()].sort((a, b) => a.quarter - b.quarter);
+    const yearTotal = { count: 0, revenue: 0, cost: 0, profit: 0 };
+    for (const q of quarters) {
+      yearlyOverviewRows.push([year, `Q${q.quarter}`, q.count, q.revenue, q.cost, q.profit]);
+      const tr = document.createElement("tr");
+      for (const text of [year, `Q${q.quarter}`, String(q.count), fmtEuro(q.revenue), fmtEuro(q.cost), fmtEuro(q.profit)]) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+      yearTotal.count += q.count;
+      yearTotal.revenue += q.revenue;
+      yearTotal.cost += q.cost;
+      yearTotal.profit += q.profit;
+    }
+    yearlyOverviewRows.push([year, "Gesamt", yearTotal.count, yearTotal.revenue, yearTotal.cost, yearTotal.profit]);
+    const totalTr = document.createElement("tr");
+    totalTr.className = "year-total-row";
+    for (const text of [year, "Gesamt", String(yearTotal.count), fmtEuro(yearTotal.revenue), fmtEuro(yearTotal.cost), fmtEuro(yearTotal.profit)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      totalTr.appendChild(td);
+    }
+    body.appendChild(totalTr);
   }
 }
 
@@ -473,6 +643,14 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     fmtNumber(row.margin_pct, 1), row.holding_days ?? "",
   ]);
   downloadCsv("statistiken.csv", headers, rows);
+});
+
+document.getElementById("yearly-csv-btn").addEventListener("click", () => {
+  const headers = ["Jahr", "Quartal", "Verkäufe", "Umsatz", "Einstandspreis", "Gewinn"];
+  const rows = yearlyOverviewRows.map((row) => [
+    row[0], row[1], row[2], fmtNumber(row[3], 2), fmtNumber(row[4], 2), fmtNumber(row[5], 2),
+  ]);
+  downloadCsv("jahresuebersicht.csv", headers, rows);
 });
 
 load();

@@ -52,7 +52,7 @@ def _ilike_search_filter(q, columns):
 def list_cards(q=None, status=None):
     query = get_client().table("cards").select("*")
     if q:
-        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year"]))
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year", "tags"]))
     if status:
         query = query.eq("recognition_status", status)
     response = query.order("created_at", desc=True).execute()
@@ -99,7 +99,7 @@ def get_card(card_id):
 def update_card(card_id, fields):
     row = {
         name: value for name, value in fields.items()
-        if name in CARD_FIELDS or name in ("recognition_status", "shipped")
+        if name in CARD_FIELDS or name in ("recognition_status", "shipped", "tags")
     }
     if not row:
         return get_card(card_id)

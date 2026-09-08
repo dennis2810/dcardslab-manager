@@ -145,6 +145,47 @@ def refresh_access_token():
             f"eBay Token API nicht erreichbar: {exc}"
         ) from exc
 
+
+# Application-level (client_credentials) token for eBay's Buy APIs (Browse -
+# aktive Angebote fuer die Preisrecherche) - unabhaengig vom Sell-API-
+# Nutzer-Consent-Flow oben: braucht nur CLIENT_ID/CLIENT_SECRET, kein
+# gespeicherter Refresh-Token, da Buy-Endpunkte keine Verkaeufer-Autorisierung
+# erfordern. In-Memory statt auf Platte zwischengespeichert, da rein
+# kurzlebig (typ. 2h) und bei jedem Server-Neustart problemlos neu geholt.
+APPLICATION_SCOPE = "https://api.ebay.com/oauth/api_scope"
+_app_token_lock = threading.Lock()
+_app_token_cache = {"access_token": None, "expires_at": 0}
+
+
+def get_application_access_token():
+    with _app_token_lock:
+        if _app_token_cache["access_token"] and _app_token_cache["expires_at"] > time.time() + 60:
+            return _app_token_cache["access_token"]
+
+        credentials = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode("ascii")
+        body = urlencode({
+            "grant_type": "client_credentials",
+            "scope": APPLICATION_SCOPE,
+        }).encode()
+        req = Request(TOKEN_URL, data=body, method="POST", headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {credentials}",
+            "Accept": "application/json",
+        })
+        try:
+            with urlopen(req, timeout=30) as response:
+                token = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"eBay Token API HTTP {exc.code}: {detail}") from exc
+        except URLError as exc:
+            raise RuntimeError(f"eBay Token API nicht erreichbar: {exc}") from exc
+
+        _app_token_cache["access_token"] = token["access_token"]
+        _app_token_cache["expires_at"] = time.time() + token.get("expires_in", 7200)
+        return token["access_token"]
+
+
 def api_get(access_token, path):
     req = Request(EBAY_API_BASE + path, method="GET", headers={
         "Authorization": f"Bearer {access_token}",
@@ -1315,6 +1356,18 @@ def internal_access_token():
         "environment": ENVIRONMENT,
         "expires_in": token.get("expires_in"),
     })
+
+
+@app.get("/api/internal/application-access-token")
+def internal_application_access_token():
+    # Fuer eBays Buy-APIs (Browse - aktive Angebote zur Preisrecherche) -
+    # braucht keinen Verkaeufer-Consent, daher unabhaengig vom
+    # /api/internal/access-token oben und dessen gespeichertem Refresh-Token.
+    try:
+        access_token = get_application_access_token()
+    except RuntimeError as exc:
+        return jsonify({"authorized": False, "error": str(exc)}), 502
+    return jsonify({"access_token": access_token, "environment": ENVIRONMENT})
 
 
 @app.post("/api/oauth/revoke-local")

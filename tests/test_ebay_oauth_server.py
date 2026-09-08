@@ -8,11 +8,13 @@ Response) for the module to import without a running server.
 
     python3 -m unittest discover -s tests -v
 """
+import json
 import sys
+import time
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 def _install_flask_stub():
@@ -102,6 +104,58 @@ class InternalAccessTokenTests(unittest.TestCase):
         with patch("app.refresh_access_token", side_effect=RuntimeError("Kein Refresh Token gespeichert.")):
             result, status = oauth_server.internal_access_token()
         self.assertEqual(status, 401)
+        self.assertFalse(result["authorized"])
+
+
+class GetApplicationAccessTokenTests(unittest.TestCase):
+    """Client-credentials token for eBay's Buy APIs (Browse) - independent
+    of the Sell-API user consent flow, so no stored refresh token needed."""
+
+    def setUp(self):
+        oauth_server._app_token_cache["access_token"] = None
+        oauth_server._app_token_cache["expires_at"] = 0
+        self.addCleanup(lambda: oauth_server._app_token_cache.update(access_token=None, expires_at=0))
+
+    def test_requests_a_fresh_token_when_cache_is_empty(self):
+        response = MagicMock()
+        response.read.return_value = json.dumps({"access_token": "app-tok-1", "expires_in": 7200}).encode()
+        response.__enter__.return_value = response
+        with patch("app.urlopen", return_value=response) as mock_urlopen:
+            token = oauth_server.get_application_access_token()
+        self.assertEqual(token, "app-tok-1")
+        request_obj = mock_urlopen.call_args[0][0]
+        self.assertIn(b"grant_type=client_credentials", request_obj.data)
+
+    def test_returns_cached_token_without_a_new_request(self):
+        oauth_server._app_token_cache["access_token"] = "cached-tok"
+        oauth_server._app_token_cache["expires_at"] = time.time() + 3600
+        with patch("app.urlopen") as mock_urlopen:
+            token = oauth_server.get_application_access_token()
+        self.assertEqual(token, "cached-tok")
+        mock_urlopen.assert_not_called()
+
+    def test_refetches_once_the_cached_token_is_close_to_expiry(self):
+        oauth_server._app_token_cache["access_token"] = "stale-tok"
+        oauth_server._app_token_cache["expires_at"] = time.time() + 10
+        response = MagicMock()
+        response.read.return_value = json.dumps({"access_token": "fresh-tok", "expires_in": 7200}).encode()
+        response.__enter__.return_value = response
+        with patch("app.urlopen", return_value=response):
+            token = oauth_server.get_application_access_token()
+        self.assertEqual(token, "fresh-tok")
+
+
+class InternalApplicationAccessTokenTests(unittest.TestCase):
+    def test_returns_token_when_available(self):
+        with patch("app.get_application_access_token", return_value="app-tok"):
+            result = oauth_server.internal_application_access_token()
+        self.assertEqual(result["access_token"], "app-tok")
+        self.assertEqual(result["environment"], oauth_server.ENVIRONMENT)
+
+    def test_returns_502_shape_on_failure(self):
+        with patch("app.get_application_access_token", side_effect=RuntimeError("eBay Token API HTTP 500: boom")):
+            result, status = oauth_server.internal_application_access_token()
+        self.assertEqual(status, 502)
         self.assertFalse(result["authorized"])
 
 

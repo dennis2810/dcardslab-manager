@@ -116,6 +116,19 @@ function addAction(items, html) {
   items.appendChild(li);
 }
 
+// Eigener try/catch statt im Promise.all unten - ein nicht erreichbarer
+// eBay-oauth-Server darf nur diese eine Aktions-Zeile ausfallen lassen,
+// nicht das ganze Dashboard (gleiche Absicherung wie main.py's
+// GET /api/ebay/oauth/status selbst schon serverseitig hat).
+async function loadEbayStatus() {
+  try {
+    const res = await fetch("/api/ebay/oauth/status");
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
 async function load() {
   try {
     const [statsRes, invRes, cardsRes, geplantRes, sheetsRes] = await Promise.all([
@@ -127,10 +140,11 @@ async function load() {
     const cardsBody = await cardsRes.json();
     const geplant = await geplantRes.json();
     const sheets = await sheetsRes.json();
+    const ebayStatus = await loadEbayStatus();
 
     document.getElementById("status-msg").style.display = "none";
     renderSummary(stats, inventory);
-    renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets);
+    renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
     renderActivity(stats);
   } catch (err) {
     document.getElementById("status-msg").textContent = "Fehler: " + err;
@@ -161,7 +175,7 @@ function renderSummary(stats, inventory) {
   }
 }
 
-function renderActions(stats, cards, geplantListings, sheets) {
+function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
   const list = document.getElementById("action-list");
   list.innerHTML = "";
   let count = 0;
@@ -207,6 +221,14 @@ function renderActions(stats, cards, geplantListings, sheets) {
   if (!sheets.connected) {
     count++;
     addAction(list, `🔌 Google Sheets ist nicht verbunden – <a href="settings.html">zu den Einstellungen &rarr;</a>`);
+  }
+
+  // ebayStatus ist null, wenn die Statusabfrage selbst fehlgeschlagen ist
+  // (z.B. oauth-Server nicht erreichbar) - dann lieber keinen (evtl.
+  // falschen) Alarm zeigen als einen unzuverlässigen.
+  if (ebayStatus && !ebayStatus.authorized) {
+    count++;
+    addAction(list, `🔌 eBay ist nicht verbunden – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
   }
 
   if (!count) {
