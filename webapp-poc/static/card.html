@@ -326,7 +326,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
-    renderPriceResearchSection(card.price_research, card.title, card.ebay_listing?.price);
+    renderPriceResearchSection(card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
