@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Anleitung</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .back-link { font-size: 0.9rem; }
+  .toc { background: rgba(127, 127, 127, 0.1); border-radius: 6px; padding: 0.75rem 1.25rem; }
+  .toc li { margin: 0.15rem 0; }
+  p, li { line-height: 1.5; }
+  code { background: rgba(127, 127, 127, 0.15); border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.9em; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Anleitung</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+  <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
+
+  <nav class="toc">
+    <strong>Inhalt</strong>
+    <ul>
+      <li><a href="#scan">Scan – Karten einscannen</a></li>
+      <li><a href="#karten-anlegen">Karte manuell anlegen</a></li>
+      <li><a href="#karten">Kartenübersicht</a></li>
+      <li><a href="#kartendetail">Kartendetail</a></li>
+      <li><a href="#kaeufe">Käufe</a></li>
+      <li><a href="#ebay">eBay</a></li>
+      <li><a href="#inventar">Inventar</a></li>
+      <li><a href="#statistiken">Statistiken</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#einstellungen">Einstellungen</a></li>
+      <li><a href="#tipps">Kürzel &amp; Tipps</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="scan">Scan – Karten einscannen</h2>
+  <p>Auf der Scan-Seite (<code>Scan</code> in der Seitenauswahl) lädt man ein Foto der Vorder- und ein Foto der
+    Rückseite eines 3×3-Rasters (9 Karten) hoch. Der Button zum externen Scan-Tool öffnet ein separates Fenster,
+    falls die Fotos dort erst zugeschnitten werden müssen. Nach dem Hochladen erkennt die KI automatisch Titel,
+    Team, Set, Kartennummer und weitere Felder pro Karte.</p>
+  <p>Wird eine Karte mit gleichem Titel/Set/Kartennummer bereits gefunden, erscheint eine Duplikat-Warnung mit der
+    Möglichkeit, die neue Karte mit der bestehenden zusammenzuführen (die Inventar-Menge wird dabei addiert).
+    Jede erfolgreich gescannte Karte bekommt automatisch einen Inventar-Eintrag (Menge 1, Zustand NM).</p>
+
+  <h2 id="karten-anlegen">Karte manuell anlegen</h2>
+  <p>Über „+ Neue Karte anlegen" auf der Kartenübersicht lässt sich eine einzelne Karte ohne den 3×3-Scan
+    anlegen: Vorder-/Rückseitenfoto hochladen, optional „KI erkennen" klicken, um die Felder automatisch zu
+    befüllen, oder alles manuell eintragen. Auch hier wird auf mögliche Duplikate geprüft. „Abbrechen" verwirft
+    die Eingabe und führt zurück zur Kartenübersicht.</p>
+
+  <h2 id="karten">Kartenübersicht</h2>
+  <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-
+    Filter und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
+    In der Listenansicht sind die Spalten sortierbar.</p>
+  <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
+    mit folgenden Optionen:</p>
+  <ul>
+    <li>Als versendet markieren / Markierung entfernen</li>
+    <li>eBay-Entwürfe für die Auswahl anlegen</li>
+    <li>Etiketten drucken (SKU/Team/Saison/Titel)</li>
+    <li>Zu einem bestehenden Kauf hinzufügen</li>
+  </ul>
+  <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe) lassen sich per „Rückgängig" zurücknehmen.
+    CSV-Export und Drucken stehen ebenfalls zur Verfügung.</p>
+
+  <h2 id="kartendetail">Kartendetail</h2>
+  <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
+    Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt) und das „Versendet"-Kästchen umschalten.</p>
+  <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
+    Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen –
+    weicht der eigene Angebotspreis um mehr als 20 % vom Durchschnitt ab, erscheint ein Preis-Alarm.</p>
+  <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots. Nach einem Verkauf lassen
+    sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
+    automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Schickt ein Käufer die Karte zurück,
+    markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
+    erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.</p>
+
+  <h2 id="kaeufe">Käufe</h2>
+  <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Sonstiges), Verkäufer,
+    Gesamtpreis und Versand an. Auf der Kauf-Detailseite werden Karten verknüpft – der Gesamtpreis wird dabei
+    automatisch gleichmäßig auf alle verknüpften Karten aufgeteilt (der Anteil pro Karte lässt sich danach manuell
+    überschreiben, bis zur nächsten Verknüpfungsänderung). Für die Steuer lässt sich außerdem ein Beleg (Foto oder
+    PDF der Rechnung) hochladen.</p>
+  <p>Die Käufe-Übersicht ist sortierbar, nach Zeitraum filterbar und lässt sich per Pfeil-Button aufklappen, um die
+    verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Die Plattform-Auswertung zeigt den
+    durchschnittlichen Gewinn/Marge je Einkaufsplattform.</p>
+
+  <h2 id="ebay">eBay</h2>
+  <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Fehler). Angebote lassen sich
+    einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte Angebote auf
+    einmal angepasst werden (z. B. „-10" für 10 % günstiger). Verkaufte Artikel werden automatisch im Hintergrund
+    synchronisiert.</p>
+
+  <h2 id="inventar">Inventar</h2>
+  <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
+    Lagerort. Die Lagerort-Übersicht gruppiert den Bestand nach Lagerort (Anzahl Karten und Wert). Bestandswarnungen
+    machen auf Karten ohne Lagerort oder mit Menge 0 aufmerksam, die noch nicht als „Verkauft" markiert sind.</p>
+
+  <h2 id="statistiken">Statistiken</h2>
+  <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer), ein Monats-Diagramm für
+    Umsatz/Gewinn, eine Jahresübersicht sowie Team-, Set- und Plattform-Ranking. Die zweite Seite („Alle Verkäufe")
+    listet jeden Verkauf einzeln, filter- und sortierbar, inklusive CSV-Export und einem für DATEV/Lexoffice
+    aufbereiteten Buchhaltungsexport.</p>
+
+  <h2 id="dashboard">Dashboard</h2>
+  <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
+    Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer.</p>
+
+  <h2 id="einstellungen">Einstellungen</h2>
+  <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport) und ein
+    vollständiges Backup (ZIP mit allen Daten als JSON sowie allen Kartenbildern) herunterladen.</p>
+
+  <h2 id="tipps">Kürzel &amp; Tipps</h2>
+  <ul>
+    <li>Die Taste <code>/</code> springt auf den meisten Listenseiten direkt in das Suchfeld.</li>
+    <li>Dark Mode folgt automatisch der Betriebssystem-/Browser-Einstellung, es gibt keinen manuellen Umschalter.</li>
+    <li>Auf fast jeder Listenseite gibt es 🖨 Drucken und ⭳ CSV-Export.</li>
+  </ul>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+</script>
+</body>
+</html>
