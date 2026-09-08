@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <title>DCardLabs – Neue Karte anlegen</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --warn-bg: #4a3c00; --warn-fg: #ffd866; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -27,7 +34,7 @@
   button:disabled { opacity: 0.5; cursor: default; }
   #status { font-style: italic; color: #555; grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
-  .duplicate-warning { font-weight: 600; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; background: #fff3cd; color: #7a5c00; }
+  .duplicate-warning { font-weight: 600; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; background: var(--warn-bg); color: var(--warn-fg); }
   .duplicate-warning .actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
   [hidden] { display: none !important; }
 </style>

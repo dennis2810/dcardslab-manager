@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <title>DCardLabs – Käufe</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7; --detail-bg: #fafafa;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --hover-bg: #2a2a2a; --detail-bg: #202020; --accent-bg: #1d2733; --accent-border: #3a4a5a; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
@@ -21,10 +29,10 @@
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
-  tr.row:hover { background: #f7f7f7; }
+  tr.row:hover { background: var(--hover-bg); }
   .expand-btn { border: none; background: none; cursor: pointer; font-size: 0.9rem; padding: 0 0.4rem; }
   tr.detail-row { cursor: default; }
-  tr.detail-row td { background: #fafafa; padding: 0.5rem 1rem; }
+  tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
   .detail-items { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
   #status-msg { font-style: italic; color: #555; }
   #new-purchase-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
@@ -32,7 +40,7 @@
   #new-purchase-form input, #new-purchase-form select { font-weight: normal; margin-top: 0.2rem; }
   #new-purchase-form .actions { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
-  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }

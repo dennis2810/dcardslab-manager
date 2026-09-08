@@ -4,6 +4,25 @@
 <meta charset="utf-8">
 <title>DCardLabs – Karten</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --placeholder-bg: #f0f0f0;
+    --success-bg: #d4edda; --success-fg: #155724;
+    --warn-bg: #fff3cd; --warn-fg: #856404;
+    --info-bg: #cce5ff; --info-fg: #004085;
+    --danger-bg: #f8d7da; --danger-fg: #721c24;
+    --neutral-bg: #e2e3e5; --neutral-fg: #383d41;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --placeholder-bg: #2a2a2a;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82;
+      --neutral-bg: #333; --neutral-fg: #ccc;
+    }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -15,7 +34,7 @@
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
   .card { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; text-decoration: none; color: inherit; display: block; }
-  .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .card .title { font-weight: 600; margin-top: 0.4rem; }
   .card .meta { font-size: 0.8rem; color: #555; }
   .card .tags { font-style: italic; }
@@ -23,18 +42,18 @@
   .status-nicht_erkannt { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
   .ebay-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; }
-  .ebay-badge-Veroeffentlicht { background: #d4edda; color: #155724; }
-  .ebay-badge-Geplant { background: #fff3cd; color: #856404; }
-  .ebay-badge-Verkauft { background: #cce5ff; color: #004085; }
-  .ebay-badge-Fehler { background: #f8d7da; color: #721c24; }
-  .ebay-badge-Entwurf { background: #e2e3e5; color: #383d41; }
-  .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: #dce8fb; color: #0b3d91; }
+  .ebay-badge-Veroeffentlicht { background: var(--success-bg); color: var(--success-fg); }
+  .ebay-badge-Geplant { background: var(--warn-bg); color: var(--warn-fg); }
+  .ebay-badge-Verkauft { background: var(--info-bg); color: var(--info-fg); }
+  .ebay-badge-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
+  .ebay-badge-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
+  .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .list { width: 100%; border-collapse: collapse; }
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
   .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   .list th .sort-arrow { color: #888; font-size: 0.8em; }
   .card .sku { font-size: 0.75rem; color: #888; }
-  .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .list a.row-link { color: inherit; text-decoration: none; display: block; }
   [hidden] { display: none !important; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }

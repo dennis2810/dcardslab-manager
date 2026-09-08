@@ -4,6 +4,23 @@
 <meta charset="utf-8">
 <title>DCardLabs – Inventar</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7; --placeholder-bg: #f0f0f0;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --info-bg: #dce8fb; --info-fg: #0b3d91;
+    --neutral-bg: #eee; --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --hover-bg: #2a2a2a; --placeholder-bg: #2a2a2a;
+      --accent-bg: #1d2733; --accent-border: #3a4a5a;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --neutral-bg: #333; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+    }
+  }
   body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -16,16 +33,16 @@
   th { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
-  tr.row:hover { background: #f7f7f7; }
-  img.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; background: #f0f0f0; vertical-align: middle; margin-right: 0.5rem; }
+  tr.row:hover { background: var(--hover-bg); }
+  img.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; background: var(--placeholder-bg); vertical-align: middle; margin-right: 0.5rem; }
   #status-msg { font-style: italic; color: #555; }
-  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   .controls { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; flex-wrap: wrap; }
   .status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
-  .status-sold { background: #dce8fb; color: #0b3d91; }
-  .status-in-stock { background: #e6f4ea; color: #1e4620; }
-  .status-out { background: #eee; color: #555; }
+  .status-sold { background: var(--info-bg); color: var(--info-fg); }
+  .status-in-stock { background: var(--success-bg); color: var(--success-fg); }
+  .status-out { background: var(--neutral-bg); color: #555; }
   @media print {
     .no-print { display: none !important; }
   }
@@ -35,7 +52,7 @@
   #add-item-form .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; align-items: center; }
   #add-item-form .full-row { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
-  .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: #fff3cd; color: #7a5c00; }
+  .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: var(--warn-bg); color: var(--warn-fg); }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
 </style>
 </head>

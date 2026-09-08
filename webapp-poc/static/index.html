@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <title>DCardLabs Web PoC</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00; --surface: #f0f0f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --warn-bg: #4a3c00; --warn-fg: #ffd866; --surface: #2a2a2a; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -16,15 +23,15 @@
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; width: fit-content; }
   table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
   th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
-  th { background: #f0f0f0; }
+  th { background: var(--surface); }
   #status { font-style: italic; color: #555; }
   .error { color: #b00020; font-weight: 600; }
   .side { display: flex; flex-direction: column; gap: 0.5rem; }
   .preview { display: none; max-width: 100%; max-height: 420px; border: 1px solid #ccc; border-radius: 6px; }
   .rotate-buttons { display: none; gap: 0.5rem; }
   .rotate-buttons button { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
-  tr.possible-duplicate { background: #fff3cd; }
-  .duplicate-note { font-size: 0.85rem; color: #7a5c00; }
+  tr.possible-duplicate { background: var(--warn-bg); }
+  .duplicate-note { font-size: 0.85rem; color: var(--warn-fg); }
 </style>
 </head>
 <body>

@@ -4,6 +4,25 @@
 <meta charset="utf-8">
 <title>DCardLabs – Karte bearbeiten</title>
 <style>
+  :root {
+    color-scheme: light dark;
+    --placeholder-bg: #f0f0f0; --surface: #f5f5f5;
+    --neutral-bg: #eee; --neutral-fg: #333;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --info-bg: #dce8fb; --info-fg: #0b3d91;
+    --danger-bg: #fdecea; --danger-fg: #611a15;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --placeholder-bg: #2a2a2a; --surface: #262626;
+      --neutral-bg: #333; --neutral-fg: #ccc;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82;
+    }
+  }
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -13,7 +32,7 @@
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
   .image-block { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
-  .image-block img { width: 100%; border-radius: 6px; background: #f0f0f0; }
+  .image-block img { width: 100%; border-radius: 6px; background: var(--placeholder-bg); }
   .rotate-buttons { display: flex; gap: 0.4rem; align-items: center; }
   .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
   .rotate-buttons button:disabled { opacity: 0.5; cursor: default; }
@@ -39,11 +58,11 @@
   .ebay-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .ebay-section h2 { font-size: 1.1rem; }
   .ebay-status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
-  .ebay-status-Entwurf { background: #eee; color: #333; }
-  .ebay-status-Geplant { background: #fff3cd; color: #7a5c00; }
-  .ebay-status-Veroeffentlicht { background: #e6f4ea; color: #1e4620; }
-  .ebay-status-Verkauft { background: #dce8fb; color: #0b3d91; }
-  .ebay-status-Fehler { background: #fdecea; color: #611a15; }
+  .ebay-status-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
+  .ebay-status-Geplant { background: var(--warn-bg); color: var(--warn-fg); }
+  .ebay-status-Veroeffentlicht { background: var(--success-bg); color: var(--success-fg); }
+  .ebay-status-Verkauft { background: var(--info-bg); color: var(--info-fg); }
+  .ebay-status-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
   .ebay-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .ebay-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   .ebay-form input, .ebay-form select, .ebay-form textarea { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
@@ -51,7 +70,7 @@
   .ebay-aspects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .ebay-aspects label { flex: 1 1 160px; }
   .ebay-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
-  .price-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; background: #f5f5f5; border-radius: 6px; padding: 0.5rem 0.75rem; }
+  .price-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; background: var(--surface); border-radius: 6px; padding: 0.5rem 0.75rem; }
   .price-calc label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .price-calc input { font-weight: normal; padding: 0.3rem; width: 5rem; }
   .price-calc .price-calc-hint { color: #555; }
@@ -59,8 +78,8 @@
   .ebay-readonly dt { font-weight: 600; }
   .ebay-readonly dd { margin: 0; }
   .price-research-links { font-size: 0.85rem; margin: 0.4rem 0; }
-  .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: #fff3cd; color: #7a5c00; }
-  .workflow-hint { background: #fff3cd; color: #7a5c00; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
+  .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: var(--warn-bg); color: var(--warn-fg); }
+  .workflow-hint { background: var(--warn-bg); color: var(--warn-fg); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
   .sale-stats { font-size: 0.85rem; }
   .fee-input-row { display: flex; align-items: center; gap: 0.4rem; }
   .fee-input-row label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
