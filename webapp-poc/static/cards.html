@@ -93,6 +93,12 @@
     <button type="button" id="bulk-unmark-shipped">Versand-Markierung entfernen</button>
     <button type="button" id="bulk-create-ebay-draft">eBay-Entwürfe anlegen</button>
     <button type="button" id="bulk-print-labels">🏷️ Etiketten drucken</button>
+    <label>Zu Kauf hinzufügen
+      <select id="bulk-add-purchase-select">
+        <option value="">– Kauf wählen –</option>
+      </select>
+    </label>
+    <button type="button" id="bulk-add-to-purchase-btn">Verknüpfen</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-status"></span>
   </div>
@@ -623,6 +629,79 @@ async function bulkCreateEbayDrafts() {
 }
 
 document.getElementById("bulk-create-ebay-draft").addEventListener("click", bulkCreateEbayDrafts);
+
+// Gleiches Datumsformat wie purchases.html/purchase.html (DD.MM.YYYY, per
+// String-Split statt new Date(), um Zeitzonen-Verschiebungen zu vermeiden).
+function formatDate(value) {
+  if (!value) return "";
+  const [y, m, d] = value.split("-");
+  return d && m && y ? `${d}.${m}.${y}` : value;
+}
+
+const bulkAddPurchaseSelect = document.getElementById("bulk-add-purchase-select");
+
+// Einmalig beim Laden der Seite befuellt (nicht bei jedem Oeffnen der Bulk-
+// Leiste) - eine neue Auswahlmoeglichkeit fuer einen waehrenddessen
+// angelegten Kauf erscheint erst nach einem Seiten-Reload, das ist fuer
+// diesen Anwendungsfall (Karten kurz nach dem Kauf verknuepfen) akzeptabel.
+async function loadPurchasesForBulkSelect() {
+  try {
+    const res = await fetch("/api/purchases");
+    const data = await res.json();
+    if (!res.ok) return;
+    for (const p of data.purchases) {
+      const option = document.createElement("option");
+      option.value = p.id;
+      option.textContent = [formatDate(p.purchase_date), p.platform, p.seller].filter(Boolean).join(" – ");
+      bulkAddPurchaseSelect.appendChild(option);
+    }
+  } catch (err) {
+    // Dropdown bleibt dann einfach leer - kein Blocker fuer den Rest der Seite.
+  }
+}
+loadPurchasesForBulkSelect();
+
+// Eine Karte kann nur einem Kauf zugeordnet sein (unique(card_id) im
+// Schema) - bereits verknuepfte Karten in der Auswahl werden uebersprungen
+// statt einen 409-Fehler zu produzieren.
+async function bulkAddToPurchase() {
+  const purchaseId = bulkAddPurchaseSelect.value;
+  if (!purchaseId) {
+    bulkStatusEl.textContent = "Bitte zuerst einen Kauf auswählen.";
+    return;
+  }
+  const ids = [...selectedIds];
+  const cardsById = new Map(currentCards.map((c) => [c.id, c]));
+  const targets = ids.filter((id) => !cardsById.get(id)?.has_purchase);
+  const skipped = ids.length - targets.length;
+  if (!targets.length) {
+    bulkStatusEl.textContent = "Alle ausgewählten Karten sind bereits einem Kauf zugeordnet.";
+    return;
+  }
+  bulkStatusEl.textContent = "Verknüpft …";
+  try {
+    const results = await Promise.all(targets.map((id) =>
+      fetch(`/api/purchases/${encodeURIComponent(purchaseId)}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_id: id }),
+      })
+    ));
+    const okCount = results.filter((r) => r.ok).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Karte(n) verknüpft.`;
+    if (skipped) message += ` ${skipped} übersprungen (bereits einem Kauf zugeordnet).`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkStatusEl.textContent = message;
+    selectedIds.clear();
+    updateBulkBar();
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+  }
+}
+
+document.getElementById("bulk-add-to-purchase-btn").addEventListener("click", bulkAddToPurchase);
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
