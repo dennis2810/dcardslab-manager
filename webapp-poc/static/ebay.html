@@ -34,7 +34,6 @@
   .status-Verkauft { color: #0b3d91; font-weight: 600; }
   .status-Fehler { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
-  .actions-bar { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; }
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
@@ -82,12 +81,21 @@
   </div>
   <p id="sync-status"></p>
 
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <button type="button" id="publish-selected-btn">Ausgewählte veröffentlichen</button>
+    <label>Preis anpassen um <input type="number" id="price-bulk-percent" step="1" style="width: 4.5rem;" placeholder="-10"> %</label>
+    <button type="button" id="price-bulk-btn">Anwenden</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
+    <span id="bulk-results"></span>
+  </div>
+
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
   <table id="listings-table" style="display: none;">
     <thead>
       <tr>
-        <th></th>
+        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
         <th></th>
         <th data-key="sku">SKU <span class="sort-arrow"></span></th>
         <th data-key="title">Titel <span class="sort-arrow"></span></th>
@@ -108,13 +116,6 @@
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
-
-  <div class="actions-bar no-print">
-    <button type="button" id="publish-selected-btn" disabled>Ausgewählte veröffentlichen</button>
-    <label>Preis anpassen um <input type="number" id="price-bulk-percent" step="1" style="width: 4.5rem;" placeholder="-10"> %</label>
-    <button type="button" id="price-bulk-btn" disabled>Anwenden</button>
-  </div>
-  <div id="bulk-results"></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -166,6 +167,9 @@ const publishSelectedBtn = document.getElementById("publish-selected-btn");
 const priceBulkBtn = document.getElementById("price-bulk-btn");
 const priceBulkPercent = document.getElementById("price-bulk-percent");
 const bulkResults = document.getElementById("bulk-results");
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
 
 const STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
@@ -183,9 +187,21 @@ function daysPending(listing) {
   if (isNaN(dt)) return 0;
   return Math.floor((Date.now() - dt.getTime()) / (24 * 60 * 60 * 1000));
 }
+// Nur Entwuerfe/fehlgeschlagene Angebote koennen (erneut) veroeffentlicht
+// werden - gilt nur fuer den Veroeffentlichen-Button, die Preisanpassung
+// funktioniert fuer jeden Status.
 const SELECTABLE_STATUSES = new Set(["Entwurf", "Fehler"]);
 
 let currentListings = [];
+// Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
+// nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
+// ueber alle Seiten hinweg). Gleiches Muster wie cards.html.
+let currentPageItems = [];
+// Massenauswahl ueber Angebots-IDs statt DOM-Checkbox-Status - bleibt so
+// beim Blaettern/Neuladen erhalten (anders als vorher, wo ausserhalb der
+// aktuellen Seite ausgewaehlte Checkboxen beim naechsten render() verloren
+// gingen).
+let selectedIds = new Set();
 // SKU-ascending by default - the seller's most-used reference number.
 let sortKey = "sku";
 let sortAsc = true;
@@ -243,11 +259,25 @@ async function loadOauthStatus() {
   }
 }
 
-function updatePublishButtonState() {
-  const anySelected = !!body.querySelector("input[type=checkbox]:checked");
-  publishSelectedBtn.disabled = !anySelected;
-  priceBulkBtn.disabled = !anySelected;
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Angebot(e) ausgewählt`;
 }
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const listing of currentPageItems) {
+    if (selectAllCheckbox.checked) selectedIds.add(listing.id);
+    else selectedIds.delete(listing.id);
+  }
+  updateBulkBar();
+  render(sortedListings());
+});
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  render(sortedListings());
+});
 
 async function loadListings() {
   const params = new URLSearchParams();
@@ -267,6 +297,8 @@ async function loadListings() {
     statusMsg.textContent = `${data.listings.length} Angebot(e)`;
     currentListings = data.listings;
     currentPage = 0;
+    selectedIds.clear();
+    updateBulkBar();
     render(sortedListings());
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -277,9 +309,11 @@ function render(listings) {
   const pageCount = Math.max(1, Math.ceil(listings.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const pageItems = listings.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  currentPageItems = pageItems;
   document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${listings.length} Angebot(e), max. ${PAGE_SIZE}/Seite)`;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  selectAllCheckbox.checked = pageItems.length > 0 && pageItems.every((l) => selectedIds.has(l.id));
 
   body.innerHTML = "";
   table.style.display = listings.length ? "table" : "none";
@@ -287,14 +321,17 @@ function render(listings) {
     const tr = document.createElement("tr");
 
     const checkboxTd = document.createElement("td");
-    if (SELECTABLE_STATUSES.has(listing.status)) {
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.dataset.listingId = listing.id;
-      checkbox.addEventListener("click", (ev) => ev.stopPropagation());
-      checkbox.addEventListener("change", updatePublishButtonState);
-      checkboxTd.appendChild(checkbox);
-    }
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(listing.id);
+    checkbox.addEventListener("click", (ev) => ev.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(listing.id);
+      else selectedIds.delete(listing.id);
+      selectAllCheckbox.checked = pageItems.length > 0 && pageItems.every((l) => selectedIds.has(l.id));
+      updateBulkBar();
+    });
+    checkboxTd.appendChild(checkbox);
     tr.appendChild(checkboxTd);
 
     const thumbTd = document.createElement("td");
@@ -352,7 +389,7 @@ function render(listings) {
     });
     body.appendChild(tr);
   }
-  updatePublishButtonState();
+  updateBulkBar();
   renderSums(listings);
 }
 
@@ -421,12 +458,19 @@ document.getElementById("csv-btn").addEventListener("click", () => {
 });
 
 publishSelectedBtn.addEventListener("click", async () => {
-  const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
-    .map((cb) => cb.dataset.listingId);
-  if (!listingIds.length) return;
+  const selected = currentListings.filter((l) => selectedIds.has(l.id));
+  const eligible = selected.filter((l) => SELECTABLE_STATUSES.has(l.status));
+  const skipped = selected.length - eligible.length;
+  if (!eligible.length) {
+    bulkResults.textContent = "Keines der ausgewählten Angebote ist ein Entwurf oder fehlgeschlagen - nur solche können veröffentlicht werden.";
+    bulkResults.className = "error";
+    return;
+  }
+  const listingIds = eligible.map((l) => l.id);
 
   publishSelectedBtn.disabled = true;
   bulkResults.textContent = "Veröffentlicht …";
+  bulkResults.className = "";
   try {
     const res = await fetch("/api/ebay/listings/publish-bulk", {
       method: "POST",
@@ -441,6 +485,11 @@ publishSelectedBtn.addEventListener("click", async () => {
     }
     bulkResults.className = "";
     const list = document.createElement("ul");
+    if (skipped) {
+      const li = document.createElement("li");
+      li.textContent = `${skipped} Angebot(e) übersprungen (weder Entwurf noch fehlgeschlagen).`;
+      list.appendChild(li);
+    }
     for (const r of data.results) {
       const li = document.createElement("li");
       const ok = r.status !== "Fehler";
@@ -449,16 +498,19 @@ publishSelectedBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    selectedIds.clear();
+    updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+  } finally {
+    publishSelectedBtn.disabled = false;
   }
 });
 
 priceBulkBtn.addEventListener("click", async () => {
-  const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
-    .map((cb) => cb.dataset.listingId);
+  const listingIds = Array.from(selectedIds);
   if (!listingIds.length) return;
   const percent = Number(priceBulkPercent.value);
   if (!percent) {
@@ -493,6 +545,8 @@ priceBulkBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    selectedIds.clear();
+    updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
