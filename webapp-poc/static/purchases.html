@@ -93,6 +93,7 @@
     <label>Notizen <input type="text" name="notes"></label>
     <div class="actions">
       <button type="submit">Speichern</button>
+      <button type="button" id="new-purchase-cancel">Abbrechen</button>
       <span id="new-purchase-status"></span>
     </div>
   </form>
@@ -172,9 +173,18 @@ function formatDate(value) {
   return d && m && y ? `${d}.${m}.${y}` : value;
 }
 
-// Einheitlich immer 2 Nachkommastellen bei Geldbetraegen.
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().
 function fmtEuro(value) {
-  return value != null && value !== "" ? `${Number(value).toFixed(2)} €` : "";
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
+function fmtPercent(value) {
+  return value != null
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+    : "";
 }
 
 // Nutzt /api/statistics mit (spiegelt main.py's _rank_platforms(): nur
@@ -213,7 +223,7 @@ async function loadPlatformRanking() {
       profitTd.className = entry.avg_profit >= 0 ? "profit-positive" : "profit-negative";
       tr.appendChild(profitTd);
       const marginTd = document.createElement("td");
-      marginTd.textContent = entry.avg_margin_pct != null ? `${entry.avg_margin_pct.toFixed(1)} %` : "";
+      marginTd.textContent = fmtPercent(entry.avg_margin_pct);
       tr.appendChild(marginTd);
       body.appendChild(tr);
     }
@@ -268,11 +278,17 @@ for (const th of document.querySelectorAll("th[data-key]")) {
 
 function renderSums(purchases) {
   const total = purchases.reduce((sum, p) => sum + (Number(p.total_price) || 0) + (Number(p.shipping) || 0), 0);
-  sumsEl.textContent = `${purchases.length} Kauf/Käufe im Filter · Summe (inkl. Versand): ${total.toFixed(2)} €`;
+  sumsEl.textContent = `${purchases.length} Kauf/Käufe im Filter · Summe (inkl. Versand): ${fmtEuro(total)}`;
 }
 
 toggleNewBtn.addEventListener("click", () => {
   newForm.style.display = newForm.style.display === "grid" ? "none" : "grid";
+});
+
+document.getElementById("new-purchase-cancel").addEventListener("click", () => {
+  newForm.reset();
+  newForm.style.display = "none";
+  document.getElementById("new-purchase-status").textContent = "";
 });
 
 async function loadPurchases() {
