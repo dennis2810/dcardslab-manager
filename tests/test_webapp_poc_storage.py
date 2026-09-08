@@ -186,5 +186,65 @@ class DeleteImagesTests(unittest.TestCase):
         mock_client.storage.from_.assert_not_called()
 
 
+class UploadReceiptTests(unittest.TestCase):
+    def test_uploads_bytes_as_is_to_expected_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            object_path = storage.upload_receipt("purchase-1", "application/pdf", b"%PDF-fake")
+
+        self.assertEqual(object_path, "purchase-1/receipt.pdf")
+        mock_client.storage.from_.assert_called_once_with(storage.RECEIPTS_BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        upload_call.assert_called_once()
+        args, kwargs = upload_call.call_args
+        self.assertEqual(args[0], "purchase-1/receipt.pdf")
+        self.assertEqual(args[1], b"%PDF-fake")
+        self.assertEqual(kwargs["file_options"]["content-type"], "application/pdf")
+        self.assertEqual(kwargs["file_options"]["upsert"], "true")
+
+    def test_picks_extension_from_content_type(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            object_path = storage.upload_receipt("purchase-1", "image/jpeg", b"fake-jpeg")
+        self.assertEqual(object_path, "purchase-1/receipt.jpg")
+
+    def test_propagates_upload_errors_to_caller(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.upload.side_effect = RuntimeError("bucket down")
+        with patch("storage.get_client", return_value=mock_client):
+            with self.assertRaises(RuntimeError):
+                storage.upload_receipt("purchase-1", "application/pdf", b"%PDF-fake")
+
+
+class ReceiptSignedUrlTests(unittest.TestCase):
+    def test_returns_signed_url_from_client_response(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_url.return_value = {
+            "signedURL": "https://example.supabase.co/signed/receipt.pdf"
+        }
+        with patch("storage.get_client", return_value=mock_client):
+            url = storage.receipt_signed_url("purchase-1/receipt.pdf")
+        self.assertEqual(url, "https://example.supabase.co/signed/receipt.pdf")
+        mock_client.storage.from_.assert_called_once_with(storage.RECEIPTS_BUCKET)
+        mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with(
+            "purchase-1/receipt.pdf", 3600
+        )
+
+
+class DeleteReceiptTests(unittest.TestCase):
+    def test_removes_given_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_receipt("purchase-1/receipt.pdf")
+        mock_client.storage.from_.assert_called_once_with(storage.RECEIPTS_BUCKET)
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(["purchase-1/receipt.pdf"])
+
+    def test_noop_when_no_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_receipt("")
+        mock_client.storage.from_.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

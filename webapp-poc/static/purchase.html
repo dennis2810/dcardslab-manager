@@ -14,11 +14,13 @@
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
-  input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  input, select { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
   .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
   .error { color: #b00020; font-weight: 600; }
+  .receipt-section { margin-top: 2rem; }
+  #receipt-upload { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .items { margin-top: 2rem; }
   .item-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #ddd; }
   .item-row img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
@@ -54,6 +56,16 @@
     <p id="load-status">Lädt …</p>
   </form>
 
+  <div class="receipt-section">
+    <h2>Beleg</h2>
+    <p id="receipt-status">Lädt …</p>
+    <div id="receipt-upload">
+      <input type="file" id="receipt-file" accept="application/pdf,image/jpeg,image/png,image/webp">
+      <button type="button" id="upload-receipt-btn">Hochladen</button>
+      <span id="receipt-upload-status"></span>
+    </div>
+  </div>
+
   <div class="items">
     <h2>Verknüpfte Karten</h2>
     <p class="item-hint">Der Kaufpreis (inkl. Versand) wird standardmäßig gleichmäßig auf alle verknüpften Karten aufgeteilt und bei jeder Verknüpfung/Entfernung neu berechnet. Der Anteil pro Karte kann unten manuell überschrieben werden - bleibt aber nur bis zur nächsten Verknüpfungsänderung erhalten.</p>
@@ -82,10 +94,11 @@
 })();
 
 const FIELDS = [
-  ["purchase_date", "Kaufdatum", "date"], ["platform", "Plattform", "text"],
+  ["purchase_date", "Kaufdatum", "date"], ["platform", "Plattform", "select"],
   ["seller", "Verkäufer", "text"], ["shipping", "Versand", "number"],
   ["total_price", "Gesamtpreis", "number"], ["notes", "Notizen", "text"],
 ];
+const KNOWN_PLATFORMS = ["eBay", "Kleinanzeigen", "Vinted", "Sonstiges"];
 
 function showError(container, message) {
   container.innerHTML = "";
@@ -155,13 +168,32 @@ function render(purchase) {
   for (const [key, label, type] of FIELDS) {
     const wrapper = document.createElement("label");
     wrapper.textContent = label;
-    const input = document.createElement("input");
-    input.type = type;
-    // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
-    // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
-    if (type === "number") input.step = "0.01";
+    let input;
+    if (type === "select") {
+      input = document.createElement("select");
+      const currentValue = purchase[key] || "";
+      const options = ["", ...KNOWN_PLATFORMS];
+      // Ein vorhandener Wert, der nicht in der festen Liste steht (z.B. aus
+      // Zeiten vor dieser Dropdown-Umstellung), muss als Option erhalten
+      // bleiben - sonst würde er beim nächsten Speichern stillschweigend
+      // überschrieben.
+      if (currentValue && !KNOWN_PLATFORMS.includes(currentValue)) options.splice(1, 0, currentValue);
+      for (const value of options) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value || "– wählen –";
+        if (currentValue === value) option.selected = true;
+        input.appendChild(option);
+      }
+    } else {
+      input = document.createElement("input");
+      input.type = type;
+      // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
+      // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
+      if (type === "number") input.step = "0.01";
+      input.value = purchase[key] ?? "";
+    }
     input.name = key;
-    input.value = purchase[key] ?? "";
     if (key === "purchase_date") input.required = true;
     wrapper.appendChild(input);
     form.appendChild(wrapper);
@@ -184,8 +216,78 @@ function render(purchase) {
   statusP.id = "save-status";
   form.appendChild(statusP);
 
+  renderReceipt(purchase);
   renderItems(purchase.items || []);
 }
+
+function renderReceipt(purchase) {
+  const statusP = document.getElementById("receipt-status");
+  statusP.innerHTML = "";
+  if (purchase.receipt_url) {
+    const link = document.createElement("a");
+    link.href = purchase.receipt_url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Beleg ansehen";
+    statusP.appendChild(link);
+    statusP.appendChild(document.createTextNode(" "));
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Beleg löschen";
+    deleteBtn.addEventListener("click", onDeleteReceipt);
+    statusP.appendChild(deleteBtn);
+  } else {
+    statusP.textContent = "Kein Beleg hochgeladen.";
+  }
+}
+
+async function onDeleteReceipt() {
+  if (!confirm("Beleg wirklich löschen?")) return;
+  try {
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}/receipt`, { method: "DELETE" });
+    const body = await res.json();
+    if (!res.ok) {
+      alert("Fehler: " + (body.detail || res.statusText));
+      return;
+    }
+    renderReceipt(body);
+  } catch (err) {
+    alert("Fehler: " + err);
+  }
+}
+
+document.getElementById("upload-receipt-btn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("receipt-file");
+  const uploadStatus = document.getElementById("receipt-upload-status");
+  const file = fileInput.files[0];
+  if (!file) {
+    uploadStatus.textContent = "Bitte zuerst eine Datei wählen.";
+    uploadStatus.className = "error";
+    return;
+  }
+  uploadStatus.textContent = "Lädt hoch …";
+  uploadStatus.className = "";
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}/receipt`, {
+      method: "POST",
+      body: formData,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      uploadStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+      uploadStatus.className = "error";
+      return;
+    }
+    uploadStatus.textContent = "Hochgeladen.";
+    fileInput.value = "";
+    renderReceipt(body);
+  } catch (err) {
+    uploadStatus.textContent = "Fehler: " + err;
+    uploadStatus.className = "error";
+  }
+});
 
 function renderItems(items) {
   const list = document.getElementById("items-list");

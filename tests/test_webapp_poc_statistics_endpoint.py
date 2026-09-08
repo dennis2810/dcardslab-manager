@@ -221,6 +221,50 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(set_ranking[0]["name"], "Panini 2026")
         self.assertEqual(set_ranking[1]["name"], "Topps 2026")
 
+    def test_platform_ranking_averages_profit_and_margin(self):
+        rows = [
+            {
+                "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+                "platform": "eBay", "purchase_date": "2026-01-01", "cost": 5.0,
+                "sale_date": "2026-01-15T00:00:00+00:00", "sale_price": 10.0,
+            },
+            {
+                "card_id": "card-2", "title": "Karte 2", "card_no": 2, "sku": None,
+                "platform": "eBay", "purchase_date": "2026-01-01", "cost": 10.0,
+                "sale_date": "2026-01-20T00:00:00+00:00", "sale_price": 15.0,
+            },
+            {
+                "card_id": "card-3", "title": "Karte 3", "card_no": 3, "sku": None,
+                "platform": "Kleinanzeigen", "purchase_date": "2026-01-01", "cost": 2.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 20.0,
+            },
+            {
+                # Keine Plattform -> darf im Ranking nicht auftauchen.
+                "card_id": "card-4", "title": "Karte 4", "card_no": 4, "sku": None,
+                "platform": "", "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 3.0,
+            },
+            {
+                # Noch nicht verkauft -> darf im Ranking nicht auftauchen.
+                "card_id": "card-5", "title": "Karte 5", "card_no": 5, "sku": None,
+                "platform": "eBay", "purchase_date": "2026-01-01", "cost": 5.0,
+                "sale_date": None, "sale_price": None,
+            },
+        ]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        ranking = response.json()["platform_ranking"]
+
+        self.assertEqual(len(ranking), 2)
+        self.assertEqual(ranking[0]["name"], "Kleinanzeigen")
+        self.assertEqual(ranking[0]["count"], 1)
+        self.assertEqual(ranking[0]["avg_profit"], 18.0)
+        self.assertEqual(ranking[0]["avg_margin_pct"], 900.0)
+        self.assertEqual(ranking[1]["name"], "eBay")
+        self.assertEqual(ranking[1]["count"], 2)
+        self.assertEqual(ranking[1]["avg_profit"], 5.0)
+        self.assertEqual(ranking[1]["avg_margin_pct"], 75.0)
+
     def test_empty_rows_produce_empty_summary(self):
         with patch("main.db.statistics_rows", return_value=[]):
             response = client.get("/api/statistics")
@@ -229,6 +273,7 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(body["monthly"], [])
         self.assertEqual(body["team_ranking"], [])
         self.assertEqual(body["set_ranking"], [])
+        self.assertEqual(body["platform_ranking"], [])
         self.assertEqual(body["summary"]["sold_count"], 0)
         self.assertEqual(body["summary"]["open_count"], 0)
         self.assertIsNone(body["summary"]["avg_margin_pct"])

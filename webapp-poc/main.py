@@ -364,6 +364,15 @@ def _expand_inventory_items(items):
 def _attach_purchase_items(purchase):
     purchase = dict(purchase)
     purchase["items"] = _expand_purchase_items(purchase.get("items", []))
+    receipt_path = purchase.get("receipt_path")
+    if receipt_path:
+        # Gleiche Guard-Logik wie bei _attach_signed_urls(): ein Storage-
+        # Hiccup oder ein Pfad, der nicht mehr aufloest, darf die restliche
+        # Kaufauskunft nicht mit einem 500 blockieren.
+        try:
+            purchase["receipt_url"] = storage.receipt_signed_url(receipt_path)
+        except Exception:
+            pass
     return purchase
 
 
@@ -605,6 +614,56 @@ async def delete_purchase_item(purchase_id: str, item_id: str):
     return Response(status_code=204)
 
 
+_RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
+
+@app.post("/api/purchases/{purchase_id}/receipt")
+async def upload_purchase_receipt(purchase_id: str, file: UploadFile = File(...)):
+    purchase = db.get_purchase(purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    if file.content_type not in storage.RECEIPT_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Beleg muss PDF, JPEG, PNG oder WebP sein.",
+        )
+    data = await file.read()
+    if len(data) > _RECEIPT_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Beleg darf höchstens 10 MB groß sein.")
+
+    old_path = purchase.get("receipt_path")
+    if old_path:
+        try:
+            storage.delete_receipt(old_path)
+        except Exception:
+            logger.exception("Alten Beleg konnte nicht gelöscht werden für Kauf %s", purchase_id)
+
+    try:
+        object_path = storage.upload_receipt(purchase_id, file.content_type, data)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Beleg-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    updated = db.set_purchase_receipt(purchase_id, object_path)
+    return JSONResponse(_attach_purchase_items(updated))
+
+
+@app.delete("/api/purchases/{purchase_id}/receipt")
+async def delete_purchase_receipt(purchase_id: str):
+    purchase = db.get_purchase(purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=404, detail=f"Kauf {purchase_id} nicht gefunden.")
+    old_path = purchase.get("receipt_path")
+    if old_path:
+        try:
+            storage.delete_receipt(old_path)
+        except Exception:
+            logger.exception("Beleg konnte nicht gelöscht werden für Kauf %s", purchase_id)
+    updated = db.set_purchase_receipt(purchase_id, "")
+    return JSONResponse(_attach_purchase_items(updated))
+
+
 @app.get("/api/inventory")
 async def list_inventory():
     items = _expand_inventory_items(db.list_inventory())
@@ -778,6 +837,7 @@ def _compute_statistics():
         "summary": summary, "monthly": monthly_list, "rows": enriched,
         "team_ranking": _rank_statistics_by(enriched, "team"),
         "set_ranking": _rank_statistics_by(enriched, "set_name"),
+        "platform_ranking": _rank_platforms(enriched),
     }
 
 
@@ -802,6 +862,39 @@ def _rank_statistics_by(enriched_rows, field):
     for group in ranked:
         group["revenue"] = round(group["revenue"], 2)
         group["profit"] = round(group["profit"], 2)
+    return ranked
+
+
+def _rank_platforms(enriched_rows):
+    # Plattform-Auswertung auf purchases.html: zeigt (anders als das Team-/
+    # Set-Ranking oben) bewusst Durchschnittswerte statt Summen, weil die
+    # Frage hier "lohnt sich Plattform X im Schnitt mehr als Y" ist, nicht
+    # "wo kam am meisten Gewinn her" - eine Plattform mit nur 2 Käufen soll
+    # nicht allein durch mehr Volumen vor einer mit 20 Käufen liegen.
+    groups = {}
+    for row in enriched_rows:
+        if row["profit"] is None:
+            continue
+        key = (row.get("platform") or "").strip()
+        if not key:
+            continue
+        group = groups.setdefault(key, {"name": key, "count": 0, "profit_sum": 0.0, "margin_sum": 0.0, "margin_count": 0})
+        group["count"] += 1
+        group["profit_sum"] += row["profit"]
+        if row["margin_pct"] is not None:
+            group["margin_sum"] += row["margin_pct"]
+            group["margin_count"] += 1
+
+    ranked = []
+    for group in groups.values():
+        avg_margin = group["margin_sum"] / group["margin_count"] if group["margin_count"] else None
+        ranked.append({
+            "name": group["name"],
+            "count": group["count"],
+            "avg_profit": round(group["profit_sum"] / group["count"], 2),
+            "avg_margin_pct": round(avg_margin, 1) if avg_margin is not None else None,
+        })
+    ranked.sort(key=lambda g: g["avg_profit"], reverse=True)
     return ranked
 
 

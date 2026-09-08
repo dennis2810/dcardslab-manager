@@ -612,6 +612,35 @@ class DeletePurchaseTests(unittest.TestCase):
         mock_client.table.return_value.delete.assert_not_called()
 
 
+class SetPurchaseReceiptTests(unittest.TestCase):
+    def test_writes_receipt_path_and_reattaches_items(self):
+        purchases_builder = MagicMock()
+        update_response = MagicMock()
+        update_response.data = [{"id": "p1", "receipt_path": "p1/receipt.pdf"}]
+        purchases_builder.update.return_value.eq.return_value.execute.return_value = update_response
+
+        items_builder = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{"id": "item-1"}]
+        items_builder.select.return_value.eq.return_value.execute.return_value = items_response
+
+        mock_client = _mock_client_for_tables(purchases=purchases_builder, purchase_items=items_builder)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_purchase_receipt("p1", "p1/receipt.pdf")
+        self.assertEqual(result["receipt_path"], "p1/receipt.pdf")
+        self.assertEqual(result["items"], [{"id": "item-1"}])
+        purchases_builder.update.assert_called_once_with({"receipt_path": "p1/receipt.pdf"})
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_purchase_receipt("does-not-exist", "x/receipt.pdf")
+        self.assertIsNone(result)
+
+
 class AddPurchaseItemTests(unittest.TestCase):
     def test_links_card_to_purchase(self):
         mock_client = MagicMock()
@@ -1467,7 +1496,7 @@ class StatisticsRowsTests(unittest.TestCase):
                 response.data = [{"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 10.0}]
                 builder.select.return_value.in_.return_value.execute.return_value = response
             elif name == "purchases":
-                response.data = [{"id": "p1", "purchase_date": "2026-01-01"}]
+                response.data = [{"id": "p1", "purchase_date": "2026-01-01", "platform": "eBay"}]
                 builder.select.return_value.in_.return_value.execute.return_value = response
             elif name == "ebay_sales":
                 response.data = [{
@@ -1494,6 +1523,8 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertEqual(by_id["card-1"]["set_name"], "Topps 2026")
         self.assertEqual(by_id["card-1"]["ebay_fees"], 1.75)
         self.assertIsNone(by_id["card-2"]["ebay_fees"])
+        self.assertEqual(by_id["card-1"]["platform"], "eBay")
+        self.assertEqual(by_id["card-2"]["platform"], "")
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()

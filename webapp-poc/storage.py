@@ -76,3 +76,39 @@ def delete_images(paths):
     if not paths:
         return
     get_client().storage.from_(BUCKET).remove(paths)
+
+
+RECEIPTS_BUCKET = "purchase-receipts"
+# Anders als card-images ist dieser Bucket privat (siehe supabase/README.md) -
+# Kaufbelege sind Steuerunterlagen, keine eBay-Produktbilder.
+RECEIPT_CONTENT_TYPES = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+
+def upload_receipt(purchase_id, content_type, data):
+    """Stores a purchase receipt as-is - unlike upload_image(), no
+    compression/re-encoding, since a receipt can be a PDF and a photo
+    shouldn't be lossily re-processed for a tax document. Returns the
+    object path within RECEIPTS_BUCKET. Raises whatever the Supabase
+    client raises on failure."""
+    ext = RECEIPT_CONTENT_TYPES[content_type]
+    object_path = f"{purchase_id}/receipt.{ext}"
+    get_client().storage.from_(RECEIPTS_BUCKET).upload(
+        object_path, data, file_options={"content-type": content_type, "upsert": "true"}
+    )
+    return object_path
+
+
+def receipt_signed_url(object_path, expires_in=3600):
+    response = get_client().storage.from_(RECEIPTS_BUCKET).create_signed_url(object_path, expires_in)
+    return response["signedURL"]
+
+
+def delete_receipt(object_path):
+    if not object_path:
+        return
+    get_client().storage.from_(RECEIPTS_BUCKET).remove([object_path])

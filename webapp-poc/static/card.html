@@ -61,6 +61,9 @@
   .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: #fff3cd; color: #7a5c00; }
   .workflow-hint { background: #fff3cd; color: #7a5c00; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
   .sale-stats { font-size: 0.85rem; }
+  .fee-input-row { display: flex; align-items: center; gap: 0.4rem; }
+  .fee-input-row label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
+  .fee-input-row input { width: 6rem; font-weight: normal; padding: 0.3rem; }
   .inventory-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .inventory-section h2 { font-size: 1.1rem; }
   .inventory-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 0.6rem; margin-bottom: 0.5rem; }
@@ -1558,6 +1561,7 @@ function renderSaleStats(purchase, sale) {
   wrapper.appendChild(dl);
 
   const shippingCostP = document.createElement("p");
+  shippingCostP.className = "fee-input-row";
   const shippingCostLabel = document.createElement("label");
   shippingCostLabel.textContent = "Versand-Kosten (Porto) ";
   const shippingCostInput = document.createElement("input");
@@ -1574,6 +1578,7 @@ function renderSaleStats(purchase, sale) {
   // daher manuell erfassbar, analog zu Versand-Kosten oben. Ohne Eintrag
   // (0) bleibt der Gewinn wie bisher unveraendert.
   const ebayFeesP = document.createElement("p");
+  ebayFeesP.className = "fee-input-row";
   const ebayFeesLabel = document.createElement("label");
   ebayFeesLabel.textContent = "eBay-Gebühren ";
   const ebayFeesInput = document.createElement("input");
