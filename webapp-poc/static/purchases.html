@@ -15,6 +15,8 @@
   input { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
   tr.row:hover { background: #f7f7f7; }
   #status-msg { font-style: italic; color: #555; }
@@ -76,7 +78,14 @@
   <p id="status-msg"></p>
   <table id="purchases-table" style="display: none;">
     <thead>
-      <tr><th>Datum</th><th>Plattform</th><th>Verkäufer</th><th>Karten</th><th>Gesamt</th><th>Versand</th></tr>
+      <tr>
+        <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
+        <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
+        <th data-key="seller">Verkäufer <span class="sort-arrow"></span></th>
+        <th data-key="item_count">Karten <span class="sort-arrow"></span></th>
+        <th data-key="total_price">Gesamt <span class="sort-arrow"></span></th>
+        <th data-key="shipping">Versand <span class="sort-arrow"></span></th>
+      </tr>
     </thead>
     <tbody id="purchases-body"></tbody>
   </table>
@@ -117,6 +126,10 @@ const toggleNewBtn = document.getElementById("toggle-new");
 const newForm = document.getElementById("new-purchase-form");
 
 let currentPurchases = [];
+// Neuestes Kaufdatum zuerst, wie bisher schon von db.list_purchases()
+// serverseitig sortiert (order("purchase_date", desc=True)).
+let sortKey = "purchase_date";
+let sortAsc = false;
 
 // Einheitliches Datumsformat (DD.MM.YYYY) - manuell statt ueber
 // toLocaleDateString("de-DE"), da dessen Default-Ausgabe nicht nullgepolstert
@@ -142,6 +155,39 @@ function filteredPurchases() {
     if (from && p.purchase_date < from) return false;
     if (to && p.purchase_date > to) return false;
     return true;
+  });
+}
+
+function sortedPurchases(purchases) {
+  if (!sortKey) return purchases;
+  return [...purchases].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setSortIndicator() {
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    renderCurrentView();
   });
 }
 
@@ -191,8 +237,9 @@ document.getElementById("reset-date-filter").addEventListener("click", () => {
 });
 
 function renderCurrentView() {
-  const filtered = filteredPurchases();
+  const filtered = sortedPurchases(filteredPurchases());
   renderSums(filtered);
+  setSortIndicator();
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
