@@ -799,6 +799,7 @@ def _compute_statistics():
     monthly = {}
     enriched = []
 
+    refunded_count = 0
     for row in rows:
         cost = row.get("cost")
         sale_price = row.get("sale_price")
@@ -808,22 +809,33 @@ def _compute_statistics():
         # API liefert die Verkaufsgebuehr nicht mit, daher 0 solange nichts
         # eingetragen ist; wirkt sich dann einfach nicht auf den Gewinn aus.
         ebay_fees = row.get("ebay_fees") or 0
+        refunded = bool(row.get("refunded"))
         profit = margin_pct = holding_days = None
+
+        # Retoure: Verkaufspreis und erhaltener Versand gingen an den Kaeufer
+        # zurueck, zaehlen also nicht mehr als Umsatz - Einstandspreis,
+        # gezahltes Porto und eBay-Gebuehren bleiben aber ein Verlust, da
+        # eBay diese in der Regel nicht erstattet.
+        revenue_contribution = 0.0 if refunded else float(sale_price or 0)
+        shipping_charged_contribution = 0.0 if refunded else float(shipping_charged)
 
         if cost is not None:
             total_cost += float(cost)
         if sale_price is not None:
-            total_revenue += float(sale_price)
-            total_shipping_charged += float(shipping_charged)
+            total_revenue += revenue_contribution
+            total_shipping_charged += shipping_charged_contribution
             total_shipping_cost += float(shipping_cost)
             total_ebay_fees += float(ebay_fees)
-            sale_prices.append(float(sale_price))
+            if refunded:
+                refunded_count += 1
+            else:
+                sale_prices.append(float(sale_price))
         if cost is not None and sale_price is not None:
             # Versand als durchlaufender Posten: eingenommener Versand zaehlt
             # als Einnahme, gezahltes Porto als Ausgabe - decken sie sich,
             # heben sie sich im Gewinn gegenseitig auf; nur eine Differenz
             # wirkt sich aus. eBay-Gebuehren mindern den Gewinn direkt.
-            profit = float(sale_price) + float(shipping_charged) - float(cost) - float(shipping_cost) - float(ebay_fees)
+            profit = revenue_contribution + shipping_charged_contribution - float(cost) - float(shipping_cost) - float(ebay_fees)
             realized_profit += profit
             sold_cost += float(cost)
             if cost:
@@ -844,7 +856,7 @@ def _compute_statistics():
                 month_key, {"month": month_key, "count": 0, "revenue": 0.0, "profit": 0.0, "cost": 0.0}
             )
             bucket["count"] += 1
-            bucket["revenue"] += float(sale_price or 0)
+            bucket["revenue"] += revenue_contribution
             if profit is not None:
                 bucket["profit"] += profit
                 # cost ist nur bekannt, wenn profit berechnet werden konnte
@@ -870,6 +882,7 @@ def _compute_statistics():
         "realized_profit": round(realized_profit, 2),
         "sold_count": len([r for r in enriched if r["profit"] is not None]),
         "open_count": open_count,
+        "refunded_count": refunded_count,
         "avg_sale_price": round(sum(sale_prices) / len(sale_prices), 2) if sale_prices else None,
         "avg_margin_pct": round(sum(margins) / len(margins), 1) if margins else None,
         "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,

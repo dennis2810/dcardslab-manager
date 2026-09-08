@@ -213,6 +213,7 @@ function renderSummary(summary) {
     ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],
     ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
+    ["Retouren", String(summary.refunded_count)],
     ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
     ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–"],
     ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–"],
@@ -258,16 +259,24 @@ function filteredRows() {
 // Neuberechnung der Gewinn-Formel noetig.
 function computeSummary(rows) {
   let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0, totalEbayFees = 0;
-  let realizedProfit = 0, soldCost = 0, openCount = 0;
+  let realizedProfit = 0, soldCost = 0, openCount = 0, refundedCount = 0;
   const margins = [], salePrices = [], holdingDays = [];
   for (const r of rows) {
     if (r.cost != null) totalCost += Number(r.cost);
     if (r.sale_price != null) {
-      totalRevenue += Number(r.sale_price);
-      totalShippingCharged += Number(r.shipping_charged || 0);
+      // Retoure: Verkaufspreis/erhaltener Versand gingen an den Kaeufer
+      // zurueck - gleiche Logik wie main.py's _compute_statistics(), damit
+      // diese gefilterte Neu-Aggregation nicht von dessen (ungefilterter)
+      // Summe abweicht.
+      if (r.refunded) {
+        refundedCount += 1;
+      } else {
+        totalRevenue += Number(r.sale_price);
+        totalShippingCharged += Number(r.shipping_charged || 0);
+        salePrices.push(Number(r.sale_price));
+      }
       totalShippingCost += Number(r.shipping_cost || 0);
       totalEbayFees += Number(r.ebay_fees || 0);
-      salePrices.push(Number(r.sale_price));
     }
     if (r.profit != null) {
       realizedProfit += r.profit;
@@ -286,6 +295,7 @@ function computeSummary(rows) {
     realized_profit: realizedProfit,
     sold_count: rows.filter((r) => r.profit != null).length,
     open_count: openCount,
+    refunded_count: refundedCount,
     avg_sale_price: avg(salePrices),
     avg_margin_pct: avg(margins),
     avg_holding_days: avg(holdingDays),
@@ -351,6 +361,12 @@ function renderRows() {
     if (row.profit != null) {
       profitTd.textContent = fmtEuro(row.profit);
       profitTd.className = row.profit >= 0 ? "profit-positive" : "profit-negative";
+      if (row.refunded) {
+        const badge = document.createElement("span");
+        badge.textContent = " ↩ Retoure";
+        badge.title = "Als eBay-Rückerstattung markiert - Verkaufspreis/Versand zählen nicht mehr als Umsatz, nur noch Einstandspreis/Gebühren als Verlust.";
+        profitTd.appendChild(badge);
+      }
     }
     tr.appendChild(profitTd);
 
@@ -420,12 +436,12 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Karte", "Kaufdatum (WE)", "Einstandspreis", "Verkaufsdatum (WA)",
-    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)",
+    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)", "Retoure",
   ];
   const rows = sortedRows(filteredRows()).map((row) => [
     row.sku || "", row.title || "", formatDate(row.purchase_date), fmtNumber(row.cost, 2),
     formatDate(row.sale_date), fmtNumber(row.sale_price, 2), fmtNumber(row.profit, 2),
-    fmtNumber(row.margin_pct, 1), row.holding_days ?? "",
+    fmtNumber(row.margin_pct, 1), row.holding_days ?? "", row.refunded ? "Ja" : "Nein",
   ]);
   downloadCsv("statistiken.csv", headers, rows);
 });

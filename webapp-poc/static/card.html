@@ -1580,8 +1580,14 @@ function renderSaleStats(purchase, sale) {
   // Porto (manuell, s.u.) als Ausgabe - decken sie sich, heben sie sich im
   // Gewinn gegenseitig auf; nur eine Differenz wirkt sich aus. Gleiche
   // Formel wie im /api/statistics-Endpunkt.
-  const shippingCharged = Number(sale.shipping_charged || 0);
+  // Retoure: Verkaufspreis/erhaltener Versand gingen an den Kaeufer zurueck
+  // und zaehlen daher nicht mehr als Einnahme - Einstandspreis, gezahltes
+  // Porto und eBay-Gebuehren bleiben aber ein Verlust, da eBay diese i.d.R.
+  // nicht erstattet. Gleiche Formel wie main.py's _compute_statistics().
+  const refunded = Boolean(sale.refunded);
+  const shippingCharged = refunded ? 0 : Number(sale.shipping_charged || 0);
   const shippingCost = Number(sale.shipping_cost || 0);
+  const grossPrice = refunded ? 0 : Number(sale.gross_price || 0);
   // eBay-Verkaufsgebuehren - eBays Order-API (fuer den Sync genutzt) liefert
   // sie nicht mit, daher aktuell nur manuell erfassbar (s.u.), analog zu
   // shipping_cost. Faellt in den Gewinn mit rein, sobald eingetragen.
@@ -1591,9 +1597,10 @@ function renderSaleStats(purchase, sale) {
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
     ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
+  if (refunded) rows.push(["Status", "↩ Rückerstattet"]);
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
     const cost = Number(purchase.allocated_cost);
-    const profit = Number(sale.gross_price) + shippingCharged - cost - shippingCost - ebayFees;
+    const profit = grossPrice + shippingCharged - cost - shippingCost - ebayFees;
     rows.push(["Gewinn", fmtEuro(profit)]);
     if (cost) {
       const marginPct = (profit / cost) * 100;
@@ -1651,6 +1658,17 @@ function renderSaleStats(purchase, sale) {
   ebayFeesP.appendChild(document.createTextNode(" €"));
   wrapper.appendChild(ebayFeesP);
 
+  // Retoure: Kaeufer hat den Verkauf zurueckgeschickt/erstattet bekommen -
+  // Verkaufspreis/Versand zaehlen dann nicht mehr als Umsatz im Gewinn
+  // (s.o.), Einstandspreis/Porto/eBay-Gebuehren bleiben ein Verlust.
+  const refundedWrapper = document.createElement("label");
+  refundedWrapper.className = "checkbox-field";
+  const refundedCheckbox = document.createElement("input");
+  refundedCheckbox.type = "checkbox";
+  refundedCheckbox.checked = Boolean(sale.refunded);
+  refundedWrapper.append(refundedCheckbox, " Als Rückerstattung/Retoure markieren");
+  wrapper.appendChild(refundedWrapper);
+
   const saveShippingBtn = document.createElement("button");
   saveShippingBtn.type = "button";
   saveShippingBtn.textContent = "Speichern";
@@ -1662,7 +1680,10 @@ function renderSaleStats(purchase, sale) {
       const res = await fetch(`/api/ebay/sales/${encodeURIComponent(sale.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value }),
+        body: JSON.stringify({
+          shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value,
+          refunded: refundedCheckbox.checked,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {

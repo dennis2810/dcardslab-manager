@@ -1148,6 +1148,17 @@ class UpdateEbaySaleTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row["ebay_fees"], 2.15)
 
+    def test_updates_refunded_flag(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "refunded": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"refunded": True})
+        self.assertTrue(result["refunded"])
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"refunded": True})
+
     def test_ignores_unknown_fields(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -1531,7 +1542,7 @@ class StatisticsRowsTests(unittest.TestCase):
             elif name == "ebay_sales":
                 response.data = [{
                     "card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00",
-                    "gross_price": 15.0, "ebay_fees": 1.75,
+                    "gross_price": 15.0, "ebay_fees": 1.75, "refunded": True,
                 }]
                 builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
             elif name == "ebay_listings":
@@ -1553,6 +1564,8 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertEqual(by_id["card-1"]["set_name"], "Topps 2026")
         self.assertEqual(by_id["card-1"]["ebay_fees"], 1.75)
         self.assertIsNone(by_id["card-2"]["ebay_fees"])
+        self.assertTrue(by_id["card-1"]["refunded"])
+        self.assertFalse(by_id["card-2"]["refunded"])
         self.assertEqual(by_id["card-1"]["platform"], "eBay")
         self.assertEqual(by_id["card-2"]["platform"], "")
 
