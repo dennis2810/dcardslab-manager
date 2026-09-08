@@ -689,7 +689,7 @@ def _compute_statistics():
     rows = db.statistics_rows()
 
     total_cost = total_revenue = realized_profit = 0.0
-    total_shipping_charged = total_shipping_cost = 0.0
+    total_shipping_charged = total_shipping_cost = total_ebay_fees = 0.0
     sold_cost = 0.0
     open_count = 0
     margins = []
@@ -703,6 +703,10 @@ def _compute_statistics():
         sale_price = row.get("sale_price")
         shipping_charged = row.get("shipping_charged") or 0
         shipping_cost = row.get("shipping_cost") or 0
+        # Manuell erfassbar (s. db.EBAY_SALE_WRITABLE_FIELDS) - eBays Order-
+        # API liefert die Verkaufsgebuehr nicht mit, daher 0 solange nichts
+        # eingetragen ist; wirkt sich dann einfach nicht auf den Gewinn aus.
+        ebay_fees = row.get("ebay_fees") or 0
         profit = margin_pct = holding_days = None
 
         if cost is not None:
@@ -711,13 +715,14 @@ def _compute_statistics():
             total_revenue += float(sale_price)
             total_shipping_charged += float(shipping_charged)
             total_shipping_cost += float(shipping_cost)
+            total_ebay_fees += float(ebay_fees)
             sale_prices.append(float(sale_price))
         if cost is not None and sale_price is not None:
             # Versand als durchlaufender Posten: eingenommener Versand zaehlt
             # als Einnahme, gezahltes Porto als Ausgabe - decken sie sich,
             # heben sie sich im Gewinn gegenseitig auf; nur eine Differenz
-            # wirkt sich aus.
-            profit = float(sale_price) + float(shipping_charged) - float(cost) - float(shipping_cost)
+            # wirkt sich aus. eBay-Gebuehren mindern den Gewinn direkt.
+            profit = float(sale_price) + float(shipping_charged) - float(cost) - float(shipping_cost) - float(ebay_fees)
             realized_profit += profit
             sold_cost += float(cost)
             if cost:
@@ -760,6 +765,7 @@ def _compute_statistics():
         "total_revenue": round(total_revenue, 2),
         "total_shipping_charged": round(total_shipping_charged, 2),
         "total_shipping_cost": round(total_shipping_cost, 2),
+        "total_ebay_fees": round(total_ebay_fees, 2),
         "realized_profit": round(realized_profit, 2),
         "sold_count": len([r for r in enriched if r["profit"] is not None]),
         "open_count": open_count,
@@ -802,6 +808,26 @@ def _rank_statistics_by(enriched_rows, field):
 @app.get("/api/statistics")
 async def get_statistics():
     return JSONResponse(_compute_statistics())
+
+
+DASHBOARD_GOAL_METRICS = {"revenue", "profit"}
+
+
+@app.get("/api/dashboard-goal")
+async def get_dashboard_goal(year: int | None = None):
+    year = year or datetime.now(timezone.utc).year
+    goal = db.get_dashboard_goal(year)
+    return JSONResponse(goal or {"year": year, "metric": "revenue", "amount": 0})
+
+
+@app.put("/api/dashboard-goal")
+async def set_dashboard_goal(fields: dict = Body(...)):
+    year = fields.get("year") or datetime.now(timezone.utc).year
+    metric = fields.get("metric", "revenue")
+    if metric not in DASHBOARD_GOAL_METRICS:
+        raise HTTPException(status_code=400, detail="metric muss 'revenue' oder 'profit' sein.")
+    updated = db.set_dashboard_goal(year, {"metric": metric, "amount": fields.get("amount", 0)})
+    return JSONResponse(updated)
 
 
 def _expand_ebay_listings(listings):
@@ -991,14 +1017,22 @@ async def get_ebay_listing(listing_id: str):
     return JSONResponse(_listing_with_card(listing))
 
 
+def _update_ebay_listing_and_republish(listing_id, fields):
+    # Shared by the single-listing PATCH and the bulk-price endpoint: a
+    # change to an already-live listing (e.g. price) must be pushed back to
+    # eBay, not just saved in our own DB.
+    updated = db.update_ebay_listing(listing_id, fields)
+    if updated["status"] == "Veroeffentlicht":
+        updated = _publish_listing(updated)
+    return updated
+
+
 @app.patch("/api/ebay/listings/{listing_id}")
 async def update_ebay_listing(listing_id: str, fields: dict = Body(...)):
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
-    updated = db.update_ebay_listing(listing_id, fields)
-    if updated["status"] == "Veroeffentlicht":
-        updated = _publish_listing(updated)
+    updated = _update_ebay_listing_and_republish(listing_id, fields)
     return JSONResponse(_listing_with_card(updated))
 
 
@@ -1062,6 +1096,33 @@ async def publish_ebay_listings_bulk(body: dict = Body(...)):
             # listing - the whole point of publish-bulk is that one bad
             # card doesn't take the rest of the batch down with it.
             results.append({"listing_id": listing_id, "status": "Fehler", "error": str(exc)})
+    return JSONResponse({"results": results})
+
+
+@app.post("/api/ebay/listings/price-bulk")
+async def update_ebay_listings_price_bulk(body: dict = Body(...)):
+    percent = body.get("percent")
+    if percent is None:
+        raise HTTPException(status_code=400, detail="percent ist erforderlich.")
+    percent = float(percent)
+
+    results = []
+    for listing_id in body.get("listing_ids", []):
+        listing = db.get_ebay_listing(listing_id)
+        if listing is None:
+            results.append({"listing_id": listing_id, "error": "Nicht gefunden."})
+            continue
+        try:
+            # Nie negativ, auch bei einer sehr starken Rabattierung (< -100%).
+            new_price = round(max(0.0, float(listing.get("price") or 0) * (1 + percent / 100)), 2)
+            updated = _update_ebay_listing_and_republish(listing_id, {"price": new_price})
+            results.append({"listing_id": listing_id, "price": updated["price"]})
+        except HTTPException as exc:
+            results.append({"listing_id": listing_id, "error": str(exc.detail)})
+        except Exception as exc:
+            # Gleiche Isolation wie publish-bulk oben - ein fehlgeschlagenes
+            # Angebot darf den Rest der Auswahl nicht abbrechen.
+            results.append({"listing_id": listing_id, "error": str(exc)})
     return JSONResponse({"results": results})
 
 

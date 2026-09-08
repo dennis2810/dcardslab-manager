@@ -220,6 +220,7 @@ function renderSummary(summary) {
     ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
     ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
     ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
+    ["eBay-Gebühren", fmtEuro(summary.total_ebay_fees)],
     ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
     ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],

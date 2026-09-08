@@ -195,3 +195,13 @@ create index if not exists price_research_card_id_idx on price_research(card_id)
 -- Migration (2026-09-08): freie, kommagetrennte Tags/Kategorien pro Karte
 -- (z.B. "Rookie, PSA-wuerdig, Investment") zum Filtern/Wiederfinden.
 alter table cards add column if not exists tags text not null default '';
+
+-- Migration (2026-09-08): selbst eintragbares Jahresziel (Umsatz oder
+-- Gewinn) fuer den Fortschrittsbalken im Dashboard - ein Ziel pro Jahr,
+-- damit ein neues Jahr nicht versehentlich das alte Ziel weiterlaufen laesst.
+create table if not exists dashboard_goals (
+    year        int primary key,
+    metric      text not null default 'revenue',
+    amount      numeric not null default 0,
+    updated_at  timestamptz not null default now()
+);

@@ -111,6 +111,8 @@
 
   <div class="actions-bar no-print">
     <button type="button" id="publish-selected-btn" disabled>Ausgewählte veröffentlichen</button>
+    <label>Preis anpassen um <input type="number" id="price-bulk-percent" step="1" style="width: 4.5rem;" placeholder="-10"> %</label>
+    <button type="button" id="price-bulk-btn" disabled>Anwenden</button>
   </div>
   <div id="bulk-results"></div>
 
@@ -161,6 +163,8 @@ const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
 const publishSelectedBtn = document.getElementById("publish-selected-btn");
+const priceBulkBtn = document.getElementById("price-bulk-btn");
+const priceBulkPercent = document.getElementById("price-bulk-percent");
 const bulkResults = document.getElementById("bulk-results");
 
 const STATUS_LABELS = {
@@ -242,6 +246,7 @@ async function loadOauthStatus() {
 function updatePublishButtonState() {
   const anySelected = !!body.querySelector("input[type=checkbox]:checked");
   publishSelectedBtn.disabled = !anySelected;
+  priceBulkBtn.disabled = !anySelected;
 }
 
 async function loadListings() {
@@ -448,6 +453,52 @@ publishSelectedBtn.addEventListener("click", async () => {
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+  }
+});
+
+priceBulkBtn.addEventListener("click", async () => {
+  const listingIds = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
+    .map((cb) => cb.dataset.listingId);
+  if (!listingIds.length) return;
+  const percent = Number(priceBulkPercent.value);
+  if (!percent) {
+    bulkResults.textContent = "Bitte einen Prozentwert ungleich 0 eingeben (z. B. -10 für 10 % günstiger).";
+    bulkResults.className = "error";
+    return;
+  }
+
+  priceBulkBtn.disabled = true;
+  bulkResults.textContent = "Passe Preise an …";
+  bulkResults.className = "";
+  try {
+    const res = await fetch("/api/ebay/listings/price-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listing_ids: listingIds, percent }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
+      bulkResults.className = "error";
+      return;
+    }
+    const list = document.createElement("ul");
+    for (const r of data.results) {
+      const li = document.createElement("li");
+      const ok = !r.error;
+      li.textContent = ok
+        ? `✓ ${r.listing_id}: neuer Preis ${fmtEuro(r.price)}`
+        : `✗ ${r.listing_id}: ${r.error}`;
+      list.appendChild(li);
+    }
+    bulkResults.innerHTML = "";
+    bulkResults.appendChild(list);
+    loadListings();
+  } catch (err) {
+    bulkResults.textContent = "Fehler: " + err;
+    bulkResults.className = "error";
+  } finally {
+    priceBulkBtn.disabled = false;
   }
 });
 

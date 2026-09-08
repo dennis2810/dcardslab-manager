@@ -32,6 +32,14 @@
   .ampel-green { background: #1e8e3e; }
   .ampel-red { background: #d93025; }
   .ampel-gray { background: #999; }
+  .goal-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; }
+  .goal-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; font-weight: 600; }
+  .goal-header button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
+  .goal-bar-track { background: #eee; border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.5rem; }
+  .goal-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
+  .goal-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap; }
+  .goal-form input, .goal-form select { padding: 0.3rem 0.5rem; }
+  .error { color: #b00020; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -57,6 +65,25 @@
 
   <p id="status-msg">Lädt …</p>
   <div class="ampel" id="connection-ampel"></div>
+
+  <div class="goal-block">
+    <div class="goal-header">
+      <span id="goal-label">Lädt …</span>
+      <button type="button" id="goal-edit-btn">Bearbeiten</button>
+    </div>
+    <div class="goal-bar-track"><div class="goal-bar-fill" id="goal-bar-fill"></div></div>
+    <form id="goal-form" class="goal-form" hidden>
+      <select id="goal-metric">
+        <option value="revenue">Umsatz</option>
+        <option value="profit">Gewinn</option>
+      </select>
+      <input type="number" id="goal-amount" step="1" min="0" placeholder="Zielbetrag in €">
+      <button type="submit">Speichern</button>
+      <button type="button" id="goal-cancel-btn">Abbrechen</button>
+      <span id="goal-status"></span>
+    </form>
+  </div>
+
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <h2>Was jetzt tun?</h2>
@@ -136,6 +163,23 @@ async function loadEbayStatus() {
   }
 }
 
+// Eigener try/catch, gleiche Begruendung wie loadEbayStatus() oben - kein
+// gesetztes Ziel (oder ein Fehler beim Laden) darf das restliche Dashboard
+// nicht rendern.
+async function loadGoal() {
+  try {
+    const res = await fetch("/api/dashboard-goal");
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+// Fuer den Fortschrittsbalken gebraucht (Filterung nach aktuellem Jahr) -
+// gemerkt, damit der Speichern-Handler des Ziel-Formulars unten nicht das
+// ganze Dashboard neu laden muss, nur um die Zahl neu zu berechnen.
+let lastStats = null;
+
 async function load() {
   try {
     const [statsRes, invRes, cardsRes, geplantRes, sheetsRes] = await Promise.all([
@@ -148,9 +192,12 @@ async function load() {
     const geplant = await geplantRes.json();
     const sheets = await sheetsRes.json();
     const ebayStatus = await loadEbayStatus();
+    dashboardGoal = await loadGoal();
+    lastStats = stats;
 
     document.getElementById("status-msg").style.display = "none";
     renderConnectionAmpel(sheets, ebayStatus);
+    renderGoal();
     renderSummary(stats, inventory);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
     renderActivity(stats);
@@ -158,6 +205,70 @@ async function load() {
     document.getElementById("status-msg").textContent = "Fehler: " + err;
   }
 }
+
+let dashboardGoal = null;
+
+function currentYearTotal(stats, metric) {
+  const year = String(new Date().getFullYear());
+  return (stats.monthly || [])
+    .filter((m) => m.month.startsWith(year))
+    .reduce((sum, m) => sum + (metric === "profit" ? m.profit : m.revenue), 0);
+}
+
+function renderGoal() {
+  const label = document.getElementById("goal-label");
+  const fill = document.getElementById("goal-bar-fill");
+  const year = new Date().getFullYear();
+  if (!dashboardGoal || !dashboardGoal.amount) {
+    label.textContent = `Noch kein Jahresziel für ${year} gesetzt.`;
+    fill.style.width = "0%";
+    return;
+  }
+  const metricLabel = dashboardGoal.metric === "profit" ? "Gewinn" : "Umsatz";
+  const current = lastStats ? currentYearTotal(lastStats, dashboardGoal.metric) : 0;
+  const pct = Math.max(0, Math.min(100, (current / dashboardGoal.amount) * 100));
+  label.textContent = `${metricLabel}-Ziel ${dashboardGoal.year || year}: ${fmtEuro(current)} von ${fmtEuro(dashboardGoal.amount)} (${pct.toFixed(0)} %)`;
+  fill.style.width = `${pct}%`;
+}
+
+const goalForm = document.getElementById("goal-form");
+document.getElementById("goal-edit-btn").addEventListener("click", () => {
+  document.getElementById("goal-metric").value = (dashboardGoal && dashboardGoal.metric) || "revenue";
+  document.getElementById("goal-amount").value = (dashboardGoal && dashboardGoal.amount) || "";
+  goalForm.hidden = false;
+});
+document.getElementById("goal-cancel-btn").addEventListener("click", () => {
+  goalForm.hidden = true;
+});
+goalForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const goalStatus = document.getElementById("goal-status");
+  goalStatus.textContent = "Speichert …";
+  goalStatus.className = "";
+  try {
+    const res = await fetch("/api/dashboard-goal", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        metric: document.getElementById("goal-metric").value,
+        amount: document.getElementById("goal-amount").value,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      goalStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+      goalStatus.className = "error";
+      return;
+    }
+    dashboardGoal = body;
+    goalStatus.textContent = "";
+    goalForm.hidden = true;
+    renderGoal();
+  } catch (err) {
+    goalStatus.textContent = "Fehler: " + err;
+    goalStatus.className = "error";
+  }
+});
 
 function renderSummary(stats, inventory) {
   const currentMonth = new Date().toISOString().slice(0, 7);

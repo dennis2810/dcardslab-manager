@@ -197,6 +197,7 @@ function renderSummary(summary) {
     ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
     ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
     ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
+    ["eBay-Gebühren", fmtEuro(summary.total_ebay_fees)],
     ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
     ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],
@@ -245,7 +246,7 @@ function filteredRows() {
 // Zeilen (profit/margin_pct/holding_days) - reine Aggregation, keine
 // Neuberechnung der Gewinn-Formel noetig.
 function computeSummary(rows) {
-  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0;
+  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0, totalEbayFees = 0;
   let realizedProfit = 0, soldCost = 0, openCount = 0;
   const margins = [], salePrices = [], holdingDays = [];
   for (const r of rows) {
@@ -254,6 +255,7 @@ function computeSummary(rows) {
       totalRevenue += Number(r.sale_price);
       totalShippingCharged += Number(r.shipping_charged || 0);
       totalShippingCost += Number(r.shipping_cost || 0);
+      totalEbayFees += Number(r.ebay_fees || 0);
       salePrices.push(Number(r.sale_price));
     }
     if (r.profit != null) {
@@ -269,6 +271,7 @@ function computeSummary(rows) {
   return {
     total_cost: totalCost, total_revenue: totalRevenue,
     total_shipping_charged: totalShippingCharged, total_shipping_cost: totalShippingCost,
+    total_ebay_fees: totalEbayFees,
     realized_profit: realizedProfit,
     sold_count: rows.filter((r) => r.profit != null).length,
     open_count: openCount,
@@ -429,6 +432,9 @@ document.getElementById("datev-csv-btn").addEventListener("click", () => {
     const label = `${row.title || "(ohne Titel)"}${row.sku ? ` (${row.sku})` : ""}`;
     if (row.sale_date && row.sale_price != null) {
       rows.push([formatDate(row.sale_date), label, fmtNumber(row.sale_price, 2), "EUR", "Verkaufserlös"]);
+    }
+    if (row.sale_date && row.ebay_fees) {
+      rows.push([formatDate(row.sale_date), label, fmtNumber(-row.ebay_fees, 2), "EUR", "eBay-Gebühren"]);
     }
     if (row.purchase_date && row.cost != null) {
       rows.push([formatDate(row.purchase_date), label, fmtNumber(-row.cost, 2), "EUR", "Wareneinsatz"]);
