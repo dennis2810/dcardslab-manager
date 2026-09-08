@@ -152,6 +152,17 @@ class UpdateCardTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"shipped": True})
 
+    def test_tags_field_is_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "tags": "Rookie, Investment"}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"tags": "Rookie, Investment"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"tags": "Rookie, Investment"})
+
     def test_never_writes_structural_columns(self):
         mock_client = MagicMock()
         saved_row = {"id": "card-1", "title": "x"}
@@ -221,7 +232,7 @@ class ListCardsFilterTests(unittest.TestCase):
         self.assertEqual(result, [{"id": "card-1"}])
         mock_client.table.return_value.select.return_value.or_.assert_not_called()
 
-    def test_q_filters_across_five_columns(self):
+    def test_q_filters_across_six_columns(self):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = []
@@ -235,6 +246,7 @@ class ListCardsFilterTests(unittest.TestCase):
         self.assertIn("set_name.ilike.%Bayern%", filter_arg)
         self.assertIn("card_number.ilike.%Bayern%", filter_arg)
         self.assertIn("season_year.ilike.%Bayern%", filter_arg)
+        self.assertIn("tags.ilike.%Bayern%", filter_arg)
 
     def test_q_strips_commas_and_parens_before_building_filter(self):
         mock_client = MagicMock()
@@ -245,7 +257,7 @@ class ListCardsFilterTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             db.list_cards(q="a,b(c)")
         filter_arg = mock_client.table.return_value.select.return_value.or_.call_args[0][0]
-        self.assertEqual(filter_arg.count(","), 4)  # exactly the 4 clause separators between the 5 ilike terms
+        self.assertEqual(filter_arg.count(","), 5)  # exactly the 5 clause separators between the 6 ilike terms
         self.assertNotIn("(", filter_arg)
         self.assertNotIn(")", filter_arg)
 

@@ -116,8 +116,8 @@ class StatisticsEndpointTests(unittest.TestCase):
         monthly = {m["month"]: m for m in response.json()["monthly"]}
         # Kein cost bekannt -> profit bleibt None fuer diese Zeilen, der
         # Monats-Gewinn-Eimer bleibt entsprechend bei 0.
-        self.assertEqual(monthly["2026-01"], {"month": "2026-01", "count": 2, "revenue": 30.0, "profit": 0.0})
-        self.assertEqual(monthly["2026-02"], {"month": "2026-02", "count": 1, "revenue": 5.0, "profit": 0.0})
+        self.assertEqual(monthly["2026-01"], {"month": "2026-01", "count": 2, "revenue": 30.0, "profit": 0.0, "cost": 0.0})
+        self.assertEqual(monthly["2026-02"], {"month": "2026-02", "count": 1, "revenue": 5.0, "profit": 0.0, "cost": 0.0})
 
     def test_monthly_profit_sums_only_rows_with_known_cost(self):
         rows = [
@@ -136,9 +136,10 @@ class StatisticsEndpointTests(unittest.TestCase):
             response = client.get("/api/statistics")
         monthly = {m["month"]: m for m in response.json()["monthly"]}
         # Karte 1: Gewinn 6.0 (10 - 4); Karte 2 hat keinen cost -> traegt
-        # nicht zum Monats-Gewinn bei, aber weiterhin zum Umsatz.
+        # nicht zum Monats-Gewinn/-Einstandspreis bei, aber weiterhin zum Umsatz.
         self.assertEqual(monthly["2026-01"]["revenue"], 30.0)
         self.assertEqual(monthly["2026-01"]["profit"], 6.0)
+        self.assertEqual(monthly["2026-01"]["cost"], 4.0)
 
     def test_empty_rows_produce_empty_summary(self):
         with patch("main.db.statistics_rows", return_value=[]):

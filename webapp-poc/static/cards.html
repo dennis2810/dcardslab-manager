@@ -18,6 +18,7 @@
   .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
   .card .title { font-weight: 600; margin-top: 0.4rem; }
   .card .meta { font-size: 0.8rem; color: #555; }
+  .card .tags { font-style: italic; }
   .status-pruefen { color: #b06000; font-weight: 600; }
   .status-nicht_erkannt { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
@@ -64,7 +65,7 @@
   </nav>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., SKU, Saison)">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., SKU, Saison, Tags)">
     <select id="status">
       <option value="">Alle Status</option>
       <option value="ok">ok</option>
@@ -93,6 +94,11 @@
     <span id="bulk-status"></span>
   </div>
 
+  <div id="undo-bar" class="controls no-print" hidden>
+    <button type="button" id="bulk-undo">↩ Rückgängig</button>
+    <span id="undo-status"></span>
+  </div>
+
   <p id="status-msg"></p>
   <div id="grid" class="grid"></div>
   <table id="list" class="list" hidden>
@@ -107,6 +113,7 @@
         <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
         <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
         <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
+        <th data-key="tags">Tags <span class="sort-arrow"></span></th>
       </tr>
     </thead>
     <tbody id="list-body"></tbody>
@@ -149,6 +156,9 @@ const selectAllCheckbox = document.getElementById("select-all-checkbox");
 const bulkActionsBar = document.getElementById("bulk-actions");
 const bulkCountEl = document.getElementById("bulk-count");
 const bulkStatusEl = document.getElementById("bulk-status");
+const undoBar = document.getElementById("undo-bar");
+const undoBtn = document.getElementById("bulk-undo");
+const undoStatusEl = document.getElementById("undo-status");
 
 // Massenaktionen (Karten-ID -> ausgewaehlt) - nur in der Listenansicht
 // nutzbar; wird bei jedem Neuladen/Filterwechsel zurueckgesetzt, damit nie
@@ -352,6 +362,13 @@ function render(cards) {
       a.appendChild(skuEl);
     }
 
+    if (card.tags) {
+      const tagsEl = document.createElement("div");
+      tagsEl.className = "meta tags";
+      tagsEl.textContent = card.tags;
+      a.appendChild(tagsEl);
+    }
+
     grid.appendChild(a);
   }
 }
@@ -414,6 +431,10 @@ function renderList(cards) {
     if (shipped) shippedTd.appendChild(shipped);
     tr.appendChild(shippedTd);
 
+    const tagsTd = document.createElement("td");
+    tagsTd.textContent = card.tags || "";
+    tr.appendChild(tagsTd);
+
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;
     });
@@ -441,12 +462,61 @@ selectAllCheckbox.addEventListener("change", () => {
   renderCurrentView();
 });
 
+// Merkt sich die letzte Massenaktion, damit sie per "Rueckgaengig" wieder
+// aufgehoben werden kann. Wird von einer neuen Massenaktion ueberschrieben -
+// nur der letzte Schritt ist rueckgaengig machbar.
+let lastUndo = null;
+
+function setUndo(action, label) {
+  lastUndo = action;
+  undoStatusEl.textContent = label;
+  undoBar.hidden = false;
+}
+
+function clearUndo() {
+  lastUndo = null;
+  undoBar.hidden = true;
+  undoStatusEl.textContent = "";
+}
+
+async function undoLastBulkAction() {
+  if (!lastUndo) return;
+  const action = lastUndo;
+  undoBtn.disabled = true;
+  undoStatusEl.textContent = "Mache rückgängig …";
+  try {
+    if (action.type === "shipped") {
+      await Promise.all(action.entries.map(({ id, prevShipped }) =>
+        fetch(`/api/cards/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shipped: prevShipped }),
+        })
+      ));
+    } else if (action.type === "ebay-drafts") {
+      await Promise.all(action.ids.map((id) =>
+        fetch(`/api/ebay/listings/${encodeURIComponent(id)}`, { method: "DELETE" })
+      ));
+    }
+    clearUndo();
+    loadCards();
+  } catch (err) {
+    undoStatusEl.textContent = "Fehler beim Rückgängigmachen: " + err;
+  } finally {
+    undoBtn.disabled = false;
+  }
+}
+
+undoBtn.addEventListener("click", undoLastBulkAction);
+
 // Keine eigener Bulk-Endpoint noetig - feuert einfach ein PATCH pro
 // ausgewaehlter Karte ab (gleiche Semantik wie card.html's einzelnes
 // "Versendet"-Kontrollkaestchen), da die Selektion ueblicherweise klein ist.
 async function bulkSetShipped(shipped) {
   bulkStatusEl.textContent = "Speichert …";
   const ids = [...selectedIds];
+  const cardsById = new Map(currentCards.map((c) => [c.id, c]));
+  const entries = ids.map((id) => ({ id, prevShipped: !!cardsById.get(id)?.shipped }));
   try {
     await Promise.all(ids.map((id) =>
       fetch(`/api/cards/${encodeURIComponent(id)}`, {
@@ -458,6 +528,7 @@ async function bulkSetShipped(shipped) {
     bulkStatusEl.textContent = "";
     selectedIds.clear();
     updateBulkBar();
+    setUndo({ type: "shipped", entries }, `Versand-Markierung von ${entries.length} Karte(n) geändert.`);
     loadCards();
   } catch (err) {
     bulkStatusEl.textContent = "Fehler: " + err;
@@ -495,14 +566,22 @@ async function bulkCreateEbayDrafts() {
         body: JSON.stringify({}),
       })
     ));
-    const failed = results.filter((r) => !r.ok).length;
-    const created = targets.length - failed;
+    const okResults = results.filter((r) => r.ok);
+    const failed = results.length - okResults.length;
+    const created = okResults.length;
+    const createdListings = await Promise.all(okResults.map((r) => r.json()));
     let message = `${created} Entwurf/Entwürfe angelegt.`;
     if (skipped) message += ` ${skipped} übersprungen (bereits vorhanden).`;
     if (failed) message += ` ${failed} fehlgeschlagen.`;
     bulkStatusEl.textContent = message;
     selectedIds.clear();
     updateBulkBar();
+    if (createdListings.length) {
+      setUndo(
+        { type: "ebay-drafts", ids: createdListings.map((l) => l.id) },
+        `${createdListings.length} eBay-Entwurf/Entwürfe angelegt.`
+      );
+    }
     loadCards();
   } catch (err) {
     bulkStatusEl.textContent = "Fehler: " + err;
@@ -588,11 +667,11 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status", "Versendet"];
+  const headers = ["SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status", "Versendet", "Tags"];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
-    c.shipped ? "Ja" : "Nein",
+    c.shipped ? "Ja" : "Nein", c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
 });

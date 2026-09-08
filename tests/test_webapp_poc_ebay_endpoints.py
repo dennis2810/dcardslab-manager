@@ -423,6 +423,33 @@ class OauthStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["authorized"])
 
+    def test_returns_json_502_when_oauth_server_unreachable(self):
+        # Ohne die eigene Fehlerbehandlung wuerde main.py hier eine
+        # unbehandelte Exception werfen, auf die FastAPI mit reinem Text
+        # statt JSON antwortet - Aufrufer wie das Dashboard erwarten immer
+        # gueltiges JSON zurueck.
+        import httpx
+        with patch("main.httpx.get", side_effect=httpx.ConnectError("nope")):
+            response = client.get("/api/ebay/oauth/status")
+        self.assertEqual(response.status_code, 502)
+        self.assertFalse(response.json()["authorized"])
+
+
+class EbayPriceResearchEndpointTests(unittest.TestCase):
+    def test_returns_active_listing_results(self):
+        results = [{"title": "Musterkarte", "price": 12.5, "currency": "EUR", "condition": "Used", "item_web_url": "https://x"}]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results) as mock_search:
+            response = client.get("/api/ebay/price-research?q=Musterkarte")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], results)
+        mock_search.assert_called_once_with("app-tok", "Musterkarte")
+
+    def test_returns_502_on_api_error(self):
+        with patch("main.ebay_client.get_application_access_token", side_effect=ebay_client.EbayApiError("boom")):
+            response = client.get("/api/ebay/price-research?q=Musterkarte")
+        self.assertEqual(response.status_code, 502)
+
 
 class SyncSalesEndpointTests(unittest.TestCase):
     def test_returns_401_when_not_authorized(self):

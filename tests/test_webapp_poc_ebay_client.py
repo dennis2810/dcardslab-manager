@@ -38,6 +38,59 @@ class GetAccessTokenTests(unittest.TestCase):
                 ebay_client.get_access_token()
 
 
+class GetApplicationAccessTokenTests(unittest.TestCase):
+    def test_returns_token_on_success(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {"access_token": "app-tok-1"})):
+            token = ebay_client.get_application_access_token()
+        self.assertEqual(token, "app-tok-1")
+
+    def test_raises_api_error_on_failure_status(self):
+        with patch("ebay_client.httpx.get", return_value=_response(502, {"authorized": False}, text="down")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_application_access_token()
+
+    def test_raises_api_error_when_oauth_server_unreachable(self):
+        import httpx
+        with patch("ebay_client.httpx.get", side_effect=httpx.ConnectError("nope")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_application_access_token()
+
+
+class SearchActiveListingsTests(unittest.TestCase):
+    def test_returns_title_price_and_url_per_item(self):
+        payload = {"itemSummaries": [{
+            "title": "Max Mustermann Rookie Card",
+            "price": {"value": "12.50", "currency": "EUR"},
+            "condition": "Used",
+            "itemWebUrl": "https://www.ebay.de/itm/123",
+        }]}
+        with patch("ebay_client.httpx.get", return_value=_response(200, payload)) as mock_get:
+            results = ebay_client.search_active_listings("app-tok", "Max Mustermann")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "Max Mustermann Rookie Card")
+        self.assertEqual(results[0]["price"], 12.5)
+        self.assertEqual(results[0]["currency"], "EUR")
+        self.assertEqual(results[0]["item_web_url"], "https://www.ebay.de/itm/123")
+        params = mock_get.call_args.kwargs["params"]
+        self.assertEqual(params["q"], "Max Mustermann")
+
+    def test_returns_empty_list_when_no_items_found(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {})):
+            results = ebay_client.search_active_listings("app-tok", "nichts-da")
+        self.assertEqual(results, [])
+
+    def test_price_is_none_when_missing(self):
+        payload = {"itemSummaries": [{"title": "Ohne Preis"}]}
+        with patch("ebay_client.httpx.get", return_value=_response(200, payload)):
+            results = ebay_client.search_active_listings("app-tok", "q")
+        self.assertIsNone(results[0]["price"])
+
+    def test_raises_api_error_on_failure_status(self):
+        with patch("ebay_client.httpx.get", return_value=_response(400, {}, text="bad request")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.search_active_listings("app-tok", "q")
+
+
 class ConditionIdToEnumTests(unittest.TestCase):
     def test_maps_known_ids(self):
         self.assertEqual(ebay_client.condition_id_to_enum("4000"), "USED_VERY_GOOD")

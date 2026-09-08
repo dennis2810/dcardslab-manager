@@ -100,6 +100,52 @@ def get_access_token():
     return response.json()["access_token"]
 
 
+def get_application_access_token():
+    """Client-credentials-Token fuer eBays Buy-APIs (Browse) - unabhaengig
+    vom Sell-API-Nutzer-Consent-Flow oben, braucht daher keinen
+    autorisierten eBay-Account."""
+    try:
+        response = httpx.get(f"{EBAY_OAUTH_SERVER_URL}/api/internal/application-access-token", timeout=30)
+    except httpx.HTTPError as exc:
+        raise EbayApiError(f"eBay-OAuth-Server nicht erreichbar: {exc}") from exc
+    if response.status_code >= 400:
+        raise EbayApiError(response.text)
+    return response.json()["access_token"]
+
+
+def search_active_listings(token, query, limit=5):
+    """Aktive eBay-Angebote zu einer Freitextsuche (Buy/Browse API) - als
+    Marktpreis-Referenz fuer die Preisrecherche. KEINE verkauften Artikel:
+    die dafuer noetige Marketplace-Insights-API ist nur mit gesonderter,
+    von eBay einzeln zu genehmigender Freigabe nutzbar."""
+    try:
+        response = httpx.get(
+            f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": MARKETPLACE_ID,
+            },
+            params={"q": query, "limit": limit},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise EbayApiError(f"eBay nicht erreichbar: {exc}") from exc
+    if response.status_code >= 400:
+        raise EbayApiError(response.text)
+    items = response.json().get("itemSummaries") or []
+    results = []
+    for item in items:
+        price = item.get("price") or {}
+        results.append({
+            "title": item.get("title", ""),
+            "price": float(price["value"]) if price.get("value") else None,
+            "currency": price.get("currency"),
+            "condition": item.get("condition", ""),
+            "item_web_url": item.get("itemWebUrl", ""),
+        })
+    return results
+
+
 def condition_id_to_enum(condition):
     return _CONDITION_ID_TO_ENUM.get(str(condition or "").strip(), condition)
 

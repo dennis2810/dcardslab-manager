@@ -700,11 +700,18 @@ def _compute_statistics():
 
         if row.get("sale_date"):
             month_key = str(row["sale_date"])[:7]
-            bucket = monthly.setdefault(month_key, {"month": month_key, "count": 0, "revenue": 0.0, "profit": 0.0})
+            bucket = monthly.setdefault(
+                month_key, {"month": month_key, "count": 0, "revenue": 0.0, "profit": 0.0, "cost": 0.0}
+            )
             bucket["count"] += 1
             bucket["revenue"] += float(sale_price or 0)
             if profit is not None:
                 bucket["profit"] += profit
+                # cost ist nur bekannt, wenn profit berechnet werden konnte
+                # (siehe oben) - fuer die Jahresuebersicht/Steuer-Export
+                # neben Umsatz/Gewinn auch der Einstandspreis, monatsweise
+                # nach Verkaufsdatum (Realisationsprinzip).
+                bucket["cost"] += float(cost)
 
         enriched.append({**row, "profit": profit, "margin_pct": margin_pct, "holding_days": holding_days})
 
@@ -712,6 +719,7 @@ def _compute_statistics():
     for bucket in monthly_list:
         bucket["revenue"] = round(bucket["revenue"], 2)
         bucket["profit"] = round(bucket["profit"], 2)
+        bucket["cost"] = round(bucket["cost"], 2)
 
     summary = {
         "total_cost": round(total_cost, 2),
@@ -997,8 +1005,30 @@ async def publish_ebay_listings_bulk(body: dict = Body(...)):
 
 @app.get("/api/ebay/oauth/status")
 async def ebay_oauth_status():
-    response = httpx.get(f"{ebay_client.EBAY_OAUTH_SERVER_URL}/api/oauth/status", timeout=15)
+    try:
+        response = httpx.get(f"{ebay_client.EBAY_OAUTH_SERVER_URL}/api/oauth/status", timeout=15)
+    except httpx.HTTPError as exc:
+        # Ohne dieses try/except wuerfe ein nicht erreichbarer oauth-Server
+        # eine unbehandelte Exception, auf die FastAPI standardmaessig mit
+        # reinem Text statt JSON antwortet - genau das hat zuvor schon die
+        # Kartenseite blockiert (siehe price_research-Fix); Aufrufer wie das
+        # Dashboard erwarten hier immer ein JSON-Objekt zurueck.
+        return JSONResponse({"authorized": False, "error": str(exc)}, status_code=502)
     return JSONResponse(response.json(), status_code=response.status_code)
+
+
+@app.get("/api/ebay/price-research")
+async def ebay_price_research(q: str):
+    # Aktive Angebote (Buy/Browse API), nicht verkaufte Artikel - die dafuer
+    # noetige Marketplace-Insights-API braucht eine gesonderte, von eBay
+    # einzeln zu genehmigende Freigabe. Braucht keinen autorisierten
+    # eBay-Account (Application-Token statt Nutzer-Token).
+    try:
+        token = ebay_client.get_application_access_token()
+        results = ebay_client.search_active_listings(token, q)
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return JSONResponse({"results": results})
 
 
 @app.patch("/api/ebay/sales/{sale_id}")

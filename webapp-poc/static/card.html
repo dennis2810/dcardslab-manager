@@ -74,6 +74,10 @@
   .price-research-form label { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; }
   .price-research-form input { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
   .price-research-form .note-field { flex: 1 1 200px; }
+  .price-research-search { margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .price-research-search input[type="text"] { font-weight: normal; padding: 0.3rem; flex: 1 1 220px; }
+  .price-research-results { list-style: none; padding: 0; margin: 0.5rem 0 0; width: 100%; }
+  .price-research-results li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -320,7 +324,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
-    renderPriceResearchSection(card.price_research);
+    renderPriceResearchSection(card.price_research, card.title);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -379,6 +383,17 @@ function render(card) {
   shippedWrapper.append(shippedCheckbox, " Versendet");
   form.appendChild(shippedWrapper);
 
+  const tagsWrapper = document.createElement("label");
+  tagsWrapper.textContent = "Tags";
+  tagsWrapper.title = "Kommagetrennt, z. B. Rookie, PSA-würdig, Investment";
+  const tagsInput = document.createElement("input");
+  tagsInput.type = "text";
+  tagsInput.name = "tags";
+  tagsInput.placeholder = "Kommagetrennt, z. B. Rookie, PSA-würdig";
+  tagsInput.value = card.tags ?? "";
+  tagsWrapper.appendChild(tagsInput);
+  form.appendChild(tagsWrapper);
+
   const actions = document.createElement("div");
   actions.className = "actions";
 
@@ -409,6 +424,7 @@ form.addEventListener("submit", async (ev) => {
   }
   fields.recognition_status = form.elements["recognition_status"].value;
   fields.shipped = form.elements["shipped"].checked;
+  fields.tags = form.elements["tags"].value;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
   statusP.className = "";
@@ -796,7 +812,7 @@ function renderInventoryRow(item) {
 // Preisrecherche-Verlauf: manuell eingetragene Marktpreis-Beobachtungen
 // ueber die Zeit (z.B. "eBay verkaufte Artikel" am X. Datum bei Y Euro) -
 // unabhaengig vom eigenen eBay-Angebot, hilft bei der Preisfindung.
-function renderPriceResearchSection(entries) {
+function renderPriceResearchSection(entries, cardTitle) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
 
@@ -910,6 +926,69 @@ function renderPriceResearchSection(entries) {
   });
   form.appendChild(addBtn);
   form.appendChild(statusEl);
+
+  // Automatische Preisrecherche ueber aktive eBay-Angebote (Buy/Browse API) -
+  // bewusst KEINE verkauften Artikel (die dafuer noetige Marketplace-
+  // Insights-API braucht eine gesonderte eBay-Freigabe). Ein Treffer
+  // uebernehmen befuellt nur das Formular oben, gespeichert wird weiterhin
+  // erst per Klick auf "Hinzufügen" - der Mensch behaelt die Kontrolle.
+  const searchWrapper = document.createElement("div");
+  searchWrapper.className = "price-research-search";
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.value = cardTitle || "";
+  searchInput.placeholder = "Suchbegriff für eBay-Preisrecherche";
+  const searchBtn = document.createElement("button");
+  searchBtn.type = "button";
+  searchBtn.textContent = "eBay-Preise suchen (aktive Angebote)";
+  const searchStatus = document.createElement("span");
+  const resultsList = document.createElement("ul");
+  resultsList.className = "price-research-results";
+
+  searchBtn.addEventListener("click", async () => {
+    const q = searchInput.value.trim();
+    if (!q) return;
+    searchBtn.disabled = true;
+    searchStatus.textContent = "Sucht …";
+    searchStatus.className = "";
+    resultsList.innerHTML = "";
+    try {
+      const res = await fetch(`/api/ebay/price-research?q=${encodeURIComponent(q)}`);
+      const body = await res.json();
+      if (!res.ok) {
+        searchStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+        searchStatus.className = "error";
+        return;
+      }
+      searchStatus.textContent = body.results.length ? "" : "Keine aktiven Angebote gefunden.";
+      for (const item of body.results) {
+        const li = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = item.item_web_url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = `${item.title} – ${item.price != null ? item.price.toFixed(2) + " €" : "?"}`;
+        li.appendChild(link);
+        const useBtn = document.createElement("button");
+        useBtn.type = "button";
+        useBtn.textContent = "Übernehmen";
+        useBtn.addEventListener("click", () => {
+          if (item.price != null) priceInput.value = item.price.toFixed(2);
+          noteInput.value = "Aktives eBay-Angebot: " + item.title;
+        });
+        li.appendChild(useBtn);
+        resultsList.appendChild(li);
+      }
+    } catch (err) {
+      searchStatus.textContent = "Fehler: " + err;
+      searchStatus.className = "error";
+    } finally {
+      searchBtn.disabled = false;
+    }
+  });
+
+  searchWrapper.append(searchInput, searchBtn, searchStatus, resultsList);
+  section.appendChild(searchWrapper);
   section.appendChild(form);
 }
 

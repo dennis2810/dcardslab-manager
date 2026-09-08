@@ -191,3 +191,7 @@ create table if not exists price_research (
 );
 
 create index if not exists price_research_card_id_idx on price_research(card_id);
+
+-- Migration (2026-09-08): freie, kommagetrennte Tags/Kategorien pro Karte
+-- (z.B. "Rookie, PSA-wuerdig, Investment") zum Filtern/Wiederfinden.
+alter table cards add column if not exists tags text not null default '';
