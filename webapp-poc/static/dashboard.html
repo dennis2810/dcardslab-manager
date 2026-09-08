@@ -26,6 +26,12 @@
   .activity-list a { color: inherit; text-decoration: none; }
   .activity-list a:hover { text-decoration: underline; }
   .activity-date { color: #555; font-size: 0.85rem; white-space: nowrap; }
+  .ampel { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: 0.75rem 0; }
+  .ampel-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .ampel-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .ampel-green { background: #1e8e3e; }
+  .ampel-red { background: #d93025; }
+  .ampel-gray { background: #999; }
 </style>
 </head>
 <body>
@@ -50,6 +56,7 @@
   </nav>
 
   <p id="status-msg">Lädt …</p>
+  <div class="ampel" id="connection-ampel"></div>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <h2>Was jetzt tun?</h2>
@@ -143,6 +150,7 @@ async function load() {
     const ebayStatus = await loadEbayStatus();
 
     document.getElementById("status-msg").style.display = "none";
+    renderConnectionAmpel(sheets, ebayStatus);
     renderSummary(stats, inventory);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
     renderActivity(stats);
@@ -172,6 +180,32 @@ function renderSummary(stats, inventory) {
     card.className = "summary-card";
     card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
     cards.appendChild(card);
+  }
+}
+
+// Dauerhaft sichtbare Ampel statt nur einer Warnzeile in "Was jetzt tun?" -
+// so ist der Verbindungsstatus auch dann auf einen Blick erkennbar, wenn
+// gerade nichts anderes zu tun ist. null (Status nicht abrufbar) zeigt grau
+// statt faelschlich rot, gleiche Vorsicht wie schon bei der Warnzeile unten.
+function ampelStatus(connected) {
+  if (connected === true) return { cls: "ampel-green", label: "verbunden" };
+  if (connected === false) return { cls: "ampel-red", label: "getrennt" };
+  return { cls: "ampel-gray", label: "unbekannt" };
+}
+
+function renderConnectionAmpel(sheets, ebayStatus) {
+  const container = document.getElementById("connection-ampel");
+  container.innerHTML = "";
+  const items = [
+    ["eBay", ebayStatus ? ebayStatus.authorized : null],
+    ["Google Sheets", sheets ? sheets.connected : null],
+  ];
+  for (const [label, connected] of items) {
+    const status = ampelStatus(connected);
+    const span = document.createElement("span");
+    span.className = "ampel-item";
+    span.innerHTML = `<span class="ampel-dot ${status.cls}"></span>${label}: ${status.label}`;
+    container.appendChild(span);
   }
 }
 
