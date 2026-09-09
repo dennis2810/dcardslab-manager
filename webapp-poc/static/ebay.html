@@ -681,6 +681,7 @@ endSelectedBtn.addEventListener("click", async () => {
     showToast("Keines der ausgewählten Angebote kann beendet werden.", true);
     return;
   }
+  if (!confirm(`${eligible.length} Angebot(e) wirklich vorzeitig beenden?`)) return;
 
   endSelectedBtn.disabled = true;
   bulkResults.textContent = "Beende Angebote …";

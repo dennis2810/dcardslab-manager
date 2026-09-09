@@ -128,7 +128,7 @@ if ("serviceWorker" in navigator) {
   <h2>Lagerort-Übersicht</h2>
   <div class="table-scroll">
     <table id="location-overview-table" style="display: none;">
-        <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th></tr></thead>
+        <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th><th>Verkauft</th></tr></thead>
         <tbody id="location-overview-body"></tbody>
       </table>
   </div>
@@ -347,10 +347,14 @@ function renderWarnings() {
   }
 }
 
-// Gruppiert nur vorrätige Eintraege (Menge > 0) nach Lagerort - "Verkauft"/
-// "Nicht vorrätig" tragen nichts zum aktuellen physischen Bestand pro Ort
-// bei. Ein leerer Lagerort landet in einer eigenen "(kein Lagerort)"-
-// Gruppe, damit er hier genauso auffaellt wie in den Warnungen oben.
+// Gruppiert vorrätige Eintraege (Menge > 0) nach Lagerort fuer Anzahl/Wert -
+// "Nicht vorrätig" traegt nichts zum aktuellen physischen Bestand pro Ort
+// bei. Zusaetzlich eine "Verkauft"-Spalte (gleiche Definition wie
+// statusInfo() oben): der Lagerort bleibt am Eintrag stehen, auch nachdem
+// die Karte verkauft wurde, daher laesst sich darueber auswerten, welcher
+// Lagerort am meisten Verkaeufe "produziert" hat. Ein leerer Lagerort
+// landet in einer eigenen "(kein Lagerort)"-Gruppe, damit er hier genauso
+// auffaellt wie in den Warnungen oben.
 function renderLocationOverview() {
   const table = document.getElementById("location-overview-table");
   const body = document.getElementById("location-overview-body");
@@ -358,19 +362,30 @@ function renderLocationOverview() {
   body.innerHTML = "";
 
   const inStock = items.filter((item) => (item.quantity ?? 0) > 0);
-  if (!inStock.length) {
+  const sold = items.filter((item) => item.ebay_status === "Verkauft" || item.manual_sale_channel);
+  if (!inStock.length && !sold.length) {
     table.style.display = "none";
-    empty.textContent = "Keine vorrätigen Karten.";
+    empty.textContent = "Keine vorrätigen oder verkauften Karten.";
     return;
   }
 
   const groups = new Map();
+  const groupFor = (location) => {
+    const key = (location || "").trim() || "(kein Lagerort)";
+    let group = groups.get(key);
+    if (!group) {
+      group = { count: 0, value: 0, sold: 0 };
+      groups.set(key, group);
+    }
+    return group;
+  };
   for (const item of inStock) {
-    const location = (item.location || "").trim() || "(kein Lagerort)";
-    const group = groups.get(location) || { count: 0, value: 0 };
+    const group = groupFor(item.location);
     group.count += 1;
     group.value += Number(item.value || 0);
-    groups.set(location, group);
+  }
+  for (const item of sold) {
+    groupFor(item.location).sold += 1;
   }
 
   const sorted = [...groups.entries()].sort((a, b) => b[1].count - a[1].count);
@@ -378,7 +393,7 @@ function renderLocationOverview() {
   empty.textContent = "";
   for (const [location, group] of sorted) {
     const tr = document.createElement("tr");
-    for (const text of [location, String(group.count), fmtEuro(group.value)]) {
+    for (const text of [location, String(group.count), fmtEuro(group.value), String(group.sold)]) {
       const td = document.createElement("td");
       td.textContent = text;
       tr.appendChild(td);
