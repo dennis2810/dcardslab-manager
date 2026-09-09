@@ -108,6 +108,15 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="monthly-empty"></p>
 
+  <h2>Jahresvergleich</h2>
+  <div class="table-scroll">
+    <table id="year-comparison-table" class="ranking-table" style="display: none;">
+        <thead><tr><th>Kennzahl</th><th id="year-comparison-prev-head"></th><th id="year-comparison-current-head"></th><th>Veränderung</th></tr></thead>
+        <tbody id="year-comparison-body"></tbody>
+      </table>
+  </div>
+  <p id="year-comparison-empty"></p>
+
   <h2>Plattform-Auswertung (Einkauf)</h2>
   <div class="table-scroll">
     <table id="platform-ranking-table" class="ranking-table" style="display: none;">
@@ -244,6 +253,7 @@ async function load() {
     renderSummary({ ...data.summary, inventory_value: inventoryValue });
     renderMonthly(data.monthly);
     renderMonthlyChart(data.monthly);
+    renderYearComparison(data.monthly);
     renderAvgRanking("platform-ranking-table", "platform-ranking-body", "platform-ranking-empty", data.platform_ranking,
       "Noch keine verkauften Karten mit erfasster Einkaufsplattform.");
     renderAvgRanking("channel-ranking-table", "channel-ranking-body", "channel-ranking-empty", data.channel_ranking,
@@ -461,6 +471,86 @@ function renderMonthly(monthly) {
     profitTd.textContent = fmtEuro(m.profit);
     profitTd.className = m.profit >= 0 ? "profit-positive" : "profit-negative";
     tr.appendChild(profitTd);
+    body.appendChild(tr);
+  }
+}
+
+// Jahr = aus dem Verkaufsmonat abgeleitet (gleiche Gruppierung wie die
+// Jahresuebersicht unten), nicht das Kalenderjahr von "heute" - so bleibt
+// der Vergleich auch bei nachtraeglich importierten/aelteren Verkaufsdaten
+// sinnvoll (jeweils die zwei juengsten Jahre MIT Verkaeufen).
+function renderYearComparison(monthly) {
+  const table = document.getElementById("year-comparison-table");
+  const body = document.getElementById("year-comparison-body");
+  const empty = document.getElementById("year-comparison-empty");
+  const prevHead = document.getElementById("year-comparison-prev-head");
+  const currentHead = document.getElementById("year-comparison-current-head");
+  body.innerHTML = "";
+
+  const byYear = new Map();
+  for (const m of monthly) {
+    const year = m.month.split("-")[0];
+    const g = byYear.get(year) || { count: 0, revenue: 0, profit: 0, cost: 0 };
+    g.count += m.count;
+    g.revenue += m.revenue;
+    g.profit += m.profit;
+    g.cost += m.cost;
+    byYear.set(year, g);
+  }
+
+  const years = [...byYear.keys()].sort();
+  if (years.length < 2) {
+    table.style.display = "none";
+    empty.textContent = years.length
+      ? "Noch nicht genug Daten für einen Jahresvergleich (mindestens zwei Jahre mit Verkäufen nötig)."
+      : "Noch keine Verkäufe.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+
+  const currentYear = years[years.length - 1];
+  const prevYear = years[years.length - 2];
+  const current = byYear.get(currentYear);
+  const prev = byYear.get(prevYear);
+  prevHead.textContent = prevYear;
+  currentHead.textContent = currentYear;
+
+  function pctDelta(prevVal, currentVal) {
+    if (!prevVal) return null;
+    return ((currentVal - prevVal) / Math.abs(prevVal)) * 100;
+  }
+
+  const currentMargin = current.cost ? (current.profit / current.cost) * 100 : null;
+  const prevMargin = prev.cost ? (prev.profit / prev.cost) * 100 : null;
+
+  const metrics = [
+    { label: "Verkäufe", prevVal: prev.count, currentVal: current.count, fmt: String, delta: pctDelta(prev.count, current.count) },
+    { label: "Umsatz", prevVal: prev.revenue, currentVal: current.revenue, fmt: fmtEuro, delta: pctDelta(prev.revenue, current.revenue) },
+    { label: "Gewinn", prevVal: prev.profit, currentVal: current.profit, fmt: fmtEuro, delta: pctDelta(prev.profit, current.profit) },
+    {
+      label: "Ø Marge", prevVal: prevMargin, currentVal: currentMargin,
+      fmt: (v) => (v != null ? fmtPercent(v) : "–"),
+      delta: prevMargin != null && currentMargin != null ? currentMargin - prevMargin : null, unit: " Pp.",
+    },
+  ];
+
+  for (const metric of metrics) {
+    const tr = document.createElement("tr");
+    for (const text of [metric.label, metric.fmt(metric.prevVal), metric.fmt(metric.currentVal)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    const deltaTd = document.createElement("td");
+    if (metric.delta == null) {
+      deltaTd.textContent = "–";
+    } else {
+      const arrow = metric.delta >= 0 ? "▲" : "▼";
+      deltaTd.textContent = `${arrow} ${Math.abs(metric.delta).toFixed(1)}${metric.unit || " %"}`;
+      deltaTd.className = metric.delta >= 0 ? "profit-positive" : "profit-negative";
+    }
+    tr.appendChild(deltaTd);
     body.appendChild(tr);
   }
 }
