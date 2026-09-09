@@ -223,3 +223,24 @@ create table if not exists app_status (
     id              boolean primary key default true check (id),
     last_backup_at  timestamptz
 );
+
+-- Migration (2026-09-10): Verkaeufe ausserhalb von eBay (Kleinanzeigen,
+-- Vinted, privat, ...) - eigenstaendig von ebay_sales, da sie nicht an
+-- einen ebay_listings-Eintrag gebunden sind. Unique auf card_id, da eine
+-- Karte hoechstens einmal manuell verkauft wird (anders als ebay_sales,
+-- das theoretisch mehrere eBay-Bestellungen pro Karte abbilden koennte).
+create table if not exists manual_sales (
+    id                uuid primary key default gen_random_uuid(),
+    card_id           uuid not null unique references cards(id) on delete cascade,
+    channel           text default '',
+    sale_date         timestamptz,
+    gross_price       numeric default 0,
+    shipping_charged  numeric default 0,
+    shipping_cost     numeric default 0,
+    fees              numeric default 0,
+    refunded          boolean not null default false,
+    notes             text default '',
+    created_at        timestamptz not null default now()
+);
+
+create index if not exists manual_sales_card_id_idx on manual_sales(card_id);

@@ -697,6 +697,60 @@ def zero_inventory_for_card(card_id):
     return response.data
 
 
+MANUAL_SALE_FIELDS = [
+    "channel", "sale_date", "gross_price", "shipping_charged", "shipping_cost", "fees", "refunded", "notes",
+]
+MANUAL_SALE_NUMERIC_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
+MANUAL_SALE_MONEY_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
+
+
+def create_manual_sale(card_id, fields):
+    # Ein Verkauf ausserhalb von eBay (Kleinanzeigen, Vinted, privat, ...) -
+    # eigenstaendige Tabelle statt ebay_sales, da kein ebay_listings-Eintrag
+    # existiert. Genau ein manueller Verkauf pro Karte (unique card_id in
+    # der Migration), daher hier ein reiner Insert statt Upsert - ein
+    # zweiter Versuch fuer dieselbe Karte soll sichtbar mit einem
+    # Constraint-Fehler scheitern statt den ersten still zu ueberschreiben.
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in MANUAL_SALE_FIELDS if name in fields},
+            MANUAL_SALE_NUMERIC_FIELDS,
+        ),
+        MANUAL_SALE_MONEY_FIELDS,
+    )
+    row["card_id"] = card_id
+    response = get_client().table("manual_sales").insert(row).execute()
+    return response.data[0]
+
+
+def get_manual_sale_for_card(card_id):
+    response = get_client().table("manual_sales").select("*").eq("card_id", card_id).execute()
+    return response.data[0] if response.data else None
+
+
+def update_manual_sale(sale_id, fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in MANUAL_SALE_FIELDS if name in fields},
+            MANUAL_SALE_NUMERIC_FIELDS,
+        ),
+        MANUAL_SALE_MONEY_FIELDS,
+    )
+    if not row:
+        response = get_client().table("manual_sales").select("*").eq("id", sale_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("manual_sales").update(row).eq("id", sale_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_manual_sale(sale_id):
+    response = get_client().table("manual_sales").select("id").eq("id", sale_id).execute()
+    if not response.data:
+        return None
+    get_client().table("manual_sales").delete().eq("id", sale_id).execute()
+    return response.data[0]
+
+
 def all_price_research():
     return get_client().table("price_research").select("*").execute().data
 
@@ -770,6 +824,17 @@ def statistics_rows():
     for row in sales_response.data:
         sales_by_card.setdefault(row["card_id"], row)
 
+    # Verkaeufe ausserhalb von eBay (Kleinanzeigen, Vinted, privat, ...) -
+    # eine Karte hat entweder einen eBay-Verkauf ODER einen manuellen
+    # Verkauf, nie beide (siehe manual_sales' unique card_id) - eBay wird
+    # bevorzugt, falls trotzdem mal beide vorlaegen (der eingerichtete Weg).
+    manual_sales_response = (
+        get_client().table("manual_sales")
+        .select("card_id,channel,sale_date,gross_price,shipping_charged,shipping_cost,fees,refunded")
+        .in_("card_id", card_ids).execute()
+    )
+    manual_sales_by_card = {row["card_id"]: row for row in manual_sales_response.data}
+
     ebay_info = ebay_info_by_card_id(card_ids)
 
     rows = []
@@ -777,6 +842,12 @@ def statistics_rows():
         item = items_by_card.get(card["id"])
         purchase = purchases_by_id.get(item["purchase_id"]) if item else None
         sale = sales_by_card.get(card["id"])
+        manual_sale = manual_sales_by_card.get(card["id"])
+        channel = None
+        if sale:
+            channel = "eBay"
+        elif manual_sale:
+            channel = manual_sale.get("channel") or "Sonstiges"
         rows.append({
             "card_id": card["id"],
             "title": card.get("title", ""),
@@ -787,11 +858,12 @@ def statistics_rows():
             "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
             "purchase_date": purchase.get("purchase_date") if purchase else None,
             "cost": item.get("allocated_cost") if item else None,
-            "sale_date": sale.get("sale_date") if sale else None,
-            "sale_price": sale.get("gross_price") if sale else None,
-            "shipping_charged": sale.get("shipping_charged") if sale else None,
-            "shipping_cost": sale.get("shipping_cost") if sale else None,
-            "ebay_fees": sale.get("ebay_fees") if sale else None,
-            "refunded": bool(sale.get("refunded")) if sale else False,
+            "channel": channel,
+            "sale_date": (sale or manual_sale or {}).get("sale_date") if (sale or manual_sale) else None,
+            "sale_price": sale.get("gross_price") if sale else (manual_sale.get("gross_price") if manual_sale else None),
+            "shipping_charged": sale.get("shipping_charged") if sale else (manual_sale.get("shipping_charged") if manual_sale else None),
+            "shipping_cost": sale.get("shipping_cost") if sale else (manual_sale.get("shipping_cost") if manual_sale else None),
+            "ebay_fees": sale.get("ebay_fees") if sale else (manual_sale.get("fees") if manual_sale else None),
+            "refunded": bool((sale or manual_sale or {}).get("refunded")) if (sale or manual_sale) else False,
         })
     return rows

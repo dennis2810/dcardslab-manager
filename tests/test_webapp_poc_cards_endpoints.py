@@ -80,6 +80,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
             response = client.get("/api/cards/card-1")
@@ -100,6 +101,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.storage.signed_url", side_effect=RuntimeError("Supabase Storage hiccup")):
             response = client.get("/api/cards/card-1")
@@ -373,6 +375,7 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["purchase"], purchase_info)
@@ -384,6 +387,7 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["purchase"])
@@ -398,6 +402,7 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=listing), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["ebay_listing"], listing)
@@ -409,6 +414,7 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["ebay_listing"])
@@ -423,6 +429,7 @@ class GetCardInventoryFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=items), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["inventory"], items)
@@ -434,6 +441,7 @@ class GetCardInventoryFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["inventory"], [])
@@ -448,6 +456,7 @@ class GetCardEbaySaleFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=sale), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["ebay_sale"], sale)
@@ -459,9 +468,96 @@ class GetCardEbaySaleFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["ebay_sale"])
+
+
+class GetCardManualSaleFieldTests(unittest.TestCase):
+    def test_includes_manual_sale_when_present(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        manual_sale = {"id": "ms-1", "card_id": "card-1", "channel": "Kleinanzeigen", "gross_price": 8.0}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=manual_sale), \
+             patch("main.db.list_price_research_for_card", return_value=[]):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.json()["manual_sale"], manual_sale)
+
+    def test_manual_sale_is_null_when_none_exists(self):
+        card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
+             patch("main.db.list_price_research_for_card", return_value=[]):
+            response = client.get("/api/cards/card-1")
+        self.assertIsNone(response.json()["manual_sale"])
+
+
+class CreateManualSaleEndpointTests(unittest.TestCase):
+    def test_creates_manual_sale_and_zeroes_inventory(self):
+        created = {"id": "ms-1", "card_id": "card-1", "channel": "Kleinanzeigen", "gross_price": 8.0}
+        with patch("main.db.get_card", return_value={"id": "card-1"}), \
+             patch("main.db.create_manual_sale", return_value=created) as mock_create, \
+             patch("main.db.zero_inventory_for_card") as mock_zero:
+            response = client.post(
+                "/api/cards/card-1/manual-sale",
+                json={"channel": "Kleinanzeigen", "gross_price": 8.0},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), created)
+        mock_create.assert_called_once_with("card-1", {"channel": "Kleinanzeigen", "gross_price": 8.0})
+        mock_zero.assert_called_once_with("card-1")
+
+    def test_returns_404_when_card_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = client.post("/api/cards/does-not-exist/manual-sale", json={"channel": "Vinted"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_inventory_zeroing_failure_does_not_break_the_create(self):
+        # Gleiches Isolationsprinzip wie bei sync_ebay_sales()/
+        # _create_default_inventory_item() - der Verkauf selbst ist schon
+        # angelegt, ein Supabase-Hiccup bei der Inventar-Nullung darf das
+        # nicht mehr zu einem 500 machen.
+        created = {"id": "ms-1", "card_id": "card-1"}
+        with patch("main.db.get_card", return_value={"id": "card-1"}), \
+             patch("main.db.create_manual_sale", return_value=created), \
+             patch("main.db.zero_inventory_for_card", side_effect=RuntimeError("inventory table down")):
+            response = client.post("/api/cards/card-1/manual-sale", json={"channel": "Vinted"})
+        self.assertEqual(response.status_code, 200)
+
+
+class UpdateManualSaleEndpointTests(unittest.TestCase):
+    def test_updates_manual_sale(self):
+        with patch("main.db.update_manual_sale", return_value={"id": "ms-1", "gross_price": 9.0}) as mock_update:
+            response = client.patch("/api/manual-sales/ms-1", json={"gross_price": 9.0})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["gross_price"], 9.0)
+        mock_update.assert_called_once_with("ms-1", {"gross_price": 9.0})
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.update_manual_sale", return_value=None):
+            response = client.patch("/api/manual-sales/does-not-exist", json={"gross_price": 1})
+        self.assertEqual(response.status_code, 404)
+
+
+class DeleteManualSaleEndpointTests(unittest.TestCase):
+    def test_deletes_manual_sale(self):
+        with patch("main.db.delete_manual_sale", return_value={"id": "ms-1"}):
+            response = client.delete("/api/manual-sales/ms-1")
+        self.assertEqual(response.status_code, 204)
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.delete_manual_sale", return_value=None):
+            response = client.delete("/api/manual-sales/does-not-exist")
+        self.assertEqual(response.status_code, 404)
 
 
 class GetCardPriceResearchFieldTests(unittest.TestCase):
@@ -473,6 +569,7 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=entries):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["price_research"], entries)
@@ -484,6 +581,7 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["price_research"], [])
@@ -498,6 +596,7 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", side_effect=RuntimeError('relation "price_research" does not exist')):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.status_code, 200)

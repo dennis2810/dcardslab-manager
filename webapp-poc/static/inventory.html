@@ -75,6 +75,12 @@ if ("serviceWorker" in navigator) {
   .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: var(--warn-bg); color: var(--warn-fg); }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
   .table-scroll { overflow-x: auto; }
+  [hidden] { display: none !important; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
+  #bulk-results { margin-left: 0.5rem; font-size: 0.9rem; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -144,10 +150,23 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <h2>Alle Einträge</h2>
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <label>Lagerort setzen auf <input type="text" id="bulk-location-input" placeholder="z.B. Kiste B"></label>
+    <button type="button" id="bulk-location-btn">Anwenden</button>
+    <label>Menge setzen auf <input type="number" id="bulk-quantity-input" min="0" step="1" style="width: 4.5rem;"></label>
+    <button type="button" id="bulk-quantity-btn">Anwenden</button>
+    <label>Zustand setzen auf <input type="text" id="bulk-condition-input" placeholder="z.B. NM"></label>
+    <button type="button" id="bulk-condition-btn">Anwenden</button>
+    <button type="button" id="bulk-delete-btn">Löschen</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
+    <span id="bulk-results"></span>
+  </div>
   <div class="table-scroll">
     <table id="inventory-table" style="display: none;">
         <thead>
           <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
             <th data-key="sku">SKU <span class="sort-arrow"></span></th>
             <th data-key="card_title">Karte <span class="sort-arrow"></span></th>
             <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
@@ -212,6 +231,39 @@ let items = [];
 // SKU-ascending by default - the seller's most-used reference number.
 let sortKey = "sku";
 let sortAsc = true;
+
+// Massenauswahl ueber Inventareintrag-IDs statt DOM-Checkbox-Status - bleibt
+// so beim Blaettern/Neuladen erhalten, gleiches Muster wie cards.html/
+// ebay.html/purchases.html.
+let selectedIds = new Set();
+// Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
+// nur auf die aktuell sichtbare Seite, nicht alle gefilterten Eintraege
+// ueber alle Seiten hinweg).
+let currentPageItems = [];
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const bulkResultsEl = document.getElementById("bulk-results");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
+
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Eintrag/Einträge ausgewählt`;
+}
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const item of currentPageItems) {
+    if (selectAllCheckbox.checked) selectedIds.add(item.id);
+    else selectedIds.delete(item.id);
+  }
+  updateBulkBar();
+  render();
+});
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  render();
+});
 
 const qInput = document.getElementById("q");
 
@@ -373,6 +425,7 @@ function render() {
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
 
+  currentPageItems = pageItems;
   body.innerHTML = "";
   table.style.display = sorted.length ? "table" : "none";
   for (const item of pageItems) {
@@ -381,6 +434,20 @@ function render() {
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
     });
+
+    const checkboxTd = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(item.id);
+    checkbox.addEventListener("click", (ev) => ev.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(item.id);
+      else selectedIds.delete(item.id);
+      selectAllCheckbox.checked = currentPageItems.length > 0 && currentPageItems.every((x) => selectedIds.has(x.id));
+      updateBulkBar();
+    });
+    checkboxTd.appendChild(checkbox);
+    tr.appendChild(checkboxTd);
 
     const skuTd = document.createElement("td");
     skuTd.textContent = item.sku || "";
@@ -417,6 +484,8 @@ function render() {
 
     body.appendChild(tr);
   }
+  selectAllCheckbox.checked = pageItems.length > 0 && pageItems.every((item) => selectedIds.has(item.id));
+  updateBulkBar();
 }
 
 for (const th of document.querySelectorAll("th[data-key]")) {
@@ -479,6 +548,89 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     statusInfo(item)[0],
   ]);
   downloadCsv("inventar.csv", headers, rows);
+});
+
+// Gemeinsamer Kern fuer die drei Bulk-Anpassungen unten (Lagerort/Menge/
+// Zustand) - unterscheiden sich nur im PATCH-Feld und der Erfolgsmeldung.
+async function applyBulkField(field, value, successLabel) {
+  const ids = [...selectedIds];
+  bulkResultsEl.textContent = "Speichert …";
+  bulkResultsEl.className = "";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/inventory/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+    ));
+    const okCount = results.filter((r) => r.ok).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Eintrag/Einträge: ${successLabel}.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadInventory();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+}
+
+document.getElementById("bulk-location-btn").addEventListener("click", () => {
+  const value = document.getElementById("bulk-location-input").value;
+  applyBulkField("location", value, `Lagerort auf "${value}" gesetzt`);
+});
+
+document.getElementById("bulk-quantity-btn").addEventListener("click", () => {
+  const input = document.getElementById("bulk-quantity-input");
+  if (input.value === "") {
+    bulkResultsEl.textContent = "Bitte eine Menge eingeben.";
+    bulkResultsEl.className = "error";
+    showToast("Bitte eine Menge eingeben.", true);
+    return;
+  }
+  applyBulkField("quantity", input.value, `Menge auf ${input.value} gesetzt`);
+});
+
+document.getElementById("bulk-condition-btn").addEventListener("click", () => {
+  const value = document.getElementById("bulk-condition-input").value;
+  if (!value) {
+    bulkResultsEl.textContent = "Bitte einen Zustand eingeben.";
+    bulkResultsEl.className = "error";
+    showToast("Bitte einen Zustand eingeben.", true);
+    return;
+  }
+  applyBulkField("condition", value, `Zustand auf "${value}" gesetzt`);
+});
+
+document.getElementById("bulk-delete-btn").addEventListener("click", async () => {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} Inventareintrag/Inventareinträge wirklich löschen?`)) return;
+  bulkResultsEl.textContent = "Löscht …";
+  bulkResultsEl.className = "";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/inventory/${encodeURIComponent(id)}`, { method: "DELETE" })
+    ));
+    const okCount = results.filter((r) => r.ok).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Eintrag/Einträge gelöscht.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadInventory();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
 });
 
 const addItemForm = document.getElementById("add-item-form");
