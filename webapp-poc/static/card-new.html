@@ -3,6 +3,15 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Neue Karte anlegen</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
   :root {
     color-scheme: light dark;
