@@ -87,6 +87,7 @@ if ("serviceWorker" in navigator) {
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <div class="controls no-print">
+    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
     <label>Zeitraum nach
       <select id="date-field">
         <option value="purchase_date">Kaufdatum</option>
@@ -101,7 +102,6 @@ if ("serviceWorker" in navigator) {
         <option value="">Alle Kanäle</option>
       </select>
     </label>
-    <input type="text" id="q" placeholder="Suche (Titel, SKU)">
   </div>
   <div class="table-scroll">
     <table id="rows-table" style="display: none;">

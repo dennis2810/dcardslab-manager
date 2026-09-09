@@ -139,6 +139,7 @@ if ("serviceWorker" in navigator) {
     <span id="page-info"></span>
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
 
   <h2>Unerwartet gefunden</h2>
@@ -463,6 +464,35 @@ document.getElementById("next-page").addEventListener("click", () => {
   render();
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "﻿" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["SKU", "Titel", "Lagerort", "Menge", "Status"];
+  const rows = sortedFilteredItems().map((item) => [
+    item.sku || "", item.card?.title || "", item.location || "", item.quantity ?? "",
+    checkedIds.has(item.id) ? "Gefunden" : "Fehlt",
+  ]);
+  downloadCsv("inventur.csv", headers, rows);
+});
 
 document.getElementById("reset-progress-btn").addEventListener("click", () => {
   if (!confirm("Fortschritt (abgehakte Karten und unerwartete Funde) wirklich zurücksetzen?")) return;

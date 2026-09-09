@@ -113,6 +113,7 @@ if ("serviceWorker" in navigator) {
     <li>Käufe-Tabelle sortierbar und einzelne Käufe aufklappbar, um verknüpfte Karten direkt zu sehen.</li>
     <li>Massenauswahl: Plattform für mehrere Käufe auf einmal setzen, Kaufdatum um X Tage verschieben (z. B.
       nach einem Importfehler), mehrere Käufe auf einmal löschen.</li>
+    <li>Anzahl Käufe und Summenzeile stehen jetzt oben auf der Seite, direkt über der Plattform-Auswertung.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -156,7 +157,7 @@ if ("serviceWorker" in navigator) {
       Scannen der SKU (funktioniert mit jedem tastatur-emulierenden Barcodescanner). Fortschritt bleibt lokal
       im Browser gespeichert; Abschlussbericht zeigt fehlende und unerwartet gefundene Karten.</li>
     <li>Checkliste ist sortierbar (Klick auf Spaltenüberschrift) und bei vielen Karten seitenweise blätterbar,
-      dazu ein Druckbutton für die Checkliste.</li>
+      dazu ein Druck- und ein CSV-Export-Button für die Checkliste.</li>
   </ul>
 
   <h2>Wunschliste <span class="date">September 2026</span></h2>
@@ -164,7 +165,7 @@ if ("serviceWorker" in navigator) {
     <li>Neue Seite für Karten, die (noch) nicht im Besitz sind – Titel, Team, Set, Wunschpreis und Notiz. Bewusst
       getrennt von der Kartenübersicht, damit Bestand und Auswertungen unberührt bleiben.</li>
     <li>Liste ist sortierbar (Klick auf Spaltenüberschrift) und bei vielen Einträgen seitenweise blätterbar,
-      dazu ein Druckbutton.</li>
+      dazu ein Druck- und ein CSV-Export-Button.</li>
   </ul>
 
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>
@@ -179,8 +180,10 @@ if ("serviceWorker" in navigator) {
     <li>Neue Kanal-Auswertung (Ø Gewinn/Marge je Verkaufskanal) auf der Übersichtsseite, direkt neben der
       Plattform-Auswertung (jetzt klarer als "(Einkauf)" gekennzeichnet, da sie die Einkaufs- und nicht die
       Verkaufsseite abbildet).</li>
-    <li>Die vier Auswertungstabellen (Plattform, Kanal, Team, Set) haben jetzt einheitliche Spaltenbreiten, damit
-      z. B. die Verkäufe-Spalte in jeder Tabelle an derselben Stelle steht.</li>
+    <li>Die Monatstabelle sowie die vier Auswertungstabellen (Plattform, Kanal, Team, Set) haben jetzt einheitliche
+      Spaltenbreiten, damit z. B. die Verkäufe-Spalte in jeder Tabelle an derselben Stelle steht.</li>
+    <li>Jahresübersicht zusätzlich zum CSV-Export auch als PDF exportierbar (druckt nur diesen Abschnitt).</li>
+    <li>Auf "Alle Verkäufe" steht die Suche jetzt ganz links in der Filterzeile, wie auf den anderen Seiten.</li>
     <li>Datumsfilter nach Kauf- oder Verkaufsdatum.</li>
     <li>Für DATEV/Lexoffice aufbereiteter Buchhaltungsexport sowie CSV-Export.</li>
     <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>
