@@ -624,6 +624,59 @@ class EbayPriceResearchEndpointTests(unittest.TestCase):
             response = client.get("/api/ebay/price-research?q=Musterkarte")
         self.assertEqual(response.status_code, 502)
 
+    def test_excludes_auto_listing_when_query_is_not_auto(self):
+        # Eine Auto(gramm)-Karte ist eine andere, meist deutlich teurere
+        # Variante als die gesuchte Basiskarte - taucht sie trotzdem in den
+        # Ergebnissen auf, wuerde sie den Preisdurchschnitt verzerren.
+        results = [
+            {"title": "Musterkarte", "price": 10.0},
+            {"title": "Musterkarte Auto", "price": 200.0},
+            {"title": "Musterkarte Autograph", "price": 250.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Musterkarte"])
+
+    def test_keeps_auto_listings_when_query_is_auto(self):
+        results = [
+            {"title": "Musterkarte", "price": 10.0},
+            {"title": "Musterkarte Auto", "price": 200.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte+Auto")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Musterkarte", "Musterkarte Auto"])
+
+    def test_excludes_numbered_listing_when_query_is_not_numbered(self):
+        results = [
+            {"title": "Musterkarte", "price": 10.0},
+            {"title": "Musterkarte /50", "price": 80.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Musterkarte"])
+
+    def test_keeps_matching_print_run_and_excludes_different_one(self):
+        # Verschiedene Auflagen (/50 vs. /99) sind unterschiedliche Karten mit
+        # unterschiedlichem Marktpreis - nur die exakt gesuchte Auflage soll
+        # in die Preisrecherche einfliessen, ein unnummeriertes Angebot aber
+        # weiterhin (koennte schlicht ohne Auflage im Titel stehen).
+        results = [
+            {"title": "Musterkarte /50", "price": 80.0},
+            {"title": "Musterkarte /99", "price": 40.0},
+            {"title": "Musterkarte", "price": 10.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte+/50")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Musterkarte /50", "Musterkarte"])
+
 
 class SyncSalesEndpointTests(unittest.TestCase):
     def test_returns_401_when_not_authorized(self):
