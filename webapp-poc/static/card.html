@@ -111,6 +111,10 @@ if ("serviceWorker" in navigator) {
   .price-research-search input[type="text"] { font-weight: normal; padding: 0.3rem; flex: 1 1 220px; }
   .price-research-results { list-style: none; padding: 0; margin: 0.5rem 0 0; width: 100%; }
   .price-research-results li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -182,6 +186,23 @@ if ("serviceWorker" in navigator) {
     if (nav.value) location.href = nav.value;
   });
 })();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
 
 // Schwellwert fuer die "auffaellig hohe Marge"-Markierung - deckungsgleich
 // mit statistics.html.
@@ -545,13 +566,16 @@ form.addEventListener("submit", async (ev) => {
     if (!res.ok) {
       statusP.textContent = "Fehler: " + (body.detail || res.statusText);
       statusP.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     statusP.textContent = "Gespeichert.";
     formIsDirty = false;
+    showToast("Karte gespeichert.");
   } catch (err) {
     statusP.textContent = "Fehler: " + err;
     statusP.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 
@@ -614,6 +638,7 @@ function renderPurchaseSection(purchase) {
           alert("Fehler: " + (body.detail || res.statusText));
           return;
         }
+        showToast("Verknüpfung gelöst.");
         loadCard();
       } catch (err) {
         alert("Fehler: " + err);
@@ -678,12 +703,15 @@ function renderPurchaseSection(purchase) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast("Kauf angelegt und verknüpft.");
       loadCard();
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
 
@@ -739,12 +767,15 @@ function renderPurchaseSection(purchase) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast("Mit Kauf verknüpft.");
       loadCard();
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
 }
@@ -884,12 +915,15 @@ function renderInventoryRow(item) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast("Inventareintrag gespeichert.");
       loadCard();
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
   row.appendChild(saveBtn);
@@ -907,6 +941,7 @@ function renderInventoryRow(item) {
           alert("Fehler: " + (body.detail || res.statusText));
           return;
         }
+        showToast("Inventareintrag gelöscht.");
         loadCard();
       } catch (err) {
         alert("Fehler: " + err);
@@ -980,6 +1015,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
             alert("Fehler: " + (body.detail || res.statusText));
             return;
           }
+          showToast("Preisrecherche-Eintrag gelöscht.");
           loadCard();
         } catch (err) {
           alert("Fehler: " + err);
@@ -1046,12 +1082,15 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast("Preisrecherche-Eintrag hinzugefügt.");
       loadCard();
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
   form.appendChild(addBtn);
@@ -1185,13 +1224,16 @@ function renderEbayCreateForm(section) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         btn.disabled = false;
         return;
       }
+      showToast("eBay-Angebot erstellt.");
       renderEbaySection(body);
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
       btn.disabled = false;
     }
   });
@@ -1403,6 +1445,7 @@ function renderEbayEditForm(section, listing, purchase) {
           alert("Fehler: " + (body.detail || res.statusText));
           return;
         }
+        showToast("eBay-Entwurf gelöscht.");
         loadCard();
       } catch (err) {
         alert("Fehler: " + err);
@@ -1453,19 +1496,24 @@ function renderEbayEditForm(section, listing, purchase) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return null;
       }
       return body;
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
       return null;
     }
   }
 
   saveBtn.addEventListener("click", async () => {
     const saved = await saveDraft();
-    if (saved) loadCard();
+    if (saved) {
+      showToast("eBay-Entwurf gespeichert.");
+      loadCard();
+    }
   });
 
   publishBtn.addEventListener("click", async () => {
@@ -1486,12 +1534,15 @@ function renderEbayEditForm(section, listing, purchase) {
       if (!res.ok) {
         statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
         statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast(scheduleInput.value ? "eBay-Angebot geplant." : "eBay-Angebot veröffentlicht.");
       loadCard();
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
       statusEl.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
 }
@@ -1535,6 +1586,7 @@ function renderEbayScheduledView(section, listing, environment) {
         alert("Fehler: " + (body.detail || res.statusText));
         return;
       }
+      showToast("eBay-Angebot veröffentlicht.");
       loadCard();
     } catch (err) {
       alert("Fehler: " + err);
@@ -1554,6 +1606,7 @@ function renderEbayScheduledView(section, listing, environment) {
         alert("Fehler: " + (body.detail || res.statusText));
         return;
       }
+      showToast("Planung storniert.");
       loadCard();
     } catch (err) {
       alert("Fehler: " + err);
@@ -1732,12 +1785,15 @@ function renderSaleStats(purchase, sale) {
       if (!res.ok) {
         shippingStatus.textContent = "Fehler: " + (body.detail || res.statusText);
         shippingStatus.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
       }
+      showToast("Verkaufsdaten gespeichert.");
       loadCard();
     } catch (err) {
       shippingStatus.textContent = "Fehler: " + err;
       shippingStatus.className = "error";
+      showToast("Fehler: " + err, true);
     }
   });
   ebayFeesP.appendChild(saveShippingBtn);

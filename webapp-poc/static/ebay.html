@@ -69,6 +69,10 @@ if ("serviceWorker" in navigator) {
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
   .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -165,6 +169,23 @@ if ("serviceWorker" in navigator) {
     if (nav.value) location.href = nav.value;
   });
 })();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
 
 const PAGE_SIZE = 40;
 let currentPage = 0;
@@ -518,6 +539,7 @@ publishSelectedBtn.addEventListener("click", async () => {
   if (!eligible.length) {
     bulkResults.textContent = "Keines der ausgewählten Angebote ist ein Entwurf oder fehlgeschlagen - nur solche können veröffentlicht werden.";
     bulkResults.className = "error";
+    showToast("Keines der ausgewählten Angebote kann veröffentlicht werden.", true);
     return;
   }
   const listingIds = eligible.map((l) => l.id);
@@ -535,6 +557,7 @@ publishSelectedBtn.addEventListener("click", async () => {
     if (!res.ok) {
       bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
       bulkResults.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     bulkResults.className = "";
@@ -552,12 +575,19 @@ publishSelectedBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    const okCount = data.results.filter((r) => r.status !== "Fehler").length;
+    const failedCount = data.results.length - okCount;
+    let toastMsg = `${okCount} Angebot(e) veröffentlicht.`;
+    if (skipped) toastMsg += ` ${skipped} übersprungen.`;
+    if (failedCount) toastMsg += ` ${failedCount} fehlgeschlagen.`;
+    showToast(toastMsg, failedCount > 0 && okCount === 0);
     selectedIds.clear();
     updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
   } finally {
     publishSelectedBtn.disabled = false;
   }
@@ -570,6 +600,7 @@ priceBulkBtn.addEventListener("click", async () => {
   if (!percent) {
     bulkResults.textContent = "Bitte einen Prozentwert ungleich 0 eingeben (z. B. -10 für 10 % günstiger).";
     bulkResults.className = "error";
+    showToast("Bitte einen Prozentwert ungleich 0 eingeben.", true);
     return;
   }
 
@@ -586,6 +617,7 @@ priceBulkBtn.addEventListener("click", async () => {
     if (!res.ok) {
       bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
       bulkResults.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     const list = document.createElement("ul");
@@ -599,12 +631,16 @@ priceBulkBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    const okCount = data.results.filter((r) => !r.error).length;
+    const failedCount = data.results.length - okCount;
+    showToast(`${okCount} Preis(e) angepasst.` + (failedCount ? ` ${failedCount} fehlgeschlagen.` : ""), failedCount > 0 && okCount === 0);
     selectedIds.clear();
     updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
   } finally {
     priceBulkBtn.disabled = false;
   }
@@ -620,13 +656,16 @@ document.getElementById("sync-sales-btn").addEventListener("click", async () => 
     if (!res.ok) {
       syncStatus.textContent = "Fehler: " + (data.detail || res.statusText);
       syncStatus.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     syncStatus.textContent = `${data.synced} neue/aktualisierte Verkäufe, ${data.skipped} ohne Treffer.`;
+    showToast(`${data.synced} neue/aktualisierte Verkäufe, ${data.skipped} ohne Treffer.`);
     loadListings();
   } catch (err) {
     syncStatus.textContent = "Fehler: " + err;
     syncStatus.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 

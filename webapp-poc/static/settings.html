@@ -30,6 +30,10 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   .connected { color: #1e4620; font-weight: 600; }
   .not-connected { color: #7a5c00; font-weight: 600; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -100,6 +104,23 @@ if ("serviceWorker" in navigator) {
   });
 })();
 
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 const sheetsStatusEl = document.getElementById("sheets-status");
 const connectDiv = document.getElementById("sheets-connect");
 const configuredDiv = document.getElementById("sheets-configured");
@@ -162,13 +183,16 @@ document.getElementById("save-spreadsheet-id-btn").addEventListener("click", asy
     if (!res.ok) {
       syncStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
       syncStatusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     syncStatusEl.textContent = "Gespeichert.";
     syncStatusEl.className = "status";
+    showToast("Google-Sheets-Tabellen-ID gespeichert.");
   } catch (err) {
     syncStatusEl.textContent = "Fehler: " + err;
     syncStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 
@@ -181,13 +205,16 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
     if (!res.ok) {
       syncStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
       syncStatusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     syncStatusEl.textContent = "Zuletzt synchronisiert: " + body.synced_at;
     syncStatusEl.className = "status";
+    showToast("Google Sheets synchronisiert.");
   } catch (err) {
     syncStatusEl.textContent = "Fehler: " + err;
     syncStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 

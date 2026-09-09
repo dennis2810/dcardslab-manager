@@ -38,6 +38,10 @@ if ("serviceWorker" in navigator) {
   .item-row .cost-input { width: 5rem; }
   .item-hint { font-size: 0.85rem; color: #555; }
   #add-item { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -102,6 +106,23 @@ if ("serviceWorker" in navigator) {
     if (nav.value) location.href = nav.value;
   });
 })();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
 
 const FIELDS = [
   ["purchase_date", "Kaufdatum", "date"], ["platform", "Plattform", "select"],
@@ -260,6 +281,7 @@ async function onDeleteReceipt() {
       alert("Fehler: " + (body.detail || res.statusText));
       return;
     }
+    showToast("Beleg gelöscht.");
     renderReceipt(body);
   } catch (err) {
     alert("Fehler: " + err);
@@ -288,14 +310,17 @@ document.getElementById("upload-receipt-btn").addEventListener("click", async ()
     if (!res.ok) {
       uploadStatus.textContent = "Fehler: " + (body.detail || res.statusText);
       uploadStatus.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     uploadStatus.textContent = "Hochgeladen.";
     fileInput.value = "";
+    showToast("Beleg hochgeladen.");
     renderReceipt(body);
   } catch (err) {
     uploadStatus.textContent = "Fehler: " + err;
     uploadStatus.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 
@@ -348,12 +373,15 @@ function renderItems(items) {
         if (!res.ok) {
           costStatus.textContent = "Fehler: " + (body.detail || res.statusText);
           costStatus.className = "error";
+          showToast("Fehler: " + (body.detail || res.statusText), true);
           return;
         }
         costStatus.textContent = "Gespeichert.";
+        showToast("Anteil gespeichert.");
       } catch (err) {
         costStatus.textContent = "Fehler: " + err;
         costStatus.className = "error";
+        showToast("Fehler: " + err, true);
       }
     });
     row.appendChild(saveCostBtn);
@@ -383,13 +411,16 @@ form.addEventListener("submit", async (ev) => {
     if (!res.ok) {
       statusP.textContent = "Fehler: " + (body.detail || res.statusText);
       statusP.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     statusP.textContent = "Gespeichert.";
+    showToast("Kauf gespeichert.");
     renderItems(body.items || []);
   } catch (err) {
     statusP.textContent = "Fehler: " + err;
     statusP.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 
@@ -420,6 +451,7 @@ async function onRemoveItem(itemId) {
       alert("Fehler: " + (body.detail || res.statusText));
       return;
     }
+    showToast("Karte aus Kauf entfernt.");
     loadPurchase();
   } catch (err) {
     alert("Fehler: " + err);
@@ -480,15 +512,18 @@ document.getElementById("link-card-btn").addEventListener("click", async () => {
     if (!res.ok) {
       linkStatus.textContent = "Fehler: " + (body.detail || res.statusText);
       linkStatus.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     linkStatus.textContent = "";
     cardSearch.value = "";
     cardResults.innerHTML = "";
+    showToast("Karte verknüpft.");
     loadPurchase();
   } catch (err) {
     linkStatus.textContent = "Fehler: " + err;
     linkStatus.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 </script>
