@@ -261,6 +261,19 @@ const params = new URLSearchParams(location.search);
 const cardId = params.get("id");
 const form = document.getElementById("edit-form");
 
+// Warnt vor Verlassen der Seite, sobald ein Feld im Bearbeiten-Formular
+// getippt wurde - bewusst nur auf #edit-form beschraenkt, nicht auf der
+// ganzen Seite: card.html hat noch etliche andere, sofort speichernde
+// Mini-Formulare (Preisrecherche, eBay-Gebuehren, ...), die keine
+// "ungespeicherten Aenderungen" im gleichen Sinn haben.
+let formIsDirty = false;
+form.addEventListener("input", () => { formIsDirty = true; });
+window.addEventListener("beforeunload", (ev) => {
+  if (!formIsDirty) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+
 if (!cardId) {
   showError(form, "Keine Karten-ID angegeben.");
 } else {
@@ -535,6 +548,7 @@ form.addEventListener("submit", async (ev) => {
       return;
     }
     statusP.textContent = "Gespeichert.";
+    formIsDirty = false;
   } catch (err) {
     statusP.textContent = "Fehler: " + err;
     statusP.className = "error";
@@ -550,6 +564,7 @@ async function onDelete() {
       alert("Fehler beim Löschen: " + (body.detail || res.statusText));
       return;
     }
+    formIsDirty = false;
     location.href = "cards.html";
   } catch (err) {
     alert("Fehler beim Löschen: " + err);

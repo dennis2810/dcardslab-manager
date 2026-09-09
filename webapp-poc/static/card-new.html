@@ -131,7 +131,21 @@ const statusEl = document.getElementById("status");
 const recognizeBtn = document.getElementById("recognize-btn");
 const saveBtn = document.getElementById("save-btn");
 
+// Warnt vor Verlassen der Seite, sobald ein Foto gewaehlt oder ein Feld
+// getippt wurde - vor dem Abbrechen-Button (der absichtlich verlaesst)
+// bzw. nach erfolgreichem Speichern wird die Markierung wieder entfernt,
+// damit die eigene, gewollte Navigation nicht selbst geblockt wird.
+let formIsDirty = false;
+document.addEventListener("input", () => { formIsDirty = true; });
+document.addEventListener("change", () => { formIsDirty = true; });
+window.addEventListener("beforeunload", (ev) => {
+  if (!formIsDirty) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+
 document.getElementById("cancel-btn").addEventListener("click", () => {
+  formIsDirty = false;
   location.href = "cards.html";
 });
 
@@ -359,6 +373,10 @@ form.addEventListener("submit", async (ev) => {
       saveBtn.disabled = false;
       return;
     }
+    // Karte ist jetzt gespeichert - ab hier keine ungespeicherten Aenderungen
+    // mehr, egal ob direkt weitergeleitet wird oder erst die Duplikat-
+    // Warnung (mit ihren eigenen Navigationen) dazwischenkommt.
+    formIsDirty = false;
     if (body.possible_duplicate) {
       showDuplicateWarning(body.id, body.possible_duplicate);
       return;

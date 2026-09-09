@@ -454,6 +454,16 @@ const toggleAddItemBtn = document.getElementById("toggle-add-item");
 const cardSearch = document.getElementById("card-search");
 const cardResults = document.getElementById("card-results");
 
+// Warnt vor Verlassen der Seite, solange das "+ Eintrag hinzufügen"-
+// Formular ausgefuellt, aber noch nicht gespeichert ist.
+let addItemFormIsDirty = false;
+addItemForm.addEventListener("input", () => { addItemFormIsDirty = true; });
+window.addEventListener("beforeunload", (ev) => {
+  if (!addItemFormIsDirty) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+
 toggleAddItemBtn.addEventListener("click", () => {
   addItemForm.style.display = addItemForm.style.display === "grid" ? "none" : "grid";
 });
@@ -462,6 +472,7 @@ document.getElementById("add-item-cancel").addEventListener("click", () => {
   addItemForm.reset();
   addItemForm.style.display = "none";
   document.getElementById("add-item-status").textContent = "";
+  addItemFormIsDirty = false;
 });
 
 // Gleiches Debounced-Suche-dann-Auswahl-Muster wie purchase.html's
@@ -518,6 +529,7 @@ addItemForm.addEventListener("submit", async (ev) => {
     cardResults.innerHTML = "";
     addItemForm.style.display = "none";
     statusEl.textContent = "";
+    addItemFormIsDirty = false;
     loadInventory();
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
