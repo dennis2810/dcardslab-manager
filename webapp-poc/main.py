@@ -27,6 +27,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import secrets
 import sys
 import tempfile
@@ -1458,6 +1459,39 @@ async def ebay_oauth_status():
     return JSONResponse(response.json(), status_code=response.status_code)
 
 
+_AUTO_RE = re.compile(r"\bauto(?:graph(?:ed)?)?\b", re.IGNORECASE)
+_PRINT_RUN_RE = re.compile(r"/(\d+)\b")
+
+
+def _variant_attrs(text):
+    """Erkennt Auto(gramm)- und Auflagen-Hinweise ('/50') in einem Titel/einer
+    Suchanfrage - rein textbasiert, da Karten kein eigenes Autogramm-Feld
+    haben (siehe ebay_listing.py)."""
+    text = text or ""
+    print_run_match = _PRINT_RUN_RE.search(text)
+    return bool(_AUTO_RE.search(text)), print_run_match.group(1) if print_run_match else None
+
+
+def _filter_price_research_results(query, results):
+    # eBays Freitextsuche vermischt sonst Auto-/nummerierte Varianten (z.B.
+    # "/50") mit der eigentlich gesuchten Basiskarte - deutlich teurere/
+    # seltenere Varianten wuerden den Preisdurchschnitt verzerren. Eine
+    # Auto- oder Auflagen-Angabe in einem Treffer zaehlt daher nur, wenn die
+    # Suchanfrage selbst danach fragt (bei Auflage zusaetzlich exakt gleich).
+    query_is_auto, query_print_run = _variant_attrs(query)
+    filtered = []
+    for item in results:
+        item_is_auto, item_print_run = _variant_attrs(item.get("title", ""))
+        if item_is_auto and not query_is_auto:
+            continue
+        if item_print_run and not query_print_run:
+            continue
+        if item_print_run and query_print_run and item_print_run != query_print_run:
+            continue
+        filtered.append(item)
+    return filtered
+
+
 @app.get("/api/ebay/price-research")
 async def ebay_price_research(q: str):
     # Aktive Angebote (Buy/Browse API), nicht verkaufte Artikel - die dafuer
@@ -1469,7 +1503,7 @@ async def ebay_price_research(q: str):
         results = ebay_client.search_active_listings(token, q)
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return JSONResponse({"results": results})
+    return JSONResponse({"results": _filter_price_research_results(q, results)})
 
 
 @app.patch("/api/ebay/sales/{sale_id}")
