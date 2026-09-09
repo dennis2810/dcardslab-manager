@@ -244,3 +244,10 @@ create table if not exists manual_sales (
 );
 
 create index if not exists manual_sales_card_id_idx on manual_sales(card_id);
+
+-- Migration (2026-09-10): weitere Fotos pro Karte, zusaetzlich zu Vorder-/
+-- Rueckseite (z.B. Detailaufnahmen bei Beschaedigungen) - kommagetrennte
+-- Storage-Objektpfade im card-images-Bucket, gleiches Freitext-Muster wie
+-- cards.tags statt einer eigenen Tabelle, da die Reihenfolge/Anzahl klein
+-- und ohne eigene Metadaten bleibt.
+alter table cards add column if not exists extra_image_paths text not null default '';

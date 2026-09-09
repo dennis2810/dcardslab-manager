@@ -58,6 +58,13 @@ if ("serviceWorker" in navigator) {
   .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
   .rotate-buttons button:disabled { opacity: 0.5; cursor: default; }
   .rotate-status { font-size: 0.8rem; color: #555; font-style: italic; }
+  .extra-images { margin-bottom: 1.5rem; }
+  .extra-images h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+  .extra-images-gallery { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; }
+  .extra-image-item { position: relative; width: 100px; }
+  .extra-image-item img { width: 100%; border-radius: 6px; background: var(--placeholder-bg); display: block; }
+  .extra-image-item button { position: absolute; top: 2px; right: 2px; padding: 0.1rem 0.4rem; font-size: 0.75rem;
+    line-height: 1; border-radius: 4px; background: var(--danger-bg); color: var(--danger-fg); border: none; cursor: pointer; }
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -137,6 +144,9 @@ if ("serviceWorker" in navigator) {
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @media print {
+    .page-nav, #back-to-cards, #prev-next-nav, #toast-container, button, input[type="file"] { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -144,7 +154,8 @@ if ("serviceWorker" in navigator) {
     <h1>Karte bearbeiten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
-  <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a></p>
+  <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a>
+    <button type="button" id="print-btn" class="no-print">🖨 Drucken</button></p>
   <nav class="page-nav">
     <label>Seite
       <select id="page-nav-select">
@@ -183,6 +194,14 @@ if ("serviceWorker" in navigator) {
         <span class="rotate-status" id="back-rotate-status"></span>
       </div>
     </div>
+  </div>
+
+  <div class="extra-images">
+    <h2>Weitere Fotos</h2>
+    <div class="extra-images-gallery" id="extra-images-gallery"></div>
+    <button type="button" id="extra-image-add-btn">+ Foto hinzufügen</button>
+    <input type="file" id="extra-image-file" accept="image/*" hidden>
+    <span class="rotate-status" id="extra-image-status"></span>
   </div>
 
   <form id="edit-form">
@@ -317,6 +336,8 @@ window.addEventListener("beforeunload", (ev) => {
   ev.preventDefault();
   ev.returnValue = "";
 });
+
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 if (!cardId) {
   showError(form, "Keine Karten-ID angegeben.");
@@ -463,6 +484,80 @@ for (const side of ["front", "back"]) {
   });
 }
 
+// Weitere Fotos neben Vorder-/Rueckseite (z.B. Detailaufnahmen bei
+// Beschaedigungen) - werden beim eBay-Veroeffentlichen mit hochgeladen
+// (main.py's _publish_listing()), daher kein separates "Auch zu eBay
+// hochladen"-Kaestchen noetig.
+function renderExtraImages(urls) {
+  const gallery = document.getElementById("extra-images-gallery");
+  gallery.innerHTML = "";
+  (urls || []).forEach((url, index) => {
+    const item = document.createElement("div");
+    item.className = "extra-image-item";
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = `Weiteres Foto ${index + 1}`;
+    item.appendChild(img);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "✕";
+    removeBtn.title = "Foto löschen";
+    removeBtn.addEventListener("click", () => deleteExtraImage(index));
+    item.appendChild(removeBtn);
+    gallery.appendChild(item);
+  });
+}
+
+const extraImageAddBtn = document.getElementById("extra-image-add-btn");
+const extraImageFile = document.getElementById("extra-image-file");
+const extraImageStatus = document.getElementById("extra-image-status");
+
+extraImageAddBtn.addEventListener("click", () => extraImageFile.click());
+extraImageFile.addEventListener("change", async () => {
+  const file = extraImageFile.files[0];
+  extraImageFile.value = "";
+  if (!file) return;
+
+  extraImageAddBtn.disabled = true;
+  extraImageStatus.textContent = "Lädt hoch …";
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/images`, {
+      method: "POST",
+      body: formData,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      showToast("Fehler beim Hochladen: " + (body.detail || res.statusText), true);
+      return;
+    }
+    renderExtraImages(body.extra_image_urls);
+    showToast("Foto hinzugefügt.");
+  } catch (err) {
+    showToast("Fehler beim Hochladen: " + err, true);
+  } finally {
+    extraImageAddBtn.disabled = false;
+    extraImageStatus.textContent = "";
+  }
+});
+
+async function deleteExtraImage(index) {
+  if (!confirm("Dieses Foto wirklich löschen?")) return;
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/images/${index}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      const body = await res.json().catch(() => ({}));
+      showToast("Fehler beim Löschen: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast("Foto gelöscht.");
+    loadCard();
+  } catch (err) {
+    showToast("Fehler beim Löschen: " + err, true);
+  }
+}
+
 async function loadCard() {
   try {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
@@ -472,6 +567,7 @@ async function loadCard() {
       return;
     }
     render(card);
+    renderExtraImages(card.extra_image_urls);
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale);

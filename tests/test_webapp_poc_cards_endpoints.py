@@ -371,6 +371,70 @@ class ReplaceCardImageEndpointTests(unittest.TestCase):
         mock_set.assert_not_called()
 
 
+class AddCardExtraImageEndpointTests(unittest.TestCase):
+    def _post_extra(self, card_id="card-1", filename="extra.jpg"):
+        return client.post(
+            f"/api/cards/{card_id}/images",
+            files={"file": (filename, b"fake-image-bytes", "image/jpeg")},
+        )
+
+    def test_uploads_and_appends_to_extra_image_paths(self):
+        card = {"id": "card-1", "batch_id": "batch-1", "position_in_batch": 3, "extra_image_paths": ""}
+        updated = {"id": "card-1", "extra_image_paths": "batch-1/3_extra_abc123.jpg"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.upload_extra_image", return_value="batch-1/3_extra_abc123.jpg") as mock_upload, \
+             patch("main.db.add_card_extra_image", return_value=updated) as mock_add, \
+             patch("main.storage.signed_url", return_value="https://signed/extra"):
+            response = self._post_extra()
+        self.assertEqual(response.status_code, 200)
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args.args
+        self.assertEqual(args[0], "batch-1")
+        self.assertEqual(args[1], 3)
+        mock_add.assert_called_once_with("card-1", "batch-1/3_extra_abc123.jpg")
+        body = response.json()
+        self.assertEqual(body["extra_image_urls"], ["https://signed/extra"])
+
+    def test_returns_404_when_card_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = self._post_extra(card_id="does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+    def test_upload_failure_returns_502(self):
+        card = {"id": "card-1", "batch_id": "batch-1", "position_in_batch": 1, "extra_image_paths": ""}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.upload_extra_image", side_effect=RuntimeError("bucket down")), \
+             patch("main.db.add_card_extra_image") as mock_add:
+            response = self._post_extra()
+        self.assertEqual(response.status_code, 502)
+        mock_add.assert_not_called()
+
+
+class DeleteCardExtraImageEndpointTests(unittest.TestCase):
+    def test_deletes_from_db_and_storage(self):
+        updated = {"id": "card-1", "extra_image_paths": ""}
+        with patch("main.db.remove_card_extra_image", return_value=(updated, "batch-1/3_extra_abc.jpg")) as mock_remove, \
+             patch("main.storage.delete_images") as mock_delete:
+            response = client.delete("/api/cards/card-1/images/0")
+        self.assertEqual(response.status_code, 204)
+        mock_remove.assert_called_once_with("card-1", 0)
+        mock_delete.assert_called_once_with(["batch-1/3_extra_abc.jpg"])
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.remove_card_extra_image", return_value=(None, None)), \
+             patch("main.storage.delete_images") as mock_delete:
+            response = client.delete("/api/cards/card-1/images/5")
+        self.assertEqual(response.status_code, 404)
+        mock_delete.assert_not_called()
+
+    def test_storage_deletion_failure_does_not_break_the_delete(self):
+        updated = {"id": "card-1", "extra_image_paths": ""}
+        with patch("main.db.remove_card_extra_image", return_value=(updated, "batch-1/3_extra_abc.jpg")), \
+             patch("main.storage.delete_images", side_effect=RuntimeError("bucket down")):
+            response = client.delete("/api/cards/card-1/images/0")
+        self.assertEqual(response.status_code, 204)
+
+
 class GetCardPurchaseFieldTests(unittest.TestCase):
     def test_includes_purchase_info_when_linked(self):
         card = {"id": "card-1", "front_image_path": None, "back_image_path": None}

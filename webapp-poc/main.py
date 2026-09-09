@@ -405,7 +405,18 @@ def _attach_signed_urls(card):
             card["back_image_url"] = storage.signed_url(back_path)
         except Exception:
             pass
+    extra_urls = []
+    for path in _split_extra_image_paths(card):
+        try:
+            extra_urls.append(storage.signed_url(path))
+        except Exception:
+            pass
+    card["extra_image_urls"] = extra_urls
     return card
+
+
+def _split_extra_image_paths(card):
+    return [p for p in (card.get("extra_image_paths") or "").split(",") if p]
 
 
 @app.get("/api/cards")
@@ -465,6 +476,7 @@ def _delete_card_and_images(card_id):
     if deleted is None:
         return None
     paths = [p for p in (deleted.get("front_image_path"), deleted.get("back_image_path")) if p]
+    paths += _split_extra_image_paths(deleted)
     if paths:
         try:
             storage.delete_images(paths)
@@ -572,6 +584,43 @@ async def replace_card_image(card_id: str, side: str = Form(...), file: UploadFi
     # hochgeladenen Kompression und kann nicht veraltet sein.
     result["replaced_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(compressed).decode("ascii")
     return JSONResponse(result)
+
+
+@app.post("/api/cards/{card_id}/images")
+async def add_card_extra_image(card_id: str, file: UploadFile = File(...)):
+    # Zusaetzliches Foto neben Vorder-/Rueckseite (z.B. Nahaufnahme eines
+    # Schadens) - anders als replace_card_image() ein neuer, eigener
+    # Storage-Pfad statt eines Upserts auf einen festen Pfad, da hier
+    # mehrere Fotos nebeneinander bestehen sollen.
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_extra_") as tmp_str:
+        tmp_path = Path(tmp_str) / f"extra{Path(file.filename or 'extra.jpg').suffix}"
+        tmp_path.write_bytes(await file.read())
+        try:
+            object_path = storage.upload_extra_image(card["batch_id"], card["position_in_batch"], tmp_path)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    updated = db.add_card_extra_image(card_id, object_path)
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.delete("/api/cards/{card_id}/images/{index}", status_code=204)
+async def delete_card_extra_image(card_id: str, index: int):
+    updated, removed_path = db.remove_card_extra_image(card_id, index)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Foto nicht gefunden.")
+    if removed_path:
+        try:
+            storage.delete_images([removed_path])
+        except Exception:
+            logger.exception("Bild-Löschung fehlgeschlagen für Karte %s, Pfad %s", card_id, removed_path)
+    return Response(status_code=204)
 
 
 @app.post("/api/purchases")
@@ -1132,11 +1181,13 @@ def _publish_listing(listing, scheduled_at=None):
         logger.info("Publish %s: %s -> ok", listing["id"], step)
 
         card = db.get_card(listing["card_id"]) or {}
-        image_urls = [
-            storage.public_url(path)
-            for path in (card.get("front_image_path"), card.get("back_image_path"))
-            if path
-        ]
+        # eBay akzeptiert maximal 12 imageUrls pro Angebot (siehe
+        # put_inventory_item's Kommentar) - Vorder-/Rueckseite zuerst,
+        # weitere Fotos (z.B. Detailaufnahmen) danach, ueberzaehlige werden
+        # stillschweigend abgeschnitten statt die Veroeffentlichung
+        # abzubrechen.
+        image_paths = [card.get("front_image_path"), card.get("back_image_path"), *_split_extra_image_paths(card)]
+        image_urls = [storage.public_url(path) for path in image_paths if path][:12]
 
         step = "put_inventory_item"
         logger.info("Publish %s: %s ...", listing["id"], step)

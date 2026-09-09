@@ -125,6 +125,45 @@ def delete_card(card_id):
     return card
 
 
+def _split_extra_image_paths(card):
+    return [p for p in (card.get("extra_image_paths") or "").split(",") if p]
+
+
+def add_card_extra_image(card_id, object_path):
+    """Appends one more photo beyond front/back (e.g. a close-up of a
+    defect) - same comma-separated freetext storage as cards.tags rather
+    than a dedicated table, see schema.sql."""
+    card = get_card(card_id)
+    if card is None:
+        return None
+    paths = _split_extra_image_paths(card) + [object_path]
+    response = (
+        get_client().table("cards").update({"extra_image_paths": ",".join(paths)})
+        .eq("id", card_id).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def remove_card_extra_image(card_id, index):
+    """Removes the extra photo at `index` (0-based, in upload order).
+    Returns (updated_card, removed_object_path) so the caller (see main.py)
+    can also delete the object from Storage; (None, None) if the card or
+    index doesn't exist."""
+    card = get_card(card_id)
+    if card is None:
+        return None, None
+    paths = _split_extra_image_paths(card)
+    if index < 0 or index >= len(paths):
+        return None, None
+    removed_path = paths.pop(index)
+    response = (
+        get_client().table("cards").update({"extra_image_paths": ",".join(paths)})
+        .eq("id", card_id).execute()
+    )
+    updated = response.data[0] if response.data else None
+    return updated, removed_path
+
+
 PURCHASE_FIELDS = ["purchase_date", "platform", "seller", "shipping", "total_price", "notes"]
 PURCHASE_NUMERIC_FIELDS = {"shipping", "total_price"}
 PURCHASE_MONEY_FIELDS = {"shipping", "total_price"}
