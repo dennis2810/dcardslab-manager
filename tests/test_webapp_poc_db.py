@@ -1263,6 +1263,36 @@ class GoogleSheetsSettingsTests(unittest.TestCase):
         self.assertNotIn("not_a_real_column", row)
 
 
+class AppStatusTests(unittest.TestCase):
+    def test_get_returns_none_when_no_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_app_status()
+        self.assertIsNone(result)
+
+    def test_get_returns_the_single_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_backup_at": "2026-09-09T10:00:00+00:00"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_app_status()
+        self.assertEqual(result["last_backup_at"], "2026-09-09T10:00:00+00:00")
+
+    def test_record_backup_downloaded_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_backup_at": "2026-09-09T10:00:00+00:00"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_backup_downloaded("2026-09-09T10:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_backup_at": "2026-09-09T10:00:00+00:00"})
+
+
 class DashboardGoalTests(unittest.TestCase):
     def test_get_returns_none_when_no_row_for_year(self):
         mock_client = MagicMock()

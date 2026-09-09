@@ -168,13 +168,44 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
 
 class DownloadBackupEndpointTests(unittest.TestCase):
     def test_returns_zip_with_attachment_headers(self):
-        with patch("main.backup.build_backup_zip", return_value=b"fake-zip-bytes"):
+        with patch("main.backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("main.db.record_backup_downloaded"):
             response = client.get("/api/backup")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         self.assertIn("attachment", response.headers["content-disposition"])
         self.assertIn(".zip", response.headers["content-disposition"])
         self.assertEqual(response.content, b"fake-zip-bytes")
+
+    def test_records_the_download_timestamp(self):
+        with patch("main.backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("main.db.record_backup_downloaded") as mock_record:
+            client.get("/api/backup")
+        mock_record.assert_called_once()
+        # ISO-Zeitstempel, kein leerer/None-Wert.
+        self.assertIsInstance(mock_record.call_args.args[0], str)
+        self.assertTrue(mock_record.call_args.args[0])
+
+    def test_recording_failure_does_not_break_the_download(self):
+        with patch("main.backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("main.db.record_backup_downloaded", side_effect=RuntimeError("db down")):
+            response = client.get("/api/backup")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"fake-zip-bytes")
+
+
+class AppStatusEndpointTests(unittest.TestCase):
+    def test_returns_last_backup_at(self):
+        with patch("main.db.get_app_status", return_value={"last_backup_at": "2026-09-09T10:00:00+00:00"}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["last_backup_at"], "2026-09-09T10:00:00+00:00")
+
+    def test_returns_none_when_never_backed_up(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["last_backup_at"])
 
 
 if __name__ == "__main__":

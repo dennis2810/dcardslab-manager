@@ -215,3 +215,11 @@ alter table purchases add column if not exists receipt_path text default '';
 -- Gewinn (siehe main.py's _compute_statistics()), Einstandspreis/Porto/
 -- eBay-Gebuehren bleiben als Verlust bestehen.
 alter table ebay_sales add column if not exists refunded boolean not null default false;
+
+-- Migration (2026-09-09): Singleton-Status fuers Dashboard - aktuell nur der
+-- Zeitpunkt des letzten Backup-Downloads (Google-Sheets-Sync hat das schon
+-- ueber google_sheets_settings.last_synced_at).
+create table if not exists app_status (
+    id              boolean primary key default true check (id),
+    last_backup_at  timestamptz
+);

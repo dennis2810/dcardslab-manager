@@ -577,6 +577,19 @@ def save_google_sheets_settings(fields):
     return response.data[0]
 
 
+def get_app_status():
+    response = get_client().table("app_status").select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def record_backup_downloaded(downloaded_at):
+    # Gleiches Singleton-Row-Muster wie save_google_sheets_settings().
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_backup_at": downloaded_at,
+    }).execute()
+    return response.data[0]
+
+
 DASHBOARD_GOAL_FIELDS = {"metric", "amount"}
 
 

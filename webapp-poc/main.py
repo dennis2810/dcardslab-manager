@@ -1538,11 +1538,24 @@ async def sync_to_sheets():
 @app.get("/api/backup")
 async def download_backup():
     data = backup.build_backup_zip()
-    filename = f"dcardslab-backup-{datetime.now(timezone.utc).date().isoformat()}.zip"
+    now = datetime.now(timezone.utc)
+    filename = f"dcardslab-backup-{now.date().isoformat()}.zip"
+    try:
+        db.record_backup_downloaded(now.isoformat())
+    except Exception:
+        # Der Zeitstempel dient nur der Dashboard-Anzeige - ein fehlgeschlagenes
+        # Speichern darf den eigentlichen Backup-Download nicht verhindern.
+        logger.exception("Backup-Zeitstempel konnte nicht gespeichert werden")
     return Response(
         content=data, media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/api/app-status")
+async def app_status():
+    status = db.get_app_status() or {}
+    return JSONResponse({"last_backup_at": status.get("last_backup_at")})
 
 
 static_dir = Path(__file__).parent / "static"
