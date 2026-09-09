@@ -54,10 +54,16 @@ if ("serviceWorker" in navigator) {
   .progress-bar-fill { background: var(--success-fg); height: 100%; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.checked { background: var(--success-bg); }
   tr:hover { background: var(--hover-bg); }
   tr.checked:hover { background: var(--success-bg); }
   .table-scroll { overflow-x: auto; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print, button { display: none !important; }
+  }
   .diff-box { border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
   .diff-missing { background: var(--warn-bg); color: var(--warn-fg); }
   .diff-unexpected { background: var(--danger-bg); color: var(--danger-fg); }
@@ -99,7 +105,7 @@ if ("serviceWorker" in navigator) {
     gedruckten SKU-Etiketten wie eine Tastatureingabe + Enter sendet) markiert sie als gefunden. Der Fortschritt
     bleibt lokal in diesem Browser gespeichert, auch nach einem Neuladen.</p>
 
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="scan-input" placeholder="SKU scannen/eintippen oder Titel suchen + Enter" autofocus>
     <label>Lagerort
       <select id="location-filter">
@@ -118,22 +124,28 @@ if ("serviceWorker" in navigator) {
       <thead>
         <tr>
           <th></th>
-          <th>SKU</th>
-          <th>Titel</th>
-          <th>Lagerort</th>
-          <th>Menge</th>
+          <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+          <th data-key="title">Titel <span class="sort-arrow"></span></th>
+          <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
+          <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
         </tr>
       </thead>
       <tbody id="items-body"></tbody>
     </table>
   </div>
   <p id="items-empty" class="empty-state"></p>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+  </div>
 
   <h2>Unerwartet gefunden</h2>
   <p class="note">Karten, die physisch auftauchen, aber nicht (oder mit falschem Lagerort/Status) im Inventar
     stehen – z. B. beim Aufräumen. Hier nur als Notiz für den Abschlussbericht, ändert nichts an den
     Inventar-Daten selbst.</p>
-  <div class="unexpected-form">
+  <div class="unexpected-form no-print">
     <input type="text" id="unexpected-input" placeholder="z. B. SKU oder Titel + kurze Notiz">
     <button type="button" id="unexpected-add-btn">Hinzufügen</button>
   </div>
@@ -208,6 +220,11 @@ const checkedIds = new Set(progress.checkedIds);
 let unexpected = progress.unexpected;
 let items = [];
 
+const PAGE_SIZE = 40;
+let currentPage = 0;
+let sortKey = "sku";
+let sortAsc = true;
+
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("items-table");
 const body = document.getElementById("items-body");
@@ -219,6 +236,7 @@ const openOnlyFilter = document.getElementById("open-only-filter");
 const unexpectedInput = document.getElementById("unexpected-input");
 const unexpectedList = document.getElementById("unexpected-list");
 const report = document.getElementById("report");
+const pageInfo = document.getElementById("page-info");
 
 function populateLocationFilter() {
   const locations = [...new Set(items.map((i) => (i.location || "").trim()).filter(Boolean))].sort();
@@ -238,6 +256,38 @@ function filteredItems() {
     if (locationFilter.value && (item.location || "").trim() !== locationFilter.value) return false;
     if (openOnlyFilter.checked && checkedIds.has(item.id)) return false;
     return true;
+  });
+}
+
+function sortValue(item, key) {
+  if (key === "title") return (item.card?.title || "").toLowerCase();
+  if (key === "quantity") return item.quantity ?? 0;
+  return (item[key] || "").toString().toLowerCase();
+}
+
+function sortedFilteredItems() {
+  const rows = filteredItems();
+  rows.sort((a, b) => {
+    const va = sortValue(a, sortKey);
+    const vb = sortValue(b, sortKey);
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    render();
   });
 }
 
@@ -320,12 +370,24 @@ function toggleChecked(itemId, checked) {
 }
 
 function render() {
-  const visible = filteredItems();
+  const allVisible = sortedFilteredItems();
+  const pageCount = Math.max(1, Math.ceil(allVisible.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const visible = allVisible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  pageInfo.textContent = allVisible.length ? `Seite ${currentPage + 1} von ${pageCount} (${allVisible.length} Karten)` : "";
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+
   body.innerHTML = "";
   if (!items.length) {
     table.style.display = "none";
     empty.textContent = "Keine vorrätigen Karten im Inventar.";
-  } else if (!visible.length) {
+  } else if (!allVisible.length) {
     table.style.display = "none";
     empty.textContent = "Nichts gefunden mit den aktuellen Filtern.";
   } else {
@@ -389,8 +451,18 @@ scanInput.addEventListener("keydown", (ev) => {
   }
 });
 
-locationFilter.addEventListener("change", render);
-openOnlyFilter.addEventListener("change", render);
+locationFilter.addEventListener("change", () => { currentPage = 0; render(); });
+openOnlyFilter.addEventListener("change", () => { currentPage = 0; render(); });
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 document.getElementById("reset-progress-btn").addEventListener("click", () => {
   if (!confirm("Fortschritt (abgehakte Karten und unerwartete Funde) wirklich zurücksetzen?")) return;
