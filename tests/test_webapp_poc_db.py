@@ -1519,6 +1519,19 @@ class ZeroInventoryForCardTests(unittest.TestCase):
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
 
 
+class RestoreInventoryForCardTests(unittest.TestCase):
+    def test_sets_quantity_to_one_for_all_rows_of_the_card(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "inv-1", "quantity": 1}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.restore_inventory_for_card("card-1")
+        self.assertEqual(result, [{"id": "inv-1", "quantity": 1}])
+        mock_client.table.return_value.update.assert_called_once_with({"quantity": 1})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+
 class CreatePriceResearchEntryTests(unittest.TestCase):
     def test_inserts_row_with_card_id_and_rounded_price(self):
         mock_client = MagicMock()
@@ -1673,14 +1686,14 @@ class UpdateManualSaleTests(unittest.TestCase):
 
 
 class DeleteManualSaleTests(unittest.TestCase):
-    def test_deletes_and_returns_entry(self):
+    def test_deletes_and_returns_entry_with_card_id(self):
         mock_client = MagicMock()
         response = MagicMock()
-        response.data = [{"id": "ms-1"}]
+        response.data = [{"id": "ms-1", "card_id": "card-1"}]
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.delete_manual_sale("ms-1")
-        self.assertEqual(result, {"id": "ms-1"})
+        self.assertEqual(result, {"id": "ms-1", "card_id": "card-1"})
         mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "ms-1")
 
     def test_returns_none_when_not_found(self):

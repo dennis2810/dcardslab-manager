@@ -554,15 +554,26 @@ class UpdateManualSaleEndpointTests(unittest.TestCase):
 
 
 class DeleteManualSaleEndpointTests(unittest.TestCase):
-    def test_deletes_manual_sale(self):
-        with patch("main.db.delete_manual_sale", return_value={"id": "ms-1"}):
+    def test_deletes_manual_sale_and_restores_inventory(self):
+        with patch("main.db.delete_manual_sale", return_value={"id": "ms-1", "card_id": "card-1"}), \
+             patch("main.db.restore_inventory_for_card") as mock_restore:
             response = client.delete("/api/manual-sales/ms-1")
         self.assertEqual(response.status_code, 204)
+        mock_restore.assert_called_once_with("card-1")
 
     def test_returns_404_when_not_found(self):
         with patch("main.db.delete_manual_sale", return_value=None):
             response = client.delete("/api/manual-sales/does-not-exist")
         self.assertEqual(response.status_code, 404)
+
+    def test_inventory_restoration_failure_does_not_break_the_delete(self):
+        # Gleiches Isolationsprinzip wie beim Anlegen (create_manual_sale) -
+        # der Verkauf ist schon geloescht, ein Supabase-Hiccup bei der
+        # Inventar-Wiederherstellung darf das nicht zu einem 500 machen.
+        with patch("main.db.delete_manual_sale", return_value={"id": "ms-1", "card_id": "card-1"}), \
+             patch("main.db.restore_inventory_for_card", side_effect=RuntimeError("inventory table down")):
+            response = client.delete("/api/manual-sales/ms-1")
+        self.assertEqual(response.status_code, 204)
 
 
 class GetCardPriceResearchFieldTests(unittest.TestCase):

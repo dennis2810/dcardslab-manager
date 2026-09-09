@@ -123,7 +123,11 @@ if ("serviceWorker" in navigator) {
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
     das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
-    Statistiken, Rankings und Jahresübersicht ein.</p>
+    Statistiken, Rankings und Jahresübersicht ein. Wird ein solcher Verkauf wieder gelöscht, wird der
+    Inventareintrag automatisch zurückgesetzt.</p>
+  <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
+    ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
+    zurückziehen.</p>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Sonstiges), Verkäufer,
@@ -132,18 +136,22 @@ if ("serviceWorker" in navigator) {
     überschreiben, bis zur nächsten Verknüpfungsänderung). Für die Steuer lässt sich außerdem ein Beleg (Foto oder
     PDF der Rechnung) hochladen.</p>
   <p>Die Käufe-Übersicht ist sortierbar, nach Zeitraum filterbar und lässt sich per Pfeil-Button aufklappen, um die
-    verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Die Plattform-Auswertung zeigt den
-    durchschnittlichen Gewinn/Marge je Einkaufsplattform.</p>
+    verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Die Plattform-Auswertung (Einkauf) zeigt den
+    durchschnittlichen Gewinn/Marge je Einkaufsplattform – also wo die Karte gekauft wurde, unabhängig davon, wie
+    sie später verkauft wurde.</p>
   <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
     alle ausgewählten Käufe auf einmal zu setzen, das Kaufdatum um eine bestimmte Anzahl Tage zu verschieben (z. B.
     nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen.</p>
 
   <h2 id="ebay">eBay</h2>
-  <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Fehler). Angebote lassen sich
-    einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte Angebote auf
-    einmal angepasst werden (z. B. „-10" für 10 % günstiger). Verkaufte Artikel werden automatisch im Hintergrund
-    synchronisiert. Ein Link führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle
-    gemeinsam mit Filtern/Suche auflistet.</p>
+  <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Beendet, Fehler). Angebote
+    lassen sich einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte
+    Angebote auf einmal angepasst werden (z. B. „-10" für 10 % günstiger). Veröffentlichte Angebote lassen sich
+    außerdem einzeln oder per Massenauswahl vorzeitig beenden – z. B. wenn eine Karte anderweitig verkauft wurde
+    und schnellstmöglich von eBay runter muss. Ein ⚠️-Hinweis in der Tabelle markiert Angebote, deren Karte bereits
+    anderweitig verkauft wurde. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link führt
+    direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit Filtern/Suche
+    auflistet.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
@@ -155,11 +163,13 @@ if ("serviceWorker" in navigator) {
 
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
-    Inventarwert), ein Monats-Diagramm für Umsatz/Gewinn, eine Jahresübersicht sowie Team-, Set- und
-    Plattform-Ranking. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite (Käufe,
-    Inventar, Karten, Alle Verkäufe). Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln – inklusive
-    Verkaufskanal (eBay oder der jeweilige manuelle Kanal) –, filter- und sortierbar, mit CSV-Export und einem für
-    DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
+    Inventarwert), ein Monats-Diagramm für Umsatz/Gewinn, eine Jahresübersicht sowie Plattform- (Einkauf),
+    Kanal- (Verkauf), Team- und Set-Ranking. Die Plattform-Auswertung zeigt, wo die Karten gekauft wurden; die
+    Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller Kanal) – beide mit
+    durchschnittlichem Gewinn/Marge. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
+    (Käufe, Inventar, Karten, Alle Verkäufe). Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln –
+    inklusive Verkaufskanal (eBay oder der jeweilige manuelle Kanal), nach dem sich auch filtern lässt –, filter-
+    und sortierbar, mit CSV-Export und einem für DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit

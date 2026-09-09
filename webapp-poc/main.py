@@ -787,6 +787,14 @@ async def delete_manual_sale(sale_id: str):
     deleted = db.delete_manual_sale(sale_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    try:
+        db.restore_inventory_for_card(deleted["card_id"])
+    except Exception:
+        # Gleiches Isolationsprinzip wie beim Anlegen (main.py's
+        # create_manual_sale) - der Verkauf ist schon geloescht, ein
+        # Supabase-Hiccup bei der Inventar-Wiederherstellung darf das
+        # nicht mehr zu einem 500 machen.
+        logger.exception("Inventar-Wiederherstellung fuer Karte %s fehlgeschlagen", deleted["card_id"])
     return Response(status_code=204)
 
 
@@ -930,6 +938,7 @@ def _compute_statistics():
         "team_ranking": _rank_statistics_by(enriched, "team"),
         "set_ranking": _rank_statistics_by(enriched, "set_name"),
         "platform_ranking": _rank_platforms(enriched),
+        "channel_ranking": _rank_channels(enriched),
     }
 
 
@@ -957,17 +966,18 @@ def _rank_statistics_by(enriched_rows, field):
     return ranked
 
 
-def _rank_platforms(enriched_rows):
-    # Plattform-Auswertung auf purchases.html: zeigt (anders als das Team-/
-    # Set-Ranking oben) bewusst Durchschnittswerte statt Summen, weil die
-    # Frage hier "lohnt sich Plattform X im Schnitt mehr als Y" ist, nicht
-    # "wo kam am meisten Gewinn her" - eine Plattform mit nur 2 Käufen soll
-    # nicht allein durch mehr Volumen vor einer mit 20 Käufen liegen.
+def _rank_by_avg(enriched_rows, field):
+    # Gemeinsame Gruppierungslogik fuer Plattform- (Einkauf) und Kanal-
+    # Auswertung (Verkauf): zeigt (anders als das Team-/Set-Ranking oben)
+    # bewusst Durchschnittswerte statt Summen, weil die Frage hier "lohnt
+    # sich X im Schnitt mehr als Y" ist, nicht "wo kam am meisten Gewinn
+    # her" - eine Gruppe mit nur 2 Karten soll nicht allein durch mehr
+    # Volumen vor einer mit 20 Karten liegen.
     groups = {}
     for row in enriched_rows:
         if row["profit"] is None:
             continue
-        key = (row.get("platform") or "").strip()
+        key = (row.get(field) or "").strip()
         if not key:
             continue
         group = groups.setdefault(key, {"name": key, "count": 0, "profit_sum": 0.0, "margin_sum": 0.0, "margin_count": 0})
@@ -988,6 +998,21 @@ def _rank_platforms(enriched_rows):
         })
     ranked.sort(key=lambda g: g["avg_profit"], reverse=True)
     return ranked
+
+
+def _rank_platforms(enriched_rows):
+    # Einkaufsplattform (wo die Karte gekauft wurde) - nicht zu verwechseln
+    # mit dem Verkaufskanal (siehe _rank_channels): eine ueber eBay
+    # gekaufte, aber manuell weiterverkaufte Karte zaehlt hier bewusst
+    # weiter unter "eBay", weil die Frage "lohnt sich Einkauf ueber
+    # Plattform X" ist.
+    return _rank_by_avg(enriched_rows, "platform")
+
+
+def _rank_channels(enriched_rows):
+    # Verkaufskanal (eBay oder manueller Kanal wie Kleinanzeigen/Vinted) -
+    # Gegenstueck zu _rank_platforms() auf der Verkaufsseite.
+    return _rank_by_avg(enriched_rows, "channel")
 
 
 @app.get("/api/statistics")
@@ -1029,6 +1054,10 @@ def _expand_ebay_listings(listings):
     # query, same guard style as the card_ids/listing_ids checks above.
     sold_ids = [l["id"] for l in listings if l.get("status") == "Verkauft"]
     sales_by_listing = db.sales_by_listing_id(sold_ids) if sold_ids else {}
+    # Verkauf ausserhalb von eBay, waehrend das Angebot hier noch lebt/
+    # geplant ist - ebay.html zeigt dafuer einen Hinweis an (siehe
+    # renderListingRow()), damit das Angebot zeitnah beendet werden kann.
+    manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     expanded = []
     for listing in listings:
         listing = dict(listing)
@@ -1044,6 +1073,7 @@ def _expand_ebay_listings(listings):
         sale = sales_by_listing.get(listing["id"])
         listing["sale_date"] = sale.get("sale_date") if sale else None
         listing["sale_price"] = sale.get("gross_price") if sale else None
+        listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
         expanded.append(listing)
     return expanded
 
@@ -1259,6 +1289,31 @@ async def unschedule_ebay_listing(listing_id: str):
     updated = db.update_ebay_listing(listing_id, {
         "status": "Entwurf", "scheduled_at": None, "scheduling_mode": "",
     })
+    return JSONResponse(_listing_with_card(updated))
+
+
+@app.post("/api/ebay/listings/{listing_id}/end")
+async def end_ebay_listing(listing_id: str):
+    # Beendet ein LIVE-Angebot vorzeitig - z.B. wenn die Karte anderweitig
+    # (Kleinanzeigen, Vinted, ...) verkauft wurde und schnellstmoeglich von
+    # eBay runter muss. Nutzt denselben withdraw_offer()-Call wie das
+    # Stornieren eines geplanten Angebots (unschedule_ebay_listing) - der
+    # raeumt ein Offer bei eBay unabhaengig davon ab, ob es schon live oder
+    # erst geplant ist.
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if listing["status"] != "Veroeffentlicht":
+        raise HTTPException(status_code=409, detail="Nur veröffentlichte Angebote können beendet werden.")
+    if listing.get("ebay_offer_id"):
+        try:
+            token = ebay_client.get_access_token()
+            ebay_client.withdraw_offer(token, listing["ebay_offer_id"])
+        except ebay_client.EbayNotAuthorizedError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except ebay_client.EbayApiError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    updated = db.update_ebay_listing(listing_id, {"status": "Beendet"})
     return JSONResponse(_listing_with_card(updated))
 
 
