@@ -904,6 +904,30 @@ class EbayStatusByCardIdTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class ManualSaleInfoByCardIdTests(unittest.TestCase):
+    def test_returns_channel_keyed_by_card_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"card_id": "card-1", "channel": "Kleinanzeigen"},
+            {"card_id": "card-2", "channel": ""},
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.manual_sale_info_by_card_id(["card-1", "card-2", "card-3"])
+        self.assertEqual(result, {
+            "card-1": {"channel": "Kleinanzeigen"},
+            "card-2": {"channel": ""},
+        })
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.manual_sale_info_by_card_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+
 class PurchaseCostByCardIdTests(unittest.TestCase):
     def test_returns_allocated_cost_keyed_by_card_id(self):
         mock_client = MagicMock()

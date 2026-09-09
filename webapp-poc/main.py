@@ -343,6 +343,7 @@ def _expand_inventory_items(items):
     card_ids = [item["card_id"] for item in items]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
     ebay_info = db.ebay_info_by_card_id(card_ids)
+    manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     purchase_costs = db.purchase_cost_by_card_id(card_ids)
     expanded = []
     for item in items:
@@ -359,6 +360,7 @@ def _expand_inventory_items(items):
         info = ebay_info.get(item["card_id"]) or {}
         item["sku"] = info.get("sku")
         item["ebay_status"] = info.get("status")
+        item["manual_sale_channel"] = (manual_sale_info.get(item["card_id"]) or {}).get("channel") or None
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -418,11 +420,13 @@ async def list_cards(q: str | None = None, status: str | None = None):
     card_ids = [c["id"] for c in cards]
     linked_ids = db.cards_with_purchase(card_ids)
     ebay_info = db.ebay_info_by_card_id(card_ids)
+    manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
         info = ebay_info.get(c["id"]) or {}
         c["ebay_status"] = info.get("status")
         c["ebay_sku"] = info.get("sku")
+        c["manual_sale_channel"] = (manual_sale_info.get(c["id"]) or {}).get("channel") or None
     return JSONResponse({"cards": cards})
 
 

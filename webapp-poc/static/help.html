@@ -106,7 +106,8 @@ if ("serviceWorker" in navigator) {
     <li>Zu einem bestehenden Kauf hinzufügen</li>
   </ul>
   <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe) lassen sich per „Rückgängig" zurücknehmen.
-    CSV-Export und Drucken stehen ebenfalls zur Verfügung.</p>
+    CSV-Export und Drucken stehen ebenfalls zur Verfügung. Die Spalte „Verkauf" zeigt sowohl den eBay-Status als
+    auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B. „Verkauft: Kleinanzeigen").</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
@@ -119,6 +120,10 @@ if ("serviceWorker" in navigator) {
     automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Schickt ein Käufer die Karte zurück,
     markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
     erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.</p>
+  <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
+    außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
+    das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
+    Statistiken, Rankings und Jahresübersicht ein.</p>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Sonstiges), Verkäufer,
@@ -129,37 +134,53 @@ if ("serviceWorker" in navigator) {
   <p>Die Käufe-Übersicht ist sortierbar, nach Zeitraum filterbar und lässt sich per Pfeil-Button aufklappen, um die
     verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Die Plattform-Auswertung zeigt den
     durchschnittlichen Gewinn/Marge je Einkaufsplattform.</p>
+  <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
+    alle ausgewählten Käufe auf einmal zu setzen, das Kaufdatum um eine bestimmte Anzahl Tage zu verschieben (z. B.
+    nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen.</p>
 
   <h2 id="ebay">eBay</h2>
   <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Fehler). Angebote lassen sich
     einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte Angebote auf
     einmal angepasst werden (z. B. „-10" für 10 % günstiger). Verkaufte Artikel werden automatisch im Hintergrund
-    synchronisiert.</p>
+    synchronisiert. Ein Link führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle
+    gemeinsam mit Filtern/Suche auflistet.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
     Lagerort. Die Lagerort-Übersicht gruppiert den Bestand nach Lagerort (Anzahl Karten und Wert). Bestandswarnungen
-    machen auf Karten ohne Lagerort oder mit Menge 0 aufmerksam, die noch nicht als „Verkauft" markiert sind.</p>
+    machen auf Karten ohne Lagerort oder mit Menge 0 aufmerksam, die weder über eBay noch über einen manuellen
+    Verkauf als „Verkauft" erfasst sind.</p>
+  <p>Mehrere Einträge lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, Lagerort, Menge
+    oder Zustand für alle ausgewählten Einträge auf einmal zu setzen oder mehrere Einträge auf einmal zu löschen.</p>
 
   <h2 id="statistiken">Statistiken</h2>
-  <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer), ein Monats-Diagramm für
-    Umsatz/Gewinn, eine Jahresübersicht sowie Team-, Set- und Plattform-Ranking. Die zweite Seite („Alle Verkäufe")
-    listet jeden Verkauf einzeln, filter- und sortierbar, inklusive CSV-Export und einem für DATEV/Lexoffice
-    aufbereiteten Buchhaltungsexport.</p>
+  <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
+    Inventarwert), ein Monats-Diagramm für Umsatz/Gewinn, eine Jahresübersicht sowie Team-, Set- und
+    Plattform-Ranking. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite (Käufe,
+    Inventar, Karten, Alle Verkäufe). Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln – inklusive
+    Verkaufskanal (eBay oder der jeweilige manuelle Kanal) –, filter- und sortierbar, mit CSV-Export und einem für
+    DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
-    Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer.</p>
+    Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer. Ein
+    QR-Code verlinkt direkt zum Dashboard, um das Tool schnell auf dem Handy zu öffnen. Zeitpunkt der letzten
+    Google-Sheets-Synchronisierung und des letzten Backups werden oben angezeigt. Der Schalter „Design" (System/
+    Hell/Dunkel) legt das Farbschema fest – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport) und ein
-    vollständiges Backup (ZIP mit allen Daten als JSON sowie allen Kartenbildern) herunterladen.</p>
+    vollständiges Backup (ZIP mit allen Daten als JSON sowie allen Kartenbildern) herunterladen; der Zeitpunkt des
+    letzten Downloads wird angezeigt. Von hier aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>
     <li>Die Taste <code>/</code> springt auf den meisten Listenseiten direkt in das Suchfeld.</li>
-    <li>Dark Mode folgt automatisch der Betriebssystem-/Browser-Einstellung, es gibt keinen manuellen Umschalter.</li>
+    <li>Das Farbschema folgt standardmäßig der Betriebssystem-/Browser-Einstellung, lässt sich aber über den
+      Schalter „Design" im Dashboard-Header manuell auf Hell oder Dunkel festlegen (gilt dann für das ganze Tool).</li>
     <li>Auf fast jeder Listenseite gibt es 🖨 Drucken und ⭳ CSV-Export.</li>
+    <li>Das Tool lässt sich als App auf dem Homescreen installieren (PWA) – im Browser-Menü nach „Zum
+      Startbildschirm hinzufügen" bzw. „App installieren" suchen.</li>
   </ul>
 
 <script>
