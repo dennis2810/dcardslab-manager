@@ -1196,6 +1196,65 @@ class ListNativeScheduledListingsTests(unittest.TestCase):
         self.assertEqual(result, [{"id": "l1", "scheduling_mode": "native"}])
 
 
+class ListListingsDueForPriceResearchTests(unittest.TestCase):
+    def test_never_checked_listing_comes_before_long_checked_one(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "last_price_research_at": "2020-01-01T00:00:00+00:00"},
+            {"id": "l2", "status": "Veroeffentlicht", "last_price_research_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_price_research()
+        self.assertEqual([r["id"] for r in result], ["l2", "l1"])
+
+    def test_filters_out_recently_checked_listing(self):
+        from datetime import datetime, timezone
+
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "last_price_research_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "l2", "status": "Veroeffentlicht", "last_price_research_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_price_research()
+        self.assertEqual([r["id"] for r in result], ["l2"])
+
+    def test_respects_limit(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": f"l{i}", "status": "Veroeffentlicht", "last_price_research_at": None} for i in range(5)
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_price_research(limit=2)
+        self.assertEqual(len(result), 2)
+
+    def test_queries_only_published_listings(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_listings_due_for_price_research()
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("status", "Veroeffentlicht")
+
+
+class MarkPriceResearchCheckedTests(unittest.TestCase):
+    def test_writes_timestamp_for_listing(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.mark_price_research_checked("listing-1", "2026-09-10T12:00:00+00:00")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"last_price_research_at": "2026-09-10T12:00:00+00:00"}
+        )
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "listing-1")
+
+
 class LatestSaleSyncCursorTests(unittest.TestCase):
     def test_returns_none_when_no_sales_yet(self):
         mock_client = MagicMock()
@@ -1610,6 +1669,112 @@ class RestoreInventoryForCardTests(unittest.TestCase):
         self.assertEqual(result, [{"id": "inv-1", "quantity": 1}])
         mock_client.table.return_value.update.assert_called_once_with({"quantity": 1})
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+
+class ListWishlistItemsTests(unittest.TestCase):
+    def test_returns_all_items_ordered_by_created_at_desc(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "title": "Karte A"}]
+        mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items()
+        self.assertEqual(result, [{"id": "w1", "title": "Karte A"}])
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with(
+            "created_at", desc=True
+        )
+
+    def test_applies_search_filter_when_q_given(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.or_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_wishlist_items(q="Bayern")
+        mock_client.table.return_value.select.return_value.or_.assert_called_once()
+
+
+class CreateWishlistItemTests(unittest.TestCase):
+    def test_inserts_row_with_rounded_target_price(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "wishlist_items", [{"id": "w1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_wishlist_item({
+                "title": "Karte A", "team": "FC Beispiel", "set_name": "Set 2026",
+                "target_price": "9.999", "notes": "beim naechsten Angebot kaufen",
+            })
+        self.assertEqual(result["id"], "w1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["title"], "Karte A")
+        self.assertEqual(row["target_price"], 10.0)
+        self.assertEqual(row["notes"], "beim naechsten Angebot kaufen")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "wishlist_items", [{"id": "w1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_wishlist_item({"title": "Karte A", "not_a_column": "x"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+    def test_blank_target_price_becomes_none(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "wishlist_items", [{"id": "w1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_wishlist_item({"title": "Karte A", "target_price": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["target_price"])
+
+
+class UpdateWishlistItemTests(unittest.TestCase):
+    def test_updates_rounded_target_price(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "target_price": 8.5}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_wishlist_item("w1", {"target_price": "8.499"})
+        self.assertEqual(result["target_price"], 8.5)
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_wishlist_item("w1", {"not_a_column": "x"})
+        self.assertEqual(result, {"id": "w1"})
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_wishlist_item("does-not-exist", {"title": "x"})
+        self.assertIsNone(result)
+
+
+class DeleteWishlistItemTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_wishlist_item("w1")
+        self.assertEqual(result, {"id": "w1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "w1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_wishlist_item("does-not-exist")
+        self.assertIsNone(result)
 
 
 class CreatePriceResearchEntryTests(unittest.TestCase):

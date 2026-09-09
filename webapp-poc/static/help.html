@@ -54,6 +54,8 @@ if ("serviceWorker" in navigator) {
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
       </select>
@@ -71,6 +73,8 @@ if ("serviceWorker" in navigator) {
       <li><a href="#kaeufe">Käufe</a></li>
       <li><a href="#ebay">eBay</a></li>
       <li><a href="#inventar">Inventar</a></li>
+      <li><a href="#inventur">Inventur</a></li>
+      <li><a href="#wunschliste">Wunschliste</a></li>
       <li><a href="#statistiken">Statistiken</a></li>
       <li><a href="#dashboard">Dashboard</a></li>
       <li><a href="#einstellungen">Einstellungen</a></li>
@@ -122,7 +126,9 @@ if ("serviceWorker" in navigator) {
     sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
     automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Schickt ein Käufer die Karte zurück,
     markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
-    erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.</p>
+    erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.
+    Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
+    Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich.</p>
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
     das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
@@ -164,6 +170,20 @@ if ("serviceWorker" in navigator) {
     Verkauf als „Verkauft" erfasst sind.</p>
   <p>Mehrere Einträge lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, Lagerort, Menge
     oder Zustand für alle ausgewählten Einträge auf einmal zu setzen oder mehrere Einträge auf einmal zu löschen.</p>
+
+  <h2 id="inventur">Inventur</h2>
+  <p>Soll/Ist-Abgleich für den physischen Bestand: die Seite zeigt alle vorrätigen Karten als Checkliste (nach
+    Lagerort filterbar) – abhaken per Klick oder durch Eintippen/Scannen der SKU im Feld oben (funktioniert mit
+    jedem USB-/Bluetooth-Barcodescanner, der wie eine Tastatur Text + Enter sendet, z. B. beim Scannen der über
+    „Etiketten drucken" erzeugten SKU-Etiketten). Der Fortschritt bleibt lokal im Browser gespeichert, auch nach
+    einem Neuladen – „Fortschritt zurücksetzen" beginnt eine neue Inventur. Unter „Unerwartet gefunden" lassen sich
+    Karten notieren, die auftauchen, aber nicht im Inventar stehen. Der Abschlussbericht zeigt am Ende, was fehlt
+    und was unerwartet war.</p>
+
+  <h2 id="wunschliste">Wunschliste</h2>
+  <p>Für Karten, die (noch) nicht im Besitz sind: Titel, Team, Set, Wunschpreis und eine Notiz erfassen. Bewusst
+    getrennt von der Kartenübersicht/dem Inventar – ein Wunschlisten-Eintrag zählt nirgends als vorhandene Karte
+    mit und beeinflusst keine Statistik. Einträge lassen sich durchsuchen, bearbeiten und löschen.</p>
 
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller

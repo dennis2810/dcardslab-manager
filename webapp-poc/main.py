@@ -38,7 +38,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import Body, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -788,6 +788,33 @@ async def delete_inventory_item(item_id: str):
     deleted = db.delete_inventory_item(item_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Inventareintrag {item_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
+@app.get("/api/wishlist")
+async def list_wishlist_items(q: str | None = None):
+    return JSONResponse({"items": db.list_wishlist_items(q=q)})
+
+
+@app.post("/api/wishlist")
+async def create_wishlist_item(fields: dict = Body(default={})):
+    created = db.create_wishlist_item(fields)
+    return JSONResponse(created)
+
+
+@app.patch("/api/wishlist/{item_id}")
+async def update_wishlist_item(item_id: str, fields: dict = Body(...)):
+    updated = db.update_wishlist_item(item_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Wunschlisten-Eintrag {item_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
+@app.delete("/api/wishlist/{item_id}", status_code=204)
+async def delete_wishlist_item(item_id: str):
+    deleted = db.delete_wishlist_item(item_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Wunschlisten-Eintrag {item_id} nicht gefunden.")
     return Response(status_code=204)
 
 
@@ -1699,6 +1726,23 @@ async def download_backup():
 async def app_status():
     status = db.get_app_status() or {}
     return JSONResponse({"last_backup_at": status.get("last_backup_at")})
+
+
+@app.middleware("http")
+async def _no_cache_for_html(request: Request, call_next):
+    # StaticFiles sendet standardmaessig keinen expliziten Cache-Control-
+    # Header - Browser wenden dann eine heuristische Cache-Lebensdauer an
+    # (RFC 7234), wodurch z.B. help.html/release-notes.html nach einem
+    # Deploy manchmal noch veraltet erscheinen, bis der Cache von selbst
+    # ablaeuft. "no-cache" (nicht "no-store") erzwingt eine Revalidierung
+    # bei jedem Laden - StaticFiles' ETag/Last-Modified-Unterstuetzung
+    # liefert dann weiterhin ein schnelles 304, wenn sich nichts geaendert
+    # hat, aber nie mehr eine blind gecachte alte Version ohne Nachfrage.
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 static_dir = Path(__file__).parent / "static"

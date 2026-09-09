@@ -116,5 +116,109 @@ class RunOnceNativeModeTests(unittest.TestCase):
         mock_update.assert_called_once_with("l2", {"status": "Veroeffentlicht"})
 
 
+class RunPriceResearchOnceTests(unittest.TestCase):
+    def test_does_nothing_when_nothing_due(self):
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=[]), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token") as mock_token:
+            ebay_scheduler.run_price_research_once()
+        mock_token.assert_not_called()
+
+    def test_survives_due_listings_fetch_failure(self):
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", side_effect=RuntimeError("db down")), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token") as mock_token:
+            ebay_scheduler.run_price_research_once()  # must not raise
+        mock_token.assert_not_called()
+
+    def test_skips_the_round_when_token_fetch_fails(self):
+        due = [{"id": "l1", "card_id": "card-1", "title": "Karte 1"}]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", side_effect=RuntimeError("down")), \
+             patch("ebay_scheduler.ebay_client.search_active_listings") as mock_search, \
+             patch("ebay_scheduler.db.mark_price_research_checked") as mock_mark:
+            ebay_scheduler.run_price_research_once()  # must not raise
+        mock_search.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_fetches_token_once_for_the_whole_batch(self):
+        due = [
+            {"id": "l1", "card_id": "card-1", "title": "Karte 1"},
+            {"id": "l2", "card_id": "card-2", "title": "Karte 2"},
+        ]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok") as mock_token, \
+             patch("ebay_scheduler.db.get_card", return_value={"title": "Karte"}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings", return_value=[]), \
+             patch("ebay_scheduler.db.mark_price_research_checked"):
+            ebay_scheduler.run_price_research_once()
+        mock_token.assert_called_once()
+
+    def test_inserts_average_price_entry_and_marks_checked(self):
+        due = [{"id": "l1", "card_id": "card-1", "title": "Karte 1"}]
+        results = [{"price": 10.0}, {"price": 20.0}, {"price": None}]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.db.get_card", return_value={"title": "Karte 1"}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings", return_value=results) as mock_search, \
+             patch("ebay_scheduler.db.create_price_research_entry") as mock_create, \
+             patch("ebay_scheduler.db.mark_price_research_checked") as mock_mark:
+            ebay_scheduler.run_price_research_once()
+        mock_search.assert_called_once_with("tok", "Karte 1")
+        args, _ = mock_create.call_args
+        self.assertEqual(args[0], "card-1")
+        self.assertEqual(args[1]["price"], 15.0)
+        self.assertIn("2 aktiven eBay-Angeboten", args[1]["note"])
+        mock_mark.assert_called_once()
+        self.assertEqual(mock_mark.call_args.args[0], "l1")
+
+    def test_falls_back_to_card_title_when_listing_has_none(self):
+        due = [{"id": "l1", "card_id": "card-1", "title": ""}]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.db.get_card", return_value={"title": "Karten-Titel"}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings", return_value=[]) as mock_search, \
+             patch("ebay_scheduler.db.create_price_research_entry"), \
+             patch("ebay_scheduler.db.mark_price_research_checked"):
+            ebay_scheduler.run_price_research_once()
+        mock_search.assert_called_once_with("tok", "Karten-Titel")
+
+    def test_marks_checked_even_when_no_results_found(self):
+        due = [{"id": "l1", "card_id": "card-1", "title": "Karte 1"}]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.db.get_card", return_value={"title": "Karte 1"}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings", return_value=[]), \
+             patch("ebay_scheduler.db.create_price_research_entry") as mock_create, \
+             patch("ebay_scheduler.db.mark_price_research_checked") as mock_mark:
+            ebay_scheduler.run_price_research_once()
+        mock_create.assert_not_called()
+        mock_mark.assert_called_once()
+
+    def test_a_failing_listing_does_not_abort_the_batch_and_is_still_marked_checked(self):
+        due = [
+            {"id": "l1", "card_id": "card-1", "title": "Karte 1"},
+            {"id": "l2", "card_id": "card-2", "title": "Karte 2"},
+        ]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.db.get_card", return_value={"title": "x"}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings",
+                   side_effect=[RuntimeError("eBay down"), []]), \
+             patch("ebay_scheduler.db.create_price_research_entry"), \
+             patch("ebay_scheduler.db.mark_price_research_checked") as mock_mark:
+            ebay_scheduler.run_price_research_once()  # must not raise
+        self.assertEqual(mock_mark.call_count, 2)
+
+    def test_skips_listing_with_no_query_but_still_marks_checked(self):
+        due = [{"id": "l1", "card_id": "card-1", "title": ""}]
+        with patch("ebay_scheduler.db.list_listings_due_for_price_research", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.db.get_card", return_value={"title": ""}), \
+             patch("ebay_scheduler.ebay_client.search_active_listings") as mock_search, \
+             patch("ebay_scheduler.db.mark_price_research_checked") as mock_mark:
+            ebay_scheduler.run_price_research_once()
+        mock_search.assert_not_called()
+        mock_mark.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

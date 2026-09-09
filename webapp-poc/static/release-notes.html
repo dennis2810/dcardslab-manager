@@ -52,6 +52,8 @@ if ("serviceWorker" in navigator) {
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
       </select>
@@ -72,6 +74,8 @@ if ("serviceWorker" in navigator) {
     <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
     <li>Farbschema (System/Hell/Dunkel) über einen Schalter im Dashboard manuell festlegbar, statt nur der
       Betriebssystem-/Browser-Einstellung zu folgen.</li>
+    <li>Seiten laden nach einem Update jetzt zuverlässig die aktuelle Version, statt teils eine im Browser
+      zwischengespeicherte ältere Fassung anzuzeigen (betraf u. a. diese Release-Notes und die Anleitung).</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
@@ -93,6 +97,8 @@ if ("serviceWorker" in navigator) {
     <li>Beliebig viele weitere Fotos zusätzlich zu Vorder-/Rückseite hinzufügen (z. B. Detailaufnahmen bei
       Beschädigungen) – werden beim eBay-Veröffentlichen automatisch mit übertragen.</li>
     <li>Druckbutton auf der Kartendetailseite, um alle Infos zu einer Karte zu drucken.</li>
+    <li>„+ Neue Karte anlegen" sitzt jetzt oben rechts neben dem Logo, statt in der Filterzeile bei schmalem
+      Fenster in eine eigene Zeile umzubrechen.</li>
     <li>Massenaktion, um mehrere ausgewählte Karten auf einmal einem Kauf zuzuordnen.</li>
     <li>Tag-Filter, Schnellsuche-Kürzel (<code>/</code>), Abbrechen-Buttons bei neuen Formularen.</li>
     <li>Freie, kommagetrennte Tags/Kategorien pro Karte.</li>
@@ -115,6 +121,8 @@ if ("serviceWorker" in navigator) {
     <li>eBay-Gebühren fließen in den Gewinn ein.</li>
     <li>Massenauswahl und Bulk-Preisänderung (prozentual) für eBay-Angebote.</li>
     <li>Preisrecherche-Verlauf pro Karte mit automatischem Preis-Alarm bei 20&nbsp;% Abweichung.</li>
+    <li>Preisrecherche läuft jetzt zusätzlich automatisch im Hintergrund für veröffentlichte Angebote
+      (ca. einmal pro Woche je Angebot) – manuelles Suchen bleibt weiterhin möglich.</li>
     <li>Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) lassen sich jetzt pro Karte erfassen
       (Kanal, Datum, Preis, Versand, Gebühren) und zählen genau wie ein eBay-Verkauf in Statistiken, Rankings
       und Jahresübersicht.</li>
@@ -141,6 +149,19 @@ if ("serviceWorker" in navigator) {
       auf einmal löschen.</li>
   </ul>
 
+  <h2>Inventur <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite für den Soll/Ist-Abgleich: vorrätige Karten als Checkliste, abhakbar per Klick oder durch
+      Scannen der SKU (funktioniert mit jedem tastatur-emulierenden Barcodescanner). Fortschritt bleibt lokal
+      im Browser gespeichert; Abschlussbericht zeigt fehlende und unerwartet gefundene Karten.</li>
+  </ul>
+
+  <h2>Wunschliste <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite für Karten, die (noch) nicht im Besitz sind – Titel, Team, Set, Wunschpreis und Notiz. Bewusst
+      getrennt von der Kartenübersicht, damit Bestand und Auswertungen unberührt bleiben.</li>
+  </ul>
+
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>
   <ul>
     <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Plattform-/Kanal-/Team-/Set-Ranking)
@@ -153,6 +174,8 @@ if ("serviceWorker" in navigator) {
     <li>Neue Kanal-Auswertung (Ø Gewinn/Marge je Verkaufskanal) auf der Übersichtsseite, direkt neben der
       Plattform-Auswertung (jetzt klarer als "(Einkauf)" gekennzeichnet, da sie die Einkaufs- und nicht die
       Verkaufsseite abbildet).</li>
+    <li>Die vier Auswertungstabellen (Plattform, Kanal, Team, Set) haben jetzt einheitliche Spaltenbreiten, damit
+      z. B. die Verkäufe-Spalte in jeder Tabelle an derselben Stelle steht.</li>
     <li>Datumsfilter nach Kauf- oder Verkaufsdatum.</li>
     <li>Für DATEV/Lexoffice aufbereiteter Buchhaltungsexport sowie CSV-Export.</li>
     <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>

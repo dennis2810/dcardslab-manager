@@ -251,3 +251,27 @@ create index if not exists manual_sales_card_id_idx on manual_sales(card_id);
 -- cards.tags statt einer eigenen Tabelle, da die Reihenfolge/Anzahl klein
 -- und ohne eigene Metadaten bleibt.
 alter table cards add column if not exists extra_image_paths text not null default '';
+
+-- Migration (2026-09-10): automatische Preisrecherche im Hintergrund-
+-- Scheduler (ebay_scheduler.py) - merkt sich, wann ein veroeffentlichtes
+-- Angebot zuletzt automatisch geprueft wurde, damit jedes Angebot nur
+-- ca. einmal pro Woche erneut gesucht wird (eBays Application-Token hat
+-- ein taegliches Anfragelimit fuer die Buy/Browse-Suche).
+alter table ebay_listings add column if not exists last_price_research_at timestamptz;
+
+-- Migration (2026-09-10): Wunschliste/Beobachtungsliste fuer Karten, die
+-- (noch) nicht im Besitz sind - bewusst eine eigene, von cards komplett
+-- getrennte Tabelle statt eines "noch nicht gekauft"-Flags an cards, damit
+-- bestehende Auswertungen/Filter fuer tatsaechlich vorhandene Karten nicht
+-- durch Wunschlisten-Eintraege verfaelscht werden.
+create table if not exists wishlist_items (
+    id            uuid primary key default gen_random_uuid(),
+    title         text not null default '',
+    team          text default '',
+    set_name      text default '',
+    target_price  numeric,
+    notes         text default '',
+    created_at    timestamptz not null default now()
+);
+
+create index if not exists wishlist_items_created_at_idx on wishlist_items(created_at);
