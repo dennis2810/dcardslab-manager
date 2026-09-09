@@ -3,7 +3,33 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – eBay-Angebote</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7; --placeholder-bg: #f0f0f0;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --danger-bg: #fdecea; --danger-fg: #611a15;
+    --info-fg: #0b3d91; --warn-fg: #7a5c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --hover-bg: #2a2a2a; --placeholder-bg: #2a2a2a;
+      --accent-bg: #1d2733; --accent-border: #3a4a5a;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82;
+      --info-fg: #8ab4f8; --warn-fg: #ffd866;
+    }
+  }
   body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -11,33 +37,42 @@
   .page-nav { margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
-  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }
   }
   #oauth-banner { padding: 0.6rem 0.9rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
-  #oauth-banner.ok { background: #e6f4ea; color: #1e4620; }
-  #oauth-banner.warn { background: #fdecea; color: #611a15; }
+  #oauth-banner.ok { background: var(--success-bg); color: var(--success-fg); }
+  #oauth-banner.warn { background: var(--danger-bg); color: var(--danger-fg); }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   [hidden] { display: none !important; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
-  td.thumb img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  td.thumb img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   tr.row-link { cursor: pointer; }
-  tr.row-link:hover { background: #f7f7f7; }
+  tr.row-link:hover { background: var(--hover-bg); }
   .status-Entwurf { color: #555; }
-  .status-Geplant { color: #7a5c00; font-weight: 600; }
-  .status-Veroeffentlicht { color: #1e4620; font-weight: 600; }
-  .status-Verkauft { color: #0b3d91; font-weight: 600; }
+  .status-Geplant { color: var(--warn-fg); font-weight: 600; }
+  .status-Veroeffentlicht { color: var(--success-fg); font-weight: 600; }
+  .status-Verkauft { color: var(--info-fg); font-weight: 600; }
   .status-Fehler { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+  .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -93,23 +128,25 @@
 
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
-  <table id="listings-table" style="display: none;">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-        <th></th>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Titel <span class="sort-arrow"></span></th>
-        <th data-key="price">Preis <span class="sort-arrow"></span></th>
-        <th data-key="status">Status <span class="sort-arrow"></span></th>
-        <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
-        <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
-        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-        <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="listings-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="listings-table" style="display: none;">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th></th>
+            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="price">Preis <span class="sort-arrow"></span></th>
+            <th data-key="status">Status <span class="sort-arrow"></span></th>
+            <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
+            <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
+            <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+            <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="listings-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
@@ -132,6 +169,23 @@
     if (nav.value) location.href = nav.value;
   });
 })();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
 
 const PAGE_SIZE = 40;
 let currentPage = 0;
@@ -163,6 +217,17 @@ function fmtEuro(value) {
 }
 
 const qInput = document.getElementById("q");
+
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
 const statusSelect = document.getElementById("status");
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
@@ -298,7 +363,13 @@ async function loadListings() {
       statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${data.listings.length} Angebot(e)`;
+    if (data.listings.length === 0) {
+      statusMsg.textContent = params.toString()
+        ? "Keine Angebote gefunden – Suche/Filter anpassen."
+        : "Noch keine eBay-Angebote – auf der Kartenseite Entwürfe anlegen.";
+    } else {
+      statusMsg.textContent = `${data.listings.length} Angebot(e)`;
+    }
     currentListings = data.listings;
     currentPage = 0;
     selectedIds.clear();
@@ -468,6 +539,7 @@ publishSelectedBtn.addEventListener("click", async () => {
   if (!eligible.length) {
     bulkResults.textContent = "Keines der ausgewählten Angebote ist ein Entwurf oder fehlgeschlagen - nur solche können veröffentlicht werden.";
     bulkResults.className = "error";
+    showToast("Keines der ausgewählten Angebote kann veröffentlicht werden.", true);
     return;
   }
   const listingIds = eligible.map((l) => l.id);
@@ -485,6 +557,7 @@ publishSelectedBtn.addEventListener("click", async () => {
     if (!res.ok) {
       bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
       bulkResults.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     bulkResults.className = "";
@@ -502,12 +575,19 @@ publishSelectedBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    const okCount = data.results.filter((r) => r.status !== "Fehler").length;
+    const failedCount = data.results.length - okCount;
+    let toastMsg = `${okCount} Angebot(e) veröffentlicht.`;
+    if (skipped) toastMsg += ` ${skipped} übersprungen.`;
+    if (failedCount) toastMsg += ` ${failedCount} fehlgeschlagen.`;
+    showToast(toastMsg, failedCount > 0 && okCount === 0);
     selectedIds.clear();
     updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
   } finally {
     publishSelectedBtn.disabled = false;
   }
@@ -520,6 +600,7 @@ priceBulkBtn.addEventListener("click", async () => {
   if (!percent) {
     bulkResults.textContent = "Bitte einen Prozentwert ungleich 0 eingeben (z. B. -10 für 10 % günstiger).";
     bulkResults.className = "error";
+    showToast("Bitte einen Prozentwert ungleich 0 eingeben.", true);
     return;
   }
 
@@ -536,6 +617,7 @@ priceBulkBtn.addEventListener("click", async () => {
     if (!res.ok) {
       bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
       bulkResults.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     const list = document.createElement("ul");
@@ -549,12 +631,16 @@ priceBulkBtn.addEventListener("click", async () => {
     }
     bulkResults.innerHTML = "";
     bulkResults.appendChild(list);
+    const okCount = data.results.filter((r) => !r.error).length;
+    const failedCount = data.results.length - okCount;
+    showToast(`${okCount} Preis(e) angepasst.` + (failedCount ? ` ${failedCount} fehlgeschlagen.` : ""), failedCount > 0 && okCount === 0);
     selectedIds.clear();
     updateBulkBar();
     loadListings();
   } catch (err) {
     bulkResults.textContent = "Fehler: " + err;
     bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
   } finally {
     priceBulkBtn.disabled = false;
   }
@@ -570,13 +656,16 @@ document.getElementById("sync-sales-btn").addEventListener("click", async () => 
     if (!res.ok) {
       syncStatus.textContent = "Fehler: " + (data.detail || res.statusText);
       syncStatus.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
       return;
     }
     syncStatus.textContent = `${data.synced} neue/aktualisierte Verkäufe, ${data.skipped} ohne Treffer.`;
+    showToast(`${data.synced} neue/aktualisierte Verkäufe, ${data.skipped} ohne Treffer.`);
     loadListings();
   } catch (err) {
     syncStatus.textContent = "Fehler: " + err;
     syncStatus.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 

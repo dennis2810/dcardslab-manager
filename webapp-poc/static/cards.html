@@ -3,7 +3,35 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Karten</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --placeholder-bg: #f0f0f0;
+    --success-bg: #d4edda; --success-fg: #155724;
+    --warn-bg: #fff3cd; --warn-fg: #856404;
+    --info-bg: #cce5ff; --info-fg: #004085;
+    --danger-bg: #f8d7da; --danger-fg: #721c24;
+    --neutral-bg: #e2e3e5; --neutral-fg: #383d41;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --placeholder-bg: #2a2a2a;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82;
+      --neutral-bg: #333; --neutral-fg: #ccc;
+    }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -12,10 +40,14 @@
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
   .card { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; text-decoration: none; color: inherit; display: block; }
-  .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .card .title { font-weight: 600; margin-top: 0.4rem; }
   .card .meta { font-size: 0.8rem; color: #555; }
   .card .tags { font-style: italic; }
@@ -23,24 +55,29 @@
   .status-nicht_erkannt { color: #b00020; font-weight: 600; }
   #status-msg { font-style: italic; color: #555; }
   .ebay-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; }
-  .ebay-badge-Veroeffentlicht { background: #d4edda; color: #155724; }
-  .ebay-badge-Geplant { background: #fff3cd; color: #856404; }
-  .ebay-badge-Verkauft { background: #cce5ff; color: #004085; }
-  .ebay-badge-Fehler { background: #f8d7da; color: #721c24; }
-  .ebay-badge-Entwurf { background: #e2e3e5; color: #383d41; }
-  .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: #dce8fb; color: #0b3d91; }
+  .ebay-badge-Veroeffentlicht { background: var(--success-bg); color: var(--success-fg); }
+  .ebay-badge-Geplant { background: var(--warn-bg); color: var(--warn-fg); }
+  .ebay-badge-Verkauft { background: var(--info-bg); color: var(--info-fg); }
+  .ebay-badge-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
+  .ebay-badge-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
+  .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .list { width: 100%; border-collapse: collapse; }
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
   .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   .list th .sort-arrow { color: #888; font-size: 0.8em; }
   .card .sku { font-size: 0.75rem; color: #888; }
-  .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+  .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .list a.row-link { color: inherit; text-decoration: none; display: block; }
   [hidden] { display: none !important; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }
   }
+  .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -110,23 +147,25 @@
 
   <p id="status-msg"></p>
   <div id="grid" class="grid"></div>
-  <table id="list" class="list" hidden>
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-        <th></th>
-        <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Titel <span class="sort-arrow"></span></th>
-        <th data-key="team">Team <span class="sort-arrow"></span></th>
-        <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
-        <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
-        <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
-        <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
-        <th data-key="tags">Tags <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="list-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="list" class="list" hidden>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th></th>
+            <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="team">Team <span class="sort-arrow"></span></th>
+            <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
+            <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
+            <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
+            <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
+            <th data-key="tags">Tags <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
@@ -150,10 +189,38 @@
   });
 })();
 
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 const PAGE_SIZE = 40;
 let currentPage = 0;
 
 const qInput = document.getElementById("q");
+
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
 const statusSelect = document.getElementById("status");
 const ebayFilterSelect = document.getElementById("ebay-filter");
 const tagFilterSelect = document.getElementById("tag-filter");
@@ -247,7 +314,6 @@ async function loadCards() {
       statusMsg.textContent = "Fehler: " + (body.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${body.cards.length} Karte(n)`;
     currentCards = body.cards;
     currentPage = 0;
     selectedIds.clear();
@@ -312,6 +378,13 @@ function populateTagFilter() {
 
 function renderCurrentView() {
   const filtered = visibleCards();
+  if (filtered.length === 0) {
+    statusMsg.textContent = currentCards.length === 0
+      ? "Noch keine Karten – jetzt scannen oder manuell anlegen."
+      : "Keine Karten gefunden – Suche/Filter anpassen.";
+  } else {
+    statusMsg.textContent = `${filtered.length} Karte(n)`;
+  }
   // card.html reads this to render "vorherige/nächste" navigation within
   // the current search/filter order (across all pages, not just the
   // current one), without a dedicated backend endpoint.
@@ -540,8 +613,10 @@ async function undoLastBulkAction() {
     }
     clearUndo();
     loadCards();
+    showToast("Aktion rückgängig gemacht.");
   } catch (err) {
     undoStatusEl.textContent = "Fehler beim Rückgängigmachen: " + err;
+    showToast("Fehler beim Rückgängigmachen: " + err, true);
   } finally {
     undoBtn.disabled = false;
   }
@@ -569,9 +644,11 @@ async function bulkSetShipped(shipped) {
     selectedIds.clear();
     updateBulkBar();
     setUndo({ type: "shipped", entries }, `Versand-Markierung von ${entries.length} Karte(n) geändert.`);
+    showToast(`Versand-Markierung von ${entries.length} Karte(n) geändert.`);
     loadCards();
   } catch (err) {
     bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
   }
 }
 
@@ -622,9 +699,11 @@ async function bulkCreateEbayDrafts() {
         `${createdListings.length} eBay-Entwurf/Entwürfe angelegt.`
       );
     }
+    showToast(message);
     loadCards();
   } catch (err) {
     bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
   }
 }
 
@@ -695,9 +774,11 @@ async function bulkAddToPurchase() {
     bulkStatusEl.textContent = message;
     selectedIds.clear();
     updateBulkBar();
+    showToast(message);
     loadCards();
   } catch (err) {
     bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
   }
 }
 

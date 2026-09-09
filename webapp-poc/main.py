@@ -280,6 +280,8 @@ async def create_card_manual(
         front_path.write_bytes(await front.read())
         back_path.write_bytes(await back.read())
 
+        duplicate = _find_duplicate_card_safe(parsed_fields)
+
         batch_id = db.create_batch(card_count=1)
         try:
             front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
@@ -298,7 +300,13 @@ async def create_card_manual(
 
     db.update_batch_status(batch_id, "ok")
     _create_default_inventory_item(card_row["id"], location, notes)
-    return JSONResponse(_attach_signed_urls(card_row))
+    result = _attach_signed_urls(card_row)
+    if duplicate:
+        # Gleiche Warnung wie beim Scannen (siehe process_one()) - bisher
+        # gab es diese Pruefung nur fuer gescannte Karten, obwohl eine
+        # manuell angelegte Karte genauso ein Duplikat sein kann.
+        result["possible_duplicate"] = duplicate
+    return JSONResponse(result)
 
 
 def _expand_purchase_items(items):
@@ -524,6 +532,40 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
     # already in memory from rotate_image()'s return value, so they're sent
     # straight back as a data URI - no read-after-write race possible.
     result["rotated_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(rotated_bytes).decode("ascii")
+    return JSONResponse(result)
+
+
+@app.post("/api/cards/{card_id}/image")
+async def replace_card_image(card_id: str, side: str = Form(...), file: UploadFile = File(...)):
+    if side not in ("front", "back"):
+        raise HTTPException(status_code=400, detail="side muss 'front' oder 'back' sein.")
+
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_replace_") as tmp_str:
+        tmp_path = Path(tmp_str) / f"{side}{Path(file.filename or f'{side}.jpg').suffix}"
+        tmp_path.write_bytes(await file.read())
+        try:
+            # batch_id/position_in_batch sind fix pro Karte -> ergibt denselben
+            # Objekt-Pfad wie beim urspruenglichen Upload und ueberschreibt ihn
+            # per upsert (siehe storage.upload_image), egal ob vorher schon ein
+            # Bild da war oder nicht.
+            compressed = storage.compress_image(tmp_path)
+            object_path = storage.upload_image(card["batch_id"], card["position_in_batch"], side, tmp_path)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    updated = db.set_card_image_path(card_id, side, object_path)
+    result = _attach_signed_urls(updated)
+    # Gleiche Begruendung wie beim Dreh-Endpunkt: Supabase Storage's CDN kann
+    # kurz nach dem Ueberschreiben noch eine veraltete Kopie ausliefern, selbst
+    # bei frisch signierter URL - die Data-URI kommt direkt aus der gerade
+    # hochgeladenen Kompression und kann nicht veraltet sein.
+    result["replaced_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(compressed).decode("ascii")
     return JSONResponse(result)
 
 
@@ -757,6 +799,7 @@ def _compute_statistics():
     monthly = {}
     enriched = []
 
+    refunded_count = 0
     for row in rows:
         cost = row.get("cost")
         sale_price = row.get("sale_price")
@@ -766,22 +809,33 @@ def _compute_statistics():
         # API liefert die Verkaufsgebuehr nicht mit, daher 0 solange nichts
         # eingetragen ist; wirkt sich dann einfach nicht auf den Gewinn aus.
         ebay_fees = row.get("ebay_fees") or 0
+        refunded = bool(row.get("refunded"))
         profit = margin_pct = holding_days = None
+
+        # Retoure: Verkaufspreis und erhaltener Versand gingen an den Kaeufer
+        # zurueck, zaehlen also nicht mehr als Umsatz - Einstandspreis,
+        # gezahltes Porto und eBay-Gebuehren bleiben aber ein Verlust, da
+        # eBay diese in der Regel nicht erstattet.
+        revenue_contribution = 0.0 if refunded else float(sale_price or 0)
+        shipping_charged_contribution = 0.0 if refunded else float(shipping_charged)
 
         if cost is not None:
             total_cost += float(cost)
         if sale_price is not None:
-            total_revenue += float(sale_price)
-            total_shipping_charged += float(shipping_charged)
+            total_revenue += revenue_contribution
+            total_shipping_charged += shipping_charged_contribution
             total_shipping_cost += float(shipping_cost)
             total_ebay_fees += float(ebay_fees)
-            sale_prices.append(float(sale_price))
+            if refunded:
+                refunded_count += 1
+            else:
+                sale_prices.append(float(sale_price))
         if cost is not None and sale_price is not None:
             # Versand als durchlaufender Posten: eingenommener Versand zaehlt
             # als Einnahme, gezahltes Porto als Ausgabe - decken sie sich,
             # heben sie sich im Gewinn gegenseitig auf; nur eine Differenz
             # wirkt sich aus. eBay-Gebuehren mindern den Gewinn direkt.
-            profit = float(sale_price) + float(shipping_charged) - float(cost) - float(shipping_cost) - float(ebay_fees)
+            profit = revenue_contribution + shipping_charged_contribution - float(cost) - float(shipping_cost) - float(ebay_fees)
             realized_profit += profit
             sold_cost += float(cost)
             if cost:
@@ -802,7 +856,7 @@ def _compute_statistics():
                 month_key, {"month": month_key, "count": 0, "revenue": 0.0, "profit": 0.0, "cost": 0.0}
             )
             bucket["count"] += 1
-            bucket["revenue"] += float(sale_price or 0)
+            bucket["revenue"] += revenue_contribution
             if profit is not None:
                 bucket["profit"] += profit
                 # cost ist nur bekannt, wenn profit berechnet werden konnte
@@ -828,6 +882,7 @@ def _compute_statistics():
         "realized_profit": round(realized_profit, 2),
         "sold_count": len([r for r in enriched if r["profit"] is not None]),
         "open_count": open_count,
+        "refunded_count": refunded_count,
         "avg_sale_price": round(sum(sale_prices) / len(sale_prices), 2) if sale_prices else None,
         "avg_margin_pct": round(sum(margins) / len(margins), 1) if margins else None,
         "avg_holding_days": round(sum(holding_days_list) / len(holding_days_list), 1) if holding_days_list else None,
@@ -1483,11 +1538,24 @@ async def sync_to_sheets():
 @app.get("/api/backup")
 async def download_backup():
     data = backup.build_backup_zip()
-    filename = f"dcardslab-backup-{datetime.now(timezone.utc).date().isoformat()}.zip"
+    now = datetime.now(timezone.utc)
+    filename = f"dcardslab-backup-{now.date().isoformat()}.zip"
+    try:
+        db.record_backup_downloaded(now.isoformat())
+    except Exception:
+        # Der Zeitstempel dient nur der Dashboard-Anzeige - ein fehlgeschlagenes
+        # Speichern darf den eigentlichen Backup-Download nicht verhindern.
+        logger.exception("Backup-Zeitstempel konnte nicht gespeichert werden")
     return Response(
         content=data, media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/api/app-status")
+async def app_status():
+    status = db.get_app_status() or {}
+    return JSONResponse({"last_backup_at": status.get("last_backup_at")})
 
 
 static_dir = Path(__file__).parent / "static"

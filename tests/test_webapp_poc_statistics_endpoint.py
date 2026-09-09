@@ -88,6 +88,54 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(body["summary"]["realized_profit"], 3.5)
         self.assertEqual(body["summary"]["total_ebay_fees"], 1.5)
 
+    def test_refunded_sale_excludes_revenue_but_keeps_costs_as_loss(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+            "shipping_charged": 3.0, "ebay_fees": 1.5, "refunded": True,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        # Verkaufspreis (15) und erhaltener Versand (3) gingen zurueck an den
+        # Kaeufer -> 0 - 10 (Einstandspreis) - 1.5 (eBay-Gebuehr, nicht
+        # erstattet) = -11.5 Verlust. shipping_cost ist hier 0 (nicht gesetzt).
+        self.assertEqual(body["rows"][0]["profit"], -11.5)
+        self.assertEqual(body["summary"]["realized_profit"], -11.5)
+        self.assertEqual(body["summary"]["total_revenue"], 0)
+        self.assertEqual(body["summary"]["total_shipping_charged"], 0)
+        self.assertEqual(body["summary"]["refunded_count"], 1)
+        # Eine ruckerstattete Karte zaehlt nicht als "verkauft" fuer den
+        # Durchschnitts-Verkaufspreis (kein echter Erloes erzielt).
+        self.assertIsNone(body["summary"]["avg_sale_price"])
+
+    def test_refunded_sale_still_counts_towards_monthly_bucket_but_not_revenue(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+            "refunded": True,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        bucket = body["monthly"][0]
+        self.assertEqual(bucket["revenue"], 0)
+        self.assertEqual(bucket["profit"], -10.0)
+
+    def test_non_refunded_sale_defaults_correctly(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+        self.assertEqual(body["summary"]["refunded_count"], 0)
+        self.assertEqual(body["summary"]["total_revenue"], 15.0)
+
     def test_missing_ebay_fees_defaults_to_zero(self):
         rows = [{
             "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
@@ -276,6 +324,7 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(body["platform_ranking"], [])
         self.assertEqual(body["summary"]["sold_count"], 0)
         self.assertEqual(body["summary"]["open_count"], 0)
+        self.assertEqual(body["summary"]["refunded_count"], 0)
         self.assertIsNone(body["summary"]["avg_margin_pct"])
         self.assertIsNone(body["summary"]["avg_holding_days"])
         self.assertIsNone(body["summary"]["avg_sale_price"])

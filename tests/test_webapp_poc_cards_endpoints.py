@@ -305,6 +305,65 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         self.assertNotIn("front_image_url", body)
 
 
+class ReplaceCardImageEndpointTests(unittest.TestCase):
+    def _post_replace(self, card_id="card-1", side="front", filename="new-front.jpg"):
+        return client.post(
+            f"/api/cards/{card_id}/image",
+            data={"side": side},
+            files={"file": (filename, b"fake-image-bytes", "image/jpeg")},
+        )
+
+    def test_uploads_to_the_cards_existing_batch_and_position(self):
+        card = {"id": "card-1", "batch_id": "batch-1", "position_in_batch": 3, "front_image_path": "batch-1/3_front.jpg"}
+        updated = {"id": "card-1", "front_image_path": "batch-1/3_front.jpg", "back_image_path": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.storage.upload_image", return_value="batch-1/3_front.jpg") as mock_upload, \
+             patch("main.db.set_card_image_path", return_value=updated) as mock_set, \
+             patch("main.storage.signed_url", return_value="https://signed/batch-1/3_front.jpg"):
+            response = self._post_replace()
+        self.assertEqual(response.status_code, 200)
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args.args
+        self.assertEqual(args[0], "batch-1")
+        self.assertEqual(args[1], 3)
+        self.assertEqual(args[2], "front")
+        mock_set.assert_called_once_with("card-1", "front", "batch-1/3_front.jpg")
+        body = response.json()
+        self.assertEqual(body["front_image_url"], "https://signed/batch-1/3_front.jpg")
+        self.assertTrue(body["replaced_image_data_uri"].startswith("data:image/jpeg;base64,"))
+
+    def test_replaces_back_side(self):
+        card = {"id": "card-1", "batch_id": "batch-1", "position_in_batch": 1, "back_image_path": "batch-1/1_back.jpg"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.storage.upload_image", return_value="batch-1/1_back.jpg") as mock_upload, \
+             patch("main.db.set_card_image_path", return_value=card), \
+             patch("main.storage.signed_url", return_value="https://signed/x"):
+            response = self._post_replace(side="back", filename="new-back.jpg")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_upload.call_args.args[2], "back")
+
+    def test_rejects_invalid_side(self):
+        response = self._post_replace(side="sideways")
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_404_when_card_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = self._post_replace(card_id="does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+    def test_upload_failure_returns_502(self):
+        card = {"id": "card-1", "batch_id": "batch-1", "position_in_batch": 1}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.storage.upload_image", side_effect=RuntimeError("bucket down")), \
+             patch("main.db.set_card_image_path") as mock_set:
+            response = self._post_replace()
+        self.assertEqual(response.status_code, 502)
+        mock_set.assert_not_called()
+
+
 class GetCardPurchaseFieldTests(unittest.TestCase):
     def test_includes_purchase_info_when_linked(self):
         card = {"id": "card-1", "front_image_path": None, "back_image_path": None}
@@ -557,6 +616,7 @@ class CreateCardManualEndpointTests(unittest.TestCase):
             "main.storage.upload_image": MagicMock(side_effect=lambda b, p, side, path: f"{b}/{p}_{side}.jpg"),
             "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
             "main.db.create_inventory_item": MagicMock(),
+            "main.db.find_duplicate_card": MagicMock(return_value=None),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
@@ -625,6 +685,27 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["id"], "card-1")
         self.assertTrue(body["front_image_url"].startswith("https://signed/"))
+
+    def test_attaches_possible_duplicate_when_found(self):
+        mocks = self._patch_all()
+        mocks["main.db.find_duplicate_card"].return_value = {"id": "card-existing", "card_no": 7}
+        response = self._post_create(fields={"title": "Max Mustermann", "set_name": "Set A", "card_number": "1"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["possible_duplicate"], {"id": "card-existing", "card_no": 7})
+        mocks["main.db.find_duplicate_card"].assert_called_once_with("Max Mustermann", "Set A", "1")
+
+    def test_omits_possible_duplicate_when_none_found(self):
+        self._patch_all()
+        response = self._post_create()
+        self.assertNotIn("possible_duplicate", response.json())
+
+    def test_duplicate_check_failure_does_not_fail_the_request(self):
+        mocks = self._patch_all()
+        mocks["main.db.find_duplicate_card"].side_effect = RuntimeError("cards table down")
+        response = self._post_create()
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("possible_duplicate", response.json())
 
     def test_invalid_fields_json_is_400(self):
         self._patch_all()

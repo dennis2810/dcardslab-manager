@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Neue Karte anlegen</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --warn-bg: #4a3c00; --warn-fg: #ffd866; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -27,6 +43,13 @@
   button:disabled { opacity: 0.5; cursor: default; }
   #status { font-style: italic; color: #555; grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
+  .duplicate-warning { font-weight: 600; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; background: var(--warn-bg); color: var(--warn-fg); }
+  .duplicate-warning .actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+  [hidden] { display: none !important; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -77,8 +100,11 @@
     <div id="status"></div>
     <div class="actions">
       <button type="submit" id="save-btn" disabled>Karte speichern</button>
+      <button type="button" id="cancel-btn">Abbrechen</button>
     </div>
   </form>
+
+  <div id="duplicate-warning" class="duplicate-warning" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -95,6 +121,23 @@
   });
 })();
 
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 const FIELDS = [
   ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
   ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
@@ -108,6 +151,24 @@ const form = document.getElementById("card-form");
 const statusEl = document.getElementById("status");
 const recognizeBtn = document.getElementById("recognize-btn");
 const saveBtn = document.getElementById("save-btn");
+
+// Warnt vor Verlassen der Seite, sobald ein Foto gewaehlt oder ein Feld
+// getippt wurde - vor dem Abbrechen-Button (der absichtlich verlaesst)
+// bzw. nach erfolgreichem Speichern wird die Markierung wieder entfernt,
+// damit die eigene, gewollte Navigation nicht selbst geblockt wird.
+let formIsDirty = false;
+document.addEventListener("input", () => { formIsDirty = true; });
+document.addEventListener("change", () => { formIsDirty = true; });
+window.addEventListener("beforeunload", (ev) => {
+  if (!formIsDirty) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+
+document.getElementById("cancel-btn").addEventListener("click", () => {
+  formIsDirty = false;
+  location.href = "cards.html";
+});
 
 // Holds the blob actually submitted for each side - starts as the file the
 // user picked, gets replaced by a rotated re-encoding each time they click
@@ -208,6 +269,7 @@ document.querySelectorAll(".rotate-buttons button").forEach((button) => {
     } catch (err) {
       statusEl.textContent = "Fehler beim Drehen: " + err;
       statusEl.className = "error";
+      showToast("Fehler beim Drehen: " + err, true);
     }
   });
 });
@@ -228,6 +290,7 @@ recognizeBtn.addEventListener("click", async () => {
     if (!res.ok) {
       statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
       statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     for (const [key] of FIELDS) {
@@ -237,13 +300,75 @@ recognizeBtn.addEventListener("click", async () => {
     }
     statusEl.textContent = body.status === "ok" ? "Erkennung abgeschlossen." : (body.status || "Erkennung abgeschlossen.");
     statusEl.className = "";
+    showToast("Erkennung abgeschlossen.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
   } finally {
     updateButtonsEnabled();
   }
 });
+
+// Karte wurde bereits angelegt (siehe main.py's create_card_manual) - die
+// Warnung fragt nur noch, ob sie mit der vermuteten Alt-Karte
+// zusammengefuehrt werden soll, statt das Anlegen selbst zu blockieren
+// (gleiche Semantik wie beim Scannen, siehe index.html's mergeDuplicate()).
+function showDuplicateWarning(newCardId, duplicate) {
+  const box = document.getElementById("duplicate-warning");
+  box.innerHTML = "";
+  box.hidden = false;
+
+  const text = document.createElement("p");
+  text.textContent = `⚠ Evtl. bereits vorhanden: Karte #${duplicate.card_no ?? "?"} mit gleichem Titel/Set/Kartennummer.`;
+  box.appendChild(text);
+
+  const link = document.createElement("a");
+  link.href = `card.html?id=${encodeURIComponent(duplicate.id)}`;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "Bestehende Karte ansehen";
+  box.appendChild(link);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const mergeBtn = document.createElement("button");
+  mergeBtn.type = "button";
+  mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+  mergeBtn.addEventListener("click", async () => {
+    mergeBtn.disabled = true;
+    mergeBtn.textContent = "Führe zusammen …";
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(newCardId)}/merge-into/${encodeURIComponent(duplicate.id)}`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        showToast("Fehler beim Zusammenführen: " + (errBody.detail || res.statusText), true);
+        mergeBtn.disabled = false;
+        mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+        return;
+      }
+      window.location.href = `card.html?id=${encodeURIComponent(duplicate.id)}`;
+    } catch (err) {
+      showToast("Fehler beim Zusammenführen: " + err, true);
+      mergeBtn.disabled = false;
+      mergeBtn.textContent = "Mit bestehender Karte zusammenführen";
+    }
+  });
+  actions.appendChild(mergeBtn);
+
+  const keepBtn = document.createElement("button");
+  keepBtn.type = "button";
+  keepBtn.textContent = "Als neue Karte behalten";
+  keepBtn.addEventListener("click", () => {
+    window.location.href = `card.html?id=${encodeURIComponent(newCardId)}`;
+  });
+  actions.appendChild(keepBtn);
+
+  box.appendChild(actions);
+}
 
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -270,13 +395,23 @@ form.addEventListener("submit", async (ev) => {
     if (!res.ok) {
       statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
       statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       saveBtn.disabled = false;
+      return;
+    }
+    // Karte ist jetzt gespeichert - ab hier keine ungespeicherten Aenderungen
+    // mehr, egal ob direkt weitergeleitet wird oder erst die Duplikat-
+    // Warnung (mit ihren eigenen Navigationen) dazwischenkommt.
+    formIsDirty = false;
+    if (body.possible_duplicate) {
+      showDuplicateWarning(body.id, body.possible_duplicate);
       return;
     }
     window.location.href = `card.html?id=${encodeURIComponent(body.id)}`;
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
     saveBtn.disabled = false;
   }
 });

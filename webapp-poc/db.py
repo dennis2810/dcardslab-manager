@@ -107,6 +107,16 @@ def update_card(card_id, fields):
     return response.data[0] if response.data else None
 
 
+def set_card_image_path(card_id, side, object_path):
+    """Writes front_image_path/back_image_path directly, bypassing
+    update_card()'s CARD_FIELDS whitelist - these are server-managed
+    Storage-object references (like purchases.receipt_path), not
+    user-editable recognition fields."""
+    column = "front_image_path" if side == "front" else "back_image_path"
+    response = get_client().table("cards").update({column: object_path}).eq("id", card_id).execute()
+    return response.data[0] if response.data else None
+
+
 def delete_card(card_id):
     card = get_card(card_id)
     if card is None:
@@ -496,16 +506,19 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
-EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees"}
+EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees", "refunded"}
 EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees"}
 
 
 def update_ebay_sale(sale_id, fields):
-    # shipping_cost and ebay_fees are the only user-editable fields on
-    # ebay_sales - everything else comes from the eBay order sync
+    # shipping_cost, ebay_fees and refunded are the only user-editable
+    # fields on ebay_sales - everything else comes from the eBay order sync
     # (sync_ebay_sales()). eBay's Order API (used for that sync) doesn't
     # report the marketplace fee itself (that lives in the separate
     # Finances API, not integrated here), so it's manually entered for now.
+    # refunded is a plain boolean, not numeric - passing it through
+    # _blank_numeric_to_none()/_round_money() below is a no-op for it
+    # (neither ever matches a bool value), so no special-casing needed.
     row = _round_money(
         _blank_numeric_to_none(
             {name: value for name, value in fields.items() if name in EBAY_SALE_WRITABLE_FIELDS},
@@ -561,6 +574,19 @@ def save_google_sheets_settings(fields):
     row = {name: value for name, value in fields.items() if name in GOOGLE_SHEETS_SETTINGS_FIELDS}
     row["id"] = True
     response = get_client().table("google_sheets_settings").upsert(row).execute()
+    return response.data[0]
+
+
+def get_app_status():
+    response = get_client().table("app_status").select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def record_backup_downloaded(downloaded_at):
+    # Gleiches Singleton-Row-Muster wie save_google_sheets_settings().
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_backup_at": downloaded_at,
+    }).execute()
     return response.data[0]
 
 
@@ -737,7 +763,7 @@ def statistics_rows():
 
     sales_response = (
         get_client().table("ebay_sales")
-        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost,ebay_fees")
+        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost,ebay_fees,refunded")
         .in_("card_id", card_ids).order("sale_date", desc=True).execute()
     )
     sales_by_card = {}
@@ -766,5 +792,6 @@ def statistics_rows():
             "shipping_charged": sale.get("shipping_charged") if sale else None,
             "shipping_cost": sale.get("shipping_cost") if sale else None,
             "ebay_fees": sale.get("ebay_fees") if sale else None,
+            "refunded": bool(sale.get("refunded")) if sale else False,
         })
     return rows

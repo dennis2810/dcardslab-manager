@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Statistiken</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --hover-bg: #2a2a2a; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 2rem; }
@@ -19,7 +35,7 @@
   #monthly-chart { margin: 0.5rem 0 1rem; overflow-x: auto; }
   .chart-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #555; margin-top: 0.3rem; }
   .chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: middle; }
-  .year-total-row { font-weight: 700; background: #f7f7f7; }
+  .year-total-row { font-weight: 700; background: var(--hover-bg); }
   .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
@@ -29,6 +45,7 @@
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
   .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -57,34 +74,42 @@
 
   <h2>Verkäufe pro Monat</h2>
   <div id="monthly-chart"></div>
-  <table id="monthly-table" style="display: none;">
-    <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
-    <tbody id="monthly-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="monthly-table" style="display: none;">
+        <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+        <tbody id="monthly-body"></tbody>
+      </table>
+  </div>
   <p id="monthly-empty"></p>
 
   <h2>Team-Ranking (nach Gewinn)</h2>
-  <table id="team-ranking-table" style="display: none;">
-    <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
-    <tbody id="team-ranking-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="team-ranking-table" style="display: none;">
+        <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+        <tbody id="team-ranking-body"></tbody>
+      </table>
+  </div>
   <p id="team-ranking-empty"></p>
 
   <h2>Set-Ranking (nach Gewinn)</h2>
-  <table id="set-ranking-table" style="display: none;">
-    <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
-    <tbody id="set-ranking-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="set-ranking-table" style="display: none;">
+        <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+        <tbody id="set-ranking-body"></tbody>
+      </table>
+  </div>
   <p id="set-ranking-empty"></p>
 
   <h2>Jahresübersicht (Steuer)</h2>
   <div class="controls no-print">
     <button type="button" id="yearly-csv-btn">⭳ CSV-Export</button>
   </div>
-  <table id="yearly-overview-table" style="display: none;">
-    <thead><tr><th>Jahr</th><th>Quartal</th><th>Verkäufe</th><th>Umsatz</th><th>Einstandspreis</th><th>Gewinn</th></tr></thead>
-    <tbody id="yearly-overview-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="yearly-overview-table" style="display: none;">
+        <thead><tr><th>Jahr</th><th>Quartal</th><th>Verkäufe</th><th>Umsatz</th><th>Einstandspreis</th><th>Gewinn</th></tr></thead>
+        <tbody id="yearly-overview-body"></tbody>
+      </table>
+  </div>
   <p id="yearly-overview-empty"></p>
 
   <p><a href="statistics-sales.html">Alle Verkäufe (mit Filtern &amp; Suche) &rarr;</a></p>

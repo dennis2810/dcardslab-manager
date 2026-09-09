@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Alle Verkäufe</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --hover-bg: #2a2a2a; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -24,11 +40,12 @@
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row-link { cursor: pointer; }
-  tr.row-link:hover { background: #f7f7f7; }
+  tr.row-link:hover { background: var(--hover-bg); }
   .profit-positive { color: #1e4620; }
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
   .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -68,22 +85,24 @@
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
   </div>
-  <table id="rows-table" style="display: none;">
-    <thead>
-      <tr>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Karte <span class="sort-arrow"></span></th>
-        <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
-        <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
-        <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
-        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-        <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
-        <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
-        <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="rows-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="rows-table" style="display: none;">
+        <thead>
+          <tr>
+            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Karte <span class="sort-arrow"></span></th>
+            <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
+            <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
+            <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
+            <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+            <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
+            <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
+            <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rows-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
@@ -119,6 +138,17 @@ const OUTLIER_MARGIN_THRESHOLD = 300;
 
 const statusMsg = document.getElementById("status-msg");
 const qInput = document.getElementById("q");
+
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
 let allRows = [];
 let sortKey = "sku";
 let sortAsc = true;
@@ -202,6 +232,7 @@ function renderSummary(summary) {
     ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
     ["Verkaufte Karten", String(summary.sold_count)],
     ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
+    ["Retouren", String(summary.refunded_count)],
     ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
     ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–"],
     ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–"],
@@ -247,16 +278,24 @@ function filteredRows() {
 // Neuberechnung der Gewinn-Formel noetig.
 function computeSummary(rows) {
   let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0, totalEbayFees = 0;
-  let realizedProfit = 0, soldCost = 0, openCount = 0;
+  let realizedProfit = 0, soldCost = 0, openCount = 0, refundedCount = 0;
   const margins = [], salePrices = [], holdingDays = [];
   for (const r of rows) {
     if (r.cost != null) totalCost += Number(r.cost);
     if (r.sale_price != null) {
-      totalRevenue += Number(r.sale_price);
-      totalShippingCharged += Number(r.shipping_charged || 0);
+      // Retoure: Verkaufspreis/erhaltener Versand gingen an den Kaeufer
+      // zurueck - gleiche Logik wie main.py's _compute_statistics(), damit
+      // diese gefilterte Neu-Aggregation nicht von dessen (ungefilterter)
+      // Summe abweicht.
+      if (r.refunded) {
+        refundedCount += 1;
+      } else {
+        totalRevenue += Number(r.sale_price);
+        totalShippingCharged += Number(r.shipping_charged || 0);
+        salePrices.push(Number(r.sale_price));
+      }
       totalShippingCost += Number(r.shipping_cost || 0);
       totalEbayFees += Number(r.ebay_fees || 0);
-      salePrices.push(Number(r.sale_price));
     }
     if (r.profit != null) {
       realizedProfit += r.profit;
@@ -275,6 +314,7 @@ function computeSummary(rows) {
     realized_profit: realizedProfit,
     sold_count: rows.filter((r) => r.profit != null).length,
     open_count: openCount,
+    refunded_count: refundedCount,
     avg_sale_price: avg(salePrices),
     avg_margin_pct: avg(margins),
     avg_holding_days: avg(holdingDays),
@@ -340,6 +380,12 @@ function renderRows() {
     if (row.profit != null) {
       profitTd.textContent = fmtEuro(row.profit);
       profitTd.className = row.profit >= 0 ? "profit-positive" : "profit-negative";
+      if (row.refunded) {
+        const badge = document.createElement("span");
+        badge.textContent = " ↩ Retoure";
+        badge.title = "Als eBay-Rückerstattung markiert - Verkaufspreis/Versand zählen nicht mehr als Umsatz, nur noch Einstandspreis/Gebühren als Verlust.";
+        profitTd.appendChild(badge);
+      }
     }
     tr.appendChild(profitTd);
 
@@ -409,12 +455,12 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Karte", "Kaufdatum (WE)", "Einstandspreis", "Verkaufsdatum (WA)",
-    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)",
+    "Verkaufspreis", "Gewinn", "Marge (%)", "Liegedauer (Tage)", "Retoure",
   ];
   const rows = sortedRows(filteredRows()).map((row) => [
     row.sku || "", row.title || "", formatDate(row.purchase_date), fmtNumber(row.cost, 2),
     formatDate(row.sale_date), fmtNumber(row.sale_price, 2), fmtNumber(row.profit, 2),
-    fmtNumber(row.margin_pct, 1), row.holding_days ?? "",
+    fmtNumber(row.margin_pct, 1), row.holding_days ?? "", row.refunded ? "Ja" : "Nein",
   ]);
   downloadCsv("statistiken.csv", headers, rows);
 });

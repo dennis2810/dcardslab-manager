@@ -209,3 +209,17 @@ create table if not exists dashboard_goals (
 -- Migration (2026-09-08): Beleg (Foto/PDF der Rechnung) pro Kauf, fuer die
 -- Steuer - Pfad in den privaten purchase-receipts-Bucket (siehe README).
 alter table purchases add column if not exists receipt_path text default '';
+
+-- Migration (2026-09-08): Retoure/Rueckerstattung fuer einen eBay-Verkauf -
+-- Verkaufspreis/erhaltener Versand zaehlen dann nicht mehr als Umsatz im
+-- Gewinn (siehe main.py's _compute_statistics()), Einstandspreis/Porto/
+-- eBay-Gebuehren bleiben als Verlust bestehen.
+alter table ebay_sales add column if not exists refunded boolean not null default false;
+
+-- Migration (2026-09-09): Singleton-Status fuers Dashboard - aktuell nur der
+-- Zeitpunkt des letzten Backup-Downloads (Google-Sheets-Sync hat das schon
+-- ueber google_sheets_settings.last_synced_at).
+create table if not exists app_status (
+    id              boolean primary key default true check (id),
+    last_backup_at  timestamptz
+);

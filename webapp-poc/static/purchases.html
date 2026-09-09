@@ -3,7 +3,24 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Käufe</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7; --detail-bg: #fafafa;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --hover-bg: #2a2a2a; --detail-bg: #202020; --accent-bg: #1d2733; --accent-border: #3a4a5a; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
@@ -21,10 +38,10 @@
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
-  tr.row:hover { background: #f7f7f7; }
+  tr.row:hover { background: var(--hover-bg); }
   .expand-btn { border: none; background: none; cursor: pointer; font-size: 0.9rem; padding: 0 0.4rem; }
   tr.detail-row { cursor: default; }
-  tr.detail-row td { background: #fafafa; padding: 0.5rem 1rem; }
+  tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
   .detail-items { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
   #status-msg { font-style: italic; color: #555; }
   #new-purchase-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
@@ -32,11 +49,16 @@
   #new-purchase-form input, #new-purchase-form select { font-weight: normal; margin-top: 0.2rem; }
   #new-purchase-form .actions { grid-column: 1 / -1; }
   .error { color: #b00020; font-weight: 600; }
-  .sums-block { font-weight: 700; font-size: 1.05rem; background: #f0f4f8; border: 1px solid #d5dee6; border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print { display: none !important; }
   }
+  .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -70,10 +92,12 @@
   <p id="sums" class="sums-block"></p>
 
   <h2>Plattform-Auswertung</h2>
-  <table id="platform-ranking-table" style="display: none;">
-    <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
-    <tbody id="platform-ranking-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="platform-ranking-table" style="display: none;">
+        <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
+        <tbody id="platform-ranking-body"></tbody>
+      </table>
+  </div>
   <p id="platform-ranking-empty"></p>
 
   <form id="new-purchase-form" class="no-print">
@@ -99,20 +123,22 @@
   </form>
 
   <p id="status-msg"></p>
-  <table id="purchases-table" style="display: none;">
-    <thead>
-      <tr>
-        <th></th>
-        <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
-        <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
-        <th data-key="seller">Verkäufer <span class="sort-arrow"></span></th>
-        <th data-key="item_count">Karten <span class="sort-arrow"></span></th>
-        <th data-key="total_price">Gesamt <span class="sort-arrow"></span></th>
-        <th data-key="shipping">Versand <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="purchases-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="purchases-table" style="display: none;">
+        <thead>
+          <tr>
+            <th></th>
+            <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
+            <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
+            <th data-key="seller">Verkäufer <span class="sort-arrow"></span></th>
+            <th data-key="item_count">Karten <span class="sort-arrow"></span></th>
+            <th data-key="total_price">Gesamt <span class="sort-arrow"></span></th>
+            <th data-key="shipping">Versand <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="purchases-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
@@ -136,10 +162,38 @@
   });
 })();
 
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 const PAGE_SIZE = 40;
 let currentPage = 0;
 
 const qInput = document.getElementById("q");
+
+// "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
+// (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "/" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  qInput.focus();
+  qInput.select();
+});
 const dateFromInput = document.getElementById("date-from");
 const dateToInput = document.getElementById("date-to");
 const statusMsg = document.getElementById("status-msg");
@@ -148,6 +202,16 @@ const table = document.getElementById("purchases-table");
 const body = document.getElementById("purchases-body");
 const toggleNewBtn = document.getElementById("toggle-new");
 const newForm = document.getElementById("new-purchase-form");
+
+// Warnt vor Verlassen der Seite, solange das "+ Neuer Kauf"-Formular
+// ausgefuellt, aber noch nicht gespeichert ist.
+let newFormIsDirty = false;
+newForm.addEventListener("input", () => { newFormIsDirty = true; });
+window.addEventListener("beforeunload", (ev) => {
+  if (!newFormIsDirty) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
 
 let currentPurchases = [];
 // Merkt sich aufgeklappte Kaeufe ueber Re-Renders hinweg (Sortieren, Suchen,
@@ -289,6 +353,7 @@ document.getElementById("new-purchase-cancel").addEventListener("click", () => {
   newForm.reset();
   newForm.style.display = "none";
   document.getElementById("new-purchase-status").textContent = "";
+  newFormIsDirty = false;
 });
 
 async function loadPurchases() {
@@ -304,7 +369,6 @@ async function loadPurchases() {
       statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${data.purchases.length} Kauf/Käufe`;
     currentPurchases = data.purchases;
     currentPage = 0;
     renderCurrentView();
@@ -329,6 +393,13 @@ document.getElementById("reset-date-filter").addEventListener("click", () => {
 
 function renderCurrentView() {
   const filtered = sortedPurchases(filteredPurchases());
+  if (filtered.length === 0) {
+    statusMsg.textContent = currentPurchases.length === 0
+      ? "Noch keine Käufe – jetzt den ersten Kauf anlegen."
+      : "Keine Käufe gefunden – Suche/Zeitfilter anpassen.";
+  } else {
+    statusMsg.textContent = `${filtered.length} Kauf/Käufe`;
+  }
   renderSums(filtered);
   setSortIndicator();
 
@@ -463,15 +534,19 @@ newForm.addEventListener("submit", async (ev) => {
     if (!res.ok) {
       statusEl.textContent = "Fehler: " + (responseBody.detail || res.statusText);
       statusEl.className = "error";
+      showToast("Fehler: " + (responseBody.detail || res.statusText), true);
       return;
     }
     newForm.reset();
     newForm.style.display = "none";
     statusEl.textContent = "";
+    newFormIsDirty = false;
+    showToast("Kauf angelegt.");
     loadPurchases();
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 

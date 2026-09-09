@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <title>DCardLabs – Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
 <style>
+  :root {
+    color-scheme: light dark;
+    --neutral-bg: #eee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --neutral-bg: #333; }
+  }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 2rem; }
@@ -13,8 +29,10 @@
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   #status-msg { font-style: italic; color: #555; }
+  .last-updates { font-size: 0.8rem; color: #555; }
   .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
-  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 170px; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 170px; display: block; color: inherit; text-decoration: none; }
+  a.summary-card:hover { border-color: #888; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
   .action-list { list-style: none; padding: 0; margin: 0; }
@@ -27,7 +45,8 @@
   .activity-list a:hover { text-decoration: underline; }
   .activity-date { color: #555; font-size: 0.85rem; white-space: nowrap; }
   .ampel { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: 0.75rem 0; }
-  .ampel-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .ampel-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: inherit; text-decoration: none; }
+  a.ampel-item:hover { text-decoration: underline; }
   .ampel-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   .ampel-green { background: #1e8e3e; }
   .ampel-red { background: #d93025; }
@@ -35,12 +54,18 @@
   .goal-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; }
   .goal-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; font-weight: 600; }
   .goal-header button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
-  .goal-bar-track { background: #eee; border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.5rem; }
+  .goal-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.5rem; }
   .goal-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
   .goal-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap; }
   [hidden] { display: none !important; }
   .goal-form input, .goal-form select { padding: 0.3rem 0.5rem; }
   .error { color: #b00020; font-weight: 600; }
+  .qr-hint { font-size: 0.85rem; color: #555; }
+  .qr-code { display: inline-block; background: #fff; padding: 0.75rem; border-radius: 8px; line-height: 0; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -66,6 +91,7 @@
 
   <p id="status-msg">Lädt …</p>
   <div class="ampel" id="connection-ampel"></div>
+  <p id="last-updates" class="last-updates"></p>
 
   <div class="goal-block">
     <div class="goal-header">
@@ -93,6 +119,11 @@
   <h2>Letzte Aktivität</h2>
   <ul class="activity-list" id="activity-list"></ul>
 
+  <h2>Schneller Zugriff</h2>
+  <p class="qr-hint">Mit dem Handy scannen, um direkt zum Dashboard zu kommen.</p>
+  <div id="qr-code" class="qr-code"></div>
+
+<script src="vendor/qrcode.js"></script>
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
 // von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
@@ -106,6 +137,36 @@
   nav.addEventListener("change", () => {
     if (nav.value) location.href = nav.value;
   });
+})();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
+// Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// QR-Code zum Dashboard, damit man es vom Handy aus per Kamera direkt
+// oeffnen kann, ohne die Adresse abzutippen - qrcode.js ist lokal
+// vendort (vendor/qrcode.js, MIT-lizenziert), kein CDN/externer Aufruf.
+// typeNumber 0 = kleinste passende QR-Version automatisch waehlen.
+(function renderQrCode() {
+  const container = document.getElementById("qr-code");
+  if (!container || typeof qrcode !== "function") return;
+  const qr = qrcode(0, "M");
+  qr.addData(location.origin + "/dashboard.html");
+  qr.make();
+  container.innerHTML = qr.createSvgTag(4);
 })();
 
 // Gleicher Schwellwert wie ebay.html/main.py's _sheets_tabs() - eBay-
@@ -136,6 +197,14 @@ function formatDate(value) {
   const d = new Date(value);
   if (isNaN(d)) return value;
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${formatDate(value)} ${time}`;
 }
 
 function daysSince(value) {
@@ -183,21 +252,24 @@ let lastStats = null;
 
 async function load() {
   try {
-    const [statsRes, invRes, cardsRes, geplantRes, sheetsRes] = await Promise.all([
+    const [statsRes, invRes, cardsRes, geplantRes, sheetsRes, appStatusRes] = await Promise.all([
       fetch("/api/statistics"), fetch("/api/inventory"), fetch("/api/cards"),
       fetch("/api/ebay/listings?status=Geplant"), fetch("/api/sheets/status"),
+      fetch("/api/app-status"),
     ]);
     const stats = await statsRes.json();
     const inventory = await invRes.json();
     const cardsBody = await cardsRes.json();
     const geplant = await geplantRes.json();
     const sheets = await sheetsRes.json();
+    const appStatus = await appStatusRes.json();
     const ebayStatus = await loadEbayStatus();
     dashboardGoal = await loadGoal();
     lastStats = stats;
 
     document.getElementById("status-msg").style.display = "none";
     renderConnectionAmpel(sheets, ebayStatus);
+    renderLastUpdates(sheets, appStatus);
     renderGoal();
     renderSummary(stats, inventory);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
@@ -259,15 +331,18 @@ goalForm.addEventListener("submit", async (ev) => {
     if (!res.ok) {
       goalStatus.textContent = "Fehler: " + (body.detail || res.statusText);
       goalStatus.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
     dashboardGoal = body;
     goalStatus.textContent = "";
     goalForm.hidden = true;
     renderGoal();
+    showToast("Jahresziel gespeichert.");
   } catch (err) {
     goalStatus.textContent = "Fehler: " + err;
     goalStatus.className = "error";
+    showToast("Fehler: " + err, true);
   }
 });
 
@@ -277,19 +352,22 @@ function renderSummary(stats, inventory) {
 
   const cards = document.getElementById("summary-cards");
   cards.style.display = "flex";
+  // href pro Kachel - macht jede Kennzahl klickbar zur passenden Detailseite,
+  // statt nur eine reine Zahl zu zeigen.
   const entries = [
-    ["Aktueller Inventarwert", fmtEuro(inventory.total_value)],
-    ["Umsatz laufender Monat", fmtEuro(monthBucket.revenue)],
-    ["Gewinn laufender Monat", fmtEuro(monthBucket.profit)],
-    ["Realisierter Gewinn (gesamt)", fmtEuro(stats.summary.realized_profit)],
-    ["ROI (verkauft)", fmtPercent(stats.summary.roi_pct)],
-    ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count)],
-    ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count)],
+    ["Aktueller Inventarwert", fmtEuro(inventory.total_value), "inventory.html"],
+    ["Umsatz laufender Monat", fmtEuro(monthBucket.revenue), "statistics.html"],
+    ["Gewinn laufender Monat", fmtEuro(monthBucket.profit), "statistics.html"],
+    ["Realisierter Gewinn (gesamt)", fmtEuro(stats.summary.realized_profit), "statistics.html"],
+    ["ROI (verkauft)", fmtPercent(stats.summary.roi_pct), "statistics.html"],
+    ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count), "statistics-sales.html"],
+    ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count), "cards.html"],
   ];
   cards.innerHTML = "";
-  for (const [label, value] of entries) {
-    const card = document.createElement("div");
+  for (const [label, value, href] of entries) {
+    const card = document.createElement(href ? "a" : "div");
     card.className = "summary-card";
+    if (href) card.href = href;
     card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
     cards.appendChild(card);
   }
@@ -309,16 +387,26 @@ function renderConnectionAmpel(sheets, ebayStatus) {
   const container = document.getElementById("connection-ampel");
   container.innerHTML = "";
   const items = [
-    ["eBay", ebayStatus ? ebayStatus.authorized : null],
-    ["Google Sheets", sheets ? sheets.connected : null],
+    ["eBay", ebayStatus ? ebayStatus.authorized : null, "ebay.html"],
+    ["Google Sheets", sheets ? sheets.connected : null, "settings.html"],
   ];
-  for (const [label, connected] of items) {
+  for (const [label, connected, href] of items) {
     const status = ampelStatus(connected);
-    const span = document.createElement("span");
+    const span = document.createElement(href ? "a" : "span");
     span.className = "ampel-item";
+    if (href) span.href = href;
     span.innerHTML = `<span class="ampel-dot ${status.cls}"></span>${label}: ${status.label}`;
     container.appendChild(span);
   }
+}
+
+function renderLastUpdates(sheets, appStatus) {
+  const el = document.getElementById("last-updates");
+  const parts = [
+    `Google Sheets zuletzt synchronisiert: ${sheets.last_synced_at ? formatDateTime(sheets.last_synced_at) : "noch nie"}`,
+    `Backup zuletzt heruntergeladen: ${appStatus.last_backup_at ? formatDateTime(appStatus.last_backup_at) : "noch nie"}`,
+  ];
+  el.textContent = parts.join(" · ");
 }
 
 function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
