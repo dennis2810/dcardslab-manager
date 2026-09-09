@@ -51,6 +51,16 @@ if ("serviceWorker" in navigator) {
   .summary-card .value { font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  /* Feste Spaltenbreiten statt table-layout: auto's Default - sonst sizen
+     die vier Auswertungstabellen (Plattform/Kanal/Team/Set) ihre Spalten
+     unabhaengig voneinander an der jeweils laengsten Kopfzeile ("Plattform"
+     vs. "Kanal" vs. "Team" vs. "Set"), wodurch z.B. "Verkäufe" in jeder
+     Tabelle an einer anderen horizontalen Position landet. */
+  .ranking-table { table-layout: fixed; }
+  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 40%; }
+  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
+  .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
+  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
   .profit-positive { color: #1e4620; }
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
@@ -97,7 +107,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Plattform-Auswertung (Einkauf)</h2>
   <div class="table-scroll">
-    <table id="platform-ranking-table" style="display: none;">
+    <table id="platform-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
         <tbody id="platform-ranking-body"></tbody>
       </table>
@@ -106,7 +116,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Kanal-Auswertung (Verkauf)</h2>
   <div class="table-scroll">
-    <table id="channel-ranking-table" style="display: none;">
+    <table id="channel-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Kanal</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
         <tbody id="channel-ranking-body"></tbody>
       </table>
@@ -115,7 +125,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Team-Ranking (nach Gewinn)</h2>
   <div class="table-scroll">
-    <table id="team-ranking-table" style="display: none;">
+    <table id="team-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
         <tbody id="team-ranking-body"></tbody>
       </table>
@@ -124,7 +134,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Set-Ranking (nach Gewinn)</h2>
   <div class="table-scroll">
-    <table id="set-ranking-table" style="display: none;">
+    <table id="set-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
         <tbody id="set-ranking-body"></tbody>
       </table>

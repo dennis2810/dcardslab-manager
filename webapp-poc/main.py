@@ -38,7 +38,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import Body, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -1726,6 +1726,23 @@ async def download_backup():
 async def app_status():
     status = db.get_app_status() or {}
     return JSONResponse({"last_backup_at": status.get("last_backup_at")})
+
+
+@app.middleware("http")
+async def _no_cache_for_html(request: Request, call_next):
+    # StaticFiles sendet standardmaessig keinen expliziten Cache-Control-
+    # Header - Browser wenden dann eine heuristische Cache-Lebensdauer an
+    # (RFC 7234), wodurch z.B. help.html/release-notes.html nach einem
+    # Deploy manchmal noch veraltet erscheinen, bis der Cache von selbst
+    # ablaeuft. "no-cache" (nicht "no-store") erzwingt eine Revalidierung
+    # bei jedem Laden - StaticFiles' ETag/Last-Modified-Unterstuetzung
+    # liefert dann weiterhin ein schnelles 304, wenn sich nichts geaendert
+    # hat, aber nie mehr eine blind gecachte alte Version ohne Nachfrage.
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 static_dir = Path(__file__).parent / "static"
