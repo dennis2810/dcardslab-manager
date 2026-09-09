@@ -710,6 +710,18 @@ def zero_inventory_for_card(card_id):
     return response.data
 
 
+def restore_inventory_for_card(card_id):
+    # Gegenstueck zu zero_inventory_for_card() - wird aufgerufen, wenn ein
+    # manueller Verkauf wieder geloescht wird (z.B. versehentlich erfasst).
+    # Menge 1 als Rueckfall, da der urspruengliche Bestand beim Verkaufen
+    # nicht mitgeschrieben wurde - deckt den ueblichen Fall (eine Karte) ab.
+    response = (
+        get_client().table("inventory").update({"quantity": 1})
+        .eq("card_id", card_id).execute()
+    )
+    return response.data
+
+
 MANUAL_SALE_FIELDS = [
     "channel", "sale_date", "gross_price", "shipping_charged", "shipping_cost", "fees", "refunded", "notes",
 ]
@@ -757,7 +769,10 @@ def update_manual_sale(sale_id, fields):
 
 
 def delete_manual_sale(sale_id):
-    response = get_client().table("manual_sales").select("id").eq("id", sale_id).execute()
+    # card_id wird mitselektiert, damit der Aufrufer (siehe main.py's
+    # DELETE /api/manual-sales/{id}) danach das Inventar der Karte wieder
+    # herstellen kann.
+    response = get_client().table("manual_sales").select("id,card_id").eq("id", sale_id).execute()
     if not response.data:
         return None
     get_client().table("manual_sales").delete().eq("id", sale_id).execute()

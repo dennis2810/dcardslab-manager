@@ -93,6 +93,24 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="monthly-empty"></p>
 
+  <h2>Plattform-Auswertung (Einkauf)</h2>
+  <div class="table-scroll">
+    <table id="platform-ranking-table" style="display: none;">
+        <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
+        <tbody id="platform-ranking-body"></tbody>
+      </table>
+  </div>
+  <p id="platform-ranking-empty"></p>
+
+  <h2>Kanal-Auswertung (Verkauf)</h2>
+  <div class="table-scroll">
+    <table id="channel-ranking-table" style="display: none;">
+        <thead><tr><th>Kanal</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
+        <tbody id="channel-ranking-body"></tbody>
+      </table>
+  </div>
+  <p id="channel-ranking-empty"></p>
+
   <h2>Team-Ranking (nach Gewinn)</h2>
   <div class="table-scroll">
     <table id="team-ranking-table" style="display: none;">
@@ -208,6 +226,10 @@ async function load() {
     renderSummary({ ...data.summary, inventory_value: inventoryValue });
     renderMonthly(data.monthly);
     renderMonthlyChart(data.monthly);
+    renderAvgRanking("platform-ranking-table", "platform-ranking-body", "platform-ranking-empty", data.platform_ranking,
+      "Noch keine verkauften Karten mit erfasster Einkaufsplattform.");
+    renderAvgRanking("channel-ranking-table", "channel-ranking-body", "channel-ranking-empty", data.channel_ranking,
+      "Noch keine verkauften Karten mit erfasstem Verkaufskanal.");
     renderRanking("team-ranking-table", "team-ranking-body", "team-ranking-empty", data.team_ranking);
     renderRanking("set-ranking-table", "set-ranking-body", "set-ranking-empty", data.set_ranking);
     renderYearlyOverview(data.monthly);
@@ -241,6 +263,42 @@ function renderRanking(tableId, bodyId, emptyId, entries) {
     profitTd.textContent = fmtEuro(entry.profit);
     profitTd.className = entry.profit >= 0 ? "profit-positive" : "profit-negative";
     tr.appendChild(profitTd);
+    body.appendChild(tr);
+  }
+}
+
+// Zeigt (anders als das Team-/Set-Ranking oben) bewusst Durchschnittswerte
+// statt Summen - gleiche Aufbereitung wie purchases.html's
+// loadPlatformRanking(), hier aber direkt aus dem bereits geladenen
+// /api/statistics-Payload statt einem eigenen Request. Gemeinsame Funktion
+// fuer Plattform- (Einkauf) und Kanal-Auswertung (Verkauf), da main.py
+// beide ueber dieselbe _rank_by_avg()-Logik liefert.
+function renderAvgRanking(tableId, bodyId, emptyId, entries, emptyText) {
+  const table = document.getElementById(tableId);
+  const body = document.getElementById(bodyId);
+  const empty = document.getElementById(emptyId);
+  body.innerHTML = "";
+  if (!entries || !entries.length) {
+    table.style.display = "none";
+    empty.textContent = emptyText;
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const entry of entries) {
+    const tr = document.createElement("tr");
+    for (const text of [entry.name, String(entry.count)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    const profitTd = document.createElement("td");
+    profitTd.textContent = fmtEuro(entry.avg_profit);
+    profitTd.className = entry.avg_profit >= 0 ? "profit-positive" : "profit-negative";
+    tr.appendChild(profitTd);
+    const marginTd = document.createElement("td");
+    marginTd.textContent = fmtPercent(entry.avg_margin_pct);
+    tr.appendChild(marginTd);
     body.appendChild(tr);
   }
 }

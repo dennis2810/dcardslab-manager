@@ -115,6 +115,11 @@ if ("serviceWorker" in navigator) {
     <li>Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) lassen sich jetzt pro Karte erfassen
       (Kanal, Datum, Preis, Versand, Gebühren) und zählen genau wie ein eBay-Verkauf in Statistiken, Rankings
       und Jahresübersicht.</li>
+    <li>Veröffentlichte eBay-Angebote lassen sich vorzeitig beenden – einzeln auf der Kartenseite oder als
+      Massenaktion auf der eBay-Seite. Praktisch, wenn eine Karte anderweitig verkauft wurde und schnellstmöglich
+      von eBay runter muss.</li>
+    <li>Die eBay-Seite warnt jetzt direkt in der Tabelle, wenn eine noch aktive Karte bereits anderweitig
+      verkauft wurde.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -122,6 +127,8 @@ if ("serviceWorker" in navigator) {
     <li>Freitext-Suche nach Titel, SKU oder Lagerort.</li>
     <li>Lagerort-Übersicht (Menge/Wert je Lagerort) und Bestandswarnungen (fehlender Lagerort, Menge 0 ohne
       "Verkauft"-Status – berücksichtigt jetzt auch manuelle Verkäufe außerhalb von eBay).</li>
+    <li>Löschen eines manuellen Verkaufs setzt den Inventareintrag der Karte jetzt wieder zurück, statt sie
+      dauerhaft auf Menge 0 stehen zu lassen.</li>
     <li>Duplikat-Zusammenführen beim Scannen erhöht die Inventar-Menge, statt eine zweite Karte anzulegen.</li>
     <li>Massenauswahl: Lagerort, Menge oder Zustand für mehrere Einträge auf einmal setzen, mehrere Einträge
       auf einmal löschen.</li>
@@ -129,9 +136,13 @@ if ("serviceWorker" in navigator) {
 
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>
   <ul>
-    <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Team-/Set-/Plattform-Ranking)
+    <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Plattform-/Kanal-/Team-/Set-Ranking)
       und "Alle Verkäufe" (jeder Verkauf einzeln, filter- und sortierbar, inklusive Verkaufskanal).</li>
     <li>Beide Seiten zeigen jetzt dieselben Kennzahlen-Kacheln in gleicher Größe und Reihenfolge.</li>
+    <li>Auf "Alle Verkäufe" lässt sich zusätzlich nach Verkaufskanal filtern.</li>
+    <li>Neue Kanal-Auswertung (Ø Gewinn/Marge je Verkaufskanal) auf der Übersichtsseite, direkt neben der
+      Plattform-Auswertung (jetzt klarer als "(Einkauf)" gekennzeichnet, da sie die Einkaufs- und nicht die
+      Verkaufsseite abbildet).</li>
     <li>Datumsfilter nach Kauf- oder Verkaufsdatum.</li>
     <li>Für DATEV/Lexoffice aufbereiteter Buchhaltungsexport sowie CSV-Export.</li>
     <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>

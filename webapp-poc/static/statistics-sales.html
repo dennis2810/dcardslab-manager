@@ -93,6 +93,11 @@ if ("serviceWorker" in navigator) {
     <label>Von <input type="date" id="date-from"></label>
     <label>Bis <input type="date" id="date-to"></label>
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
+    <label>Kanal
+      <select id="channel-filter">
+        <option value="">Alle Kanäle</option>
+      </select>
+    </label>
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
   </div>
   <div class="table-scroll">
@@ -149,6 +154,7 @@ const OUTLIER_MARGIN_THRESHOLD = 300;
 
 const statusMsg = document.getElementById("status-msg");
 const qInput = document.getElementById("q");
+const channelFilterSelect = document.getElementById("channel-filter");
 
 // "/" fokussiert das Suchfeld, ausser man tippt bereits in einem Eingabefeld
 // (sonst wuerde z.B. "/" in einem Notiz-Feld die Eingabe abbrechen).
@@ -241,6 +247,7 @@ async function load() {
     statusMsg.textContent = "";
     await loadInventoryValue();
     allRows = data.rows;
+    populateChannelFilter();
     renderRows();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -298,11 +305,29 @@ function dateFilteredRows() {
 
 function filteredRows() {
   const q = qInput.value.trim().toLowerCase();
-  const rows = dateFilteredRows();
+  const channel = channelFilterSelect.value;
+  let rows = dateFilteredRows();
+  if (channel) rows = rows.filter((r) => (r.channel || "") === channel);
   if (!q) return rows;
   return rows.filter((r) =>
     (r.title || "").toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)
   );
+}
+
+// Kanaele sind teils Freitext (manuelle Verkaufskanaele wie "Kleinanzeigen",
+// "Vinted", ...) statt eines festen Enums - Optionen daher dynamisch aus den
+// tatsaechlich geladenen Zeilen ableiten statt hartkodiert.
+function populateChannelFilter() {
+  const channels = [...new Set(allRows.map((r) => r.channel).filter(Boolean))].sort();
+  const current = channelFilterSelect.value;
+  channelFilterSelect.innerHTML = '<option value="">Alle Kanäle</option>';
+  for (const channel of channels) {
+    const opt = document.createElement("option");
+    opt.value = channel;
+    opt.textContent = channel;
+    channelFilterSelect.appendChild(opt);
+  }
+  if (channels.includes(current)) channelFilterSelect.value = current;
 }
 
 // Spiegelt die Summenlogik von GET /api/statistics, aber auf einer
@@ -461,7 +486,7 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(() => { currentPage = 0; renderRows(); }, 200);
 });
 
-for (const id of ["date-field", "date-from", "date-to"]) {
+for (const id of ["date-field", "date-from", "date-to", "channel-filter"]) {
   document.getElementById(id).addEventListener("change", () => {
     currentPage = 0;
     renderRows();

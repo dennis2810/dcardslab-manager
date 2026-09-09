@@ -93,6 +93,7 @@ if ("serviceWorker" in navigator) {
   .ebay-status-Veroeffentlicht { background: var(--success-bg); color: var(--success-fg); }
   .ebay-status-Verkauft { background: var(--info-bg); color: var(--info-fg); }
   .ebay-status-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
+  .ebay-status-Beendet { background: var(--neutral-bg); color: var(--neutral-fg); }
   .ebay-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .ebay-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   .ebay-form input, .ebay-form select, .ebay-form textarea { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
@@ -473,7 +474,7 @@ async function loadCard() {
     render(card);
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
-    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
+    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale);
     renderManualSaleSection(card.manual_sale, card.purchase);
     renderPriceResearchSection(card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price);
   } catch (err) {
@@ -805,7 +806,7 @@ function renderPurchaseSection(purchase) {
 
 const EBAY_STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
-  Verkauft: "Verkauft", Fehler: "Fehler",
+  Verkauft: "Verkauft", Fehler: "Fehler", Beendet: "Beendet",
 };
 
 // Same URL formulas as ebay_listing.price_research_links() on the backend
@@ -1386,7 +1387,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
   section.appendChild(form);
 }
 
-async function renderEbaySection(listing, purchase, sale) {
+async function renderEbaySection(listing, purchase, sale, manualSale) {
   const section = document.getElementById("ebay-section");
   section.innerHTML = "<h2>eBay</h2>";
 
@@ -1423,7 +1424,7 @@ async function renderEbaySection(listing, purchase, sale) {
     renderEbayScheduledView(section, listing, environment);
   } else {
     const environment = await getEbayEnvironment();
-    renderEbayPublishedView(section, listing, environment, purchase, sale);
+    renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale);
   }
 }
 
@@ -1849,7 +1850,14 @@ function renderEbayScheduledView(section, listing, environment) {
 // Erstveroeffentlichung oder eine spaetere Bearbeitung war.
 const RECENTLY_UPDATED_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
-function renderEbayPublishedView(section, listing, environment, purchase, sale) {
+function renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale) {
+  if (manualSale && listing.status === "Veroeffentlicht") {
+    const warn = document.createElement("p");
+    warn.className = "workflow-hint";
+    warn.textContent = `⚠️ Diese Karte wurde bereits anderweitig verkauft (${manualSale.channel}) - das eBay-Angebot sollte schnellstmöglich beendet werden.`;
+    section.appendChild(warn);
+  }
+
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const dl = document.createElement("dl");
@@ -1887,6 +1895,26 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale) 
     editBtn.textContent = "Bearbeiten";
     editBtn.addEventListener("click", () => renderEbayEditForm(section, listing));
     section.appendChild(editBtn);
+
+    const endBtn = document.createElement("button");
+    endBtn.type = "button";
+    endBtn.textContent = "Beenden";
+    endBtn.addEventListener("click", async () => {
+      if (!confirm("Angebot wirklich vorzeitig beenden?")) return;
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/end`, { method: "POST" });
+        const body = await res.json();
+        if (!res.ok) {
+          alert("Fehler: " + (body.detail || res.statusText));
+          return;
+        }
+        showToast("eBay-Angebot beendet.");
+        loadCard();
+      } catch (err) {
+        alert("Fehler: " + err);
+      }
+    });
+    section.appendChild(endBtn);
   }
 }
 

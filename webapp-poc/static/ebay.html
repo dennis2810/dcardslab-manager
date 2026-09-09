@@ -75,6 +75,8 @@ if ("serviceWorker" in navigator) {
   .status-Veroeffentlicht { color: var(--success-fg); font-weight: 600; }
   .status-Verkauft { color: var(--info-fg); font-weight: 600; }
   .status-Fehler { color: #b00020; font-weight: 600; }
+  .status-Beendet { color: #555; }
+  .manual-sale-warning { cursor: help; }
   #status-msg { font-style: italic; color: #555; }
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
@@ -120,6 +122,7 @@ if ("serviceWorker" in navigator) {
       <option value="Veroeffentlicht">Veröffentlicht</option>
       <option value="Verkauft">Verkauft</option>
       <option value="Fehler">Fehler</option>
+      <option value="Beendet">Beendet</option>
     </select>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
   </div>
@@ -135,6 +138,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="publish-selected-btn">Ausgewählte veröffentlichen</button>
     <label>Preis anpassen um <input type="number" id="price-bulk-percent" step="1" style="width: 4.5rem;" placeholder="-10"> %</label>
     <button type="button" id="price-bulk-btn">Anwenden</button>
+    <button type="button" id="end-selected-btn">Ausgewählte beenden</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-results"></span>
   </div>
@@ -247,6 +251,7 @@ const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
 const publishSelectedBtn = document.getElementById("publish-selected-btn");
 const priceBulkBtn = document.getElementById("price-bulk-btn");
+const endSelectedBtn = document.getElementById("end-selected-btn");
 const priceBulkPercent = document.getElementById("price-bulk-percent");
 const bulkResults = document.getElementById("bulk-results");
 const bulkActionsBar = document.getElementById("bulk-actions");
@@ -255,7 +260,7 @@ const selectAllCheckbox = document.getElementById("select-all-checkbox");
 
 const STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
-  Verkauft: "Verkauft", Fehler: "Fehler",
+  Verkauft: "Verkauft", Fehler: "Fehler", Beendet: "Beendet",
 };
 
 // Gleicher Schwellwert wie main.py's _sheets_tabs()/Dashboard-Kennzahl
@@ -451,6 +456,13 @@ function render(listings) {
       const warn = document.createElement("span");
       warn.textContent = " ⚠️";
       warn.title = `Seit über ${STALE_GEPLANT_DAYS} Tagen "Geplant", aber nicht veröffentlicht - ggf. haengengebliebenen Scheduling-Job pruefen.`;
+      statusTd.appendChild(warn);
+    }
+    if (listing.manual_sale_channel && (listing.status === "Veroeffentlicht" || listing.status === "Geplant")) {
+      const warn = document.createElement("span");
+      warn.className = "manual-sale-warning";
+      warn.textContent = " ⚠️";
+      warn.title = `Karte wurde bereits anderweitig verkauft (${listing.manual_sale_channel}) - Angebot sollte beendet werden.`;
       statusTd.appendChild(warn);
     }
     tr.appendChild(statusTd);
@@ -656,6 +668,62 @@ priceBulkBtn.addEventListener("click", async () => {
     showToast("Fehler: " + err, true);
   } finally {
     priceBulkBtn.disabled = false;
+  }
+});
+
+endSelectedBtn.addEventListener("click", async () => {
+  const selected = currentListings.filter((l) => selectedIds.has(l.id));
+  const eligible = selected.filter((l) => l.status === "Veroeffentlicht");
+  const skipped = selected.length - eligible.length;
+  if (!eligible.length) {
+    bulkResults.textContent = "Keines der ausgewählten Angebote ist veröffentlicht - nur solche können beendet werden.";
+    bulkResults.className = "error";
+    showToast("Keines der ausgewählten Angebote kann beendet werden.", true);
+    return;
+  }
+
+  endSelectedBtn.disabled = true;
+  bulkResults.textContent = "Beende Angebote …";
+  bulkResults.className = "";
+  try {
+    const results = await Promise.all(eligible.map(async (l) => {
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(l.id)}/end`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) return { id: l.id, ok: false, error: data.detail || res.statusText };
+        return { id: l.id, ok: true };
+      } catch (err) {
+        return { id: l.id, ok: false, error: String(err) };
+      }
+    }));
+    const list = document.createElement("ul");
+    if (skipped) {
+      const li = document.createElement("li");
+      li.textContent = `${skipped} Angebot(e) übersprungen (nicht veröffentlicht).`;
+      list.appendChild(li);
+    }
+    for (const r of results) {
+      const li = document.createElement("li");
+      li.textContent = `${r.ok ? "✓" : "✗"} ${r.id}` + (r.error ? ` — ${r.error}` : "");
+      list.appendChild(li);
+    }
+    bulkResults.innerHTML = "";
+    bulkResults.appendChild(list);
+    const okCount = results.filter((r) => r.ok).length;
+    const failedCount = results.length - okCount;
+    let toastMsg = `${okCount} Angebot(e) beendet.`;
+    if (skipped) toastMsg += ` ${skipped} übersprungen.`;
+    if (failedCount) toastMsg += ` ${failedCount} fehlgeschlagen.`;
+    showToast(toastMsg, failedCount > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadListings();
+  } catch (err) {
+    bulkResults.textContent = "Fehler: " + err;
+    bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    endSelectedBtn.disabled = false;
   }
 });
 
