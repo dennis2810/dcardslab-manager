@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Release-Notes</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .back-link { font-size: 0.9rem; }
+  .date { font-size: 0.8rem; color: #555; font-weight: normal; }
+  p, li { line-height: 1.5; }
+  .note { font-size: 0.85rem; color: #555; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Release-Notes</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+  <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
+  <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
+    einzeln aufgeführt.</p>
+
+  <h2>Dashboard &amp; Zugriff <span class="date">September 2026</span></h2>
+  <ul>
+    <li>QR-Code auf dem Dashboard, um das Tool direkt vom Handy aus zu öffnen.</li>
+    <li>Installierbar als App auf dem Home-Bildschirm (Handy/Desktop).</li>
+    <li>Anzeige, wann Google Sheets zuletzt synchronisiert und wann zuletzt ein Backup heruntergeladen wurde.</li>
+    <li>Kennzahlen-Kacheln und Verbindungsstatus auf dem Dashboard sind jetzt anklickbar.</li>
+    <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
+    <li>Dark Mode folgt automatisch der Betriebssystem-/Browser-Einstellung.</li>
+  </ul>
+
+  <h2>Karten <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Duplikat-Prüfung jetzt auch beim manuellen Anlegen (nicht nur beim Scannen), mit
+      Zusammenführen-Option.</li>
+    <li>Fotos lassen sich einzeln ersetzen, nicht nur drehen.</li>
+    <li>Massenaktion, um mehrere ausgewählte Karten auf einmal einem Kauf zuzuordnen.</li>
+    <li>Tag-Filter, Schnellsuche-Kürzel (<code>/</code>), Abbrechen-Buttons bei neuen Formularen.</li>
+    <li>Freie, kommagetrennte Tags/Kategorien pro Karte.</li>
+    <li>Settbares "Versendet"-Kennzeichen für verkaufte Karten.</li>
+  </ul>
+
+  <h2>Käufe <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Belege (Foto/PDF der Rechnung) lassen sich pro Kauf hochladen, für die Steuer.</li>
+    <li>Plattform-Auswertung: durchschnittlicher Gewinn/Marge je Einkaufsplattform.</li>
+    <li>Plattform-Feld als feste Auswahl (eBay, Kleinanzeigen, Vinted, Sonstiges) statt Freitext.</li>
+    <li>Käufe-Tabelle sortierbar und einzelne Käufe aufklappbar, um verknüpfte Karten direkt zu sehen.</li>
+  </ul>
+
+  <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Retouren/Rückerstattungen lassen sich markieren – Gewinn/Marge werden dann korrekt gegengerechnet.</li>
+    <li>eBay-Gebühren fließen in den Gewinn ein.</li>
+    <li>Massenauswahl und Bulk-Preisänderung (prozentual) für eBay-Angebote.</li>
+    <li>Preisrecherche-Verlauf pro Karte mit automatischem Preis-Alarm bei 20&nbsp;% Abweichung.</li>
+  </ul>
+
+  <h2>Inventar <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Freitext-Suche nach Titel, SKU oder Lagerort.</li>
+    <li>Lagerort-Übersicht (Menge/Wert je Lagerort) und Bestandswarnungen (fehlender Lagerort, Menge 0 ohne
+      "Verkauft"-Status).</li>
+    <li>Duplikat-Zusammenführen beim Scannen erhöht die Inventar-Menge, statt eine zweite Karte anzulegen.</li>
+  </ul>
+
+  <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>
+  <ul>
+    <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Team-/Set-/Plattform-Ranking)
+      und "Alle Verkäufe" (jeder Verkauf einzeln, filter- und sortierbar).</li>
+    <li>Datumsfilter nach Kauf- oder Verkaufsdatum.</li>
+    <li>Für DATEV/Lexoffice aufbereiteter Buchhaltungsexport sowie CSV-Export.</li>
+    <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>
+  </ul>
+
+  <h2>Grundfunktionen <span class="date">Ausgangsversion</span></h2>
+  <ul>
+    <li>Scan-Workflow: 3×3-Rasterfoto hochladen, automatischer Zuschnitt und KI-Erkennung der Kartendaten.</li>
+    <li>Kartenverwaltung mit Kachel-/Listenansicht, Filtern und Massenaktionen.</li>
+    <li>eBay-Integration: Angebote anlegen/veröffentlichen/planen, automatischer Verkaufs-Sync im Hintergrund.</li>
+    <li>Käufe- und Inventarverwaltung, inklusive automatischer Kostenaufteilung auf verknüpfte Karten.</li>
+    <li>Google-Sheets-Synchronisierung und vollständiger Backup-Download (ZIP mit allen Daten und Bildern).</li>
+  </ul>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+</script>
+</body>
+</html>
