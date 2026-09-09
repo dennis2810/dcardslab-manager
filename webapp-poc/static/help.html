@@ -120,18 +120,21 @@ if ("serviceWorker" in navigator) {
     Beschädigungen) – sie werden beim Veröffentlichen automatisch mit an eBay übertragen (bis zu eBays Limit von
     12 Fotos pro Angebot). Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte.</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
-    Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen –
-    weicht der eigene Angebotspreis um mehr als 20 % vom Durchschnitt ab, erscheint ein Preis-Alarm.</p>
+    Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
+    Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
+    um mehr als 20 % ab, erscheint zusätzlich ein Preis-Alarm. Einträge lassen sich per Checkbox mehrfach auswählen
+    und auf einmal löschen.</p>
   <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots. Nach einem Verkauf lassen
     sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
     automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Schickt ein Käufer die Karte zurück,
     markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
     erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.
     Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
-    Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich.
-    Die Suche blendet dabei Auto(gramm)- und nummerierte Angebote (z. B. „/50") aus, sofern der Suchbegriff selbst
-    nicht danach fragt – bei einer gesuchten Auflage werden zusätzlich nur Angebote mit exakt derselben Auflage
-    berücksichtigt, damit die Preise nicht mit teureren/selteneren Varianten vermischt werden.</p>
+    Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich,
+    auch mehrere Suchtreffer auf einmal per Checkbox und „Ausgewählte übernehmen". Die Suche blendet dabei
+    Auto(gramm)- und nummerierte Angebote (z. B. „/50") aus, sofern der Suchbegriff selbst nicht danach fragt – bei
+    einer gesuchten Auflage werden zusätzlich nur Angebote mit exakt derselben Auflage berücksichtigt, damit die
+    Preise nicht mit teureren/selteneren Varianten vermischt werden.</p>
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
     das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
@@ -163,9 +166,12 @@ if ("serviceWorker" in navigator) {
     Angebote auf einmal angepasst werden (z. B. „-10" für 10 % günstiger). Veröffentlichte Angebote lassen sich
     außerdem einzeln oder per Massenauswahl vorzeitig beenden – z. B. wenn eine Karte anderweitig verkauft wurde
     und schnellstmöglich von eBay runter muss. Ein ⚠️-Hinweis in der Tabelle markiert Angebote, deren Karte bereits
-    anderweitig verkauft wurde. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link führt
-    direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit Filtern/Suche
-    auflistet.</p>
+    anderweitig verkauft wurde. Die Spalte „Preis-Check" zeigt auf einen Blick, ob der Angebotspreis zum
+    Marktdurchschnitt der Preisrecherche passt (✅) oder deutlich darüber (🔺) bzw. darunter (🔻) liegt – gleicher
+    ±20&nbsp;%-Schwellwert wie der Preis-Alarm auf der Kartenseite. Ist eBay verbunden, führt oben ein Link direkt
+    zum eigenen eBay-Verkäufer-Cockpit. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link
+    führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit
+    Filtern/Suche auflistet.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
@@ -219,7 +225,8 @@ if ("serviceWorker" in navigator) {
   <h2 id="einstellungen">Einstellungen</h2>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport) und ein
     vollständiges Backup (ZIP mit allen Daten als JSON sowie allen Kartenbildern) herunterladen; der Zeitpunkt des
-    letzten Downloads wird angezeigt. Von hier aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
+    letzten Downloads wird angezeigt. Ein Link „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle.
+    Von hier aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>

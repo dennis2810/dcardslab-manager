@@ -88,6 +88,7 @@ if ("serviceWorker" in navigator) {
       <button type="button" id="save-spreadsheet-id-btn">Speichern</button>
       <button type="button" id="sync-btn">Jetzt synchronisieren</button>
       <p class="status" id="sync-status"></p>
+      <p id="open-sheet-link" style="display:none;"><a href="#" target="_blank" rel="noopener">📊 Tabelle öffnen ↗</a></p>
       <p><a href="/api/sheets/oauth/start">Google-Verbindung erneuern</a></p>
     </div>
   </section>
@@ -167,6 +168,7 @@ const connectDiv = document.getElementById("sheets-connect");
 const configuredDiv = document.getElementById("sheets-configured");
 const spreadsheetIdInput = document.getElementById("spreadsheet-id");
 const syncStatusEl = document.getElementById("sync-status");
+const openSheetLink = document.querySelector("#open-sheet-link a");
 
 function showSheetsError(message) {
   sheetsStatusEl.textContent = "Fehler: " + message;
@@ -195,6 +197,12 @@ async function loadSheetsStatus() {
       connectDiv.style.display = "none";
       configuredDiv.style.display = "block";
       spreadsheetIdInput.value = body.spreadsheet_id || "";
+      if (body.spreadsheet_id) {
+        openSheetLink.href = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(body.spreadsheet_id)}/edit`;
+        openSheetLink.parentElement.style.display = "block";
+      } else {
+        openSheetLink.parentElement.style.display = "none";
+      }
       if (body.last_synced_at) {
         syncStatusEl.textContent = "Zuletzt synchronisiert: " + formatDateTime(body.last_synced_at);
       }

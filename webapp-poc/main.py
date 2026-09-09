@@ -1135,6 +1135,9 @@ def _expand_ebay_listings(listings):
     # geplant ist - ebay.html zeigt dafuer einen Hinweis an (siehe
     # renderListingRow()), damit das Angebot zeitnah beendet werden kann.
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
+    # Fuer die Preisrecherche-Statusspalte (siehe ebay.html) - gleicher
+    # +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite.
+    price_research_info = db.price_research_by_card_ids(card_ids)
     expanded = []
     for listing in listings:
         listing = dict(listing)
@@ -1151,6 +1154,9 @@ def _expand_ebay_listings(listings):
         listing["sale_date"] = sale.get("sale_date") if sale else None
         listing["sale_price"] = sale.get("gross_price") if sale else None
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
+        research = price_research_info.get(listing["card_id"])
+        listing["price_research_avg"] = research["avg_price"] if research else None
+        listing["price_research_count"] = research["count"] if research else 0
         expanded.append(listing)
     return expanded
 
