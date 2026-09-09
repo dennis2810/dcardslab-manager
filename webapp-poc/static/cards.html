@@ -293,7 +293,6 @@ async function loadCards() {
       statusMsg.textContent = "Fehler: " + (body.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${body.cards.length} Karte(n)`;
     currentCards = body.cards;
     currentPage = 0;
     selectedIds.clear();
@@ -358,6 +357,13 @@ function populateTagFilter() {
 
 function renderCurrentView() {
   const filtered = visibleCards();
+  if (filtered.length === 0) {
+    statusMsg.textContent = currentCards.length === 0
+      ? "Noch keine Karten – jetzt scannen oder manuell anlegen."
+      : "Keine Karten gefunden – Suche/Filter anpassen.";
+  } else {
+    statusMsg.textContent = `${filtered.length} Karte(n)`;
+  }
   // card.html reads this to render "vorherige/nächste" navigation within
   // the current search/filter order (across all pages, not just the
   // current one), without a dedicated backend endpoint.

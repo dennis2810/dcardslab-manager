@@ -213,7 +213,6 @@ async function loadInventory() {
       return;
     }
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
-    statusMsg.textContent = `${items.length} Eintrag/Einträge`;
     totalValueEl.textContent = `Gesamtwert: ${fmtEuro(data.total_value ?? 0)}`;
     renderWarnings();
     renderLocationOverview();
@@ -322,6 +321,13 @@ function sortedFilteredItems() {
 
 function render() {
   const sorted = sortedFilteredItems();
+  if (sorted.length === 0) {
+    statusMsg.textContent = items.length === 0
+      ? "Noch keine Einträge – Karten scannen oder Bestand manuell hinzufügen."
+      : "Keine Einträge gefunden – Suche/Filter anpassen.";
+  } else {
+    statusMsg.textContent = `${sorted.length} Eintrag/Einträge`;
+  }
 
   for (const th of document.querySelectorAll("th[data-key]")) {
     const arrow = th.querySelector(".sort-arrow");

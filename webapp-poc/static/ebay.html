@@ -342,7 +342,13 @@ async function loadListings() {
       statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${data.listings.length} Angebot(e)`;
+    if (data.listings.length === 0) {
+      statusMsg.textContent = params.toString()
+        ? "Keine Angebote gefunden – Suche/Filter anpassen."
+        : "Noch keine eBay-Angebote – auf der Kartenseite Entwürfe anlegen.";
+    } else {
+      statusMsg.textContent = `${data.listings.length} Angebot(e)`;
+    }
     currentListings = data.listings;
     currentPage = 0;
     selectedIds.clear();

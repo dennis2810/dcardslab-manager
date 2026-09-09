@@ -337,7 +337,6 @@ async function loadPurchases() {
       statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
       return;
     }
-    statusMsg.textContent = `${data.purchases.length} Kauf/Käufe`;
     currentPurchases = data.purchases;
     currentPage = 0;
     renderCurrentView();
@@ -362,6 +361,13 @@ document.getElementById("reset-date-filter").addEventListener("click", () => {
 
 function renderCurrentView() {
   const filtered = sortedPurchases(filteredPurchases());
+  if (filtered.length === 0) {
+    statusMsg.textContent = currentPurchases.length === 0
+      ? "Noch keine Käufe – jetzt den ersten Kauf anlegen."
+      : "Keine Käufe gefunden – Suche/Zeitfilter anpassen.";
+  } else {
+    statusMsg.textContent = `${filtered.length} Kauf/Käufe`;
+  }
   renderSums(filtered);
   setSortIndicator();
 
