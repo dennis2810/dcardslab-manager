@@ -40,6 +40,10 @@ if ("serviceWorker" in navigator) {
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
   .card { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; text-decoration: none; color: inherit; display: block; }
@@ -69,6 +73,7 @@ if ("serviceWorker" in navigator) {
   @media print {
     .no-print { display: none !important; }
   }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -138,23 +143,25 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg"></p>
   <div id="grid" class="grid"></div>
-  <table id="list" class="list" hidden>
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-        <th></th>
-        <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Titel <span class="sort-arrow"></span></th>
-        <th data-key="team">Team <span class="sort-arrow"></span></th>
-        <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
-        <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
-        <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
-        <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
-        <th data-key="tags">Tags <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="list-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="list" class="list" hidden>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th></th>
+            <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="team">Team <span class="sort-arrow"></span></th>
+            <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
+            <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
+            <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
+            <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
+            <th data-key="tags">Tags <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>

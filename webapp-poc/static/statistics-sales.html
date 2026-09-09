@@ -45,6 +45,7 @@ if ("serviceWorker" in navigator) {
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
   .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -84,22 +85,24 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
   </div>
-  <table id="rows-table" style="display: none;">
-    <thead>
-      <tr>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Karte <span class="sort-arrow"></span></th>
-        <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
-        <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
-        <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
-        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-        <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
-        <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
-        <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="rows-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="rows-table" style="display: none;">
+        <thead>
+          <tr>
+            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Karte <span class="sort-arrow"></span></th>
+            <th data-key="purchase_date">Kaufdatum (WE) <span class="sort-arrow"></span></th>
+            <th data-key="cost">Einstandspreis <span class="sort-arrow"></span></th>
+            <th data-key="sale_date">Verkaufsdatum (WA) <span class="sort-arrow"></span></th>
+            <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+            <th data-key="profit">Gewinn <span class="sort-arrow"></span></th>
+            <th data-key="margin_pct">Marge <span class="sort-arrow"></span></th>
+            <th data-key="holding_days">Liegedauer <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rows-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>

@@ -54,6 +54,7 @@ if ("serviceWorker" in navigator) {
   @media print {
     .no-print { display: none !important; }
   }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -87,10 +88,12 @@ if ("serviceWorker" in navigator) {
   <p id="sums" class="sums-block"></p>
 
   <h2>Plattform-Auswertung</h2>
-  <table id="platform-ranking-table" style="display: none;">
-    <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
-    <tbody id="platform-ranking-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="platform-ranking-table" style="display: none;">
+        <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
+        <tbody id="platform-ranking-body"></tbody>
+      </table>
+  </div>
   <p id="platform-ranking-empty"></p>
 
   <form id="new-purchase-form" class="no-print">
@@ -116,20 +119,22 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <p id="status-msg"></p>
-  <table id="purchases-table" style="display: none;">
-    <thead>
-      <tr>
-        <th></th>
-        <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
-        <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
-        <th data-key="seller">Verkäufer <span class="sort-arrow"></span></th>
-        <th data-key="item_count">Karten <span class="sort-arrow"></span></th>
-        <th data-key="total_price">Gesamt <span class="sort-arrow"></span></th>
-        <th data-key="shipping">Versand <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="purchases-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="purchases-table" style="display: none;">
+        <thead>
+          <tr>
+            <th></th>
+            <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
+            <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
+            <th data-key="seller">Verkäufer <span class="sort-arrow"></span></th>
+            <th data-key="item_count">Karten <span class="sort-arrow"></span></th>
+            <th data-key="total_price">Gesamt <span class="sort-arrow"></span></th>
+            <th data-key="shipping">Versand <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="purchases-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>

@@ -63,6 +63,7 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: var(--warn-bg); color: var(--warn-fg); }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -103,10 +104,12 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <h2>Lagerort-Übersicht</h2>
-  <table id="location-overview-table" style="display: none;">
-    <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th></tr></thead>
-    <tbody id="location-overview-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="location-overview-table" style="display: none;">
+        <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th></tr></thead>
+        <tbody id="location-overview-body"></tbody>
+      </table>
+  </div>
   <p id="location-overview-empty"></p>
 
   <form id="add-item-form">
@@ -126,21 +129,23 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <h2>Alle Einträge</h2>
-  <table id="inventory-table" style="display: none;">
-    <thead>
-      <tr>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="card_title">Karte <span class="sort-arrow"></span></th>
-        <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
-        <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
-        <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
-        <th data-key="notes">Notizen <span class="sort-arrow"></span></th>
-        <th data-key="value">Wert <span class="sort-arrow"></span></th>
-        <th data-key="ebay_status">Status <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="inventory-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="inventory-table" style="display: none;">
+        <thead>
+          <tr>
+            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="card_title">Karte <span class="sort-arrow"></span></th>
+            <th data-key="quantity">Menge <span class="sort-arrow"></span></th>
+            <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
+            <th data-key="location">Lagerort <span class="sort-arrow"></span></th>
+            <th data-key="notes">Notizen <span class="sort-arrow"></span></th>
+            <th data-key="value">Wert <span class="sort-arrow"></span></th>
+            <th data-key="ebay_status">Status <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="inventory-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>

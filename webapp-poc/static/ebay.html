@@ -47,6 +47,10 @@ if ("serviceWorker" in navigator) {
   #oauth-banner.warn { background: var(--danger-bg); color: var(--danger-fg); }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   [hidden] { display: none !important; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
@@ -64,6 +68,7 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+  .table-scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -119,23 +124,25 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
-  <table id="listings-table" style="display: none;">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-        <th></th>
-        <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-        <th data-key="title">Titel <span class="sort-arrow"></span></th>
-        <th data-key="price">Preis <span class="sort-arrow"></span></th>
-        <th data-key="status">Status <span class="sort-arrow"></span></th>
-        <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
-        <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
-        <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-        <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
-      </tr>
-    </thead>
-    <tbody id="listings-body"></tbody>
-  </table>
+  <div class="table-scroll">
+    <table id="listings-table" style="display: none;">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th></th>
+            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="price">Preis <span class="sort-arrow"></span></th>
+            <th data-key="status">Status <span class="sort-arrow"></span></th>
+            <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
+            <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
+            <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+            <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="listings-body"></tbody>
+      </table>
+  </div>
   <div class="pagination no-print">
     <button type="button" id="prev-page">&larr; Zurück</button>
     <span id="page-info"></span>
