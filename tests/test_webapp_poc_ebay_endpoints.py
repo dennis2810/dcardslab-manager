@@ -677,6 +677,26 @@ class EbayPriceResearchEndpointTests(unittest.TestCase):
         titles = [r["title"] for r in response.json()["results"]]
         self.assertEqual(titles, ["Musterkarte /50", "Musterkarte"])
 
+    def test_does_not_mistake_season_year_for_a_print_run(self):
+        # season_year kann laut ai_card_recognition.py Formate wie "2024/25"
+        # oder "24/25" annehmen - das sieht syntaktisch wie eine Auflage
+        # ("/50") aus, ist aber keine. Ohne Sonderbehandlung wuerden nahezu
+        # alle echten Angebote (die die Saison im Titel haben) ausgeschlossen,
+        # nur weil die Suchanfrage die Saison anders/gar nicht formatiert -
+        # genau das vom Nutzer gemeldete "nur 100%-Titeltreffer"-Problem.
+        results = [
+            {"title": "Lionel Messi 2024/25 Panini", "price": 5.0},
+            {"title": "L. Messi 24/25 Panini", "price": 6.0},
+            {"title": "Messi Panini Base", "price": 4.5},
+            {"title": "Messi Panini /50", "price": 200.0},
+            {"title": "Messi Panini Auto", "price": 300.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Lionel+Messi+2024+Panini")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Lionel Messi 2024/25 Panini", "L. Messi 24/25 Panini", "Messi Panini Base"])
+
 
 class SyncSalesEndpointTests(unittest.TestCase):
     def test_returns_401_when_not_authorized(self):
