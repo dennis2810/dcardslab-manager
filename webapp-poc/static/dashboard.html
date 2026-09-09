@@ -8,6 +8,13 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <meta name="theme-color" content="#ffffff">
 <script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter unten)
+// nicht erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
 }
@@ -18,8 +25,10 @@ if ("serviceWorker" in navigator) {
     --neutral-bg: #eee;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --neutral-bg: #333; }
+    :root:not([data-theme="light"]) { --neutral-bg: #333; }
   }
+  :root[data-theme="dark"] { color-scheme: dark; --neutral-bg: #333; }
+  :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 2rem; }
@@ -28,6 +37,8 @@ if ("serviceWorker" in navigator) {
   .page-nav { margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .theme-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .theme-toggle select { padding: 0.3rem 0.5rem; font-size: 0.85rem; font-weight: normal; }
   #status-msg { font-style: italic; color: #555; }
   .last-updates { font-size: 0.8rem; color: #555; }
   .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
@@ -71,6 +82,13 @@ if ("serviceWorker" in navigator) {
 <body>
   <div class="page-header">
     <h1>DCardLabs – Dashboard</h1>
+    <label class="theme-toggle">Design
+      <select id="theme-select">
+        <option value="system">System</option>
+        <option value="light">Hell</option>
+        <option value="dark">Dunkel</option>
+      </select>
+    </label>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
   <nav class="page-nav">
@@ -136,6 +154,27 @@ if ("serviceWorker" in navigator) {
   }
   nav.addEventListener("change", () => {
     if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Schalter wirkt App-weit (data-theme-Attribut auf <html> + localStorage),
+// obwohl er nur hier im Dashboard sichtbar ist - jede andere Seite liest das
+// gespeicherte "theme" beim Laden ueber ein blockierendes Head-Script (siehe
+// <head>) und wendet es genauso an, bevor sie rendert.
+(function initThemeToggle() {
+  const select = document.getElementById("theme-select");
+  if (!select) return;
+  let stored = null;
+  try { stored = localStorage.getItem("theme"); } catch (err) {}
+  select.value = stored === "light" || stored === "dark" ? stored : "system";
+  select.addEventListener("change", () => {
+    const value = select.value;
+    try {
+      if (value === "system") localStorage.removeItem("theme");
+      else localStorage.setItem("theme", value);
+    } catch (err) {}
+    if (value === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", value);
   });
 })();
 

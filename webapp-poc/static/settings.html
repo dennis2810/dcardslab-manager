@@ -8,12 +8,21 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <meta name="theme-color" content="#ffffff">
 <script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
 }
 </script>
 <style>
   :root { color-scheme: light dark; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -87,6 +96,7 @@ if ("serviceWorker" in navigator) {
       und -Verkäufe, Inventar, Preisrecherche-Verlauf) als JSON sowie allen
       Kartenbildern herunter.</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
+    <p class="status" id="last-backup-status"></p>
   </section>
 
 <script>
@@ -119,6 +129,35 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Einheitliches Datumsformat (DD.MM.YYYY, HH:MM) - manuell statt ueber
+// toLocaleString("de-DE"), da dessen Default-Ausgabe Tag/Monat nicht
+// nullgepolstert liefert (z.B. "5.1.2026" statt "05.01.2026").
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+}
+
+async function loadBackupStatus() {
+  const statusEl = document.getElementById("last-backup-status");
+  try {
+    const res = await fetch("/api/app-status");
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = "Zuletzt heruntergeladen: " + (body.last_backup_at ? formatDateTime(body.last_backup_at) : "noch nie");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  }
 }
 
 const sheetsStatusEl = document.getElementById("sheets-status");
@@ -219,6 +258,7 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
 });
 
 loadSheetsStatus();
+loadBackupStatus();
 </script>
 </body>
 </html>

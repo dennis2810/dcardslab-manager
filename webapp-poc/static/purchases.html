@@ -8,6 +8,13 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <meta name="theme-color" content="#ffffff">
 <script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
 }
@@ -19,8 +26,10 @@ if ("serviceWorker" in navigator) {
     --accent-bg: #f0f4f8; --accent-border: #d5dee6;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --hover-bg: #2a2a2a; --detail-bg: #202020; --accent-bg: #1d2733; --accent-border: #3a4a5a; }
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --detail-bg: #202020; --accent-bg: #1d2733; --accent-border: #3a4a5a; }
   }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --detail-bg: #202020; --accent-bg: #1d2733; --accent-border: #3a4a5a; }
+  :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }

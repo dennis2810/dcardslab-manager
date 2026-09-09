@@ -8,6 +8,13 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <meta name="theme-color" content="#ffffff">
 <script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
 }
@@ -18,8 +25,10 @@ if ("serviceWorker" in navigator) {
     --hover-bg: #f7f7f7;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --hover-bg: #2a2a2a; }
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; }
   }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; }
+  :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -31,8 +40,8 @@ if ("serviceWorker" in navigator) {
   @media print {
     .no-print { display: none !important; }
   }
-  .summary-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
-  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-width: 150px; }
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
@@ -221,7 +230,7 @@ async function load() {
 
 function renderSummary(summary) {
   const cards = document.getElementById("summary-cards");
-  cards.style.display = "flex";
+  cards.style.display = "grid";
   const entries = [
     ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
     ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
