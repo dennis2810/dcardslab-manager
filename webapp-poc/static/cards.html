@@ -72,6 +72,7 @@ if ("serviceWorker" in navigator) {
   .ebay-badge-Verkauft { background: var(--info-bg); color: var(--info-fg); }
   .ebay-badge-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
   .ebay-badge-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
+  .manual-sale-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .list { width: 100%; border-collapse: collapse; }
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
@@ -170,7 +171,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="team">Team <span class="sort-arrow"></span></th>
             <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
             <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
-            <th data-key="ebay_status">eBay <span class="sort-arrow"></span></th>
+            <th data-key="ebay_status">Verkauf <span class="sort-arrow"></span></th>
             <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
             <th data-key="tags">Tags <span class="sort-arrow"></span></th>
           </tr>
@@ -277,6 +278,14 @@ function ebayBadge(ebayStatus) {
   const badge = document.createElement("span");
   badge.className = "ebay-badge ebay-badge-" + ebayStatus;
   badge.textContent = "eBay: " + (EBAY_STATUS_LABELS[ebayStatus] || ebayStatus);
+  return badge;
+}
+
+function manualSaleBadge(channel) {
+  if (!channel) return null;
+  const badge = document.createElement("span");
+  badge.className = "manual-sale-badge";
+  badge.textContent = "Verkauft: " + channel;
   return badge;
 }
 
@@ -473,6 +482,9 @@ function render(cards) {
     const badge = ebayBadge(card.ebay_status);
     if (badge) a.appendChild(badge);
 
+    const manualBadge = manualSaleBadge(card.manual_sale_channel);
+    if (manualBadge) a.appendChild(manualBadge);
+
     const shipped = shippedBadge(card.shipped);
     if (shipped) a.appendChild(shipped);
 
@@ -545,6 +557,8 @@ function renderList(cards) {
     const ebayTd = document.createElement("td");
     const badge = ebayBadge(card.ebay_status);
     if (badge) ebayTd.appendChild(badge);
+    const manualBadge = manualSaleBadge(card.manual_sale_channel);
+    if (manualBadge) ebayTd.appendChild(manualBadge);
     tr.appendChild(ebayTd);
 
     const shippedTd = document.createElement("td");

@@ -63,6 +63,7 @@ if ("serviceWorker" in navigator) {
   .status-sold { background: var(--info-bg); color: var(--info-fg); }
   .status-in-stock { background: var(--success-bg); color: var(--success-fg); }
   .status-out { background: var(--neutral-bg); color: #555; }
+  .sale-channel-hint { font-size: 0.8rem; color: #555; }
   @media print {
     .no-print { display: none !important; }
   }
@@ -307,22 +308,29 @@ async function loadInventory() {
 }
 
 function statusInfo(item) {
-  if (item.ebay_status === "Verkauft") return ["Verkauft", "status-sold"];
+  // "Verkauft" gilt unabhaengig vom Kanal - sowohl ueber eBay als auch
+  // ueber einen manuellen Verkauf (Kleinanzeigen, Vinted, ...). Der Status-
+  // Filter oben matcht exakt auf "Verkauft", daher bewusst kein
+  // kanal-spezifischer Zusatztext im Label selbst (siehe render() fuer den
+  // Kanal-Hinweis daneben).
+  if (item.ebay_status === "Verkauft" || item.manual_sale_channel) return ["Verkauft", "status-sold"];
   if ((item.quantity ?? 0) > 0) return ["Auf Lager", "status-in-stock"];
   return ["Nicht vorrätig", "status-out"];
 }
 
 // Zwei Faelle, die auf ein Problem hindeuten, statt nur einen normalen
 // Zustand zu beschreiben: eine vorrätige Karte ohne erfassten Lagerort
-// (nicht auffindbar) bzw. eine Karte mit Menge 0, die aber nicht ueber
-// einen eBay-Verkauf als "Verkauft" erfasst wurde (z.B. verloren,
-// beschaedigt oder ausserhalb von eBay verkauft, ohne das hier
-// nachzutragen).
+// (nicht auffindbar) bzw. eine Karte mit Menge 0, die aber weder ueber
+// einen eBay-Verkauf noch einen manuellen Verkauf (Kleinanzeigen, Vinted,
+// ...) als "Verkauft" erfasst wurde (z.B. verloren, beschaedigt, ohne das
+// hier nachzutragen).
 function renderWarnings() {
   const container = document.getElementById("inventory-warnings");
   container.innerHTML = "";
   const noLocation = items.filter((item) => (item.quantity ?? 0) > 0 && !(item.location || "").trim());
-  const unexplainedZero = items.filter((item) => (item.quantity ?? 0) === 0 && item.ebay_status !== "Verkauft");
+  const unexplainedZero = items.filter((item) =>
+    (item.quantity ?? 0) === 0 && item.ebay_status !== "Verkauft" && !item.manual_sale_channel
+  );
 
   const warnings = [];
   if (noLocation.length) {
@@ -480,6 +488,14 @@ function render() {
     badge.className = "status-badge " + statusClass;
     badge.textContent = statusLabel;
     statusTd.appendChild(badge);
+    // Kanal-Hinweis nur bei einem manuellen Verkauf noetig - ein eBay-
+    // Verkauf ist ueber die SKU-Spalte ohnehin schon als "eBay" erkennbar.
+    if (item.manual_sale_channel && item.ebay_status !== "Verkauft") {
+      const channelHint = document.createElement("span");
+      channelHint.className = "sale-channel-hint";
+      channelHint.textContent = " über " + item.manual_sale_channel;
+      statusTd.appendChild(channelHint);
+    }
     tr.appendChild(statusTd);
 
     body.appendChild(tr);

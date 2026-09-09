@@ -65,10 +65,24 @@ if ("serviceWorker" in navigator) {
   <ul>
     <li>QR-Code auf dem Dashboard, um das Tool direkt vom Handy aus zu öffnen.</li>
     <li>Installierbar als App auf dem Home-Bildschirm (Handy/Desktop).</li>
-    <li>Anzeige, wann Google Sheets zuletzt synchronisiert und wann zuletzt ein Backup heruntergeladen wurde.</li>
-    <li>Kennzahlen-Kacheln und Verbindungsstatus auf dem Dashboard sind jetzt anklickbar.</li>
+    <li>Anzeige, wann Google Sheets zuletzt synchronisiert und wann zuletzt ein Backup heruntergeladen wurde
+      (jetzt auch in den Einstellungen).</li>
+    <li>Kennzahlen-Kacheln und Verbindungsstatus auf dem Dashboard sind jetzt anklickbar – ebenso die
+      Kennzahlen-Kacheln auf den Statistikseiten, die zur jeweils passenden Seite führen.</li>
     <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
-    <li>Dark Mode folgt automatisch der Betriebssystem-/Browser-Einstellung.</li>
+    <li>Farbschema (System/Hell/Dunkel) über einen Schalter im Dashboard manuell festlegbar, statt nur der
+      Betriebssystem-/Browser-Einstellung zu folgen.</li>
+  </ul>
+
+  <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Toast-Benachrichtigungen statt reinem Text-Status bei Speichern/Löschen/Massenaktionen – bleiben sichtbar,
+      auch wenn zwischendurch weitergescrollt oder die Auswahl geleert wurde.</li>
+    <li>Massenaktionen-Leiste bleibt beim Scrollen sichtbar (Karten, eBay, Käufe, Inventar).</li>
+    <li>Tabellen scrollen auf schmalen Bildschirmen horizontal statt das Layout zu sprengen.</li>
+    <li>Warnung beim Verlassen einer Seite mit ungespeicherten Änderungen in den wichtigsten Formularen.</li>
+    <li>Einheitliche Leerzustände: „noch keine Einträge" (mit Handlungsvorschlag) wird jetzt von „nichts gefunden"
+      (Such-/Filter-Hinweis) unterschieden.</li>
   </ul>
 
   <h2>Karten <span class="date">September 2026</span></h2>
@@ -88,6 +102,8 @@ if ("serviceWorker" in navigator) {
     <li>Plattform-Auswertung: durchschnittlicher Gewinn/Marge je Einkaufsplattform.</li>
     <li>Plattform-Feld als feste Auswahl (eBay, Kleinanzeigen, Vinted, Sonstiges) statt Freitext.</li>
     <li>Käufe-Tabelle sortierbar und einzelne Käufe aufklappbar, um verknüpfte Karten direkt zu sehen.</li>
+    <li>Massenauswahl: Plattform für mehrere Käufe auf einmal setzen, Kaufdatum um X Tage verschieben (z. B.
+      nach einem Importfehler), mehrere Käufe auf einmal löschen.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -96,20 +112,26 @@ if ("serviceWorker" in navigator) {
     <li>eBay-Gebühren fließen in den Gewinn ein.</li>
     <li>Massenauswahl und Bulk-Preisänderung (prozentual) für eBay-Angebote.</li>
     <li>Preisrecherche-Verlauf pro Karte mit automatischem Preis-Alarm bei 20&nbsp;% Abweichung.</li>
+    <li>Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) lassen sich jetzt pro Karte erfassen
+      (Kanal, Datum, Preis, Versand, Gebühren) und zählen genau wie ein eBay-Verkauf in Statistiken, Rankings
+      und Jahresübersicht.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
   <ul>
     <li>Freitext-Suche nach Titel, SKU oder Lagerort.</li>
     <li>Lagerort-Übersicht (Menge/Wert je Lagerort) und Bestandswarnungen (fehlender Lagerort, Menge 0 ohne
-      "Verkauft"-Status).</li>
+      "Verkauft"-Status – berücksichtigt jetzt auch manuelle Verkäufe außerhalb von eBay).</li>
     <li>Duplikat-Zusammenführen beim Scannen erhöht die Inventar-Menge, statt eine zweite Karte anzulegen.</li>
+    <li>Massenauswahl: Lagerort, Menge oder Zustand für mehrere Einträge auf einmal setzen, mehrere Einträge
+      auf einmal löschen.</li>
   </ul>
 
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>
   <ul>
     <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Team-/Set-/Plattform-Ranking)
-      und "Alle Verkäufe" (jeder Verkauf einzeln, filter- und sortierbar).</li>
+      und "Alle Verkäufe" (jeder Verkauf einzeln, filter- und sortierbar, inklusive Verkaufskanal).</li>
+    <li>Beide Seiten zeigen jetzt dieselben Kennzahlen-Kacheln in gleicher Größe und Reihenfolge.</li>
     <li>Datumsfilter nach Kauf- oder Verkaufsdatum.</li>
     <li>Für DATEV/Lexoffice aufbereiteter Buchhaltungsexport sowie CSV-Export.</li>
     <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>

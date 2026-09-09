@@ -187,14 +187,14 @@ async function loadSheetsStatus() {
     }
     if (body.connected) {
       if (!sheetsError) {
-        sheetsStatusEl.textContent = "Verbunden seit " + (body.connected_at || "?");
+        sheetsStatusEl.textContent = "Verbunden seit " + (body.connected_at ? formatDateTime(body.connected_at) : "?");
         sheetsStatusEl.className = "connected";
       }
       connectDiv.style.display = "none";
       configuredDiv.style.display = "block";
       spreadsheetIdInput.value = body.spreadsheet_id || "";
       if (body.last_synced_at) {
-        syncStatusEl.textContent = "Zuletzt synchronisiert: " + body.last_synced_at;
+        syncStatusEl.textContent = "Zuletzt synchronisiert: " + formatDateTime(body.last_synced_at);
       }
     } else {
       if (!sheetsError) {
@@ -247,7 +247,7 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
       showToast("Fehler: " + (body.detail || res.statusText), true);
       return;
     }
-    syncStatusEl.textContent = "Zuletzt synchronisiert: " + body.synced_at;
+    syncStatusEl.textContent = "Zuletzt synchronisiert: " + formatDateTime(body.synced_at);
     syncStatusEl.className = "status";
     showToast("Google Sheets synchronisiert.");
   } catch (err) {

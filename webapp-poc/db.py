@@ -379,6 +379,19 @@ def ebay_info_by_card_id(card_ids):
     }
 
 
+def manual_sale_info_by_card_id(card_ids):
+    # Bulk-Companion zu ebay_info_by_card_id() - inventory.html/cards.html
+    # brauchen den Verkaufskanal pro Karte, um Verkaeufe ausserhalb von eBay
+    # genauso als "verkauft" zu erkennen wie einen eBay-Verkauf.
+    if not card_ids:
+        return {}
+    response = (
+        get_client().table("manual_sales").select("card_id,channel")
+        .in_("card_id", card_ids).execute()
+    )
+    return {row["card_id"]: {"channel": row["channel"]} for row in response.data}
+
+
 def purchase_cost_by_card_id(card_ids):
     # Bulk-lookup companion to get_purchase_for_card() - used where the cost
     # basis of many cards is needed at once (e.g. inventory valuation)
