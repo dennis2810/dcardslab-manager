@@ -541,6 +541,31 @@ def list_native_scheduled_listings():
     return response.data
 
 
+def list_listings_due_for_price_research(limit=3, max_age_days=7):
+    # Client-seitig gefiltert, gleiches Muster wie list_due_scheduled_listings() -
+    # ein nie geprueftes Angebot (last_price_research_at leer) hat Vorrang vor
+    # laengst faelligen; begrenzt auf `limit` pro Aufruf, damit
+    # ebay_scheduler.run_price_research_once() eBays Application-Token-
+    # Tageslimit fuer die Buy/Browse-Suche nicht sprengt.
+    from datetime import datetime, timedelta, timezone
+
+    response = (
+        get_client().table("ebay_listings").select("*")
+        .eq("status", "Veroeffentlicht").execute()
+    )
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    due = [
+        row for row in response.data
+        if not row.get("last_price_research_at") or row["last_price_research_at"] <= cutoff_iso
+    ]
+    due.sort(key=lambda row: row.get("last_price_research_at") or "")
+    return due[:limit]
+
+
+def mark_price_research_checked(listing_id, when_iso):
+    get_client().table("ebay_listings").update({"last_price_research_at": when_iso}).eq("id", listing_id).execute()
+
+
 def latest_sale_sync_cursor():
     response = (
         get_client().table("ebay_sales").select("created_at")
@@ -815,6 +840,54 @@ def delete_manual_sale(sale_id):
     if not response.data:
         return None
     get_client().table("manual_sales").delete().eq("id", sale_id).execute()
+    return response.data[0]
+
+
+WISHLIST_FIELDS = ["title", "team", "set_name", "target_price", "notes"]
+WISHLIST_NUMERIC_FIELDS = {"target_price"}
+WISHLIST_MONEY_FIELDS = {"target_price"}
+
+
+def list_wishlist_items(q=None):
+    query = get_client().table("wishlist_items").select("*")
+    if q:
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "notes"]))
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+
+def create_wishlist_item(fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in WISHLIST_FIELDS if name in fields},
+            WISHLIST_NUMERIC_FIELDS,
+        ),
+        WISHLIST_MONEY_FIELDS,
+    )
+    response = get_client().table("wishlist_items").insert(row).execute()
+    return response.data[0]
+
+
+def update_wishlist_item(item_id, fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in WISHLIST_FIELDS if name in fields},
+            WISHLIST_NUMERIC_FIELDS,
+        ),
+        WISHLIST_MONEY_FIELDS,
+    )
+    if not row:
+        response = get_client().table("wishlist_items").select("*").eq("id", item_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("wishlist_items").update(row).eq("id", item_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_wishlist_item(item_id):
+    response = get_client().table("wishlist_items").select("id").eq("id", item_id).execute()
+    if not response.data:
+        return None
+    get_client().table("wishlist_items").delete().eq("id", item_id).execute()
     return response.data[0]
 
 

@@ -791,6 +791,33 @@ async def delete_inventory_item(item_id: str):
     return Response(status_code=204)
 
 
+@app.get("/api/wishlist")
+async def list_wishlist_items(q: str | None = None):
+    return JSONResponse({"items": db.list_wishlist_items(q=q)})
+
+
+@app.post("/api/wishlist")
+async def create_wishlist_item(fields: dict = Body(default={})):
+    created = db.create_wishlist_item(fields)
+    return JSONResponse(created)
+
+
+@app.patch("/api/wishlist/{item_id}")
+async def update_wishlist_item(item_id: str, fields: dict = Body(...)):
+    updated = db.update_wishlist_item(item_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Wunschlisten-Eintrag {item_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
+@app.delete("/api/wishlist/{item_id}", status_code=204)
+async def delete_wishlist_item(item_id: str):
+    deleted = db.delete_wishlist_item(item_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Wunschlisten-Eintrag {item_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
 @app.post("/api/cards/{card_id}/price-research")
 async def create_price_research_entry(card_id: str, fields: dict = Body(default={})):
     if db.get_card(card_id) is None:

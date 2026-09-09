@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Inventur</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+    --danger-bg: #fdecea; --danger-fg: #611a15;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --accent-bg: #1d2733; --accent-border: #3a4a5a;
+      --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --accent-bg: #1d2733; --accent-border: #3a4a5a;
+    --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+    --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .note { font-size: 0.85rem; color: #555; }
+  .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  #scan-input { flex: 1 1 260px; font-size: 1.1rem; }
+  .progress-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
+  .progress-bar-track { background: #ddd; border-radius: 6px; height: 10px; margin-top: 0.4rem; overflow: hidden; }
+  .progress-bar-fill { background: var(--success-fg); height: 100%; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  tr.checked { background: var(--success-bg); }
+  tr:hover { background: var(--hover-bg); }
+  tr.checked:hover { background: var(--success-bg); }
+  .table-scroll { overflow-x: auto; }
+  .diff-box { border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.5rem 0; }
+  .diff-missing { background: var(--warn-bg); color: var(--warn-fg); }
+  .diff-unexpected { background: var(--danger-bg); color: var(--danger-fg); }
+  .diff-box ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+  .unexpected-form { display: flex; gap: 0.5rem; margin: 0.5rem 0; flex-wrap: wrap; }
+  .unexpected-form input { flex: 1 1 220px; }
+  #status-msg { font-style: italic; color: #555; }
+  .empty-state { color: #555; font-style: italic; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Inventur</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+  <p class="note">Soll/Ist-Abgleich: Sollbestand kommt aus dem aktuellen Inventar (vorrätige Karten). Karte anklicken
+    oder ihre SKU ins Feld unten tippen/scannen (funktioniert mit jedem USB-/Bluetooth-Barcodescanner, der die
+    gedruckten SKU-Etiketten wie eine Tastatureingabe + Enter sendet) markiert sie als gefunden. Der Fortschritt
+    bleibt lokal in diesem Browser gespeichert, auch nach einem Neuladen.</p>
+
+  <div class="controls">
+    <input type="text" id="scan-input" placeholder="SKU scannen/eintippen oder Titel suchen + Enter" autofocus>
+    <label>Lagerort
+      <select id="location-filter">
+        <option value="">Alle</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="open-only-filter"> Nur offene anzeigen</label>
+    <button type="button" id="reset-progress-btn">Fortschritt zurücksetzen</button>
+  </div>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="progress-block" id="progress-block" style="display: none;"></div>
+
+  <div class="table-scroll">
+    <table id="items-table" style="display: none;">
+      <thead>
+        <tr>
+          <th></th>
+          <th>SKU</th>
+          <th>Titel</th>
+          <th>Lagerort</th>
+          <th>Menge</th>
+        </tr>
+      </thead>
+      <tbody id="items-body"></tbody>
+    </table>
+  </div>
+  <p id="items-empty" class="empty-state"></p>
+
+  <h2>Unerwartet gefunden</h2>
+  <p class="note">Karten, die physisch auftauchen, aber nicht (oder mit falschem Lagerort/Status) im Inventar
+    stehen – z. B. beim Aufräumen. Hier nur als Notiz für den Abschlussbericht, ändert nichts an den
+    Inventar-Daten selbst.</p>
+  <div class="unexpected-form">
+    <input type="text" id="unexpected-input" placeholder="z. B. SKU oder Titel + kurze Notiz">
+    <button type="button" id="unexpected-add-btn">Hinzufügen</button>
+  </div>
+  <ul id="unexpected-list"></ul>
+
+  <h2>Abschlussbericht</h2>
+  <div id="report"></div>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// Fortschritt (abgehakte Item-IDs + unerwartet gefundene Notizen) bleibt rein
+// lokal im Browser - keine Server-Aenderung, das ist nur ein Begehungs-
+// Hilfsmittel fuer die aktuelle Session, kein Datenbank-Feld. Ein eigener
+// Key statt Ueberschreiben bei jedem Neuladen, damit eine mehrtaegige
+// Inventur nicht bei jedem Tab-Schliessen von vorne beginnt.
+const STORAGE_KEY = "dcardslab_inventur_v1";
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { checkedIds: [], unexpected: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      checkedIds: Array.isArray(parsed.checkedIds) ? parsed.checkedIds : [],
+      unexpected: Array.isArray(parsed.unexpected) ? parsed.unexpected : [],
+    };
+  } catch (err) {
+    return { checkedIds: [], unexpected: [] };
+  }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      checkedIds: [...checkedIds], unexpected,
+    }));
+  } catch (err) {
+    // Privater Modus/voller Speicher - Fortschritt lebt dann nur fuer die
+    // aktuelle Seitenansicht, kein harter Fehler noetig.
+  }
+}
+
+const progress = loadProgress();
+const checkedIds = new Set(progress.checkedIds);
+let unexpected = progress.unexpected;
+let items = [];
+
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("items-table");
+const body = document.getElementById("items-body");
+const empty = document.getElementById("items-empty");
+const progressBlock = document.getElementById("progress-block");
+const scanInput = document.getElementById("scan-input");
+const locationFilter = document.getElementById("location-filter");
+const openOnlyFilter = document.getElementById("open-only-filter");
+const unexpectedInput = document.getElementById("unexpected-input");
+const unexpectedList = document.getElementById("unexpected-list");
+const report = document.getElementById("report");
+
+function populateLocationFilter() {
+  const locations = [...new Set(items.map((i) => (i.location || "").trim()).filter(Boolean))].sort();
+  const current = locationFilter.value;
+  locationFilter.innerHTML = '<option value="">Alle</option>';
+  for (const location of locations) {
+    const opt = document.createElement("option");
+    opt.value = location;
+    opt.textContent = location;
+    locationFilter.appendChild(opt);
+  }
+  if (locations.includes(current)) locationFilter.value = current;
+}
+
+function filteredItems() {
+  return items.filter((item) => {
+    if (locationFilter.value && (item.location || "").trim() !== locationFilter.value) return false;
+    if (openOnlyFilter.checked && checkedIds.has(item.id)) return false;
+    return true;
+  });
+}
+
+function renderProgress() {
+  const total = items.length;
+  const found = items.filter((i) => checkedIds.has(i.id)).length;
+  progressBlock.style.display = total ? "block" : "none";
+  if (!total) return;
+  const pct = Math.round((found / total) * 100);
+  progressBlock.innerHTML = "";
+  progressBlock.append(`${found} von ${total} gefunden (${pct} %)`);
+  const track = document.createElement("div");
+  track.className = "progress-bar-track";
+  const fill = document.createElement("div");
+  fill.className = "progress-bar-fill";
+  fill.style.width = `${pct}%`;
+  track.appendChild(fill);
+  progressBlock.appendChild(track);
+}
+
+function renderReport() {
+  report.innerHTML = "";
+  const missing = items.filter((i) => !checkedIds.has(i.id));
+  const missingBox = document.createElement("div");
+  missingBox.className = "diff-box diff-missing";
+  if (missing.length) {
+    missingBox.innerHTML = `<strong>Fehlt (${missing.length})</strong>`;
+    const ul = document.createElement("ul");
+    for (const item of missing) {
+      const li = document.createElement("li");
+      li.textContent = `${item.sku || "(keine SKU)"} – ${item.card?.title || ""}${item.location ? " · " + item.location : ""}`;
+      ul.appendChild(li);
+    }
+    missingBox.appendChild(ul);
+  } else {
+    missingBox.textContent = items.length ? "Nichts fehlt – alle vorrätigen Karten wurden gefunden." : "";
+  }
+  report.appendChild(missingBox);
+
+  if (unexpected.length) {
+    const unexpectedBox = document.createElement("div");
+    unexpectedBox.className = "diff-box diff-unexpected";
+    unexpectedBox.innerHTML = `<strong>Unerwartet gefunden (${unexpected.length})</strong>`;
+    const ul = document.createElement("ul");
+    for (const note of unexpected) {
+      const li = document.createElement("li");
+      li.textContent = note;
+      ul.appendChild(li);
+    }
+    unexpectedBox.appendChild(ul);
+    report.appendChild(unexpectedBox);
+  }
+}
+
+function renderUnexpectedList() {
+  unexpectedList.innerHTML = "";
+  unexpected.forEach((note, index) => {
+    const li = document.createElement("li");
+    li.textContent = note + " ";
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Entfernen";
+    removeBtn.addEventListener("click", () => {
+      unexpected.splice(index, 1);
+      saveProgress();
+      renderUnexpectedList();
+      renderReport();
+    });
+    li.appendChild(removeBtn);
+    unexpectedList.appendChild(li);
+  });
+}
+
+function toggleChecked(itemId, checked) {
+  if (checked) checkedIds.add(itemId);
+  else checkedIds.delete(itemId);
+  saveProgress();
+  renderProgress();
+  renderReport();
+}
+
+function render() {
+  const visible = filteredItems();
+  body.innerHTML = "";
+  if (!items.length) {
+    table.style.display = "none";
+    empty.textContent = "Keine vorrätigen Karten im Inventar.";
+  } else if (!visible.length) {
+    table.style.display = "none";
+    empty.textContent = "Nichts gefunden mit den aktuellen Filtern.";
+  } else {
+    table.style.display = "table";
+    empty.textContent = "";
+    for (const item of visible) {
+      const tr = document.createElement("tr");
+      const isChecked = checkedIds.has(item.id);
+      if (isChecked) tr.classList.add("checked");
+
+      const checkTd = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = isChecked;
+      checkbox.addEventListener("change", () => {
+        toggleChecked(item.id, checkbox.checked);
+        tr.classList.toggle("checked", checkbox.checked);
+      });
+      checkTd.appendChild(checkbox);
+      tr.appendChild(checkTd);
+
+      for (const text of [item.sku || "", item.card?.title || "", item.location || "", String(item.quantity ?? "")]) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+  }
+  renderProgress();
+  renderReport();
+}
+
+scanInput.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  ev.preventDefault();
+  const query = scanInput.value.trim();
+  if (!query) return;
+
+  const bySku = items.find((i) => (i.sku || "").toLowerCase() === query.toLowerCase());
+  if (bySku) {
+    checkedIds.add(bySku.id);
+    saveProgress();
+    render();
+    showToast(`✓ ${bySku.card?.title || bySku.sku} abgehakt.`);
+    scanInput.value = "";
+    return;
+  }
+
+  const titleMatches = items.filter((i) => (i.card?.title || "").toLowerCase().includes(query.toLowerCase()));
+  if (titleMatches.length === 1) {
+    checkedIds.add(titleMatches[0].id);
+    saveProgress();
+    render();
+    showToast(`✓ ${titleMatches[0].card?.title} abgehakt.`);
+    scanInput.value = "";
+  } else if (titleMatches.length > 1) {
+    showToast(`${titleMatches.length} Treffer für "${query}" - bitte SKU verwenden oder genauer eingrenzen.`, true);
+  } else {
+    showToast(`Keine vorrätige Karte zu "${query}" gefunden.`, true);
+  }
+});
+
+locationFilter.addEventListener("change", render);
+openOnlyFilter.addEventListener("change", render);
+
+document.getElementById("reset-progress-btn").addEventListener("click", () => {
+  if (!confirm("Fortschritt (abgehakte Karten und unerwartete Funde) wirklich zurücksetzen?")) return;
+  checkedIds.clear();
+  unexpected = [];
+  saveProgress();
+  renderUnexpectedList();
+  render();
+  showToast("Fortschritt zurückgesetzt.");
+});
+
+document.getElementById("unexpected-add-btn").addEventListener("click", () => {
+  const note = unexpectedInput.value.trim();
+  if (!note) return;
+  unexpected.push(note);
+  unexpectedInput.value = "";
+  saveProgress();
+  renderUnexpectedList();
+  renderReport();
+});
+unexpectedInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    document.getElementById("unexpected-add-btn").click();
+  }
+});
+
+async function load() {
+  try {
+    const res = await fetch("/api/inventory");
+    const responseBody = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (responseBody.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = "";
+    // Soll-Bestand = vorrätige Eintraege (Menge > 0), gleiche Definition wie
+    // inventory.html's Lagerort-Uebersicht - "Verkauft"/"Nicht vorrätig"
+    // muessen bei einer physischen Begehung nicht auftauchen.
+    items = (responseBody.inventory || []).filter((i) => (i.quantity ?? 0) > 0);
+    items.sort((a, b) => (a.location || "").localeCompare(b.location || "") || (a.sku || "").localeCompare(b.sku || ""));
+    populateLocationFilter();
+    renderUnexpectedList();
+    render();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

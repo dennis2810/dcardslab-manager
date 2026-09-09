@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Wunschliste</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  tr:hover { background: var(--hover-bg); }
+  #status-msg { font-style: italic; color: #555; }
+  #item-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+  #item-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  #item-form input { font-weight: normal; margin-top: 0.2rem; }
+  #item-form .full-row { grid-column: 1 / -1; }
+  #item-form .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; align-items: center; }
+  .error { color: #b00020; font-weight: 600; }
+  .empty-state { color: #555; font-style: italic; }
+  .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Wunschliste</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+  <p class="empty-state">Karten, die (noch) nicht im Besitz sind – bewusst getrennt von der Kartenübersicht, damit
+    Bestand und Auswertungen unberührt bleiben.</p>
+
+  <div class="controls">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
+    <button type="button" id="toggle-form">+ Eintrag hinzufügen</button>
+  </div>
+
+  <form id="item-form">
+    <input type="hidden" id="item-id">
+    <label>Titel <input type="text" id="item-title" required></label>
+    <label>Team <input type="text" id="item-team"></label>
+    <label>Set <input type="text" id="item-set"></label>
+    <label>Wunschpreis <input type="number" id="item-target-price" step="0.01"></label>
+    <label class="full-row">Notiz <input type="text" id="item-notes"></label>
+    <div class="actions">
+      <button type="submit" id="item-form-submit">Hinzufügen</button>
+      <button type="button" id="item-form-cancel">Abbrechen</button>
+      <span id="item-form-status"></span>
+    </div>
+  </form>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="table-scroll">
+    <table id="items-table" style="display: none;">
+      <thead>
+        <tr>
+          <th>Titel</th>
+          <th>Team</th>
+          <th>Set</th>
+          <th>Wunschpreis</th>
+          <th>Notiz</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="items-body"></tbody>
+    </table>
+  </div>
+  <p id="items-empty"></p>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
+// Loeschen) - anders als ein reiner Status-Text neben dem jeweiligen Button
+// bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
+// groessere Betraege deutlich lesbarer ist als toFixed().
+function fmtEuro(value) {
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("items-table");
+const body = document.getElementById("items-body");
+const empty = document.getElementById("items-empty");
+const qInput = document.getElementById("q");
+
+const form = document.getElementById("item-form");
+const toggleFormBtn = document.getElementById("toggle-form");
+const cancelBtn = document.getElementById("item-form-cancel");
+const submitBtn = document.getElementById("item-form-submit");
+const formStatus = document.getElementById("item-form-status");
+const idInput = document.getElementById("item-id");
+const titleInput = document.getElementById("item-title");
+const teamInput = document.getElementById("item-team");
+const setInput = document.getElementById("item-set");
+const targetPriceInput = document.getElementById("item-target-price");
+const notesInput = document.getElementById("item-notes");
+
+function resetForm() {
+  form.reset();
+  idInput.value = "";
+  submitBtn.textContent = "Hinzufügen";
+  formStatus.textContent = "";
+  formStatus.className = "";
+}
+
+toggleFormBtn.addEventListener("click", () => {
+  const showing = form.style.display === "grid";
+  if (showing) {
+    form.style.display = "none";
+    resetForm();
+  } else {
+    resetForm();
+    form.style.display = "grid";
+    titleInput.focus();
+  }
+});
+
+cancelBtn.addEventListener("click", () => {
+  form.style.display = "none";
+  resetForm();
+});
+
+function startEdit(item) {
+  idInput.value = item.id;
+  titleInput.value = item.title || "";
+  teamInput.value = item.team || "";
+  setInput.value = item.set_name || "";
+  targetPriceInput.value = item.target_price ?? "";
+  notesInput.value = item.notes || "";
+  submitBtn.textContent = "Aktualisieren";
+  form.style.display = "grid";
+  titleInput.focus();
+}
+
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!titleInput.value.trim()) {
+    formStatus.textContent = "Bitte einen Titel eingeben.";
+    formStatus.className = "error";
+    return;
+  }
+  const fields = {
+    title: titleInput.value.trim(),
+    team: teamInput.value.trim(),
+    set_name: setInput.value.trim(),
+    target_price: targetPriceInput.value,
+    notes: notesInput.value.trim(),
+  };
+  const itemId = idInput.value;
+  formStatus.textContent = "Speichert …";
+  formStatus.className = "";
+  try {
+    const res = await fetch(itemId ? `/api/wishlist/${encodeURIComponent(itemId)}` : "/api/wishlist", {
+      method: itemId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const responseBody = await res.json();
+    if (!res.ok) {
+      formStatus.textContent = "Fehler: " + (responseBody.detail || res.statusText);
+      formStatus.className = "error";
+      showToast("Fehler: " + (responseBody.detail || res.statusText), true);
+      return;
+    }
+    showToast(itemId ? "Eintrag aktualisiert." : "Eintrag hinzugefügt.");
+    form.style.display = "none";
+    resetForm();
+    loadItems();
+  } catch (err) {
+    formStatus.textContent = "Fehler: " + err;
+    formStatus.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+async function deleteItem(itemId) {
+  if (!confirm("Diesen Wunschlisten-Eintrag wirklich löschen?")) return;
+  try {
+    const res = await fetch(`/api/wishlist/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      const responseBody = await res.json();
+      showToast("Fehler: " + (responseBody.detail || res.statusText), true);
+      return;
+    }
+    showToast("Eintrag gelöscht.");
+    loadItems();
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  }
+}
+
+function render(items) {
+  body.innerHTML = "";
+  if (!items.length) {
+    table.style.display = "none";
+    empty.textContent = qInput.value.trim()
+      ? "Nichts gefunden."
+      : "Noch keine Wunschlisten-Einträge – über „+ Eintrag hinzufügen“ eine Karte notieren, die du dir wünschst.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const item of items) {
+    const tr = document.createElement("tr");
+    for (const text of [item.title, item.team || "", item.set_name || "", fmtEuro(item.target_price), item.notes || ""]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    const actionsTd = document.createElement("td");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Bearbeiten";
+    editBtn.addEventListener("click", () => startEdit(item));
+    actionsTd.appendChild(editBtn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Löschen";
+    deleteBtn.addEventListener("click", () => deleteItem(item.id));
+    actionsTd.appendChild(deleteBtn);
+    tr.appendChild(actionsTd);
+    body.appendChild(tr);
+  }
+}
+
+async function loadItems() {
+  const q = qInput.value.trim();
+  try {
+    const res = await fetch("/api/wishlist" + (q ? `?q=${encodeURIComponent(q)}` : ""));
+    const responseBody = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (responseBody.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = "";
+    render(responseBody.items || []);
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(loadItems, 300);
+});
+
+loadItems();
+</script>
+</body>
+</html>
