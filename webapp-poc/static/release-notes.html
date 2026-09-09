@@ -120,6 +120,8 @@ if ("serviceWorker" in navigator) {
       von eBay runter muss.</li>
     <li>Die eBay-Seite warnt jetzt direkt in der Tabelle, wenn eine noch aktive Karte bereits anderweitig
       verkauft wurde.</li>
+    <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
+      Beenden auf der Kartenseite.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -129,6 +131,8 @@ if ("serviceWorker" in navigator) {
       "Verkauft"-Status – berücksichtigt jetzt auch manuelle Verkäufe außerhalb von eBay).</li>
     <li>Löschen eines manuellen Verkaufs setzt den Inventareintrag der Karte jetzt wieder zurück, statt sie
       dauerhaft auf Menge 0 stehen zu lassen.</li>
+    <li>Lagerort-Übersicht zeigt jetzt zusätzlich die Anzahl bereits verkaufter Karten je Lagerort (der
+      Lagerort bleibt nach einem Verkauf erhalten).</li>
     <li>Duplikat-Zusammenführen beim Scannen erhöht die Inventar-Menge, statt eine zweite Karte anzulegen.</li>
     <li>Massenauswahl: Lagerort, Menge oder Zustand für mehrere Einträge auf einmal setzen, mehrere Einträge
       auf einmal löschen.</li>
@@ -139,7 +143,10 @@ if ("serviceWorker" in navigator) {
     <li>Zwei Seiten: Übersicht (Kennzahlen, Monats-Diagramm, Jahresübersicht, Plattform-/Kanal-/Team-/Set-Ranking)
       und "Alle Verkäufe" (jeder Verkauf einzeln, filter- und sortierbar, inklusive Verkaufskanal).</li>
     <li>Beide Seiten zeigen jetzt dieselben Kennzahlen-Kacheln in gleicher Größe und Reihenfolge.</li>
-    <li>Auf "Alle Verkäufe" lässt sich zusätzlich nach Verkaufskanal filtern.</li>
+    <li>Auf "Alle Verkäufe" lässt sich zusätzlich nach Verkaufskanal filtern, und alle Kennzahlen-Kacheln sind
+      jetzt anklickbar (springen zur zugehörigen Tabelle bzw. Seite).</li>
+    <li>Lange Kennzahlen-Werte (z. B. ein hoher ROI-Prozentsatz) brechen in den Kennzahlen-Kacheln nicht mehr
+      unschön um.</li>
     <li>Neue Kanal-Auswertung (Ø Gewinn/Marge je Verkaufskanal) auf der Übersichtsseite, direkt neben der
       Plattform-Auswertung (jetzt klarer als "(Einkauf)" gekennzeichnet, da sie die Einkaufs- und nicht die
       Verkaufsseite abbildet).</li>
