@@ -148,7 +148,8 @@ if ("serviceWorker" in navigator) {
     verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Oben auf der Seite steht die Anzahl der
     Käufe im aktuellen Filter mit Summe (inkl. Versand); direkt darunter die Plattform-Auswertung (Einkauf) mit dem
     durchschnittlichen Gewinn/Marge je Einkaufsplattform – also wo die Karte gekauft wurde, unabhängig davon, wie
-    sie später verkauft wurde.</p>
+    sie später verkauft wurde. Die Verkäufer-Historie darunter gruppiert die Käufe nach dem Verkäufer-Feld (Anzahl,
+    Summe, Ø pro Kauf) und folgt dabei dem aktuellen Such-/Zeitfilter.</p>
   <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
     alle ausgewählten Käufe auf einmal zu setzen, das Kaufdatum um eine bestimmte Anzahl Tage zu verschieben (z. B.
     nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen.</p>
@@ -188,7 +189,8 @@ if ("serviceWorker" in navigator) {
     getrennt von der Kartenübersicht/dem Inventar – ein Wunschlisten-Eintrag zählt nirgends als vorhandene Karte
     mit und beeinflusst keine Statistik. Einträge lassen sich durchsuchen, bearbeiten und löschen, per Klick auf
     eine Spaltenüberschrift sortieren, sind bei vielen Einträgen seitenweise blätterbar und über „🖨 Drucken"
-    ausdruckbar sowie über „⭳ CSV-Export" exportierbar.</p>
+    ausdruckbar sowie über „⭳ CSV-Export" exportierbar. Der Pfeil-Button vor jedem Eintrag prüft aktive eBay-Angebote
+    zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen.</p>
 
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
@@ -196,8 +198,10 @@ if ("serviceWorker" in navigator) {
     Kanal- (Verkauf), Team- und Set-Ranking. Die Plattform-Auswertung zeigt, wo die Karten gekauft wurden; die
     Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller Kanal) – beide mit
     durchschnittlichem Gewinn/Marge. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
-    (Käufe, Inventar, Karten, Alle Verkäufe). Die Jahresübersicht lässt sich zusätzlich zum CSV-Export auch als PDF
-    exportieren (Button „📄 PDF-Export" – druckt nur diesen Abschnitt, „Als PDF speichern" im Druckdialog wählen).
+    (Käufe, Inventar, Karten, Alle Verkäufe). Der Jahresvergleich stellt die beiden jüngsten Jahre mit Verkäufen
+    nebeneinander (Verkäufe, Umsatz, Gewinn, Ø Marge) inklusive Veränderung in Prozent. Die Jahresübersicht lässt
+    sich zusätzlich zum CSV-Export auch als PDF exportieren (Button „📄 PDF-Export" – druckt nur diesen Abschnitt,
+    „Als PDF speichern" im Druckdialog wählen).
     Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln – inklusive Verkaufskanal (eBay oder der
     jeweilige manuelle Kanal), nach dem sich auch filtern lässt –, filter- und sortierbar, mit CSV-Export und einem
     für DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>

@@ -110,6 +110,15 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="platform-ranking-empty"></p>
 
+  <h2>Verkäufer-Historie</h2>
+  <div class="table-scroll">
+    <table id="seller-history-table" style="display: none;">
+        <thead><tr><th>Verkäufer</th><th>Käufe</th><th>Summe (inkl. Versand)</th><th>Ø pro Kauf</th></tr></thead>
+        <tbody id="seller-history-body"></tbody>
+      </table>
+  </div>
+  <p id="seller-history-empty"></p>
+
   <h2>Alle Käufe</h2>
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Plattform, Verkäufer, Notizen)">
@@ -416,6 +425,43 @@ function renderSums(purchases) {
   sumsEl.textContent = `${purchases.length} Kauf/Käufe im Filter · Summe (inkl. Versand): ${fmtEuro(total)}`;
 }
 
+// Gruppiert nach Verkaeufer-Freitextfeld (kein eigener Stammdatensatz) -
+// folgt dem aktuellen Such-/Zeitfilter, damit sich z.B. "wie oft habe ich
+// bei X gekauft" gezielt nach Plattform/Zeitraum eingrenzen laesst.
+function renderSellerHistory(purchases) {
+  const table = document.getElementById("seller-history-table");
+  const body = document.getElementById("seller-history-body");
+  const empty = document.getElementById("seller-history-empty");
+  body.innerHTML = "";
+
+  const bySeller = new Map();
+  for (const p of purchases) {
+    const seller = (p.seller || "").trim() || "(unbekannt)";
+    const g = bySeller.get(seller) || { count: 0, total: 0 };
+    g.count += 1;
+    g.total += (Number(p.total_price) || 0) + (Number(p.shipping) || 0);
+    bySeller.set(seller, g);
+  }
+
+  const rows = [...bySeller.entries()].sort((a, b) => b[1].total - a[1].total);
+  if (!rows.length) {
+    table.style.display = "none";
+    empty.textContent = "Noch keine Käufe im aktuellen Filter.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const [seller, g] of rows) {
+    const tr = document.createElement("tr");
+    for (const text of [seller, String(g.count), fmtEuro(g.total), fmtEuro(g.total / g.count)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
 toggleNewBtn.addEventListener("click", () => {
   newForm.style.display = newForm.style.display === "grid" ? "none" : "grid";
 });
@@ -472,6 +518,7 @@ function renderCurrentView() {
     statusMsg.textContent = `${filtered.length} Kauf/Käufe`;
   }
   renderSums(filtered);
+  renderSellerHistory(filtered);
   setSortIndicator();
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
