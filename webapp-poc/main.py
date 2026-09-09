@@ -436,6 +436,7 @@ async def get_card(card_id: str):
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     card["inventory"] = db.get_inventory_for_card(card_id)
     card["ebay_sale"] = db.get_sale_for_card(card_id)
+    card["manual_sale"] = db.get_manual_sale_for_card(card_id)
     try:
         card["price_research"] = db.list_price_research_for_card(card_id)
     except Exception:
@@ -750,6 +751,38 @@ async def delete_price_research_entry(entry_id: str):
     deleted = db.delete_price_research_entry(entry_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Preisrecherche-Eintrag {entry_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
+@app.post("/api/cards/{card_id}/manual-sale")
+async def create_manual_sale(card_id: str, fields: dict = Body(default={})):
+    if db.get_card(card_id) is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    created = db.create_manual_sale(card_id, fields)
+    try:
+        db.zero_inventory_for_card(card_id)
+    except Exception:
+        # Gleiches Isolationsprinzip wie sync_ebay_sales()/
+        # _create_default_inventory_item(): der Verkauf ist schon angelegt,
+        # ein Supabase-Hiccup bei der Inventar-Nullung darf das nicht zu
+        # einem 500 machen.
+        logger.exception("Inventar-Nullung fuer Karte %s (manueller Verkauf) fehlgeschlagen", card_id)
+    return JSONResponse(created)
+
+
+@app.patch("/api/manual-sales/{sale_id}")
+async def update_manual_sale(sale_id: str, fields: dict = Body(...)):
+    updated = db.update_manual_sale(sale_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
+@app.delete("/api/manual-sales/{sale_id}", status_code=204)
+async def delete_manual_sale(sale_id: str):
+    deleted = db.delete_manual_sale(sale_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
     return Response(status_code=204)
 
 

@@ -64,6 +64,12 @@ if ("serviceWorker" in navigator) {
     .no-print { display: none !important; }
   }
   .table-scroll { overflow-x: auto; }
+  [hidden] { display: none !important; }
+  /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
+     Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
+     farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
+  #bulk-results { margin-left: 0.5rem; font-size: 0.9rem; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -131,11 +137,31 @@ if ("serviceWorker" in navigator) {
     </div>
   </form>
 
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <label>Plattform setzen auf
+      <select id="bulk-platform-select">
+        <option value="">– wählen –</option>
+        <option value="eBay">eBay</option>
+        <option value="Kleinanzeigen">Kleinanzeigen</option>
+        <option value="Vinted">Vinted</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+    </label>
+    <button type="button" id="bulk-platform-btn">Anwenden</button>
+    <label>Kaufdatum verschieben um <input type="number" id="bulk-date-shift-days" step="1" style="width: 4.5rem;" placeholder="-3"> Tage</label>
+    <button type="button" id="bulk-date-shift-btn">Anwenden</button>
+    <button type="button" id="bulk-delete-btn">Löschen</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
+    <span id="bulk-results"></span>
+  </div>
+
   <p id="status-msg"></p>
   <div class="table-scroll">
     <table id="purchases-table" style="display: none;">
         <thead>
           <tr>
+            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
             <th></th>
             <th data-key="purchase_date">Datum <span class="sort-arrow"></span></th>
             <th data-key="platform">Plattform <span class="sort-arrow"></span></th>
@@ -230,6 +256,38 @@ let currentPurchases = [];
 // keinen neuen Request ausloest.
 const expandedIds = new Set();
 const purchaseDetailsCache = new Map();
+
+// Massenauswahl ueber Kauf-IDs statt DOM-Checkbox-Status - bleibt so beim
+// Blaettern/Neuladen erhalten, gleiches Muster wie cards.html/ebay.html.
+let selectedIds = new Set();
+// Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
+// nur auf die aktuell sichtbare Seite, nicht alle gefilterten Kaeufe ueber
+// alle Seiten hinweg).
+let currentPageItems = [];
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const bulkResultsEl = document.getElementById("bulk-results");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
+
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Kauf/Käufe ausgewählt`;
+}
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const p of currentPageItems) {
+    if (selectAllCheckbox.checked) selectedIds.add(p.id);
+    else selectedIds.delete(p.id);
+  }
+  updateBulkBar();
+  renderCurrentView();
+});
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  renderCurrentView();
+});
 // Neuestes Kaufdatum zuerst, wie bisher schon von db.list_purchases()
 // serverseitig sortiert (order("purchase_date", desc=True)).
 let sortKey = "purchase_date";
@@ -419,7 +477,10 @@ function renderCurrentView() {
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
 
+  currentPageItems = pageItems;
   render(pageItems, filtered);
+  selectAllCheckbox.checked = pageItems.length > 0 && pageItems.every((p) => selectedIds.has(p.id));
+  updateBulkBar();
 }
 
 function render(purchases, allFiltered) {
@@ -437,6 +498,20 @@ function render(purchases, allFiltered) {
     tr.addEventListener("click", () => {
       location.href = `purchase.html?id=${encodeURIComponent(p.id)}`;
     });
+
+    const checkboxTd = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(p.id);
+    checkbox.addEventListener("click", (ev) => ev.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(p.id);
+      else selectedIds.delete(p.id);
+      selectAllCheckbox.checked = currentPageItems.length > 0 && currentPageItems.every((x) => selectedIds.has(x.id));
+      updateBulkBar();
+    });
+    checkboxTd.appendChild(checkbox);
+    tr.appendChild(checkboxTd);
 
     const toggleTd = document.createElement("td");
     const toggleBtn = document.createElement("button");
@@ -481,7 +556,7 @@ function buildDetailRow(purchaseId) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 7;
+  td.colSpan = 8;
   tr.appendChild(td);
 
   const cached = purchaseDetailsCache.get(purchaseId);
@@ -555,6 +630,114 @@ newForm.addEventListener("submit", async (ev) => {
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+// Reine Datumsarithmetik auf dem "YYYY-MM-DD"-String statt ueber new Date()
+// (das wuerde in einer Zeitzone westlich von UTC die UTC-Mitternacht auf
+// den Vortag zurueckfallen lassen) - Date.UTC() umgeht das, da purchase_date
+// ohnehin ein reines Datum ohne Uhrzeit ist.
+function shiftDateString(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const shifted = new Date(Date.UTC(y, m - 1, d + days));
+  return shifted.toISOString().slice(0, 10);
+}
+
+document.getElementById("bulk-platform-btn").addEventListener("click", async () => {
+  const platform = document.getElementById("bulk-platform-select").value;
+  if (!platform) {
+    bulkResultsEl.textContent = "Bitte eine Plattform auswählen.";
+    bulkResultsEl.className = "error";
+    showToast("Bitte eine Plattform auswählen.", true);
+    return;
+  }
+  const ids = [...selectedIds];
+  bulkResultsEl.textContent = "Speichert …";
+  bulkResultsEl.className = "";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/purchases/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform }),
+      })
+    ));
+    const okCount = results.filter((r) => r.ok).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Kauf/Käufe auf Plattform "${platform}" gesetzt.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadPurchases();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("bulk-date-shift-btn").addEventListener("click", async () => {
+  const daysInput = document.getElementById("bulk-date-shift-days");
+  const days = Number(daysInput.value);
+  if (!days) {
+    bulkResultsEl.textContent = "Bitte eine Anzahl Tage ungleich 0 eingeben (z. B. -3).";
+    bulkResultsEl.className = "error";
+    showToast("Bitte eine Anzahl Tage ungleich 0 eingeben.", true);
+    return;
+  }
+  const purchasesById = new Map(currentPurchases.map((p) => [p.id, p]));
+  const targets = [...selectedIds].filter((id) => purchasesById.get(id)?.purchase_date);
+  bulkResultsEl.textContent = "Verschiebt …";
+  bulkResultsEl.className = "";
+  try {
+    const results = await Promise.all(targets.map((id) =>
+      fetch(`/api/purchases/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchase_date: shiftDateString(purchasesById.get(id).purchase_date, days) }),
+      })
+    ));
+    const okCount = results.filter((r) => r.ok).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Kaufdatum/Kaufdaten um ${days} Tag(e) verschoben.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadPurchases();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("bulk-delete-btn").addEventListener("click", async () => {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} Kauf/Käufe wirklich löschen? Verknüpfte Karten bleiben erhalten, nur die Zuordnung geht verloren.`)) return;
+  bulkResultsEl.textContent = "Löscht …";
+  bulkResultsEl.className = "";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/purchases/${encodeURIComponent(id)}`, { method: "DELETE" })
+    ));
+    const okCount = results.filter((r) => r.ok || r.status === 204).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Kauf/Käufe gelöscht.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadPurchases();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

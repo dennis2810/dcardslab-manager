@@ -1550,6 +1550,125 @@ class DeletePriceResearchEntryTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class CreateManualSaleTests(unittest.TestCase):
+    def test_inserts_row_with_card_id_and_rounded_money_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "manual_sales", [{"id": "ms-1", "card_id": "card-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_manual_sale("card-1", {
+                "channel": "Kleinanzeigen", "sale_date": "2026-09-10", "gross_price": "12.499",
+                "shipping_charged": "3.005", "shipping_cost": "2.5", "fees": "0.999", "notes": "Barzahlung",
+            })
+        self.assertEqual(result["id"], "ms-1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["card_id"], "card-1")
+        self.assertEqual(row["channel"], "Kleinanzeigen")
+        self.assertEqual(row["gross_price"], 12.5)
+        self.assertEqual(row["shipping_charged"], 3.0)
+        self.assertEqual(row["shipping_cost"], 2.5)
+        self.assertEqual(row["fees"], 1.0)
+        self.assertEqual(row["notes"], "Barzahlung")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "manual_sales", [{"id": "ms-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_manual_sale("card-1", {"gross_price": 5, "not_a_column": "x"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+    def test_blank_money_fields_become_none(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "manual_sales", [{"id": "ms-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_manual_sale("card-1", {"gross_price": "", "fees": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["gross_price"])
+        self.assertIsNone(row["fees"])
+
+
+class GetManualSaleForCardTests(unittest.TestCase):
+    def test_returns_the_row_for_the_card(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "card_id": "card-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_manual_sale_for_card("card-1")
+        self.assertEqual(result["id"], "ms-1")
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("card_id", "card-1")
+
+    def test_returns_none_when_no_manual_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_manual_sale_for_card("card-1")
+        self.assertIsNone(result)
+
+
+class UpdateManualSaleTests(unittest.TestCase):
+    def test_updates_rounded_money_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "gross_price": 9.5}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_manual_sale("ms-1", {"gross_price": "9.499"})
+        self.assertEqual(result["gross_price"], 9.5)
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["gross_price"], 9.5)
+
+    def test_updates_refunded_flag(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "refunded": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_manual_sale("ms-1", {"refunded": True})
+        self.assertTrue(result["refunded"])
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_manual_sale("ms-1", {"not_a_column": "x"})
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_manual_sale("does-not-exist", {"not_a_column": "x"})
+        self.assertIsNone(result)
+
+
+class DeleteManualSaleTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_manual_sale("ms-1")
+        self.assertEqual(result, {"id": "ms-1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "ms-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_manual_sale("does-not-exist")
+        self.assertIsNone(result)
+
+
 class StatisticsRowsTests(unittest.TestCase):
     def test_joins_purchase_and_sale_info_per_card(self):
         mock_client = MagicMock()
@@ -1561,6 +1680,7 @@ class StatisticsRowsTests(unittest.TestCase):
                 response.data = [
                     {"id": "card-1", "title": "Karte 1", "card_no": 1, "team": "FC Bayern", "set_name": "Topps 2026"},
                     {"id": "card-2", "title": "Karte 2", "card_no": 2, "team": "", "set_name": ""},
+                    {"id": "card-3", "title": "Karte 3", "card_no": 3, "team": "", "set_name": ""},
                 ]
                 builder.select.return_value.execute.return_value = response
             elif name == "purchase_items":
@@ -1577,6 +1697,12 @@ class StatisticsRowsTests(unittest.TestCase):
                 builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
             elif name == "ebay_listings":
                 response.data = []
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            elif name == "manual_sales":
+                response.data = [{
+                    "card_id": "card-3", "channel": "Kleinanzeigen", "sale_date": "2026-03-01T00:00:00+00:00",
+                    "gross_price": 8.0, "fees": 0.5, "refunded": False,
+                }]
                 builder.select.return_value.in_.return_value.execute.return_value = response
             return builder
 
@@ -1598,6 +1724,15 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertFalse(by_id["card-2"]["refunded"])
         self.assertEqual(by_id["card-1"]["platform"], "eBay")
         self.assertEqual(by_id["card-2"]["platform"], "")
+        self.assertEqual(by_id["card-1"]["channel"], "eBay")
+        self.assertIsNone(by_id["card-2"]["channel"])
+        # card-3 has no eBay sale, only a manual sale - statistics_rows()
+        # must fall back to it instead of leaving the card "unsold".
+        self.assertEqual(by_id["card-3"]["sale_price"], 8.0)
+        self.assertEqual(by_id["card-3"]["ebay_fees"], 0.5)
+        self.assertEqual(by_id["card-3"]["channel"], "Kleinanzeigen")
+        self.assertEqual(by_id["card-3"]["sale_date"], "2026-03-01T00:00:00+00:00")
+        self.assertFalse(by_id["card-3"]["refunded"])
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()

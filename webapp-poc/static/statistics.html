@@ -45,7 +45,8 @@ if ("serviceWorker" in navigator) {
   .chart-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #555; margin-top: 0.3rem; }
   .chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: middle; }
   .year-total-row { font-weight: 700; background: var(--hover-bg); }
-  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; }
+  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-height: 4.5rem; display: flex; flex-direction: column; justify-content: center; color: inherit; text-decoration: none; }
+  a.summary-card:hover { border-color: #888; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
   .summary-card .value { font-size: 1.2rem; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
@@ -248,25 +249,30 @@ function renderRanking(tableId, bodyId, emptyId, entries) {
 function renderSummary(summary) {
   const cards = document.getElementById("summary-cards");
   cards.style.display = "grid";
+  // Gleiches KPI-Set/gleiche Reihenfolge wie statistics-sales.html, damit
+  // beide Seiten identisch aussehen - dort ohne die Verweise auf "Alle
+  // Verkäufe" (drittes Element), da man auf dieser Detailseite bereits ist.
   const entries = [
-    ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost)],
-    ["Aktueller Inventarwert", fmtEuro(summary.inventory_value)],
-    ["Gesamtumsatz", fmtEuro(summary.total_revenue)],
-    ["Versand erhalten", fmtEuro(summary.total_shipping_charged)],
-    ["Versand-Kosten", fmtEuro(summary.total_shipping_cost)],
-    ["eBay-Gebühren", fmtEuro(summary.total_ebay_fees)],
-    ["Realisierter Gewinn", fmtEuro(summary.realized_profit)],
-    ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–"],
-    ["Verkaufte Karten", String(summary.sold_count)],
-    ["Offene Karten (Kauf, unverkauft)", String(summary.open_count)],
-    ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price)],
-    ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–"],
-    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–"],
+    ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost), "purchases.html"],
+    ["Aktueller Inventarwert", fmtEuro(summary.inventory_value), "inventory.html"],
+    ["Gesamtumsatz", fmtEuro(summary.total_revenue), "statistics-sales.html"],
+    ["Versand erhalten", fmtEuro(summary.total_shipping_charged), "statistics-sales.html"],
+    ["Versand-Kosten", fmtEuro(summary.total_shipping_cost), "statistics-sales.html"],
+    ["Verkaufsgebühren", fmtEuro(summary.total_ebay_fees), "statistics-sales.html"],
+    ["Realisierter Gewinn", fmtEuro(summary.realized_profit), "statistics-sales.html"],
+    ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–", "statistics-sales.html"],
+    ["Verkaufte Karten", String(summary.sold_count), "statistics-sales.html"],
+    ["Offene Karten (Kauf, unverkauft)", String(summary.open_count), "cards.html"],
+    ["Retouren", String(summary.refunded_count), "statistics-sales.html"],
+    ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price), "statistics-sales.html"],
+    ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–", "statistics-sales.html"],
+    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–", "statistics-sales.html"],
   ];
   cards.innerHTML = "";
-  for (const [label, value] of entries) {
-    const card = document.createElement("div");
+  for (const [label, value, href] of entries) {
+    const card = document.createElement(href ? "a" : "div");
     card.className = "summary-card";
+    if (href) card.href = href;
     card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
     cards.appendChild(card);
   }

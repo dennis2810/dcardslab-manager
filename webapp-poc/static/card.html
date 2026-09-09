@@ -78,6 +78,15 @@ if ("serviceWorker" in navigator) {
   .purchase-forms input, .purchase-forms select { padding: 0.3rem; margin-right: 0.4rem; }
   .ebay-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .ebay-section h2 { font-size: 1.1rem; }
+  .manual-sale-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .manual-sale-section h2 { font-size: 1.1rem; }
+  .manual-sale-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .manual-sale-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .manual-sale-form input, .manual-sale-form select { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .manual-sale-form .actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; align-items: center; margin-top: 0.5rem; }
+  .manual-sale-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
+  .manual-sale-readonly dt { font-weight: 600; }
+  .manual-sale-readonly dd { margin: 0; }
   .ebay-status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
   .ebay-status-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
   .ebay-status-Geplant { background: var(--warn-bg); color: var(--warn-fg); }
@@ -182,6 +191,7 @@ if ("serviceWorker" in navigator) {
   <div class="purchase-section" id="purchase-section"></div>
   <div class="inventory-section" id="inventory-section"></div>
   <div class="ebay-section" id="ebay-section"></div>
+  <div class="manual-sale-section" id="manual-sale-section"></div>
   <div class="price-research-section" id="price-research-section"></div>
 
 <script>
@@ -464,6 +474,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale);
+    renderManualSaleSection(card.manual_sale, card.purchase);
     renderPriceResearchSection(card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price);
   } catch (err) {
     showError(form, "Fehler: " + err);
@@ -968,6 +979,208 @@ function renderInventoryRow(item) {
 // Preisrecherche-Verlauf: manuell eingetragene Marktpreis-Beobachtungen
 // ueber die Zeit (z.B. "eBay verkaufte Artikel" am X. Datum bei Y Euro) -
 // unabhaengig vom eigenen eBay-Angebot, hilft bei der Preisfindung.
+// Verkauf ausserhalb von eBay (Kleinanzeigen, Vinted, ...) - eigenstaendig
+// von renderEbaySection() oben, da nicht an einen ebay_listings-Eintrag
+// gebunden. Genau ein manueller Verkauf pro Karte (siehe main.py's
+// POST/PATCH/DELETE /api/manual-sales), analog zu renderSaleStats() fuer
+// eBay-Verkaeufe, aber mit editierbarem Kanal/Preis/Datum statt nur
+// nachtraeglich anpassbaren Gebuehren.
+function renderManualSaleSection(manualSale, purchase) {
+  const section = document.getElementById("manual-sale-section");
+  if (manualSale) {
+    renderManualSaleReadonly(section, manualSale, purchase);
+  } else {
+    renderManualSaleForm(section, null);
+  }
+}
+
+function renderManualSaleReadonly(section, sale, purchase) {
+  section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
+  const readonly = document.createElement("div");
+  readonly.className = "manual-sale-readonly";
+  const dl = document.createElement("dl");
+  const rows = [
+    ["Kanal", sale.channel || ""],
+    ["Verkauft am", formatDate(sale.sale_date)],
+    ["Verkaufspreis", fmtEuro(sale.gross_price)],
+    ["Versand erhalten", fmtEuro(sale.shipping_charged)],
+  ];
+  if (sale.refunded) rows.push(["Status", "↩ Rückerstattet"]);
+  if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
+    const cost = Number(purchase.allocated_cost);
+    const refunded = Boolean(sale.refunded);
+    const grossPrice = refunded ? 0 : Number(sale.gross_price || 0);
+    const shippingCharged = refunded ? 0 : Number(sale.shipping_charged || 0);
+    const shippingCost = Number(sale.shipping_cost || 0);
+    const fees = Number(sale.fees || 0);
+    const profit = grossPrice + shippingCharged - cost - shippingCost - fees;
+    rows.push(["Gewinn", fmtEuro(profit)]);
+    if (cost) {
+      const marginPct = (profit / cost) * 100;
+      let marginText = fmtPercent(marginPct);
+      if (marginPct > OUTLIER_MARGIN_THRESHOLD) {
+        marginText += " ⚠️ auffällig hoch – ggf. automatisch aufgeteilten Einstandspreis auf der Kaufseite prüfen";
+      }
+      rows.push(["Marge", marginText]);
+    }
+  }
+  if (purchase && purchase.purchase_date && sale.sale_date) {
+    const purchaseDate = new Date(purchase.purchase_date);
+    const saleDate = new Date(sale.sale_date);
+    const days = Math.round((saleDate - purchaseDate) / (24 * 60 * 60 * 1000));
+    rows.push(["Liegedauer", `${days} Tag(e)`]);
+  }
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
+    const dd = document.createElement("dd"); dd.textContent = value; dl.appendChild(dd);
+  }
+  readonly.appendChild(dl);
+  section.appendChild(readonly);
+
+  const actions = document.createElement("div");
+  actions.className = "ebay-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.textContent = "Bearbeiten";
+  editBtn.addEventListener("click", () => renderManualSaleForm(section, sale));
+  actions.appendChild(editBtn);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.textContent = "Verkauf löschen";
+  deleteBtn.addEventListener("click", async () => {
+    if (!confirm("Diesen manuellen Verkauf wirklich löschen?")) return;
+    try {
+      const res = await fetch(`/api/manual-sales/${encodeURIComponent(sale.id)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const body = await res.json();
+        alert("Fehler: " + (body.detail || res.statusText));
+        return;
+      }
+      showToast("Verkauf gelöscht.");
+      loadCard();
+    } catch (err) {
+      alert("Fehler: " + err);
+    }
+  });
+  actions.appendChild(deleteBtn);
+  section.appendChild(actions);
+}
+
+function renderManualSaleForm(section, existingSale) {
+  section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
+  const form = document.createElement("form");
+  form.className = "manual-sale-form";
+
+  function field(label, name, value, type = "text", step) {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = label;
+    const input = document.createElement("input");
+    input.type = type;
+    if (step) input.step = step;
+    input.name = name;
+    input.value = value ?? "";
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
+    return input;
+  }
+
+  const channelWrapper = document.createElement("label");
+  channelWrapper.textContent = "Kanal";
+  const channelSelect = document.createElement("select");
+  channelSelect.name = "channel";
+  for (const value of ["Kleinanzeigen", "Vinted", "Sonstiges"]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if ((existingSale?.channel || "Kleinanzeigen") === value) option.selected = true;
+    channelSelect.appendChild(option);
+  }
+  channelWrapper.appendChild(channelSelect);
+  form.appendChild(channelWrapper);
+
+  field(
+    "Verkaufsdatum", "sale_date",
+    existingSale?.sale_date ? existingSale.sale_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    "date"
+  );
+  // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst lehnen
+  // manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
+  field("Verkaufspreis (€)", "gross_price", existingSale?.gross_price, "number", "0.01");
+  field("Versand erhalten (€)", "shipping_charged", existingSale?.shipping_charged, "number", "0.01");
+  field("Versand-Kosten (€)", "shipping_cost", existingSale?.shipping_cost, "number", "0.01");
+  field("Gebühren (€)", "fees", existingSale?.fees, "number", "0.01");
+  field("Notizen", "notes", existingSale?.notes);
+
+  const refundedWrapper = document.createElement("label");
+  refundedWrapper.className = "checkbox-field";
+  const refundedCheckbox = document.createElement("input");
+  refundedCheckbox.type = "checkbox";
+  refundedCheckbox.checked = Boolean(existingSale?.refunded);
+  refundedWrapper.append(refundedCheckbox, " Als Rückerstattung/Retoure markieren");
+  form.appendChild(refundedWrapper);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "submit";
+  saveBtn.textContent = existingSale ? "Speichern" : "Verkauf erfassen";
+  actions.appendChild(saveBtn);
+
+  if (existingSale) {
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Abbrechen";
+    cancelBtn.addEventListener("click", () => loadCard());
+    actions.appendChild(cancelBtn);
+  }
+
+  const statusEl = document.createElement("span");
+  actions.appendChild(statusEl);
+  form.appendChild(actions);
+  section.appendChild(form);
+
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fields = {
+      channel: form.elements.channel.value,
+      sale_date: form.elements.sale_date.value,
+      gross_price: form.elements.gross_price.value,
+      shipping_charged: form.elements.shipping_charged.value,
+      shipping_cost: form.elements.shipping_cost.value,
+      fees: form.elements.fees.value,
+      notes: form.elements.notes.value,
+      refunded: refundedCheckbox.checked,
+    };
+    statusEl.textContent = "Speichert …";
+    statusEl.className = "";
+    try {
+      const url = existingSale
+        ? `/api/manual-sales/${encodeURIComponent(existingSale.id)}`
+        : `/api/cards/${encodeURIComponent(cardId)}/manual-sale`;
+      const res = await fetch(url, {
+        method: existingSale ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        statusEl.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      showToast(existingSale ? "Verkauf gespeichert." : "Verkauf erfasst.");
+      loadCard();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "error";
+      showToast("Fehler: " + err, true);
+    }
+  });
+}
+
 function renderPriceResearchSection(entries, cardTitle, listingPrice) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
