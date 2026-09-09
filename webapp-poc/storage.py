@@ -4,6 +4,7 @@ so the free-tier 1GB storage quota lasts - full-resolution scanner output
 is overkill for web display and eBay listing photos."""
 import io
 from pathlib import Path
+from uuid import uuid4
 
 from PIL import Image
 
@@ -29,6 +30,20 @@ def upload_image(batch_id, position, side, path):
     how to handle a failed upload for one card without aborting the batch."""
     data = compress_image(Path(path))
     object_path = f"{batch_id}/{position}_{side}.jpg"
+    get_client().storage.from_(BUCKET).upload(
+        object_path, data, file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
+    return object_path
+
+
+def upload_extra_image(batch_id, position, path):
+    """Additional photo beyond front/back (e.g. a close-up of a defect).
+    Unlike upload_image()'s fixed front/back path, each extra photo needs
+    its own unique object path so several can coexist per card and be
+    deleted individually - a random suffix instead of a running counter,
+    since the caller doesn't track how many extras already exist."""
+    data = compress_image(Path(path))
+    object_path = f"{batch_id}/{position}_extra_{uuid4().hex[:8]}.jpg"
     get_client().storage.from_(BUCKET).upload(
         object_path, data, file_options={"content-type": "image/jpeg", "upsert": "true"}
     )

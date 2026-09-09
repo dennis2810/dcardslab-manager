@@ -67,6 +67,45 @@ class UploadImageTests(unittest.TestCase):
                     storage.upload_image("batch-123", 3, "front", fixture)
 
 
+class UploadExtraImageTests(unittest.TestCase):
+    def test_uploads_compressed_bytes_to_a_unique_path(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _write_fixture_image(Path(tmp))
+            mock_client = MagicMock()
+            with patch("storage.get_client", return_value=mock_client):
+                object_path = storage.upload_extra_image("batch-123", 3, fixture)
+
+        self.assertTrue(object_path.startswith("batch-123/3_extra_"))
+        self.assertTrue(object_path.endswith(".jpg"))
+        mock_client.storage.from_.assert_called_once_with(storage.BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        upload_call.assert_called_once()
+        args, kwargs = upload_call.call_args
+        self.assertEqual(args[0], object_path)
+        self.assertEqual(kwargs["file_options"]["content-type"], "image/jpeg")
+
+    def test_two_uploads_get_different_paths(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _write_fixture_image(Path(tmp))
+            mock_client = MagicMock()
+            with patch("storage.get_client", return_value=mock_client):
+                path1 = storage.upload_extra_image("batch-123", 3, fixture)
+                path2 = storage.upload_extra_image("batch-123", 3, fixture)
+        self.assertNotEqual(path1, path2)
+
+    def test_propagates_upload_errors_to_caller(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _write_fixture_image(Path(tmp))
+            mock_client = MagicMock()
+            mock_client.storage.from_.return_value.upload.side_effect = RuntimeError("bucket down")
+            with patch("storage.get_client", return_value=mock_client):
+                with self.assertRaises(RuntimeError):
+                    storage.upload_extra_image("batch-123", 3, fixture)
+
+
 class SignedUrlTests(unittest.TestCase):
     def test_returns_signed_url_from_client_response(self):
         mock_client = MagicMock()

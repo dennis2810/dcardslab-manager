@@ -228,6 +228,86 @@ class SetCardImagePathTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class AddCardExtraImageTests(unittest.TestCase):
+    def test_appends_to_empty_list(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = [{"id": "card-1", "extra_image_paths": ""}]
+        update_response = MagicMock()
+        update_response.data = [{"id": "card-1", "extra_image_paths": "b1/1_extra_abc.jpg"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = update_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.add_card_extra_image("card-1", "b1/1_extra_abc.jpg")
+        self.assertEqual(result["extra_image_paths"], "b1/1_extra_abc.jpg")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"extra_image_paths": "b1/1_extra_abc.jpg"}
+        )
+
+    def test_appends_to_existing_list(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = [{"id": "card-1", "extra_image_paths": "b1/1_extra_aaa.jpg"}]
+        update_response = MagicMock()
+        update_response.data = [{"id": "card-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = update_response
+        with patch("db.get_client", return_value=mock_client):
+            db.add_card_extra_image("card-1", "b1/1_extra_bbb.jpg")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"extra_image_paths": "b1/1_extra_aaa.jpg,b1/1_extra_bbb.jpg"}
+        )
+
+    def test_returns_none_when_card_not_found(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.add_card_extra_image("does-not-exist", "x.jpg")
+        self.assertIsNone(result)
+        mock_client.table.return_value.update.assert_not_called()
+
+
+class RemoveCardExtraImageTests(unittest.TestCase):
+    def test_removes_by_index_and_returns_removed_path(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = [{"id": "card-1", "extra_image_paths": "b1/1_extra_aaa.jpg,b1/1_extra_bbb.jpg"}]
+        update_response = MagicMock()
+        update_response.data = [{"id": "card-1", "extra_image_paths": "b1/1_extra_bbb.jpg"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = update_response
+        with patch("db.get_client", return_value=mock_client):
+            updated, removed_path = db.remove_card_extra_image("card-1", 0)
+        self.assertEqual(removed_path, "b1/1_extra_aaa.jpg")
+        self.assertEqual(updated["extra_image_paths"], "b1/1_extra_bbb.jpg")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"extra_image_paths": "b1/1_extra_bbb.jpg"}
+        )
+
+    def test_returns_none_none_when_index_out_of_range(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = [{"id": "card-1", "extra_image_paths": "b1/1_extra_aaa.jpg"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        with patch("db.get_client", return_value=mock_client):
+            updated, removed_path = db.remove_card_extra_image("card-1", 5)
+        self.assertIsNone(updated)
+        self.assertIsNone(removed_path)
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_returns_none_none_when_card_not_found(self):
+        mock_client = MagicMock()
+        get_response = MagicMock()
+        get_response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = get_response
+        with patch("db.get_client", return_value=mock_client):
+            updated, removed_path = db.remove_card_extra_image("does-not-exist", 0)
+        self.assertIsNone(updated)
+        self.assertIsNone(removed_path)
+
+
 class DeleteCardTests(unittest.TestCase):
     def test_deletes_card_and_returns_it(self):
         mock_client = MagicMock()
