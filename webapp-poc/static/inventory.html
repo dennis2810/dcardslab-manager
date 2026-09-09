@@ -114,6 +114,17 @@ if ("serviceWorker" in navigator) {
   <p id="status-msg"></p>
   <p id="total-value" class="sums-block"></p>
   <div id="inventory-warnings"></div>
+
+  <h2>Lagerort-Übersicht</h2>
+  <div class="table-scroll">
+    <table id="location-overview-table" style="display: none;">
+        <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th><th>Verkauft</th></tr></thead>
+        <tbody id="location-overview-body"></tbody>
+      </table>
+  </div>
+  <p id="location-overview-empty"></p>
+
+  <h2>Alle Einträge</h2>
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, SKU, Lagerort)">
     <label>Status
@@ -125,16 +136,8 @@ if ("serviceWorker" in navigator) {
       </select>
     </label>
     <button type="button" id="toggle-add-item">+ Eintrag hinzufügen</button>
+    <a class="no-print" href="inventur.html"><button type="button">📋 Inventur starten</button></a>
   </div>
-
-  <h2>Lagerort-Übersicht</h2>
-  <div class="table-scroll">
-    <table id="location-overview-table" style="display: none;">
-        <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th><th>Verkauft</th></tr></thead>
-        <tbody id="location-overview-body"></tbody>
-      </table>
-  </div>
-  <p id="location-overview-empty"></p>
 
   <form id="add-item-form">
     <div class="full-row">
@@ -152,7 +155,6 @@ if ("serviceWorker" in navigator) {
     </div>
   </form>
 
-  <h2>Alle Einträge</h2>
   <div id="bulk-actions" class="controls no-print" hidden>
     <span id="bulk-count"></span>
     <label>Lagerort setzen auf <input type="text" id="bulk-location-input" placeholder="z.B. Kiste B"></label>

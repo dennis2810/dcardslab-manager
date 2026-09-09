@@ -47,7 +47,10 @@ if ("serviceWorker" in navigator) {
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-  .page-header-actions { display: flex; align-items: center; gap: 0.75rem; }
+  /* Steht direkt ueber der Kartentabelle (statt oben im page-header), siehe
+     .controls: rechtsbuendig ans Ende der Zeile gedrueckt statt nach dem
+     letzten Filter in eine eigene Zeile umzubrechen. */
+  .controls .new-card-link { margin-left: auto; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
@@ -98,10 +101,7 @@ if ("serviceWorker" in navigator) {
 <body>
   <div class="page-header">
     <h1>DCardLabs – Karten</h1>
-    <div class="page-header-actions">
-      <a class="no-print" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
-      <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
-    </div>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
   <nav class="page-nav no-print">
     <label>Seite
@@ -142,6 +142,7 @@ if ("serviceWorker" in navigator) {
       <option value="">Alle Tags</option>
     </select>
     <button type="button" id="view-toggle">Listenansicht</button>
+    <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
   <div id="bulk-actions" class="controls no-print" hidden>

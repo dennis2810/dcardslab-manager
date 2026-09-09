@@ -41,6 +41,12 @@ if ("serviceWorker" in navigator) {
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   tr:hover { background: var(--hover-bg); }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print, button { display: none !important; }
+  }
   #status-msg { font-style: italic; color: #555; }
   #item-form { display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
   #item-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -81,12 +87,12 @@ if ("serviceWorker" in navigator) {
   <p class="empty-state">Karten, die (noch) nicht im Besitz sind – bewusst getrennt von der Kartenübersicht, damit
     Bestand und Auswertungen unberührt bleiben.</p>
 
-  <div class="controls">
+  <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
     <button type="button" id="toggle-form">+ Eintrag hinzufügen</button>
   </div>
 
-  <form id="item-form">
+  <form id="item-form" class="no-print">
     <input type="hidden" id="item-id">
     <label>Titel <input type="text" id="item-title" required></label>
     <label>Team <input type="text" id="item-team"></label>
@@ -105,10 +111,10 @@ if ("serviceWorker" in navigator) {
     <table id="items-table" style="display: none;">
       <thead>
         <tr>
-          <th>Titel</th>
-          <th>Team</th>
-          <th>Set</th>
-          <th>Wunschpreis</th>
+          <th data-key="title">Titel <span class="sort-arrow"></span></th>
+          <th data-key="team">Team <span class="sort-arrow"></span></th>
+          <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+          <th data-key="target_price">Wunschpreis <span class="sort-arrow"></span></th>
           <th>Notiz</th>
           <th></th>
         </tr>
@@ -117,6 +123,12 @@ if ("serviceWorker" in navigator) {
     </table>
   </div>
   <p id="items-empty"></p>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+  </div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -163,6 +175,13 @@ const table = document.getElementById("items-table");
 const body = document.getElementById("items-body");
 const empty = document.getElementById("items-empty");
 const qInput = document.getElementById("q");
+const pageInfo = document.getElementById("page-info");
+
+const PAGE_SIZE = 40;
+let currentPage = 0;
+let sortKey = "title";
+let sortAsc = true;
+let allItems = [];
 
 const form = document.getElementById("item-form");
 const toggleFormBtn = document.getElementById("toggle-form");
@@ -270,9 +289,53 @@ async function deleteItem(itemId) {
   }
 }
 
-function render(items) {
+function sortValue(item, key) {
+  if (key === "target_price") return item.target_price ?? -Infinity;
+  return (item[key] || "").toString().toLowerCase();
+}
+
+function sortedItems() {
+  const rows = allItems.slice();
+  rows.sort((a, b) => {
+    const va = sortValue(a, sortKey);
+    const vb = sortValue(b, sortKey);
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    render();
+  });
+}
+
+function render() {
+  const sorted = sortedItems();
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const visible = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  pageInfo.textContent = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+
   body.innerHTML = "";
-  if (!items.length) {
+  if (!allItems.length) {
     table.style.display = "none";
     empty.textContent = qInput.value.trim()
       ? "Nichts gefunden."
@@ -281,7 +344,7 @@ function render(items) {
   }
   table.style.display = "table";
   empty.textContent = "";
-  for (const item of items) {
+  for (const item of visible) {
     const tr = document.createElement("tr");
     for (const text of [item.title, item.team || "", item.set_name || "", fmtEuro(item.target_price), item.notes || ""]) {
       const td = document.createElement("td");
@@ -314,7 +377,9 @@ async function loadItems() {
       return;
     }
     statusMsg.textContent = "";
-    render(responseBody.items || []);
+    allItems = responseBody.items || [];
+    currentPage = 0;
+    render();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -324,6 +389,16 @@ qInput.addEventListener("input", () => {
   clearTimeout(qInput._debounce);
   qInput._debounce = setTimeout(loadItems, 300);
 });
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 loadItems();
 </script>
