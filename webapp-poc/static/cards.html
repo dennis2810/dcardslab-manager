@@ -8,6 +8,13 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <meta name="theme-color" content="#ffffff">
 <script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
 }
@@ -23,15 +30,20 @@ if ("serviceWorker" in navigator) {
     --neutral-bg: #e2e3e5; --neutral-fg: #383d41;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --placeholder-bg: #2a2a2a;
+    :root:not([data-theme="light"]) { --placeholder-bg: #2a2a2a;
       --success-bg: #1c3324; --success-fg: #7fd99a;
       --warn-bg: #4a3c00; --warn-fg: #ffd866;
       --info-bg: #1d2c44; --info-fg: #8ab4f8;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82;
-      --neutral-bg: #333; --neutral-fg: #ccc;
-    }
+      --neutral-bg: #333; --neutral-fg: #ccc; }
   }
+  :root[data-theme="dark"] { color-scheme: dark; --placeholder-bg: #2a2a2a;
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82;
+      --neutral-bg: #333; --neutral-fg: #ccc; }
+  :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
