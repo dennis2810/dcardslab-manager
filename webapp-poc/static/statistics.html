@@ -39,6 +39,9 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   @media print {
     .no-print { display: none !important; }
+    /* PDF-Export der Jahresübersicht: blendet beim Drucken alles bis auf den
+       Abschnitt aus, statt die ganze (lange) Statistikseite zu drucken. */
+    body.print-yearly-only > *:not(#yearly-section) { display: none !important; }
   }
   .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
   #monthly-chart { margin: 0.5rem 0 1rem; overflow-x: auto; }
@@ -98,7 +101,7 @@ if ("serviceWorker" in navigator) {
   <h2>Verkäufe pro Monat</h2>
   <div id="monthly-chart"></div>
   <div class="table-scroll">
-    <table id="monthly-table" style="display: none;">
+    <table id="monthly-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Monat</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
         <tbody id="monthly-body"></tbody>
       </table>
@@ -141,17 +144,20 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="set-ranking-empty"></p>
 
-  <h2>Jahresübersicht (Steuer)</h2>
-  <div class="controls no-print">
-    <button type="button" id="yearly-csv-btn">⭳ CSV-Export</button>
+  <div id="yearly-section">
+    <h2>Jahresübersicht (Steuer)</h2>
+    <div class="controls no-print">
+      <button type="button" id="yearly-csv-btn">⭳ CSV-Export</button>
+      <button type="button" id="yearly-pdf-btn">📄 PDF-Export</button>
+    </div>
+    <div class="table-scroll">
+      <table id="yearly-overview-table" style="display: none;">
+          <thead><tr><th>Jahr</th><th>Quartal</th><th>Verkäufe</th><th>Umsatz</th><th>Einstandspreis</th><th>Gewinn</th></tr></thead>
+          <tbody id="yearly-overview-body"></tbody>
+        </table>
+    </div>
+    <p id="yearly-overview-empty"></p>
   </div>
-  <div class="table-scroll">
-    <table id="yearly-overview-table" style="display: none;">
-        <thead><tr><th>Jahr</th><th>Quartal</th><th>Verkäufe</th><th>Umsatz</th><th>Einstandspreis</th><th>Gewinn</th></tr></thead>
-        <tbody id="yearly-overview-body"></tbody>
-      </table>
-  </div>
-  <p id="yearly-overview-empty"></p>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -533,6 +539,17 @@ document.getElementById("yearly-csv-btn").addEventListener("click", () => {
     row[0], row[1], row[2], fmtNumber(row[3], 2), fmtNumber(row[4], 2), fmtNumber(row[5], 2),
   ]);
   downloadCsv("jahresuebersicht.csv", headers, rows);
+});
+
+// Beschraenkt den Druck-Dialog auf den Jahresuebersicht-Abschnitt (siehe
+// body.print-yearly-only im @media print), damit "Als PDF speichern" nicht
+// die ganze Statistikseite exportiert.
+document.getElementById("yearly-pdf-btn").addEventListener("click", () => {
+  document.body.classList.add("print-yearly-only");
+  window.print();
+});
+window.addEventListener("afterprint", () => {
+  document.body.classList.remove("print-yearly-only");
 });
 
 load();

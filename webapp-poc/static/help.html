@@ -145,7 +145,8 @@ if ("serviceWorker" in navigator) {
     überschreiben, bis zur nächsten Verknüpfungsänderung). Für die Steuer lässt sich außerdem ein Beleg (Foto oder
     PDF der Rechnung) hochladen.</p>
   <p>Die Käufe-Übersicht ist sortierbar, nach Zeitraum filterbar und lässt sich per Pfeil-Button aufklappen, um die
-    verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Die Plattform-Auswertung (Einkauf) zeigt den
+    verknüpften Karten eines Kaufs zu sehen, ohne die Seite zu wechseln. Oben auf der Seite steht die Anzahl der
+    Käufe im aktuellen Filter mit Summe (inkl. Versand); direkt darunter die Plattform-Auswertung (Einkauf) mit dem
     durchschnittlichen Gewinn/Marge je Einkaufsplattform – also wo die Karte gekauft wurde, unabhängig davon, wie
     sie später verkauft wurde.</p>
   <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
@@ -180,14 +181,14 @@ if ("serviceWorker" in navigator) {
     einem Neuladen – „Fortschritt zurücksetzen" beginnt eine neue Inventur. Unter „Unerwartet gefunden" lassen sich
     Karten notieren, die auftauchen, aber nicht im Inventar stehen. Der Abschlussbericht zeigt am Ende, was fehlt
     und was unerwartet war. Die Checkliste lässt sich per Klick auf eine Spaltenüberschrift sortieren, ist bei
-    vielen Karten seitenweise blätterbar und über „🖨 Drucken" ausdruckbar.</p>
+    vielen Karten seitenweise blätterbar und über „🖨 Drucken" ausdruckbar sowie über „⭳ CSV-Export" exportierbar.</p>
 
   <h2 id="wunschliste">Wunschliste</h2>
   <p>Für Karten, die (noch) nicht im Besitz sind: Titel, Team, Set, Wunschpreis und eine Notiz erfassen. Bewusst
     getrennt von der Kartenübersicht/dem Inventar – ein Wunschlisten-Eintrag zählt nirgends als vorhandene Karte
     mit und beeinflusst keine Statistik. Einträge lassen sich durchsuchen, bearbeiten und löschen, per Klick auf
     eine Spaltenüberschrift sortieren, sind bei vielen Einträgen seitenweise blätterbar und über „🖨 Drucken"
-    ausdruckbar.</p>
+    ausdruckbar sowie über „⭳ CSV-Export" exportierbar.</p>
 
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
@@ -195,9 +196,11 @@ if ("serviceWorker" in navigator) {
     Kanal- (Verkauf), Team- und Set-Ranking. Die Plattform-Auswertung zeigt, wo die Karten gekauft wurden; die
     Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller Kanal) – beide mit
     durchschnittlichem Gewinn/Marge. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
-    (Käufe, Inventar, Karten, Alle Verkäufe). Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln –
-    inklusive Verkaufskanal (eBay oder der jeweilige manuelle Kanal), nach dem sich auch filtern lässt –, filter-
-    und sortierbar, mit CSV-Export und einem für DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
+    (Käufe, Inventar, Karten, Alle Verkäufe). Die Jahresübersicht lässt sich zusätzlich zum CSV-Export auch als PDF
+    exportieren (Button „📄 PDF-Export" – druckt nur diesen Abschnitt, „Als PDF speichern" im Druckdialog wählen).
+    Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln – inklusive Verkaufskanal (eBay oder der
+    jeweilige manuelle Kanal), nach dem sich auch filtern lässt –, filter- und sortierbar, mit CSV-Export und einem
+    für DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
