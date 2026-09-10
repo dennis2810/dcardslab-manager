@@ -107,7 +107,8 @@ if ("serviceWorker" in navigator) {
     mit folgenden Optionen:</p>
   <ul>
     <li>Als versendet markieren / Markierung entfernen</li>
-    <li>eBay-Entwürfe für die Auswahl anlegen</li>
+    <li>eBay-Entwürfe für die Auswahl anlegen (optional mit einem in den Einstellungen angelegten Textbaustein,
+      der in die automatisch generierte Beschreibung eingefügt wird)</li>
     <li>Etiketten drucken (SKU/Team/Saison/Titel)</li>
     <li>Zu einem bestehenden Kauf hinzufügen</li>
   </ul>
@@ -137,9 +138,13 @@ if ("serviceWorker" in navigator) {
     mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
     Verfügung, siehe unten). Der Versand über das Tool ist dabei komplett optional – wird stattdessen direkt im
     eBay Seller Hub versendet, übernimmt der automatische Hintergrund-Sync Trackingnummer und Versanddienstleister
-    trotzdem von dort und markiert die Karte ebenfalls als versendet. Schickt ein Käufer die Karte zurück,
-    markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
-    erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.
+    trotzdem von dort und markiert die Karte ebenfalls als versendet. Nach einem eBay-Verkauf wird auch der
+    (pseudonyme) eBay-Käufer-Benutzername angezeigt – ist er bei einem schon vor dieser Funktion synchronisierten
+    Verkauf noch leer, holt der Button „Käufer-/Versanddaten von eBay laden" ihn zusammen mit der aktuellen
+    Versandadresse einmalig nach (die Adresse wird dabei nur angezeigt, nicht gespeichert). Schickt ein Käufer die
+    Karte zurück, markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend:
+    Verkaufspreis und erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben
+    als Verlust stehen.
     Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
     Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich,
     auch mehrere Suchtreffer auf einmal per Checkbox und „Ausgewählte übernehmen". Die Suche blendet dabei
@@ -154,7 +159,8 @@ if ("serviceWorker" in navigator) {
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
     das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
     Statistiken, Rankings und Jahresübersicht ein. Wird ein solcher Verkauf wieder gelöscht, wird der
-    Inventareintrag automatisch zurückgesetzt.</p>
+    Inventareintrag automatisch zurückgesetzt. Wurde die Karte bereits über eBay verkauft, ist dieser Abschnitt
+    ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich).</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
     ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
     zurückziehen.</p>
@@ -274,8 +280,11 @@ if ("serviceWorker" in navigator) {
     Rhythmus zu warten. Ein Link
     „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle. Die Mindestbestand-Schwelle legt fest, ab
     welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Die Absenderadresse wird
-    als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Von hier aus geht es
-    auch zu dieser Anleitung und zu den Release-Notes.</p>
+    als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Die
+    Angebots-Textbausteine sind wiederverwendbare Beschreibungstexte (z. B. ein Hinweis für eine ganze
+    Kartenserie), die sich beim Anlegen eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf
+    der Kartenübersicht – optional auswählen lassen, statt denselben Text immer wieder neu einzutippen. Von hier
+    aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>

@@ -1397,6 +1397,15 @@ class GetEbaySaleTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class SetEbaySaleBuyerUsernameTests(unittest.TestCase):
+    def test_writes_username_for_sale(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.set_ebay_sale_buyer_username("sale-1", "kartenfan99")
+        mock_client.table.return_value.update.assert_called_once_with({"buyer_username": "kartenfan99"})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "sale-1")
+
+
 class GetSaleForCardTests(unittest.TestCase):
     def test_returns_most_recent_sale(self):
         mock_client = MagicMock()
@@ -1927,6 +1936,74 @@ class UpdateWishlistPriceCheckTests(unittest.TestCase):
             db.update_wishlist_price_check("w1", fields)
         mock_client.table.return_value.update.assert_called_once_with(fields)
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "w1")
+
+
+class ListDescriptionTemplatesTests(unittest.TestCase):
+    def test_returns_all_templates_ordered_by_created_at_desc(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1", "name": "Set-Hinweis", "body": "Text"}]
+        mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_description_templates()
+        self.assertEqual(result, [{"id": "t1", "name": "Set-Hinweis", "body": "Text"}])
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with(
+            "created_at", desc=True
+        )
+
+
+class CreateDescriptionTemplateTests(unittest.TestCase):
+    def test_inserts_row(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "description_templates", [{"id": "t1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_description_template({"name": "Set-Hinweis", "body": "Aus meiner Sammlung."})
+        self.assertEqual(result["id"], "t1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["name"], "Set-Hinweis")
+        self.assertEqual(row["body"], "Aus meiner Sammlung.")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "description_templates", [{"id": "t1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_description_template({"name": "x", "not_a_column": "y"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+
+class UpdateDescriptionTemplateTests(unittest.TestCase):
+    def test_updates_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1", "name": "Neuer Name"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_description_template("t1", {"name": "Neuer Name"})
+        self.assertEqual(result["name"], "Neuer Name")
+        mock_client.table.return_value.update.assert_called_once_with({"name": "Neuer Name"})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "t1")
+
+
+class DeleteDescriptionTemplateTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_description_template("t1")
+        self.assertEqual(result, {"id": "t1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "t1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_description_template("does-not-exist")
+        self.assertIsNone(result)
 
 
 class CreatePriceResearchEntryTests(unittest.TestCase):

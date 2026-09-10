@@ -77,6 +77,35 @@ class CreateEbayListingEndpointTests(unittest.TestCase):
         body = response.json()
         self.assertIn("required_aspects", body)
 
+    def test_inserts_extra_note_into_generated_description(self):
+        with patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
+            response = client.post(
+                "/api/cards/card-1/ebay-listing", json={"extra_note": "Aus meiner Sammlung."}
+            )
+        self.assertEqual(response.status_code, 200)
+        _, _, row = mock_create.call_args[0]
+        self.assertIn("Aus meiner Sammlung.", row["description"])
+
+    def test_explicit_description_overrides_extra_note(self):
+        with patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
+            response = client.post(
+                "/api/cards/card-1/ebay-listing",
+                json={"description": "Eigener Text", "extra_note": "sollte ignoriert werden"},
+            )
+        self.assertEqual(response.status_code, 200)
+        _, _, row = mock_create.call_args[0]
+        self.assertEqual(row["description"], "Eigener Text")
+
 
 class ListEbayListingsEndpointTests(unittest.TestCase):
     def test_passes_filters_through(self):
@@ -1097,6 +1126,52 @@ class EbaySaleShippingAddressEndpointTests(unittest.TestCase):
              patch("main.ebay_client.get_order", side_effect=ebay_client.EbayApiError("boom")):
             response = client.get("/api/ebay/sales/sale-1/shipping-address")
         self.assertEqual(response.status_code, 502)
+
+    def test_includes_buyer_username_and_backfills_it(self):
+        order = {
+            "buyer": {"username": "kartenfan99"},
+            "fulfillmentStartInstructions": [
+                {"shippingStep": {"shipTo": {"fullName": "Max Mustermann", "contactAddress": {"city": "Berlin"}}}}
+            ],
+        }
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=order), \
+             patch("main.db.set_ebay_sale_buyer_username") as mock_backfill:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["buyer_username"], "kartenfan99")
+        mock_backfill.assert_called_once_with("sale-1", "kartenfan99")
+
+    def test_missing_buyer_defaults_username_to_empty_string_and_skips_backfill(self):
+        order = {
+            "fulfillmentStartInstructions": [
+                {"shippingStep": {"shipTo": {"fullName": "Max Mustermann"}}}
+            ],
+        }
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=order), \
+             patch("main.db.set_ebay_sale_buyer_username") as mock_backfill:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["buyer_username"], "")
+        mock_backfill.assert_not_called()
+
+    def test_backfill_failure_does_not_fail_the_request(self):
+        order = {
+            "buyer": {"username": "kartenfan99"},
+            "fulfillmentStartInstructions": [
+                {"shippingStep": {"shipTo": {"fullName": "Max Mustermann"}}}
+            ],
+        }
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=order), \
+             patch("main.db.set_ebay_sale_buyer_username", side_effect=RuntimeError("db down")):
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["buyer_username"], "kartenfan99")
 
 
 if __name__ == "__main__":

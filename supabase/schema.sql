@@ -322,3 +322,17 @@ alter table wishlist_items add column if not exists last_price_check_at timestam
 alter table wishlist_items add column if not exists last_match_price numeric;
 alter table wishlist_items add column if not exists last_match_title text default '';
 alter table wishlist_items add column if not exists last_match_url text default '';
+
+-- Migration (2026-09-10): Wiederverwendbare Textbausteine fuer eBay-
+-- Beschreibungen (z.B. ein Hinweis fuer eine ganze Set-Serie) - werden beim
+-- Anlegen eines Angebots optional in die automatisch generierte
+-- Beschreibung eingefuegt (siehe ebay_listing.generate_description()),
+-- statt denselben Text bei jeder aehnlichen Karte neu zu tippen. Eigene
+-- Tabelle statt an eine Karte/ein Angebot gebunden, da ein Baustein ueber
+-- viele Angebote hinweg wiederverwendet wird.
+create table if not exists description_templates (
+    id          uuid primary key default gen_random_uuid(),
+    name        text not null default '',
+    body        text not null default '',
+    created_at  timestamptz not null default now()
+);

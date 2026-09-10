@@ -824,6 +824,33 @@ async def delete_wishlist_item(item_id: str):
     return Response(status_code=204)
 
 
+@app.get("/api/description-templates")
+async def list_description_templates():
+    return JSONResponse({"templates": db.list_description_templates()})
+
+
+@app.post("/api/description-templates")
+async def create_description_template(fields: dict = Body(default={})):
+    created = db.create_description_template(fields)
+    return JSONResponse(created)
+
+
+@app.patch("/api/description-templates/{template_id}")
+async def update_description_template(template_id: str, fields: dict = Body(...)):
+    updated = db.update_description_template(template_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Textbaustein {template_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
+@app.delete("/api/description-templates/{template_id}", status_code=204)
+async def delete_description_template(template_id: str):
+    deleted = db.delete_description_template(template_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Textbaustein {template_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
 @app.post("/api/cards/{card_id}/price-research")
 async def create_price_research_entry(card_id: str, fields: dict = Body(default={})):
     if db.get_card(card_id) is None:
@@ -1302,7 +1329,7 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
     listing_type = fields.get("listing_type") or ebay_listing.derive_listing_type(card)
     row = {
         "title": fields.get("title") or ebay_listing.generate_title(card),
-        "description": fields.get("description") or ebay_listing.generate_description(card),
+        "description": fields.get("description") or ebay_listing.generate_description(card, fields.get("extra_note", "")),
         "condition": fields.get("condition", "NM"),
         "condition_id": fields.get("condition_id", "4000"),
         "grader": fields.get("grader", ""),
@@ -1626,7 +1653,17 @@ async def ebay_sale_shipping_address(sale_id: str):
     ship_to = (instructions[0].get("shippingStep") or {}).get("shipTo") if instructions else None
     if not ship_to:
         raise HTTPException(status_code=404, detail="Keine Versandadresse in der eBay-Bestellung gefunden.")
-    return JSONResponse(ship_to)
+    # Pseudonymer eBay-Handle (anders als die Adresse oben durchaus dauerhaft
+    # gespeichert, siehe buyer_username-Migration) - hier als Backfill fuer
+    # Verkaeufe, die vor Einfuehrung des Felds synchronisiert wurden, ohne
+    # auf den naechsten sync_ebay_sales()-Lauf warten zu muessen.
+    buyer_username = (order.get("buyer") or {}).get("username") or ""
+    if buyer_username:
+        try:
+            db.set_ebay_sale_buyer_username(sale_id, buyer_username)
+        except Exception:
+            logger.exception("Konnte buyer_username nicht nachtragen fuer Verkauf %s", sale_id)
+    return JSONResponse({**ship_to, "buyer_username": buyer_username})
 
 
 @app.post("/api/ebay/sync-sales")

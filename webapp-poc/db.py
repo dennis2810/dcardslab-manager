@@ -615,6 +615,15 @@ def get_ebay_sale(sale_id):
     return response.data[0] if response.data else None
 
 
+def set_ebay_sale_buyer_username(sale_id, username):
+    # Eigene Funktion statt update_ebay_sale() (dessen EBAY_SALE_WRITABLE_FIELDS
+    # bewusst nur die manuell editierbaren Felder erlaubt) - buyer_username
+    # kommt sonst nur aus sync_ebay_sales(), hier zusaetzlich als Backfill
+    # fuer bereits vor diesem Feld synchronisierte Verkaeufe (siehe
+    # GET /api/ebay/sales/{id}/shipping-address).
+    get_client().table("ebay_sales").update({"buyer_username": username}).eq("id", sale_id).execute()
+
+
 def get_sale_for_card(card_id):
     response = (
         get_client().table("ebay_sales").select("*")
@@ -951,6 +960,37 @@ def delete_wishlist_item(item_id):
     if not response.data:
         return None
     get_client().table("wishlist_items").delete().eq("id", item_id).execute()
+    return response.data[0]
+
+
+DESCRIPTION_TEMPLATE_FIELDS = ["name", "body"]
+
+
+def list_description_templates():
+    response = get_client().table("description_templates").select("*").order("created_at", desc=True).execute()
+    return response.data
+
+
+def create_description_template(fields):
+    row = {name: fields[name] for name in DESCRIPTION_TEMPLATE_FIELDS if name in fields}
+    response = get_client().table("description_templates").insert(row).execute()
+    return response.data[0]
+
+
+def update_description_template(template_id, fields):
+    row = {name: fields[name] for name in DESCRIPTION_TEMPLATE_FIELDS if name in fields}
+    if not row:
+        response = get_client().table("description_templates").select("*").eq("id", template_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("description_templates").update(row).eq("id", template_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_description_template(template_id):
+    response = get_client().table("description_templates").select("id").eq("id", template_id).execute()
+    if not response.data:
+        return None
+    get_client().table("description_templates").delete().eq("id", template_id).execute()
     return response.data[0]
 
 

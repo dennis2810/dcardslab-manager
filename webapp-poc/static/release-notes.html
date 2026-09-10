@@ -192,6 +192,14 @@ if ("serviceWorker" in navigator) {
     <li>Käufer-Historie auf „Alle Verkäufe": zeigt Wiederholungskäufer bei eBay, gruppiert nach dem pseudonymen
       eBay-Benutzernamen (keine Adresse/kein echter Name wird dafür gespeichert) – Anzahl Käufe, Summe, letzter
       Kauf, folgt dem aktuellen Zeit-/Kanal-/Suchfilter der Seite.</li>
+    <li>Der eBay-Käufer-Benutzername wird jetzt auch auf der Kartenseite angezeigt. Bei schon vor dieser Funktion
+      synchronisierten Verkäufen holt ihn der neue Button „Käufer-/Versanddaten von eBay laden" zusammen mit der
+      aktuellen Versandadresse einmalig nach (die Adresse selbst wird weiterhin nicht gespeichert).</li>
+    <li>Der Abschnitt „Verkauf außerhalb eBay" auf der Kartenseite ist jetzt ausgegraut, sobald eine Karte bereits
+      über eBay verkauft wurde – vermeidet einen widersprüchlichen zweiten Verkauf für dieselbe Karte.</li>
+    <li>Neue Angebots-Textbausteine (Einstellungen): wiederverwendbare Beschreibungstexte, die sich beim Anlegen
+      eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf der Kartenübersicht – optional
+      in die automatisch generierte Beschreibung einfügen lassen.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>

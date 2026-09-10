@@ -63,7 +63,7 @@ _DESCRIPTION_FOOTER_HTML = f"""<p><strong>Versand &amp; Kombiversand:</strong></
 <p><em>Rechtlicher Hinweis: Dies ist ein Privatverkauf. Der Verkauf erfolgt unter Ausschluss jeglicher Gewährleistung, Sachmängelhaftung oder Rücknahme.</em></p>"""
 
 
-def generate_description(card):
+def generate_description(card, extra_note=""):
     lines = [f"<p><strong>{html.escape(generate_title(card, max_len=200))}</strong></p>"]
     items = []
     for label, key in (
@@ -76,6 +76,14 @@ def generate_description(card):
     if items:
         lines.append("<ul>" + "".join(items) + "</ul>")
     lines.append("<p>Zustand: siehe Angebot. Versand aus Deutschland.</p>")
+    # Optionaler, wiederverwendbarer Textbaustein (siehe description_templates-
+    # Tabelle/settings.html) - z.B. ein Hinweis fuer eine ganze Set-Serie,
+    # damit er nicht bei jeder aehnlichen Karte neu getippt werden muss. Vor
+    # dem festen Versand-/Rechtstext-Footer, da er sich inhaltlich noch auf
+    # die Karte selbst bezieht.
+    note = (extra_note or "").strip()
+    if note:
+        lines.append(f'<p class="extra-note">{html.escape(note)}</p>')
     lines.append(_DESCRIPTION_FOOTER_HTML)
     return "\n".join(lines)
 

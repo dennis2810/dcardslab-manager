@@ -75,5 +75,52 @@ class DeleteWishlistEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ListDescriptionTemplatesEndpointTests(unittest.TestCase):
+    def test_returns_templates(self):
+        templates = [{"id": "t1", "name": "Set-Hinweis", "body": "Text"}]
+        with patch("main.db.list_description_templates", return_value=templates):
+            response = client.get("/api/description-templates")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["templates"], templates)
+
+
+class CreateDescriptionTemplateEndpointTests(unittest.TestCase):
+    def test_creates_template(self):
+        created = {"id": "t1", "name": "Set-Hinweis", "body": "Text"}
+        with patch("main.db.create_description_template", return_value=created) as mock_create:
+            response = client.post("/api/description-templates", json={"name": "Set-Hinweis", "body": "Text"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), created)
+        mock_create.assert_called_once_with({"name": "Set-Hinweis", "body": "Text"})
+
+
+class UpdateDescriptionTemplateEndpointTests(unittest.TestCase):
+    def test_updates_template(self):
+        updated = {"id": "t1", "name": "Neuer Name"}
+        with patch("main.db.update_description_template", return_value=updated) as mock_update:
+            response = client.patch("/api/description-templates/t1", json={"name": "Neuer Name"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), updated)
+        mock_update.assert_called_once_with("t1", {"name": "Neuer Name"})
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.update_description_template", return_value=None):
+            response = client.patch("/api/description-templates/does-not-exist", json={"name": "x"})
+        self.assertEqual(response.status_code, 404)
+
+
+class DeleteDescriptionTemplateEndpointTests(unittest.TestCase):
+    def test_deletes_template(self):
+        with patch("main.db.delete_description_template", return_value={"id": "t1"}) as mock_delete:
+            response = client.delete("/api/description-templates/t1")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("t1")
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.delete_description_template", return_value=None):
+            response = client.delete("/api/description-templates/does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
