@@ -92,11 +92,14 @@ if ("serviceWorker" in navigator) {
   <p>Wird eine Karte mit gleichem Titel/Set/Kartennummer bereits gefunden, erscheint eine Duplikat-Warnung mit der
     Möglichkeit, die neue Karte mit der bestehenden zusammenzuführen (die Inventar-Menge wird dabei addiert).
     Jede erfolgreich gescannte Karte bekommt automatisch einen Inventar-Eintrag (Menge 1, Zustand NM).</p>
+  <p>Stimmen Titel/Set/Kartennummer nicht exakt überein (z. B. weil die KI ein Feld falsch gelesen hat), prüft
+    das Tool zusätzlich das Vorderseitenfoto: Sieht es einer bereits vorhandenen Karte sehr ähnlich, erscheint
+    ebenfalls eine Duplikat-Warnung („per Foto erkannt").</p>
 
   <h2 id="karten-anlegen">Karte manuell anlegen</h2>
   <p>Über „+ Neue Karte anlegen" auf der Kartenübersicht lässt sich eine einzelne Karte ohne den 3×3-Scan
     anlegen: Vorder-/Rückseitenfoto hochladen, optional „KI erkennen" klicken, um die Felder automatisch zu
-    befüllen, oder alles manuell eintragen. Auch hier wird auf mögliche Duplikate geprüft. „Abbrechen" verwirft
+    befüllen, oder alles manuell eintragen. Auch hier wird auf mögliche Duplikate geprüft (Text und Foto). „Abbrechen" verwirft
     die Eingabe und führt zurück zur Kartenübersicht.</p>
 
   <h2 id="karten">Kartenübersicht</h2>

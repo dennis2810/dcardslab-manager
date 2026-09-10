@@ -911,6 +911,26 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("possible_duplicate", response.json())
 
+    def test_flags_photo_duplicate_when_no_text_match_but_image_hash_matches(self):
+        mocks = self._patch_all()
+        photo_duplicate = {"id": "card-photo-match", "title": "Andere Schreibweise", "card_no": 4}
+        with patch("main.image_hash.compute_hash", return_value="abc123abc123abc1"), \
+             patch("main.db.find_duplicate_card_by_image_hash", return_value=photo_duplicate) as mock_photo:
+            response = self._post_create()
+        body = response.json()
+        self.assertEqual(body["possible_duplicate"], {**photo_duplicate, "matched_by": "photo"})
+        mock_photo.assert_called_once_with("abc123abc123abc1", exclude_card_id=None)
+        insert_kwargs = mocks["main.db.insert_card"].call_args.kwargs
+        self.assertEqual(insert_kwargs["front_image_hash"], "abc123abc123abc1")
+
+    def test_skips_image_hash_lookup_when_text_duplicate_already_found(self):
+        mocks = self._patch_all()
+        mocks["main.db.find_duplicate_card"].return_value = {"id": "card-existing", "card_no": 7}
+        with patch("main.image_hash.compute_hash", return_value="abc123abc123abc1"), \
+             patch("main.db.find_duplicate_card_by_image_hash") as mock_photo:
+            self._post_create()
+        mock_photo.assert_not_called()
+
     def test_invalid_fields_json_is_400(self):
         self._patch_all()
         files = {

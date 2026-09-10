@@ -336,3 +336,10 @@ create table if not exists description_templates (
     body        text not null default '',
     created_at  timestamptz not null default now()
 );
+
+-- Migration (2026-09-10): Perceptual-Hash (dHash) des Vorderseitenfotos je
+-- Karte, fuer die Foto-basierte Duplikat-Erkennung beim Scannen - ergaenzt
+-- den bestehenden exakten Titel/Set/Kartennummer-Abgleich (find_duplicate_card)
+-- um Faelle, in denen die Texterkennung ein Feld falsch liest, das Foto aber
+-- (nahezu) identisch zu einer bereits vorhandenen Karte ist.
+alter table cards add column if not exists front_image_hash text;

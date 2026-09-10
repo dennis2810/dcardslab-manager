@@ -66,6 +66,7 @@ import ebay_client  # noqa: E402
 import ebay_listing  # noqa: E402
 import ebay_scheduler  # noqa: E402
 import google_sheets_client  # noqa: E402
+import image_hash  # noqa: E402
 import storage  # noqa: E402
 
 logger = logging.getLogger("ebay_publish")
@@ -118,6 +119,27 @@ def _find_duplicate_card_safe(fields):
         return db.find_duplicate_card(fields.get("title"), fields.get("set_name"), fields.get("card_number"))
     except Exception:
         logger.exception("Duplikat-Pruefung fehlgeschlagen")
+        return None
+
+
+def _compute_image_hash_safe(image_path):
+    # Perzeptueller Hash (dHash, siehe image_hash.py) des Vorderseitenfotos -
+    # faengt Duplikate ab, bei denen Titel/Set/Kartennummer durch einen OCR-/
+    # KI-Erkennungsfehler nicht exakt uebereinstimmen, das Foto aber (nahezu)
+    # dasselbe ist. Isoliert wie _find_duplicate_card_safe() oben, damit ein
+    # kaputtes/unlesbares Bild den restlichen Scan nicht scheitern laesst.
+    try:
+        return image_hash.compute_hash(image_path)
+    except Exception:
+        logger.exception("Bild-Hash-Berechnung fehlgeschlagen")
+        return None
+
+
+def _find_duplicate_card_by_hash_safe(hash_value, exclude_card_id=None):
+    try:
+        return db.find_duplicate_card_by_image_hash(hash_value, exclude_card_id=exclude_card_id)
+    except Exception:
+        logger.exception("Foto-basierte Duplikat-Pruefung fehlgeschlagen")
         return None
 
 
@@ -188,6 +210,14 @@ async def scan(
 
             fields = recognize_card(front_path=fp, back_path=bp)
             duplicate = _find_duplicate_card_safe(fields)
+            front_hash = _compute_image_hash_safe(fp)
+            if duplicate is None and front_hash:
+                # Foto-basierte Ergaenzung: faengt Duplikate ab, bei denen
+                # Titel/Set/Kartennummer durch einen Erkennungsfehler nicht
+                # exakt uebereinstimmen (siehe find_duplicate_card_by_image_hash()).
+                photo_duplicate = _find_duplicate_card_by_hash_safe(front_hash)
+                if photo_duplicate:
+                    duplicate = {**photo_duplicate, "matched_by": "photo"}
 
             front_image_path = back_image_path = None
             image_error = None
@@ -202,7 +232,9 @@ async def scan(
             if duplicate:
                 result["possible_duplicate"] = duplicate
             try:
-                card_row = db.insert_card(batch_id, number, fields, front_image_path, back_image_path)
+                card_row = db.insert_card(
+                    batch_id, number, fields, front_image_path, back_image_path, front_image_hash=front_hash,
+                )
                 result["id"] = card_row["id"]
             except Exception as exc:
                 if image_error is None:
@@ -287,12 +319,19 @@ async def create_card_manual(
         back_path.write_bytes(await back.read())
 
         duplicate = _find_duplicate_card_safe(parsed_fields)
+        front_hash = _compute_image_hash_safe(front_path)
+        if duplicate is None and front_hash:
+            photo_duplicate = _find_duplicate_card_by_hash_safe(front_hash)
+            if photo_duplicate:
+                duplicate = {**photo_duplicate, "matched_by": "photo"}
 
         batch_id = db.create_batch(card_count=1)
         try:
             front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
             back_image_path = storage.upload_image(batch_id, 1, "back", back_path)
-            card_row = db.insert_card(batch_id, 1, parsed_fields, front_image_path, back_image_path)
+            card_row = db.insert_card(
+                batch_id, 1, parsed_fields, front_image_path, back_image_path, front_image_hash=front_hash,
+            )
         except Exception as exc:
             # Covers db.insert_card() too, not just the image uploads - a
             # Supabase insert failure here must not leave the batch row

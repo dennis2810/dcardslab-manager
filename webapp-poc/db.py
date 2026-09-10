@@ -25,7 +25,7 @@ def update_batch_status(batch_id, status):
     get_client().table("scan_batches").update({"status": status}).eq("id", batch_id).execute()
 
 
-def insert_card(batch_id, position_in_batch, fields, front_image_path, back_image_path):
+def insert_card(batch_id, position_in_batch, fields, front_image_path, back_image_path, front_image_hash=None):
     row = {name: fields.get(name, "") for name in CARD_FIELDS}
     row.update({
         "batch_id": batch_id,
@@ -35,6 +35,11 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
         "recognition_status": fields.get("status", ""),
         "front_image_path": front_image_path,
         "back_image_path": back_image_path,
+        # Perzeptueller Bild-Hash (dHash, siehe image_hash.py) des
+        # Vorderseitenfotos - fuer die Foto-basierte Duplikat-Erkennung
+        # (find_duplicate_card_by_image_hash()) zusaetzlich zum bestehenden
+        # Text-Abgleich (find_duplicate_card()).
+        "front_image_hash": front_image_hash,
     })
     response = get_client().table("cards").insert(row).execute()
     return response.data[0]
@@ -89,6 +94,34 @@ def find_duplicate_card(title, set_name, card_number):
         .limit(1).execute()
     )
     return response.data[0] if response.data else None
+
+
+def find_duplicate_card_by_image_hash(image_hash_value, exclude_card_id=None, max_distance=8):
+    # Foto-basierte Ergaenzung zu find_duplicate_card() oben - faengt
+    # Duplikate ab, bei denen Titel/Set/Kartennummer durch einen OCR-/KI-
+    # Erkennungsfehler nicht exakt uebereinstimmen, das Foto aber (nahezu)
+    # dasselbe ist. Client-seitiger Distanzvergleich statt SQL, da Supabase/
+    # PostgREST keinen Hamming-Distanz-Operator anbietet - fuer eine
+    # ueberschaubare Sammlung (kein Massen-Retail-Bestand) unproblematisch.
+    if not image_hash_value:
+        return None
+    from image_hash import hamming_distance
+
+    query = get_client().table("cards").select("id,title,set_name,card_number,card_no,front_image_hash")
+    if exclude_card_id:
+        query = query.neq("id", exclude_card_id)
+    response = query.execute()
+
+    best = None
+    best_distance = None
+    for row in response.data:
+        row_hash = row.get("front_image_hash")
+        if not row_hash:
+            continue
+        distance = hamming_distance(image_hash_value, row_hash)
+        if distance <= max_distance and (best_distance is None or distance < best_distance):
+            best, best_distance = row, distance
+    return best
 
 
 def get_card(card_id):
