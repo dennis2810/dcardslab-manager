@@ -43,11 +43,6 @@ if ("serviceWorker" in navigator) {
   @media print {
     .no-print { display: none !important; }
   }
-  .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
-  .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-height: 4.5rem; display: flex; flex-direction: column; justify-content: center; color: inherit; text-decoration: none; }
-  a.summary-card:hover { border-color: #888; }
-  .summary-card .label { font-size: 0.8rem; color: #555; }
-  .summary-card .value { font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -108,7 +103,6 @@ if ("serviceWorker" in navigator) {
   </nav>
 
   <p id="status-msg">Lädt …</p>
-  <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <h2>Käufer-Historie (eBay)</h2>
   <p class="note">Nur eBay-Verkäufe haben einen Käufer-Benutzernamen (pseudonymer eBay-Handle, keine Adresse) - zeigt
@@ -273,22 +267,6 @@ function formatDate(value) {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
-// Aktueller Inventarwert - ein Momentaufnahme-Wert (was die Karten JETZT
-// im Bestand wert sind), daher unabhaengig vom Kauf-/Verkaufsdatums-Filter
-// dieser Seite immer der gleiche; separat geladen, da /api/statistics
-// nichts zum Lagerbestand weiss. Gleiches Muster wie statistics.html.
-let inventoryValue = null;
-
-async function loadInventoryValue() {
-  try {
-    const res = await fetch("/api/inventory");
-    const data = await res.json();
-    if (res.ok) inventoryValue = data.total_value ?? null;
-  } catch (err) {
-    inventoryValue = null;
-  }
-}
-
 // Fuer den "Auf eBay ansehen"-Link in der aufgeklappten Kaeufer-Historie -
 // gleiches Muster wie ebay.html/card.html.
 let ebayEnvironment = "sandbox";
@@ -317,7 +295,6 @@ async function load() {
       return;
     }
     statusMsg.textContent = "";
-    await loadInventoryValue();
     await loadEbayEnvironment();
     allRows = data.rows;
     populateChannelFilter();
@@ -327,44 +304,8 @@ async function load() {
   }
 }
 
-function renderSummary(summary) {
-  const cards = document.getElementById("summary-cards");
-  cards.style.display = "grid";
-  // Gleiches KPI-Set/gleiche Reihenfolge wie statistics.html, damit beide
-  // Seiten identisch aussehen - hier ohne Verweise auf "Alle Verkäufe"
-  // (drittes Element), da man auf dieser Detailseite bereits ist.
-  // Kennzahlen ohne eigene "Detailseite" (die Details SIND ja schon diese
-  // Seite hier) verlinken auf die Verkaufstabelle weiter unten, statt
-  // unklickbar zu bleiben - konsistent mit den anklickbaren Kacheln auf
-  // Dashboard/statistics.html.
-  const entries = [
-    ["Gesamt-Einkaufswert", fmtEuro(summary.total_cost), "purchases.html"],
-    ["Aktueller Inventarwert", fmtEuro(inventoryValue), "inventory.html"],
-    ["Gesamtumsatz", fmtEuro(summary.total_revenue), "#rows-table"],
-    ["Versand erhalten", fmtEuro(summary.total_shipping_charged), "#rows-table"],
-    ["Versand-Kosten", fmtEuro(summary.total_shipping_cost), "#rows-table"],
-    ["Verkaufsgebühren", fmtEuro(summary.total_ebay_fees), "#rows-table"],
-    ["Realisierter Gewinn", fmtEuro(summary.realized_profit), "#rows-table"],
-    ["ROI (verkauft)", summary.roi_pct != null ? fmtPercent(summary.roi_pct) : "–", "#rows-table"],
-    ["Verkaufte Karten", String(summary.sold_count), "#rows-table"],
-    ["Offene Karten (Kauf, unverkauft)", String(summary.open_count), "cards.html"],
-    ["Retouren", String(summary.refunded_count), "#rows-table"],
-    ["⌀ Verkaufspreis", fmtEuro(summary.avg_sale_price), "#rows-table"],
-    ["⌀ Marge", summary.avg_margin_pct != null ? fmtPercent(summary.avg_margin_pct) : "–", "#rows-table"],
-    ["⌀ Liegedauer", summary.avg_holding_days != null ? `${fmtNumber(summary.avg_holding_days, 1)} Tage` : "–", "#rows-table"],
-  ];
-  cards.innerHTML = "";
-  for (const [label, value, href] of entries) {
-    const card = document.createElement(href ? "a" : "div");
-    card.className = "summary-card";
-    if (href) card.href = href;
-    card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
-    cards.appendChild(card);
-  }
-}
-
 // Zeitraum-Filter nach Kauf- ODER Verkaufsdatum (separat waehlbar) - wirkt
-// auf die Summenkarten UND die Tabelle dieser Seite.
+// auf die Tabelle dieser Seite.
 function dateFilteredRows() {
   const field = document.getElementById("date-field").value;
   const from = document.getElementById("date-from").value;
@@ -405,56 +346,6 @@ function populateChannelFilter() {
     channelFilterSelect.appendChild(opt);
   }
   if (channels.includes(current)) channelFilterSelect.value = current;
-}
-
-// Spiegelt die Summenlogik von GET /api/statistics, aber auf einer
-// (Datums-)gefilterten Teilmenge der bereits vom Server angereicherten
-// Zeilen (profit/margin_pct/holding_days) - reine Aggregation, keine
-// Neuberechnung der Gewinn-Formel noetig.
-function computeSummary(rows) {
-  let totalCost = 0, totalRevenue = 0, totalShippingCharged = 0, totalShippingCost = 0, totalEbayFees = 0;
-  let realizedProfit = 0, soldCost = 0, openCount = 0, refundedCount = 0;
-  const margins = [], salePrices = [], holdingDays = [];
-  for (const r of rows) {
-    if (r.cost != null) totalCost += Number(r.cost);
-    if (r.sale_price != null) {
-      // Retoure: Verkaufspreis/erhaltener Versand gingen an den Kaeufer
-      // zurueck - gleiche Logik wie main.py's _compute_statistics(), damit
-      // diese gefilterte Neu-Aggregation nicht von dessen (ungefilterter)
-      // Summe abweicht.
-      if (r.refunded) {
-        refundedCount += 1;
-      } else {
-        totalRevenue += Number(r.sale_price);
-        totalShippingCharged += Number(r.shipping_charged || 0);
-        salePrices.push(Number(r.sale_price));
-      }
-      totalShippingCost += Number(r.shipping_cost || 0);
-      totalEbayFees += Number(r.ebay_fees || 0);
-    }
-    if (r.profit != null) {
-      realizedProfit += r.profit;
-      soldCost += Number(r.cost);
-      if (r.margin_pct != null) margins.push(r.margin_pct);
-    } else if (r.cost != null && r.sale_price == null) {
-      openCount += 1;
-    }
-    if (r.holding_days != null) holdingDays.push(r.holding_days);
-  }
-  const avg = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : null);
-  return {
-    total_cost: totalCost, total_revenue: totalRevenue,
-    total_shipping_charged: totalShippingCharged, total_shipping_cost: totalShippingCost,
-    total_ebay_fees: totalEbayFees,
-    realized_profit: realizedProfit,
-    sold_count: rows.filter((r) => r.profit != null).length,
-    open_count: openCount,
-    refunded_count: refundedCount,
-    avg_sale_price: avg(salePrices),
-    avg_margin_pct: avg(margins),
-    avg_holding_days: avg(holdingDays),
-    roi_pct: soldCost ? (realizedProfit / soldCost) * 100 : null,
-  };
 }
 
 // Welche Kaeufer aktuell aufgeklappt sind - bleibt ueber ein Re-Render
@@ -651,7 +542,6 @@ function setSortIndicator() {
 }
 
 function renderRows() {
-  renderSummary(computeSummary(dateFilteredRows()));
   const allFiltered = sortedRows(filteredRows());
   renderBuyerHistory(allFiltered);
   setSortIndicator();

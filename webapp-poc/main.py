@@ -995,6 +995,53 @@ async def delete_wishlist_item(item_id: str):
     return Response(status_code=204)
 
 
+_WISHLIST_IMPORT_TEXT_COLUMNS = (("Titel", "title"), ("Team", "team"), ("Set", "set_name"), ("Notiz", "notes"))
+_WISHLIST_IMPORT_MONEY_COLUMNS = (("Wunschpreis", "target_price"),)
+
+
+@app.post("/api/wishlist/import")
+async def import_wishlist_csv(file: UploadFile = File(...)):
+    # Bulk-Import fuer die Wunschliste ueber eine CSV-Datei, gleiches Format
+    # wie der bestehende CSV-Export (Semikolon-getrennt, Spalten per Name
+    # erkannt) - anders als bei Karten (siehe import_purchases_csv()) ist das
+    # hier unproblematisch, da Wunschlisten-Eintraege nie echte Karten sind.
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="CSV muss UTF-8-kodiert sein.") from exc
+
+    reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    imported = []
+    errors = []
+    for line_no, row in enumerate(reader, start=2):
+        fields = {}
+        for header, field_name in _WISHLIST_IMPORT_TEXT_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if value:
+                fields[field_name] = value
+        invalid_amount = False
+        for header, field_name in _WISHLIST_IMPORT_MONEY_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if not value:
+                continue
+            try:
+                fields[field_name] = float(value.replace(",", "."))
+            except ValueError:
+                errors.append(f"Zeile {line_no}: Ungültiger Betrag bei „{header}“: „{value}“.")
+                invalid_amount = True
+                break
+        if invalid_amount:
+            continue
+        if not fields:
+            continue
+        if not fields.get("title"):
+            errors.append(f"Zeile {line_no}: „Titel“ darf nicht leer sein.")
+            continue
+        imported.append(db.create_wishlist_item(fields))
+    return JSONResponse({"imported": len(imported), "errors": errors, "items": imported})
+
+
 @app.get("/api/description-templates")
 async def list_description_templates():
     return JSONResponse({"templates": db.list_description_templates()})

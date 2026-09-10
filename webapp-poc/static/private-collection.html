@@ -47,6 +47,7 @@ if ("serviceWorker" in navigator) {
     .no-print, button { display: none !important; }
   }
   #status-msg { font-style: italic; color: #555; }
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   .error { color: #b00020; font-weight: 600; }
   .empty-state { color: #555; font-style: italic; }
   .table-scroll { overflow-x: auto; }
@@ -94,11 +95,24 @@ if ("serviceWorker" in navigator) {
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <button type="button" id="bulk-return-btn">Zurückholen</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
+    <span id="bulk-status"></span>
+  </div>
+
+  <div id="undo-bar" class="controls no-print" hidden>
+    <button type="button" id="bulk-undo">↩ Rückgängig</button>
+    <span id="undo-status"></span>
+  </div>
+
   <p id="status-msg">Lädt …</p>
   <div class="table-scroll">
     <table id="items-table" style="display: none;">
       <thead>
         <tr>
+          <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
           <th data-key="set_name">Set <span class="sort-arrow"></span></th>
@@ -164,6 +178,96 @@ let sortKey = "title";
 let sortAsc = true;
 let allCards = [];
 
+// Mehrfachauswahl fuer Massenaktionen - gleiches Muster wie cards.html.
+let selectedIds = new Set();
+let currentPageCards = [];
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const bulkStatusEl = document.getElementById("bulk-status");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
+const undoBar = document.getElementById("undo-bar");
+const undoBtn = document.getElementById("bulk-undo");
+const undoStatusEl = document.getElementById("undo-status");
+let lastUndo = null;
+
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Karte(n) ausgewählt`;
+}
+
+function setUndo(ids, label) {
+  lastUndo = ids;
+  undoStatusEl.textContent = label;
+  undoBar.hidden = false;
+}
+
+function clearUndo() {
+  lastUndo = null;
+  undoBar.hidden = true;
+  undoStatusEl.textContent = "";
+}
+
+undoBtn.addEventListener("click", async () => {
+  if (!lastUndo) return;
+  const ids = lastUndo;
+  undoBtn.disabled = true;
+  undoStatusEl.textContent = "Mache rückgängig …";
+  try {
+    // POST markiert die Karten wieder als privat (Inventar erneut auf 0,
+    // siehe db.set_card_private_collection()) - Gegenstueck zum DELETE, das
+    // bulkReturnCards() unten ausloest.
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}/private-collection`, { method: "POST" })
+    ));
+    clearUndo();
+    loadCards();
+    showToast("Aktion rückgängig gemacht.");
+  } catch (err) {
+    undoStatusEl.textContent = "Fehler beim Rückgängigmachen: " + err;
+    showToast("Fehler beim Rückgängigmachen: " + err, true);
+  } finally {
+    undoBtn.disabled = false;
+  }
+});
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const card of currentPageCards) {
+    if (selectAllCheckbox.checked) selectedIds.add(card.id);
+    else selectedIds.delete(card.id);
+  }
+  updateBulkBar();
+  render();
+});
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  render();
+});
+
+async function bulkReturnCards() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} Karte(n) aus der privaten Sammlung zurückholen? Der Inventarbestand wird jeweils auf 1 gesetzt.`)) return;
+  bulkStatusEl.textContent = "Holt zurück …";
+  try {
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}/private-collection`, { method: "DELETE" })
+    ));
+    bulkStatusEl.textContent = "";
+    selectedIds.clear();
+    updateBulkBar();
+    setUndo(ids, `${ids.length} Karte(n) zurückgeholt.`);
+    showToast(`${ids.length} Karte(n) zurückgeholt.`);
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
+  }
+}
+
+document.getElementById("bulk-return-btn").addEventListener("click", bulkReturnCards);
+
 function sortValue(card, key) {
   return (card[key] || "").toString().toLowerCase();
 }
@@ -218,6 +322,8 @@ function render() {
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const visible = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  currentPageCards = visible;
+  selectAllCheckbox.checked = visible.length > 0 && visible.every((c) => selectedIds.has(c.id));
   pageInfo.textContent = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
@@ -239,6 +345,20 @@ function render() {
   empty.textContent = "";
   for (const card of visible) {
     const tr = document.createElement("tr");
+
+    const checkTd = document.createElement("td");
+    checkTd.className = "no-print";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(card.id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(card.id);
+      else selectedIds.delete(card.id);
+      selectAllCheckbox.checked = currentPageCards.length > 0 && currentPageCards.every((c) => selectedIds.has(c.id));
+      updateBulkBar();
+    });
+    checkTd.appendChild(checkbox);
+    tr.appendChild(checkTd);
 
     for (const text of [card.title || "(ohne Titel)", card.team || "", card.set_name || "", card.card_number || ""]) {
       const td = document.createElement("td");

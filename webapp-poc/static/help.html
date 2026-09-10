@@ -277,7 +277,11 @@ if ("serviceWorker" in navigator) {
     getrennt von der Kartenübersicht/dem Inventar – ein Wunschlisten-Eintrag zählt nirgends als vorhandene Karte
     mit und beeinflusst keine Statistik. Einträge lassen sich durchsuchen, bearbeiten und löschen, per Klick auf
     eine Spaltenüberschrift sortieren, sind bei vielen Einträgen seitenweise blätterbar und über „🖨 Drucken"
-    ausdruckbar sowie über „⭳ CSV-Export" exportierbar. Der Pfeil-Button vor jedem Eintrag prüft aktive eBay-Angebote
+    ausdruckbar sowie über „⭳ CSV-Export" exportierbar. Über „⭱ CSV importieren" lassen sich mehrere Einträge auf
+    einmal aus einer CSV-Datei anlegen (Spalten Titel;Team;Set;Wunschpreis;Notiz, gleiches Format wie der Export –
+    fehlerhafte Zeilen werden einzeln gemeldet und übersprungen). Mehrere Einträge lassen sich per Kästchen auswählen
+    und über die dann erscheinende Massenaktionen-Leiste auf einmal löschen (mit kurzer Gnadenfrist samt
+    „Rückgängig" statt eines Bestätigungsdialogs). Der Pfeil-Button vor jedem Eintrag prüft aktive eBay-Angebote
     zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen.</p>
   <p>Zusätzlich läuft im Hintergrund automatisch (ca. einmal täglich je Eintrag) dieselbe Preisprüfung – der
     günstigste gefundene Treffer erscheint direkt in der Spalte „Sourcing", ohne dass man jeden Eintrag einzeln
@@ -298,7 +302,8 @@ if ("serviceWorker" in navigator) {
     eBay-Übersicht.</p>
   <p>Die Seite listet alle Karten der privaten Sammlung – sortierbar, seitenweise blätterbar, über „🖨 Drucken"/
     „⭳ CSV-Export" exportierbar. Der Button „Zurückholen" macht die Privatentnahme rückgängig und setzt den
-    Inventarbestand wieder auf 1.</p>
+    Inventarbestand wieder auf 1. Mehrere Karten lassen sich per Kästchen auswählen und über die dann erscheinende
+    Massenaktionen-Leiste auf einmal zurückholen (mit „Rückgängig").</p>
 
   <h2 id="suche">Suche</h2>
   <p>Ein Suchfeld direkt in der Seitennavigation (oben, neben der Seitenauswahl) ist auf jeder Seite verfügbar und
