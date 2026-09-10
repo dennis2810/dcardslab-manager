@@ -124,10 +124,11 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
             patch("main.db.all_ebay_listings", return_value=[]),
             patch("main.db.all_ebay_sales", return_value=[]),
             patch("main.db.list_inventory", return_value=[]),
+            patch("main.db.list_wishlist_items", return_value=[]),
             patch("main.db.statistics_rows", return_value=[]),
         ]
 
-    def test_syncs_seven_tabs_on_success(self):
+    def test_syncs_eight_tabs_on_success(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
         patchers = self._patch_sheets_data_sources()
         for p in patchers:
@@ -142,9 +143,31 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
         tabs = mock_sync.call_args[0][2]
         self.assertEqual(
             set(tabs.keys()),
-            {"Karten", "Käufe", "eBay", "Inventar", "Statistiken", "Dashboard", "Sync_Info"},
+            {"Karten", "Käufe", "eBay", "Inventar", "Wunschliste", "Statistiken", "Dashboard", "Sync_Info"},
         )
         self.assertIn("last_synced_at", mock_save.call_args[0][0])
+
+    def test_wunschliste_tab_lists_items(self):
+        settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
+        patchers = self._patch_sheets_data_sources()
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+        wishlist_item = {
+            "id": "w1", "title": "Lionel Messi", "team": "PSG", "set_name": "Panini",
+            "target_price": 12.5, "notes": "Auto gesucht",
+        }
+        with patch("main.db.get_google_sheets_settings", return_value=settings), \
+             patch("main.db.save_google_sheets_settings"), \
+             patch("main.db.list_wishlist_items", return_value=[wishlist_item]), \
+             patch("main.google_sheets_client.refresh_access_token", return_value="access-tok"), \
+             patch("main.google_sheets_client.sync_to_sheets") as mock_sync:
+            response = client.post("/api/sheets/sync")
+        self.assertEqual(response.status_code, 200)
+        tabs = mock_sync.call_args[0][2]
+        headers, rows = tabs["Wunschliste"]
+        self.assertIn("title", headers)
+        self.assertEqual(rows[0][headers.index("title")], "Lionel Messi")
 
     def test_returns_502_on_google_api_error(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
@@ -206,6 +229,41 @@ class AppStatusEndpointTests(unittest.TestCase):
             response = client.get("/api/app-status")
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()["last_backup_at"])
+
+    def test_returns_low_stock_threshold(self):
+        with patch("main.db.get_app_status", return_value={"low_stock_threshold": 3}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["low_stock_threshold"], 3)
+
+    def test_low_stock_threshold_defaults_to_zero(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["low_stock_threshold"], 0)
+
+    def test_returns_last_auto_backup_at(self):
+        with patch("main.db.get_app_status", return_value={"last_auto_backup_at": "2026-09-10T03:00:00+00:00"}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["last_auto_backup_at"], "2026-09-10T03:00:00+00:00")
+
+
+class LowStockThresholdEndpointTests(unittest.TestCase):
+    def test_sets_threshold(self):
+        with patch("main.db.set_low_stock_threshold", return_value={"id": True, "low_stock_threshold": 5}) as mock_set:
+            response = client.put("/api/low-stock-threshold", json={"threshold": 5})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["low_stock_threshold"], 5)
+        mock_set.assert_called_once_with(5)
+
+    def test_rejects_negative_threshold(self):
+        response = client.put("/api/low-stock-threshold", json={"threshold": -1})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_integer_threshold(self):
+        response = client.put("/api/low-stock-threshold", json={"threshold": "abc"})
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

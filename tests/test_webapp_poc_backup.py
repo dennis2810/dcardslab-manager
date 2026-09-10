@@ -3,6 +3,7 @@ import io
 import sys
 import zipfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -95,6 +96,49 @@ class BuildBackupZipTests(unittest.TestCase):
             names = zf.namelist()
         self.assertIn("cards.json", names)
         self.assertNotIn("price_research.json", names)
+
+
+class RunScheduledBackupOnceTests(unittest.TestCase):
+    def test_uploads_and_records_when_never_backed_up(self):
+        with patch("backup.db.get_app_status", return_value=None), \
+             patch("backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("backup.storage.upload_backup") as mock_upload, \
+             patch("backup.storage.prune_old_backups") as mock_prune, \
+             patch("backup.db.record_auto_backup") as mock_record:
+            backup.run_scheduled_backup_once()
+        mock_upload.assert_called_once()
+        filename, data = mock_upload.call_args[0]
+        self.assertTrue(filename.startswith("backup-") and filename.endswith(".zip"))
+        self.assertEqual(data, b"fake-zip-bytes")
+        mock_prune.assert_called_once()
+        mock_record.assert_called_once()
+
+    def test_skips_when_last_backup_within_interval(self):
+        recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        with patch("backup.db.get_app_status", return_value={"last_auto_backup_at": recent}), \
+             patch("backup.build_backup_zip") as mock_build, \
+             patch("backup.storage.upload_backup") as mock_upload:
+            backup.run_scheduled_backup_once()
+        mock_build.assert_not_called()
+        mock_upload.assert_not_called()
+
+    def test_runs_when_last_backup_older_than_interval(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+        with patch("backup.db.get_app_status", return_value={"last_auto_backup_at": old}), \
+             patch("backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("backup.storage.upload_backup") as mock_upload, \
+             patch("backup.storage.prune_old_backups"), \
+             patch("backup.db.record_auto_backup"):
+            backup.run_scheduled_backup_once()
+        mock_upload.assert_called_once()
+
+    def test_does_not_crash_when_upload_fails(self):
+        with patch("backup.db.get_app_status", return_value=None), \
+             patch("backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("backup.storage.upload_backup", side_effect=RuntimeError("bucket down")), \
+             patch("backup.db.record_auto_backup") as mock_record:
+            backup.run_scheduled_backup_once()  # must not raise
+        mock_record.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -63,6 +63,7 @@ class SearchActiveListingsTests(unittest.TestCase):
             "price": {"value": "12.50", "currency": "EUR"},
             "condition": "Used",
             "itemWebUrl": "https://www.ebay.de/itm/123",
+            "itemId": "v1|110412345678|0",
         }]}
         with patch("ebay_client.httpx.get", return_value=_response(200, payload)) as mock_get:
             results = ebay_client.search_active_listings("app-tok", "Max Mustermann")
@@ -71,6 +72,7 @@ class SearchActiveListingsTests(unittest.TestCase):
         self.assertEqual(results[0]["price"], 12.5)
         self.assertEqual(results[0]["currency"], "EUR")
         self.assertEqual(results[0]["item_web_url"], "https://www.ebay.de/itm/123")
+        self.assertEqual(results[0]["item_id"], "v1|110412345678|0")
         params = mock_get.call_args.kwargs["params"]
         self.assertEqual(params["q"], "Max Mustermann")
 

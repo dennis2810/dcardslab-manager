@@ -22,7 +22,13 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
    Steuerunterlagen, kein externer Dienst braucht eine dauerhafte URL
    dafür — die WebApp nutzt ausschließlich signierte, zeitlich begrenzte
    URLs zur Anzeige).
-5. Unter Project Settings → API: `Project URL` und `service_role`
+5. Unter Storage einen dritten Bucket `backups` anlegen, ebenfalls
+   **"Public bucket" AUSGESCHALTET lassen** — hier legt die App
+   automatisch wöchentlich eine Backup-ZIP ab (siehe `webapp-poc/backup.py`,
+   `run_forever()`), zusätzlich zum manuellen Download unter
+   Einstellungen → Backup. Die letzten 4 Wochen werden behalten, ältere
+   automatisch gelöscht.
+6. Unter Project Settings → API: `Project URL` und `service_role`
    Secret Key kopieren (NICHT den `anon`-Key – der Service-Role-Key hat
    vollen Server-Zugriff und gehört nur ins Backend-Environment, niemals
    in Frontend-Code).

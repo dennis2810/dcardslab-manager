@@ -97,9 +97,23 @@ if ("serviceWorker" in navigator) {
     <h2>Backup</h2>
     <p>Lädt eine ZIP-Datei mit allen Daten (Scans, Karten, Käufe, eBay-Angebote
       und -Verkäufe, Inventar, Preisrecherche-Verlauf) als JSON sowie allen
-      Kartenbildern herunter.</p>
+      Kartenbildern herunter. Zusätzlich wird automatisch einmal pro Woche
+      ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt
+      (die letzten 4 Wochen werden aufbewahrt).</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
     <p class="status" id="last-backup-status"></p>
+    <p class="status" id="last-auto-backup-status"></p>
+  </section>
+
+  <section id="low-stock-section">
+    <h2>Mindestbestand</h2>
+    <p>Ab welcher Menge eine Karte im Inventar als "niedriger Bestand"
+      markiert wird (0 = deaktiviert). Gilt global für alle Karten.</p>
+    <label>Schwelle
+      <input type="number" id="low-stock-threshold-input" min="0" step="1">
+    </label>
+    <button type="button" id="save-low-stock-threshold-btn">Speichern</button>
+    <p class="status" id="low-stock-threshold-status"></p>
   </section>
 
 <script>
@@ -157,6 +171,9 @@ async function loadBackupStatus() {
       return;
     }
     statusEl.textContent = "Zuletzt heruntergeladen: " + (body.last_backup_at ? formatDateTime(body.last_backup_at) : "noch nie");
+    document.getElementById("last-auto-backup-status").textContent =
+      "Letztes automatisches Backup: " + (body.last_auto_backup_at ? formatDateTime(body.last_auto_backup_at) : "noch keins");
+    document.getElementById("low-stock-threshold-input").value = body.low_stock_threshold || 0;
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
@@ -263,6 +280,37 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
   } catch (err) {
     syncStatusEl.textContent = "Fehler: " + err;
     syncStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-low-stock-threshold-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("low-stock-threshold-status");
+  const threshold = parseInt(document.getElementById("low-stock-threshold-input").value, 10);
+  if (!Number.isInteger(threshold) || threshold < 0) {
+    statusEl.textContent = "Bitte eine ganze Zahl >= 0 eingeben.";
+    statusEl.className = "error";
+    return;
+  }
+  try {
+    const res = await fetch("/api/low-stock-threshold", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threshold }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Mindestbestand-Schwelle gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

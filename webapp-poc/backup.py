@@ -2,18 +2,32 @@
 every card image - an independent copy outside Supabase, since the
 Free-Tier project pauses after a week without API access (see
 supabase/README.md)."""
+import asyncio
 import io
 import json
+import logging
 import zipfile
+from datetime import datetime, timedelta, timezone
 
 import db
+import storage
 from storage import BUCKET
 from supabase_client import get_client
+
+logger = logging.getLogger("backup_scheduler")
 
 _TABLE_NAMES = (
     "scan_batches", "cards", "purchases", "purchase_items",
     "ebay_listings", "ebay_sales", "inventory", "price_research",
 )
+
+# Woechentlich statt taeglich, um den Free-Tier-Storage (1GB) nicht unnoetig
+# zu fuellen - stuendlich geprueft (CHECK_INTERVAL_SECONDS), aber nur
+# tatsaechlich ausgefuehrt, wenn das letzte automatische Backup laenger her
+# ist (gleiches "faellig?"-Muster wie ebay_scheduler.py's Preisrecherche).
+BACKUP_INTERVAL_DAYS = 7
+CHECK_INTERVAL_SECONDS = 3600
+BACKUPS_KEEP = 4
 
 
 def build_backup_zip():
@@ -50,3 +64,37 @@ def build_backup_zip():
                     continue
                 zf.writestr(f"images/{object_path}", data)
     return buf.getvalue()
+
+
+def _is_backup_due():
+    status = db.get_app_status() or {}
+    last = status.get("last_auto_backup_at")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except ValueError:
+        return True
+    return datetime.now(timezone.utc) - last_dt >= timedelta(days=BACKUP_INTERVAL_DAYS)
+
+
+def run_scheduled_backup_once():
+    if not _is_backup_due():
+        return
+    try:
+        data = build_backup_zip()
+        filename = f"backup-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.zip"
+        storage.upload_backup(filename, data)
+        storage.prune_old_backups(BACKUPS_KEEP)
+        db.record_auto_backup(datetime.now(timezone.utc).isoformat())
+    except Exception:
+        # Ein fehlgeschlagenes automatisches Backup darf den Hintergrund-
+        # Loop nicht abbrechen - naechster Versuch beim naechsten Takt
+        # (last_auto_backup_at bleibt unveraendert, also weiterhin faellig).
+        logger.exception("Automatisches Backup fehlgeschlagen")
+
+
+async def run_forever():
+    while True:
+        run_scheduled_backup_once()
+        await asyncio.sleep(CHECK_INTERVAL_SECONDS)

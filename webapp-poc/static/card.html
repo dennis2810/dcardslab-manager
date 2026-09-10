@@ -142,6 +142,8 @@ if ("serviceWorker" in navigator) {
   .price-research-search input[type="text"] { font-weight: normal; padding: 0.3rem; flex: 1 1 220px; }
   .price-research-results { list-style: none; padding: 0; margin: 0.5rem 0 0; width: 100%; }
   .price-research-results li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+  .own-listing-badge { background: var(--info-bg); color: var(--info-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.8em; font-weight: 600; white-space: nowrap; }
+  .price-sparkline-wrapper { max-width: 320px; margin: 0 0 0.75rem; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -576,7 +578,10 @@ async function loadCard() {
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale);
     renderManualSaleSection(card.manual_sale, card.purchase);
-    renderPriceResearchSection(card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price);
+    renderPriceResearchSection(
+      card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
+      card.ebay_listing?.ebay_listing_id
+    );
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -1284,7 +1289,61 @@ function renderManualSaleForm(section, existingSale) {
 
 let selectedPriceResearchIds = new Set();
 
-function renderPriceResearchSection(entries, cardTitle, listingPrice) {
+// Kleines Liniendiagramm statt nur einer Tabelle - zeigt auf einen Blick,
+// ob der Markt gerade steigt oder faellt, statt jeden Preis einzeln lesen
+// zu muessen. Braucht mindestens zwei datierte Preise fuer eine sinnvolle
+// Linie.
+function buildPriceSparkline(entries) {
+  const points = (entries || [])
+    .map((entry) => ({ date: entry.checked_at, price: Number(entry.price) }))
+    .filter((p) => p.date && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (points.length < 2) return null;
+
+  const svgNs = "http://www.w3.org/2000/svg";
+  const width = 280;
+  const height = 60;
+  const padding = 8;
+  const prices = points.map((p) => p.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const range = maxPrice - minPrice || 1;
+  const xStep = (width - padding * 2) / (points.length - 1);
+  const coords = points.map((p, i) => ({
+    x: padding + i * xStep,
+    y: height - padding - ((p.price - minPrice) / range) * (height - padding * 2),
+    point: p,
+  }));
+
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", height);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Preisverlauf");
+
+  const polyline = document.createElementNS(svgNs, "polyline");
+  polyline.setAttribute("points", coords.map((c) => `${c.x},${c.y}`).join(" "));
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "#8ab4f8");
+  polyline.setAttribute("stroke-width", "2");
+  svg.appendChild(polyline);
+
+  for (const c of coords) {
+    const dot = document.createElementNS(svgNs, "circle");
+    dot.setAttribute("cx", c.x);
+    dot.setAttribute("cy", c.y);
+    dot.setAttribute("r", "3");
+    dot.setAttribute("fill", "#8ab4f8");
+    const title = document.createElementNS(svgNs, "title");
+    title.textContent = `${formatDate(c.point.date)} – ${fmtEuro(c.point.price)}`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  }
+  return svg;
+}
+
+function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
 
@@ -1300,6 +1359,14 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     avgP.className = "price-average";
     avgP.textContent = `Marktdurchschnitt: ${fmtEuro(avg)} (aus ${knownPrices.length} ${knownPrices.length === 1 ? "Preis" : "Preisen"})`;
     section.appendChild(avgP);
+  }
+
+  const sparkline = buildPriceSparkline(entries);
+  if (sparkline) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "price-sparkline-wrapper";
+    wrapper.appendChild(sparkline);
+    section.appendChild(wrapper);
   }
 
   // Preis-Alarm: warnt in beide Richtungen, wenn der eigene Angebotspreis um
@@ -1336,7 +1403,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     selectAllCheckbox.checked = entries.every((entry) => selectedPriceResearchIds.has(entry.id));
     selectAllCheckbox.addEventListener("change", () => {
       selectedPriceResearchIds = selectAllCheckbox.checked ? new Set(entries.map((entry) => entry.id)) : new Set();
-      renderPriceResearchSection(entries, cardTitle, listingPrice);
+      renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId);
     });
     selectAllTh.appendChild(selectAllCheckbox);
     thead.appendChild(selectAllTh);
@@ -1560,7 +1627,8 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     adoptSelectedBtn.hidden = true;
     adoptSelectedBtn.disabled = true;
     try {
-      const res = await fetch(`/api/ebay/price-research?q=${encodeURIComponent(q)}`);
+      const ownParam = ownListingId ? `&own_listing_id=${encodeURIComponent(ownListingId)}` : "";
+      const res = await fetch(`/api/ebay/price-research?q=${encodeURIComponent(q)}${ownParam}`);
       const body = await res.json();
       if (!res.ok) {
         searchStatus.textContent = "Fehler: " + (body.detail || res.statusText);
@@ -1571,16 +1639,28 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
       adoptSelectedBtn.hidden = !body.results.length;
       body.results.forEach((item, index) => {
         const li = document.createElement("li");
+        // Eigenes Angebot per Item-ID erkannt (siehe main.py) - taucht sonst
+        // unter den Treffern auf und wuerde beim Uebernehmen mit sich selbst
+        // statt mit dem Markt verglichen.
+        const disableReason = item.is_own_listing
+          ? "Das ist dein eigenes Angebot"
+          : item.price == null ? "Kein Preis angegeben" : null;
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.disabled = item.price == null;
-        checkbox.title = item.price == null ? "Kein Preis angegeben" : "Für Mehrfachübernahme auswählen";
+        checkbox.disabled = disableReason != null;
+        checkbox.title = disableReason || "Für Mehrfachübernahme auswählen";
         checkbox.addEventListener("change", () => {
           if (checkbox.checked) selectedSearchResults.set(index, item);
           else selectedSearchResults.delete(index);
           adoptSelectedBtn.disabled = selectedSearchResults.size === 0;
         });
         li.appendChild(checkbox);
+        if (item.is_own_listing) {
+          const badge = document.createElement("span");
+          badge.className = "own-listing-badge";
+          badge.textContent = "🫵 Eigenes Angebot";
+          li.appendChild(badge);
+        }
         const link = document.createElement("a");
         link.href = item.item_web_url;
         link.target = "_blank";
@@ -1590,6 +1670,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
         const useBtn = document.createElement("button");
         useBtn.type = "button";
         useBtn.textContent = "Übernehmen";
+        useBtn.disabled = item.is_own_listing;
         useBtn.addEventListener("click", () => {
           if (item.price != null) priceInput.value = item.price.toFixed(2);
           noteInput.value = "Aktives eBay-Angebot: " + item.title;

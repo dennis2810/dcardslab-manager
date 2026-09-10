@@ -659,8 +659,28 @@ class EbayPriceResearchEndpointTests(unittest.TestCase):
              patch("main.ebay_client.search_active_listings", return_value=results) as mock_search:
             response = client.get("/api/ebay/price-research?q=Musterkarte")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["results"], results)
+        self.assertEqual(response.json()["results"][0]["title"], "Musterkarte")
+        self.assertFalse(response.json()["results"][0]["is_own_listing"])
         mock_search.assert_called_once_with("app-tok", "Musterkarte")
+
+    def test_marks_own_listing_when_item_id_matches(self):
+        results = [
+            {"title": "Musterkarte", "price": 12.5, "item_id": "v1|110412345678|0"},
+            {"title": "Musterkarte", "price": 15.0, "item_id": "v1|999999999999|0"},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte&own_listing_id=110412345678")
+        body = response.json()["results"]
+        self.assertTrue(body[0]["is_own_listing"])
+        self.assertFalse(body[1]["is_own_listing"])
+
+    def test_marks_nothing_as_own_when_no_own_listing_id_given(self):
+        results = [{"title": "Musterkarte", "price": 12.5, "item_id": "v1|110412345678|0"}]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Musterkarte")
+        self.assertFalse(response.json()["results"][0]["is_own_listing"])
 
     def test_returns_502_on_api_error(self):
         with patch("main.ebay_client.get_application_access_token", side_effect=ebay_client.EbayApiError("boom")):
