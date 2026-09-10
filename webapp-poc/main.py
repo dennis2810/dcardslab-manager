@@ -31,6 +31,7 @@ import json
 import logging
 import re
 import secrets
+import shutil
 import sys
 import tempfile
 import time
@@ -122,6 +123,27 @@ def _find_duplicate_card_safe(fields):
     except Exception:
         logger.exception("Duplikat-Pruefung fehlgeschlagen")
         return None
+
+
+# Handyscan (card-new.html?mode=handyscan): zusaetzlich zum Upload in den
+# Supabase-Storage-Bucket wird eine Rohkopie von Vorder-/Rueckseite hier
+# abgelegt - fester Container-Pfad statt Env-Var (siehe README), muss beim
+# Deploy per Docker-Volume auf einen NAS-Ordner gemountet werden. Ohne
+# Mount landen die Dateien einfach im (ephemeren) Container-Dateisystem.
+HANDYSCAN_ARCHIVE_DIR = Path("/data/handyscan")
+
+
+def _archive_handyscan_photos_safe(front_path, back_path):
+    # Isoliert wie _find_duplicate_card_safe() - ein fehlendes/schreibge-
+    # schuetztes Mount-Verzeichnis darf das eigentliche Kartenanlegen nicht
+    # scheitern lassen, das Archivieren ist ein reiner Zusatznutzen.
+    try:
+        HANDYSCAN_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        shutil.copyfile(front_path, HANDYSCAN_ARCHIVE_DIR / f"{stamp}_front{front_path.suffix}")
+        shutil.copyfile(back_path, HANDYSCAN_ARCHIVE_DIR / f"{stamp}_back{back_path.suffix}")
+    except Exception:
+        logger.exception("Handyscan-Archivierung fehlgeschlagen")
 
 
 def _compute_image_hash_safe(image_path):
@@ -315,7 +337,7 @@ async def recognize_card_images(front: UploadFile = File(...), back: UploadFile 
 @app.post("/api/cards")
 async def create_card_manual(
     front: UploadFile = File(...), back: UploadFile = File(...), fields: str = Form("{}"),
-    location: str = Form(""), notes: str = Form(""),
+    location: str = Form(""), notes: str = Form(""), archive_photos: bool = Form(False),
 ):
     try:
         parsed_fields = json.loads(fields)
@@ -328,6 +350,9 @@ async def create_card_manual(
         back_path = tmp / f"back{Path(back.filename or 'back.jpg').suffix}"
         front_path.write_bytes(await front.read())
         back_path.write_bytes(await back.read())
+
+        if archive_photos:
+            _archive_handyscan_photos_safe(front_path, back_path)
 
         duplicate = _find_duplicate_card_safe(parsed_fields)
         front_hash = _compute_image_hash_safe(front_path)

@@ -107,6 +107,9 @@ if ("serviceWorker" in navigator) {
     ebenfalls eine Duplikat-Warnung („per Foto erkannt").</p>
   <p>Das Kästchen „Alle Karten dieses Scans für die private Sammlung" markiert den ganzen Scan-Stapel direkt als
     Privatentnahme (siehe Private Sammlung) – die automatischen Inventar-Einträge starten dann mit Menge 0 statt 1.</p>
+  <p>Der Button „📱 Handyscan" führt zum manuellen Anlegen-Formular (siehe unten), aber mit direktem Kamera-Zugriff
+    auf dem Handy statt Fotoauswahl aus der Galerie – gedacht zum schnellen Durchfotografieren mehrerer einzelner
+    Karten unterwegs.</p>
 
   <h2 id="karten-anlegen">Karte manuell anlegen</h2>
   <p>Über „+ Neue Karte anlegen" auf der Kartenübersicht lässt sich eine einzelne Karte ohne den 3×3-Scan
@@ -114,6 +117,12 @@ if ("serviceWorker" in navigator) {
     befüllen, oder alles manuell eintragen. Auch hier wird auf mögliche Duplikate geprüft (Text und Foto). „Abbrechen" verwirft
     die Eingabe und führt zurück zur Kartenübersicht. Das Kästchen „Für die private Sammlung (Privatentnahme)"
     markiert die Karte direkt beim Anlegen als privat (siehe Private Sammlung).</p>
+  <p>Im Handyscan-Modus (über den Button auf der Scan-Seite erreicht) öffnen die Foto-Felder auf dem Handy direkt
+    die Kamera statt der Galerie. Nach dem Speichern bleibt das Formular offen und wird für die nächste Karte
+    zurückgesetzt (Lagerort/Notiz/Privatsammlung-Kästchen bleiben dabei erhalten), statt zur Kartendetailseite
+    weiterzuleiten – so lassen sich mehrere Karten hintereinander fotografieren. Die Fotos werden zusätzlich zum
+    normalen Speichern als Rohkopie in einem lokalen Ordner abgelegt (sofern beim Deployment ein entsprechendes
+    Docker-Volume eingebunden wurde, siehe README).</p>
 
   <h2 id="karten">Kartenübersicht</h2>
   <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-

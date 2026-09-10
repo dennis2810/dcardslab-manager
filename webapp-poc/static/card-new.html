@@ -67,9 +67,11 @@ if ("serviceWorker" in navigator) {
 </head>
 <body>
   <div class="page-header">
-    <h1>Neue Karte anlegen</h1>
+    <h1 id="page-title">Neue Karte anlegen</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
+  <p id="handyscan-hint" hidden>📱 Handyscan-Modus: Fotos werden zusätzlich lokal archiviert. Nach dem Speichern
+    bleibt das Formular für die nächste Karte offen.</p>
   <nav class="page-nav">
     <label>Seite
       <select id="page-nav-select">
@@ -98,7 +100,7 @@ if ("serviceWorker" in navigator) {
   <div class="images">
     <div class="side">
       <label for="front">Vorderseite</label>
-      <input type="file" id="front" name="front" accept="image/*" required>
+      <input type="file" id="front" name="front" accept="image/*" capture="environment" required>
       <img id="front-preview" class="preview" alt="Vorschau Vorderseite">
       <div id="front-rotate" class="rotate-buttons">
         <button type="button" data-side="front" data-dir="left">&#8634; Links drehen</button>
@@ -107,7 +109,7 @@ if ("serviceWorker" in navigator) {
     </div>
     <div class="side">
       <label for="back">Rückseite</label>
-      <input type="file" id="back" name="back" accept="image/*" required>
+      <input type="file" id="back" name="back" accept="image/*" capture="environment" required>
       <img id="back-preview" class="preview" alt="Vorschau Rückseite">
       <div id="back-rotate" class="rotate-buttons">
         <button type="button" data-side="back" data-dir="left">&#8634; Links drehen</button>
@@ -173,6 +175,17 @@ const form = document.getElementById("card-form");
 const statusEl = document.getElementById("status");
 const recognizeBtn = document.getElementById("recognize-btn");
 const saveBtn = document.getElementById("save-btn");
+
+// Handyscan (index.html's "📱 Handyscan"-Button, ?mode=handyscan): gleiches
+// Formular wie beim normalen manuellen Anlegen, aber mit capture="environment"
+// auf den Foto-Inputs (oeffnet auf dem Handy direkt die Kamera statt der
+// Galerie - auf dem Desktop wirkungslos) und ohne Weiterleitung nach dem
+// Speichern, damit sich mehrere Karten hintereinander fotografieren lassen.
+const handyscanMode = new URLSearchParams(location.search).get("mode") === "handyscan";
+if (handyscanMode) {
+  document.getElementById("page-title").textContent = "Handyscan";
+  document.getElementById("handyscan-hint").hidden = false;
+}
 
 // Warnt vor Verlassen der Seite, sobald ein Foto gewaehlt oder ein Feld
 // getippt wurde - vor dem Abbrechen-Button (der absichtlich verlaesst)
@@ -421,6 +434,7 @@ form.addEventListener("submit", async (ev) => {
   data.append("fields", JSON.stringify(fields));
   data.append("location", form.elements.location.value);
   data.append("notes", form.elements.notes.value);
+  if (handyscanMode) data.append("archive_photos", "true");
 
   try {
     const res = await fetch("/api/cards", { method: "POST", body: data });
@@ -433,11 +447,17 @@ form.addEventListener("submit", async (ev) => {
       return;
     }
     // Karte ist jetzt gespeichert - ab hier keine ungespeicherten Aenderungen
-    // mehr, egal ob direkt weitergeleitet wird oder erst die Duplikat-
-    // Warnung (mit ihren eigenen Navigationen) dazwischenkommt.
+    // mehr, egal ob direkt weitergeleitet wird, das Formular fuer die
+    // naechste Karte zurueckgesetzt wird oder erst die Duplikat-Warnung
+    // (mit ihren eigenen Navigationen) dazwischenkommt.
     formIsDirty = false;
     if (body.possible_duplicate) {
       showDuplicateWarning(body.id, body.possible_duplicate);
+      return;
+    }
+    if (handyscanMode) {
+      showToast("Karte gespeichert - bereit für die nächste.");
+      resetForNextCard();
       return;
     }
     window.location.href = `card.html?id=${encodeURIComponent(body.id)}`;
@@ -448,6 +468,26 @@ form.addEventListener("submit", async (ev) => {
     saveBtn.disabled = false;
   }
 });
+
+// Nur im Handyscan-Modus genutzt: Foto-Inputs, erkannte Felder und die
+// Duplikat-Warnung werden zurueckgesetzt, Lagerort/Notiz/Privatsammlung-
+// Kaestchen bleiben bestehen (gleiche "gilt fuer alle Karten dieser Session"-
+// Konvention wie index.html's Scan-Formular).
+function resetForNextCard() {
+  for (const side of ["front", "back"]) {
+    sideBlobs[side] = null;
+    document.getElementById(side).value = "";
+    updatePreview(side);
+  }
+  for (const [key] of FIELDS) {
+    form.elements[key].value = "";
+  }
+  document.getElementById("duplicate-warning").hidden = true;
+  statusEl.textContent = "";
+  statusEl.className = "";
+  saveBtn.disabled = true;
+  recognizeBtn.disabled = true;
+}
 </script>
 </body>
 </html>
