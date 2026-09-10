@@ -877,7 +877,7 @@ class RecognizeCardImagesEndpointTests(unittest.TestCase):
 
 
 class CreateCardManualEndpointTests(unittest.TestCase):
-    def _post_create(self, fields=None, location=None, notes=None):
+    def _post_create(self, fields=None, location=None, notes=None, archive_photos=None):
         files = {
             "front": ("front.jpg", b"fake-front-bytes", "image/jpeg"),
             "back": ("back.jpg", b"fake-back-bytes", "image/jpeg"),
@@ -887,6 +887,8 @@ class CreateCardManualEndpointTests(unittest.TestCase):
             data["location"] = location
         if notes is not None:
             data["notes"] = notes
+        if archive_photos is not None:
+            data["archive_photos"] = "true" if archive_photos else "false"
         return client.post("/api/cards", files=files, data=data)
 
     def _patch_all(self, **overrides):
@@ -1056,6 +1058,41 @@ class CreateCardManualEndpointTests(unittest.TestCase):
             data={"fields": "{}"},
         )
         self.assertEqual(response.status_code, 422)
+
+    def test_archive_photos_true_archives_front_and_back(self):
+        self._patch_all()
+        with patch("main._archive_handyscan_photos_safe") as mock_archive:
+            response = self._post_create(archive_photos=True)
+        self.assertEqual(response.status_code, 200)
+        mock_archive.assert_called_once()
+        front_path, back_path = mock_archive.call_args.args
+        self.assertTrue(str(front_path).endswith(".jpg"))
+        self.assertTrue(str(back_path).endswith(".jpg"))
+
+    def test_archive_photos_omitted_does_not_archive(self):
+        self._patch_all()
+        with patch("main._archive_handyscan_photos_safe") as mock_archive:
+            response = self._post_create()
+        self.assertEqual(response.status_code, 200)
+        mock_archive.assert_not_called()
+
+    def test_archive_photos_false_does_not_archive(self):
+        self._patch_all()
+        with patch("main._archive_handyscan_photos_safe") as mock_archive:
+            response = self._post_create(archive_photos=False)
+        self.assertEqual(response.status_code, 200)
+        mock_archive.assert_not_called()
+
+    def test_archive_failure_does_not_fail_the_request(self):
+        # _archive_handyscan_photos_safe() swallows its own errors (siehe
+        # main.py) - dieser Test ruft die echte Funktion mit einem nicht
+        # beschreibbaren Zielverzeichnis auf, um sicherzustellen, dass ein
+        # Archivierungsfehler das Kartenanlegen nicht scheitern laesst.
+        self._patch_all()
+        with patch("main.HANDYSCAN_ARCHIVE_DIR", Path("/nonexistent-root-only/handyscan")):
+            response = self._post_create(archive_photos=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], "card-1")
 
 
 if __name__ == "__main__":

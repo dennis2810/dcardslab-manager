@@ -167,6 +167,7 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e GOOGLE_CLIENT_ID=deine-google-client-id \
   -e GOOGLE_CLIENT_SECRET=dein-google-client-secret \
   -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
+  -v /volume1/dein-ordner:/data/handyscan \
   dcardslab-webapp-poc
 ```
 
@@ -179,12 +180,22 @@ Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
 nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.) - ohne
 sie funktioniert alles andere inkl. Backup-Download unverändert.
 
+Das Volume `/data/handyscan` ist optional und nur für den
+"📱 Handyscan"-Button (siehe Scan-Seite) relevant: dort per Handy fotografierte
+Vorder-/Rückseiten werden zusätzlich zum normalen Supabase-Storage-Upload als
+Rohkopie dort abgelegt (fester Container-Pfad, nicht per Env-Var
+konfigurierbar). `/volume1/dein-ordner` durch den gewünschten NAS-Ordner
+ersetzen; ohne diesen Mount landen die Dateien nur im ephemeren
+Container-Dateisystem und gehen beim Neustart verloren - der Handyscan-Button
+funktioniert aber trotzdem (die Karten selbst werden ja weiterhin wie gewohnt
+in Supabase gespeichert).
+
 Dann von irgendeinem Gerät im Tailscale-Netz: `http://<nas-tailscale-name>:8000`
 öffnen (Port 8000, nicht 8080 - das ist der OAuth-Server).
 
 `docker logs -f dcardslab-webapp-poc` zeigt Fehler beim Verarbeiten; zum
-Stoppen `docker rm -f dcardslab-webapp-poc`, das läuft ohne Volume, es
-bleibt nichts Persistentes übrig.
+Stoppen `docker rm -f dcardslab-webapp-poc`. Läuft ohne das optionale
+Handyscan-Volume komplett ohne Volumes, es bleibt nichts Persistentes übrig.
 
 `scanner_v0_8_dynamic.py` importiert (ungenutzt für `process()`, aber
 vorhanden) `tkinter` auf Modulebene - `main.py` stubbt das Modul vorab weg
