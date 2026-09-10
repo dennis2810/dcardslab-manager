@@ -315,7 +315,7 @@ async function load() {
     renderGoal();
     renderSummary(stats, inventory, published.listings || []);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
-    renderActivity(stats);
+    renderActivity(stats, cardsBody.cards || []);
   } catch (err) {
     document.getElementById("status-msg").textContent = "Fehler: " + err;
   }
@@ -526,7 +526,7 @@ function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
   }
 }
 
-function renderActivity(stats) {
+function renderActivity(stats, cards) {
   const list = document.getElementById("activity-list");
   list.innerHTML = "";
 
@@ -537,8 +537,14 @@ function renderActivity(stats) {
   const purchases = rows
     .filter((r) => r.purchase_date)
     .map((r) => ({ date: r.purchase_date, text: `Gekauft: ${r.title || "(ohne Titel)"}${r.cost != null ? ` für ${fmtEuro(r.cost)}` : ""}`, href: `card.html?id=${encodeURIComponent(r.card_id)}` }));
+  // Nur Karten ohne Kauf-Zuordnung - sonst taucht praktisch jede Karte
+  // gleich zweimal auf (hier als "Neu angelegt" und gleich darunter/darueber
+  // als "Gekauft"), sobald sie einem Kauf zugeordnet wird.
+  const newCards = (cards || [])
+    .filter((c) => c.created_at && !c.has_purchase)
+    .map((c) => ({ date: c.created_at, text: `Neu angelegt: ${c.title || "(ohne Titel)"}`, href: `card.html?id=${encodeURIComponent(c.id)}` }));
 
-  const combined = [...sales, ...purchases]
+  const combined = [...sales, ...purchases, ...newCards]
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     .slice(0, 10);
 
