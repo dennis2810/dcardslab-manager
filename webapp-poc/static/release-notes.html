@@ -69,6 +69,7 @@ if ("serviceWorker" in navigator) {
     <li>Installierbar als App auf dem Home-Bildschirm (Handy/Desktop).</li>
     <li>Anzeige, wann Google Sheets zuletzt synchronisiert und wann zuletzt ein Backup heruntergeladen wurde
       (jetzt auch in den Einstellungen).</li>
+    <li>Link „📊 Tabelle öffnen" in den Einstellungen führt direkt zur verknüpften Google-Sheets-Tabelle.</li>
     <li>Kennzahlen-Kacheln und Verbindungsstatus auf dem Dashboard sind jetzt anklickbar – ebenso die
       Kennzahlen-Kacheln auf den Statistikseiten, die zur jeweils passenden Seite führen.</li>
     <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
@@ -124,12 +125,18 @@ if ("serviceWorker" in navigator) {
     <li>Retouren/Rückerstattungen lassen sich markieren – Gewinn/Marge werden dann korrekt gegengerechnet.</li>
     <li>eBay-Gebühren fließen in den Gewinn ein.</li>
     <li>Massenauswahl und Bulk-Preisänderung (prozentual) für eBay-Angebote.</li>
-    <li>Preisrecherche-Verlauf pro Karte mit automatischem Preis-Alarm bei 20&nbsp;% Abweichung.</li>
+    <li>Preisrecherche-Verlauf pro Karte mit automatischem Preis-Alarm bei 20&nbsp;% Abweichung; der
+      Marktdurchschnitt wird jetzt immer angezeigt, nicht nur beim Alarm.</li>
     <li>Preisrecherche läuft jetzt zusätzlich automatisch im Hintergrund für veröffentlichte Angebote
-      (ca. einmal pro Woche je Angebot) – manuelles Suchen bleibt weiterhin möglich.</li>
+      (ca. einmal pro Woche je Angebot) – manuelles Suchen bleibt weiterhin möglich, auch mit Mehrfachauswahl von
+      Suchtreffern zum gemeinsamen Übernehmen.</li>
+    <li>Preisrecherche-Einträge lassen sich per Checkbox mehrfach auswählen und auf einmal löschen.</li>
     <li>Preisrecherche vermischt nicht mehr Auto(gramm)- und nummerierte Angebote (z. B. „/50") mit der gesuchten
       Basiskarte – solche Treffer zählen nur noch, wenn der Suchbegriff selbst danach fragt (bei einer Auflage
       zusätzlich nur bei exakt gleicher Nummer).</li>
+    <li>Neue Spalte „Preis-Check" auf der eBay-Seite: zeigt auf einen Blick, ob der Angebotspreis zum
+      Marktdurchschnitt der Preisrecherche passt oder deutlich darüber/darunter liegt.</li>
+    <li>Link zum eigenen eBay-Verkäufer-Cockpit oben auf der eBay-Seite, wenn eBay verbunden ist.</li>
     <li>Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) lassen sich jetzt pro Karte erfassen
       (Kanal, Datum, Preis, Versand, Gebühren) und zählen genau wie ein eBay-Verkauf in Statistiken, Rankings
       und Jahresübersicht.</li>

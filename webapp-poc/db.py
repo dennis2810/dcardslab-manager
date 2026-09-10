@@ -913,6 +913,26 @@ def create_price_research_entry(card_id, fields):
     return response.data[0]
 
 
+def price_research_by_card_ids(card_ids):
+    # Bulk-Companion zu list_price_research_for_card() - ebay.html braucht
+    # Durchschnitt/Anzahl je Karte fuer die Preisrecherche-Statusspalte, ohne
+    # eine Abfrage pro Zeile abzusetzen (gleiches Muster wie
+    # manual_sale_info_by_card_id()).
+    if not card_ids:
+        return {}
+    response = (
+        get_client().table("price_research").select("card_id,price")
+        .in_("card_id", card_ids).execute()
+    )
+    prices_by_card = {}
+    for row in response.data:
+        prices_by_card.setdefault(row["card_id"], []).append(row["price"])
+    return {
+        card_id: {"avg_price": sum(prices) / len(prices), "count": len(prices)}
+        for card_id, prices in prices_by_card.items()
+    }
+
+
 def list_price_research_for_card(card_id):
     response = (
         get_client().table("price_research").select("*")

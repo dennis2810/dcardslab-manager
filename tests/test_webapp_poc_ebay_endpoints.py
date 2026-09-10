@@ -61,6 +61,7 @@ class CreateEbayListingEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
             response = client.post("/api/cards/card-1/ebay-listing")
@@ -90,6 +91,7 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         with patch("main.db.list_ebay_listings", return_value=[sold_listing]), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.db.sales_by_listing_id", return_value={
                  "listing-1": {"sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 12.5}
              }) as mock_sales:
@@ -103,6 +105,7 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.db.sales_by_listing_id") as mock_sales:
             response = client.get("/api/ebay/listings")
         self.assertIsNone(response.json()["listings"][0]["sale_price"])
@@ -112,9 +115,31 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         listing = _listing(status="Veroeffentlicht")
         with patch("main.db.list_ebay_listings", return_value=[listing]), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={"card-1": {"channel": "Kleinanzeigen"}}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={"card-1": {"channel": "Kleinanzeigen"}}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
             response = client.get("/api/ebay/listings")
         self.assertEqual(response.json()["listings"][0]["manual_sale_channel"], "Kleinanzeigen")
+
+    def test_attaches_price_research_average_and_count(self):
+        with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids",
+                   return_value={"card-1": {"avg_price": 15.0, "count": 2}}):
+            response = client.get("/api/ebay/listings")
+        listing = response.json()["listings"][0]
+        self.assertEqual(listing["price_research_avg"], 15.0)
+        self.assertEqual(listing["price_research_count"], 2)
+
+    def test_price_research_fields_default_when_no_data(self):
+        with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
+            response = client.get("/api/ebay/listings")
+        listing = response.json()["listings"][0]
+        self.assertIsNone(listing["price_research_avg"])
+        self.assertEqual(listing["price_research_count"], 0)
 
 
 class GetEbayListingEndpointTests(unittest.TestCase):
@@ -126,7 +151,8 @@ class GetEbayListingEndpointTests(unittest.TestCase):
     def test_returns_listing_with_card_summary(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
             response = client.get("/api/ebay/listings/listing-1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["card"]["title"], "Musterkarte")
@@ -144,6 +170,7 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token") as mock_token:
             response = client.patch("/api/ebay/listings/listing-1", json={"price": 12.0})
         self.assertEqual(response.status_code, 200)
@@ -157,6 +184,7 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card(front_image_path="b1/1_front.jpg")), \
              patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.storage.public_url", return_value="https://img/x.jpg"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
@@ -215,6 +243,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={"fulfillmentPolicyId": "F1"}), \
@@ -238,6 +267,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=card), \
              patch("main.db.get_cards_by_ids", return_value=[card]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.storage.public_url", side_effect=lambda path: f"https://img/{path}"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
@@ -258,6 +288,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=card), \
              patch("main.db.get_cards_by_ids", return_value=[card]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.storage.public_url", side_effect=lambda path: f"https://img/{path}"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
@@ -280,6 +311,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", side_effect=ebay_client.EbayApiError("Policy fehlt")):
@@ -297,6 +329,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", side_effect=ebay_client.EbayApiError("Policy fehlt")), \
@@ -317,6 +350,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
@@ -338,6 +372,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
@@ -356,6 +391,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", side_effect=ebay_client.EbayNotAuthorizedError("nicht verbunden")):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 401)
@@ -366,6 +402,7 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.put_inventory_item") as mock_put, \
              patch("main.ebay_client.create_offer") as mock_create:
             response = client.post(
@@ -398,6 +435,7 @@ class UnscheduleEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/unschedule")
         self.assertEqual(response.status_code, 200)
@@ -416,6 +454,7 @@ class UnscheduleEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/unschedule")
@@ -441,6 +480,7 @@ class EndEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/end")
@@ -455,6 +495,7 @@ class EndEbayListingEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.withdraw_offer") as mock_withdraw:
             response = client.post("/api/ebay/listings/listing-1/end")
         self.assertEqual(response.status_code, 200)
@@ -494,6 +535,7 @@ class PublishBulkEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
              patch("main.ebay_client.get_listing_policies", return_value={}), \
@@ -558,6 +600,7 @@ class PriceBulkEndpointTests(unittest.TestCase):
              patch("main.db.get_card", return_value=_card(front_image_path="b1/1_front.jpg")), \
              patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
              patch("main.storage.public_url", return_value="https://img/x.jpg"), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
@@ -676,6 +719,26 @@ class EbayPriceResearchEndpointTests(unittest.TestCase):
             response = client.get("/api/ebay/price-research?q=Musterkarte+/50")
         titles = [r["title"] for r in response.json()["results"]]
         self.assertEqual(titles, ["Musterkarte /50", "Musterkarte"])
+
+    def test_does_not_mistake_season_year_for_a_print_run(self):
+        # season_year kann laut ai_card_recognition.py Formate wie "2024/25"
+        # oder "24/25" annehmen - das sieht syntaktisch wie eine Auflage
+        # ("/50") aus, ist aber keine. Ohne Sonderbehandlung wuerden nahezu
+        # alle echten Angebote (die die Saison im Titel haben) ausgeschlossen,
+        # nur weil die Suchanfrage die Saison anders/gar nicht formatiert -
+        # genau das vom Nutzer gemeldete "nur 100%-Titeltreffer"-Problem.
+        results = [
+            {"title": "Lionel Messi 2024/25 Panini", "price": 5.0},
+            {"title": "L. Messi 24/25 Panini", "price": 6.0},
+            {"title": "Messi Panini Base", "price": 4.5},
+            {"title": "Messi Panini /50", "price": 200.0},
+            {"title": "Messi Panini Auto", "price": 300.0},
+        ]
+        with patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.search_active_listings", return_value=results):
+            response = client.get("/api/ebay/price-research?q=Lionel+Messi+2024+Panini")
+        titles = [r["title"] for r in response.json()["results"]]
+        self.assertEqual(titles, ["Lionel Messi 2024/25 Panini", "L. Messi 24/25 Panini", "Messi Panini Base"])
 
 
 class SyncSalesEndpointTests(unittest.TestCase):

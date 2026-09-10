@@ -117,6 +117,8 @@ if ("serviceWorker" in navigator) {
   .ebay-readonly dd { margin: 0; }
   .price-research-links { font-size: 0.85rem; margin: 0.4rem 0; }
   .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: var(--warn-bg); color: var(--warn-fg); }
+  .price-average { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: var(--info-bg); color: var(--info-fg); }
+  .price-research-bulk-bar { display: flex; gap: 0.75rem; align-items: center; margin: 0 0 0.75rem; }
   .workflow-hint { background: var(--warn-bg); color: var(--warn-fg); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
   .sale-stats { font-size: 0.85rem; }
   .fee-input-row { display: flex; align-items: center; gap: 0.4rem; }
@@ -1280,19 +1282,31 @@ function renderManualSaleForm(section, existingSale) {
   });
 }
 
+let selectedPriceResearchIds = new Set();
+
 function renderPriceResearchSection(entries, cardTitle, listingPrice) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
+
+  // Durchschnitt immer sichtbar (nicht nur bei einem Preis-Alarm) - dient
+  // als staendiger Referenzwert fuer die eigene Preisentscheidung.
+  const knownPrices = (entries || [])
+    .map((entry) => Number(entry.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  let avg = null;
+  if (knownPrices.length) {
+    avg = knownPrices.reduce((sum, price) => sum + price, 0) / knownPrices.length;
+    const avgP = document.createElement("p");
+    avgP.className = "price-average";
+    avgP.textContent = `Marktdurchschnitt: ${fmtEuro(avg)} (aus ${knownPrices.length} ${knownPrices.length === 1 ? "Preis" : "Preisen"})`;
+    section.appendChild(avgP);
+  }
 
   // Preis-Alarm: warnt in beide Richtungen, wenn der eigene Angebotspreis um
   // mindestens 20% vom Durchschnitt der erfassten Preisrecherche-Einträge
   // abweicht - sowohl "zu teuer" (verkauft sich schlecht) als auch "zu
   // billig" (Geld liegen gelassen) sind für den Verkäufer relevant.
-  const knownPrices = (entries || [])
-    .map((entry) => Number(entry.price))
-    .filter((price) => Number.isFinite(price) && price > 0);
-  if (listingPrice != null && knownPrices.length) {
-    const avg = knownPrices.reduce((sum, price) => sum + price, 0) / knownPrices.length;
+  if (listingPrice != null && avg != null) {
     const diffPct = ((Number(listingPrice) - avg) / avg) * 100;
     if (avg > 0 && Math.abs(diffPct) >= 20) {
       const alertP = document.createElement("p");
@@ -1305,18 +1319,57 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     }
   }
 
+  // Auswahl bleibt nur fuer noch existierende Eintraege erhalten (ueberlebt
+  // ein loadCard() nach dem Anlegen eines neuen Eintrags).
+  selectedPriceResearchIds = new Set(
+    [...selectedPriceResearchIds].filter((id) => (entries || []).some((entry) => entry.id === id))
+  );
+
   if (entries && entries.length) {
     const table = document.createElement("table");
     table.className = "price-research-table";
     const thead = document.createElement("tr");
+    const selectAllTh = document.createElement("th");
+    const selectAllCheckbox = document.createElement("input");
+    selectAllCheckbox.type = "checkbox";
+    selectAllCheckbox.title = "Alle auswählen";
+    selectAllCheckbox.checked = entries.every((entry) => selectedPriceResearchIds.has(entry.id));
+    selectAllCheckbox.addEventListener("change", () => {
+      selectedPriceResearchIds = selectAllCheckbox.checked ? new Set(entries.map((entry) => entry.id)) : new Set();
+      renderPriceResearchSection(entries, cardTitle, listingPrice);
+    });
+    selectAllTh.appendChild(selectAllCheckbox);
+    thead.appendChild(selectAllTh);
     for (const label of ["Datum", "Preis", "Notiz", ""]) {
       const th = document.createElement("th");
       th.textContent = label;
       thead.appendChild(th);
     }
     table.appendChild(thead);
+
+    const bulkCountEl = document.createElement("span");
+    const bulkDeleteBtn = document.createElement("button");
+    bulkDeleteBtn.type = "button";
+    bulkDeleteBtn.textContent = "Ausgewählte löschen";
+
+    function updateBulkBar() {
+      bulkCountEl.textContent = selectedPriceResearchIds.size ? `${selectedPriceResearchIds.size} ausgewählt` : "";
+      bulkDeleteBtn.disabled = selectedPriceResearchIds.size === 0;
+    }
+
     for (const entry of entries) {
       const tr = document.createElement("tr");
+      const checkTd = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = selectedPriceResearchIds.has(entry.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selectedPriceResearchIds.add(entry.id);
+        else selectedPriceResearchIds.delete(entry.id);
+        updateBulkBar();
+      });
+      checkTd.appendChild(checkbox);
+      tr.appendChild(checkTd);
       const dateTd = document.createElement("td");
       dateTd.textContent = formatDate(entry.checked_at);
       tr.appendChild(dateTd);
@@ -1350,6 +1403,29 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
       table.appendChild(tr);
     }
     section.appendChild(table);
+
+    bulkDeleteBtn.addEventListener("click", async () => {
+      const ids = [...selectedPriceResearchIds];
+      if (!ids.length) return;
+      if (!confirm(`${ids.length} Preisrecherche-Einträge wirklich löschen?`)) return;
+      try {
+        const results = await Promise.all(
+          ids.map((id) => fetch(`/api/price-research/${encodeURIComponent(id)}`, { method: "DELETE" }))
+        );
+        const okCount = results.filter((r) => r.ok || r.status === 204).length;
+        const failed = results.length - okCount;
+        showToast(`${okCount} Preisrecherche-Einträge gelöscht.${failed ? ` ${failed} fehlgeschlagen.` : ""}`, failed > 0 && okCount === 0);
+        selectedPriceResearchIds = new Set();
+        loadCard();
+      } catch (err) {
+        alert("Fehler: " + err);
+      }
+    });
+    updateBulkBar();
+    const bulkBar = document.createElement("div");
+    bulkBar.className = "price-research-bulk-bar";
+    bulkBar.append(bulkCountEl, bulkDeleteBtn);
+    section.appendChild(bulkBar);
   } else {
     const emptyP = document.createElement("p");
     emptyP.textContent = "Noch keine Preisrecherche erfasst.";
@@ -1437,6 +1513,41 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
   const searchStatus = document.createElement("span");
   const resultsList = document.createElement("ul");
   resultsList.className = "price-research-results";
+  const selectedSearchResults = new Map();
+  const adoptSelectedBtn = document.createElement("button");
+  adoptSelectedBtn.type = "button";
+  adoptSelectedBtn.textContent = "Ausgewählte übernehmen";
+  adoptSelectedBtn.disabled = true;
+  adoptSelectedBtn.hidden = true;
+
+  adoptSelectedBtn.addEventListener("click", async () => {
+    const items = [...selectedSearchResults.values()];
+    if (!items.length) return;
+    adoptSelectedBtn.disabled = true;
+    searchStatus.textContent = "Übernimmt …";
+    searchStatus.className = "";
+    try {
+      const results = await Promise.all(items.map((item) =>
+        fetch(`/api/cards/${encodeURIComponent(cardId)}/price-research`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            price: item.price, note: "Aktives eBay-Angebot: " + item.title,
+            checked_at: new Date().toISOString().slice(0, 10),
+          }),
+        })
+      ));
+      const okCount = results.filter((r) => r.ok).length;
+      const failed = results.length - okCount;
+      showToast(`${okCount} Preisrecherche-Einträge übernommen.${failed ? ` ${failed} fehlgeschlagen.` : ""}`, failed > 0 && okCount === 0);
+      loadCard();
+    } catch (err) {
+      searchStatus.textContent = "Fehler: " + err;
+      searchStatus.className = "error";
+    } finally {
+      adoptSelectedBtn.disabled = selectedSearchResults.size === 0;
+    }
+  });
 
   searchBtn.addEventListener("click", async () => {
     const q = searchInput.value.trim();
@@ -1445,6 +1556,9 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     searchStatus.textContent = "Sucht …";
     searchStatus.className = "";
     resultsList.innerHTML = "";
+    selectedSearchResults.clear();
+    adoptSelectedBtn.hidden = true;
+    adoptSelectedBtn.disabled = true;
     try {
       const res = await fetch(`/api/ebay/price-research?q=${encodeURIComponent(q)}`);
       const body = await res.json();
@@ -1454,8 +1568,19 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
         return;
       }
       searchStatus.textContent = body.results.length ? "" : "Keine aktiven Angebote gefunden.";
-      for (const item of body.results) {
+      adoptSelectedBtn.hidden = !body.results.length;
+      body.results.forEach((item, index) => {
         const li = document.createElement("li");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.disabled = item.price == null;
+        checkbox.title = item.price == null ? "Kein Preis angegeben" : "Für Mehrfachübernahme auswählen";
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) selectedSearchResults.set(index, item);
+          else selectedSearchResults.delete(index);
+          adoptSelectedBtn.disabled = selectedSearchResults.size === 0;
+        });
+        li.appendChild(checkbox);
         const link = document.createElement("a");
         link.href = item.item_web_url;
         link.target = "_blank";
@@ -1471,7 +1596,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
         });
         li.appendChild(useBtn);
         resultsList.appendChild(li);
-      }
+      });
     } catch (err) {
       searchStatus.textContent = "Fehler: " + err;
       searchStatus.className = "error";
@@ -1480,7 +1605,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice) {
     }
   });
 
-  searchWrapper.append(searchInput, searchBtn, searchStatus, resultsList);
+  searchWrapper.append(searchInput, searchBtn, searchStatus, resultsList, adoptSelectedBtn);
   section.appendChild(searchWrapper);
   section.appendChild(form);
 }

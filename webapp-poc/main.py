@@ -1135,6 +1135,9 @@ def _expand_ebay_listings(listings):
     # geplant ist - ebay.html zeigt dafuer einen Hinweis an (siehe
     # renderListingRow()), damit das Angebot zeitnah beendet werden kann.
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
+    # Fuer die Preisrecherche-Statusspalte (siehe ebay.html) - gleicher
+    # +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite.
+    price_research_info = db.price_research_by_card_ids(card_ids)
     expanded = []
     for listing in listings:
         listing = dict(listing)
@@ -1151,6 +1154,9 @@ def _expand_ebay_listings(listings):
         listing["sale_date"] = sale.get("sale_date") if sale else None
         listing["sale_price"] = sale.get("gross_price") if sale else None
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
+        research = price_research_info.get(listing["card_id"])
+        listing["price_research_avg"] = research["avg_price"] if research else None
+        listing["price_research_count"] = research["count"] if research else 0
         expanded.append(listing)
     return expanded
 
@@ -1460,7 +1466,18 @@ async def ebay_oauth_status():
 
 
 _AUTO_RE = re.compile(r"\bauto(?:graph(?:ed)?)?\b", re.IGNORECASE)
-_PRINT_RUN_RE = re.compile(r"/(\d+)\b")
+_PRINT_RUN_RE = re.compile(r"(\d{2,4})?/(\d{1,4})\b")
+
+
+def _is_season_like(prefix_digits, suffix_digits):
+    # season_year kann laut ai_card_recognition.py Formate wie "2024/25" oder
+    # "24/25" annehmen - syntaktisch nicht von einer Auflagenangabe ("12/50")
+    # zu unterscheiden. Eine Saison ist aber immer ein direkt aufeinander-
+    # folgendes Jahrespaar (23/24, 99/00 beim Jahrhundertwechsel); eine echte
+    # Auflage so gut wie nie.
+    if prefix_digits is None or len(suffix_digits) != 2:
+        return False
+    return int(suffix_digits) == (int(prefix_digits[-2:]) + 1) % 100
 
 
 def _variant_attrs(text):
@@ -1468,8 +1485,13 @@ def _variant_attrs(text):
     Suchanfrage - rein textbasiert, da Karten kein eigenes Autogramm-Feld
     haben (siehe ebay_listing.py)."""
     text = text or ""
-    print_run_match = _PRINT_RUN_RE.search(text)
-    return bool(_AUTO_RE.search(text)), print_run_match.group(1) if print_run_match else None
+    print_run = None
+    for match in _PRINT_RUN_RE.finditer(text):
+        if _is_season_like(match.group(1), match.group(2)):
+            continue
+        print_run = match.group(2)
+        break
+    return bool(_AUTO_RE.search(text)), print_run
 
 
 def _filter_price_research_results(query, results):
