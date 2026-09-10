@@ -49,10 +49,16 @@ if ("serviceWorker" in navigator) {
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
   .note { font-size: 0.85rem; color: #555; }
+  @media print {
+    .no-print { display: none !important; }
+  }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
   tr:hover { background: var(--hover-bg); }
   .table-scroll { overflow-x: auto; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
   .thumb { width: 40px; height: auto; border-radius: 3px; display: block; }
   .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
   .badge-info { background: var(--info-bg); color: var(--info-fg); }
@@ -109,17 +115,24 @@ if ("serviceWorker" in navigator) {
       <thead>
         <tr>
           <th></th>
-          <th>Titel</th>
-          <th>Kanal</th>
-          <th>Verkauft am</th>
-          <th>Preis</th>
-          <th>Aktionen</th>
+          <th data-key="title">Titel <span class="sort-arrow"></span></th>
+          <th data-key="channel">Kanal <span class="sort-arrow"></span></th>
+          <th data-key="saleDate">Verkauft am <span class="sort-arrow"></span></th>
+          <th data-key="price">Preis <span class="sort-arrow"></span></th>
+          <th class="no-print">Aktionen</th>
         </tr>
       </thead>
       <tbody id="items-body"></tbody>
     </table>
   </div>
   <p id="items-empty" class="empty-state"></p>
+  <div class="pagination no-print" id="pagination" style="display: none;">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
+  </div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -234,10 +247,35 @@ function formatShipToAddress(shipTo) {
 
 let items = [];
 
+const PAGE_SIZE = 40;
+let currentPage = 0;
+let sortKey = "saleDate";
+let sortAsc = false;
+
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("items-table");
 const body = document.getElementById("items-body");
 const empty = document.getElementById("items-empty");
+const pagination = document.getElementById("pagination");
+
+function sortedItems() {
+  if (!sortKey) return items;
+  return [...items].sort((a, b) => {
+    const av = a[sortKey] ?? "";
+    const bv = b[sortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
+    return sortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setSortIndicator() {
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+}
 
 function buildActionsCell(item, tr) {
   const wrap = document.createElement("div");
@@ -391,12 +429,25 @@ function render() {
   body.innerHTML = "";
   if (!items.length) {
     table.style.display = "none";
+    pagination.style.display = "none";
     empty.textContent = "Keine verkauften, unversendeten Karten - alles erledigt.";
     return;
   }
   table.style.display = "table";
+  pagination.style.display = "flex";
   empty.textContent = "";
-  for (const item of items) {
+  setSortIndicator();
+
+  const allItems = sortedItems();
+  const pageCount = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const pageItems = allItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  document.getElementById("page-info").textContent =
+    `Seite ${currentPage + 1} von ${pageCount} (${allItems.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  for (const item of pageItems) {
     const tr = document.createElement("tr");
 
     const imgTd = document.createElement("td");
@@ -495,6 +546,58 @@ async function load() {
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    render();
+  });
+}
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["Titel", "Kanal", "Verkauft am", "Preis"];
+  const rows = sortedItems().map((item) => [
+    item.title || "", item.channel || "", formatDate(item.saleDate), fmtEuro(item.price),
+  ]);
+  downloadCsv("versand-checkliste.csv", headers, rows);
+});
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+// Gleiches Muster wie auf den anderen Listenseiten.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 load();

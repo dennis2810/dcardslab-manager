@@ -108,11 +108,26 @@ if ("serviceWorker" in navigator) {
     Wiederholungskäufer und folgt dem aktuellen Zeit-/Kanal-/Suchfilter unten.</p>
   <div class="table-scroll">
     <table id="buyer-history-table" class="ranking-table" style="display: none;">
-      <thead><tr><th></th><th>Käufer (eBay)</th><th>Käufe</th><th>Summe</th><th>Letzter Kauf</th></tr></thead>
+      <thead>
+        <tr>
+          <th></th>
+          <th data-key="buyer">Käufer (eBay) <span class="sort-arrow"></span></th>
+          <th data-key="count">Käufe <span class="sort-arrow"></span></th>
+          <th data-key="total">Summe <span class="sort-arrow"></span></th>
+          <th data-key="lastSaleDate">Letzter Kauf <span class="sort-arrow"></span></th>
+        </tr>
+      </thead>
       <tbody id="buyer-history-body"></tbody>
     </table>
   </div>
   <p id="buyer-history-empty" class="note"></p>
+  <div class="pagination no-print" id="buyer-history-pagination" style="display: none;">
+    <button type="button" id="buyer-prev-page">&larr; Zurück</button>
+    <span id="buyer-page-info"></span>
+    <button type="button" id="buyer-next-page">Weiter &rarr;</button>
+    <button type="button" id="buyer-print-btn">🖨 Drucken</button>
+    <button type="button" id="buyer-csv-btn">⭳ CSV-Export</button>
+  </div>
 
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
@@ -440,38 +455,83 @@ function computeSummary(rows) {
 // purchases.html's expandedIds.
 const expandedBuyers = new Set();
 
-// Gruppiert nach eBay-Kaeufer-Benutzernamen (pseudonymer Handle, siehe
-// sync_ebay_sales()) - manuelle Verkaeufe haben keinen buyer_username und
-// werden hier ausgeblendet, da es dafuer keine vergleichbare eBay-Kennung
-// gibt. Folgt dem aktuellen Zeit-/Kanal-/Suchfilter (rows kommt bereits
-// gefiltert rein), gleiches Prinzip wie purchases.html's Verkaeufer-Historie.
-function renderBuyerHistory(rows) {
-  const table = document.getElementById("buyer-history-table");
-  const body = document.getElementById("buyer-history-body");
-  const empty = document.getElementById("buyer-history-empty");
-  body.innerHTML = "";
+// Eigener Sortier-/Seitenstatus, unabhaengig von der Alle-Verkaeufe-Tabelle
+// darunter - Standard ist "Summe absteigend" (bisheriges Verhalten).
+let buyerSortKey = "total";
+let buyerSortAsc = false;
+let buyerCurrentPage = 0;
+// Zuletzt uebergebene, bereits gefilterte Zeilen - damit Sortier-Klicks und
+// die Pagination-Buttons ohne erneuten API-Aufruf neu rendern koennen.
+let lastBuyerHistoryRows = [];
 
+function groupRowsByBuyer(rows) {
   const byBuyer = new Map();
   for (const r of rows) {
     const buyer = (r.buyer_username || "").trim();
     if (!buyer || r.sale_price == null) continue;
-    const g = byBuyer.get(buyer) || { count: 0, total: 0, lastSaleDate: null, sales: [] };
+    const g = byBuyer.get(buyer) || { buyer, count: 0, total: 0, lastSaleDate: null, sales: [] };
     g.count += 1;
     g.total += Number(r.sale_price) || 0;
     if (r.sale_date && (!g.lastSaleDate || r.sale_date > g.lastSaleDate)) g.lastSaleDate = r.sale_date;
     g.sales.push(r);
     byBuyer.set(buyer, g);
   }
+  return [...byBuyer.values()];
+}
 
-  const entries = [...byBuyer.entries()].sort((a, b) => b[1].total - a[1].total);
-  if (!entries.length) {
+function sortedBuyerEntries(entries) {
+  return [...entries].sort((a, b) => {
+    const av = a[buyerSortKey] ?? "";
+    const bv = b[buyerSortKey] ?? "";
+    if (typeof av === "number" && typeof bv === "number") return buyerSortAsc ? av - bv : bv - av;
+    return buyerSortAsc
+      ? String(av).localeCompare(String(bv), "de")
+      : String(bv).localeCompare(String(av), "de");
+  });
+}
+
+function setBuyerSortIndicator() {
+  for (const th of document.querySelectorAll("#buyer-history-table th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === buyerSortKey ? (buyerSortAsc ? "▲" : "▼") : "";
+  }
+}
+
+// Gruppiert nach eBay-Kaeufer-Benutzernamen (pseudonymer Handle, siehe
+// sync_ebay_sales()) - manuelle Verkaeufe haben keinen buyer_username und
+// werden hier ausgeblendet, da es dafuer keine vergleichbare eBay-Kennung
+// gibt. Folgt dem aktuellen Zeit-/Kanal-/Suchfilter (rows kommt bereits
+// gefiltert rein), gleiches Prinzip wie purchases.html's Verkaeufer-Historie.
+function renderBuyerHistory(rows) {
+  lastBuyerHistoryRows = rows;
+  const table = document.getElementById("buyer-history-table");
+  const body = document.getElementById("buyer-history-body");
+  const empty = document.getElementById("buyer-history-empty");
+  const pagination = document.getElementById("buyer-history-pagination");
+  body.innerHTML = "";
+
+  const allEntries = sortedBuyerEntries(groupRowsByBuyer(rows));
+  setBuyerSortIndicator();
+  if (!allEntries.length) {
     table.style.display = "none";
+    pagination.style.display = "none";
     empty.textContent = "Keine eBay-Käufer im aktuellen Filter.";
     return;
   }
   table.style.display = "table";
+  pagination.style.display = "flex";
   empty.textContent = "";
-  for (const [buyer, g] of entries) {
+
+  const pageCount = Math.max(1, Math.ceil(allEntries.length / PAGE_SIZE));
+  buyerCurrentPage = Math.min(buyerCurrentPage, pageCount - 1);
+  const entries = allEntries.slice(buyerCurrentPage * PAGE_SIZE, (buyerCurrentPage + 1) * PAGE_SIZE);
+  document.getElementById("buyer-page-info").textContent =
+    `Seite ${buyerCurrentPage + 1} von ${pageCount} (${allEntries.length} Käufer, max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("buyer-prev-page").disabled = buyerCurrentPage === 0;
+  document.getElementById("buyer-next-page").disabled = buyerCurrentPage >= pageCount - 1;
+
+  for (const g of entries) {
+    const buyer = g.buyer;
     const tr = document.createElement("tr");
 
     const toggleTd = document.createElement("td");
@@ -500,6 +560,37 @@ function renderBuyerHistory(rows) {
     }
   }
 }
+
+for (const th of document.querySelectorAll("#buyer-history-table th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (buyerSortKey === key) {
+      buyerSortAsc = !buyerSortAsc;
+    } else {
+      buyerSortKey = key;
+      buyerSortAsc = true;
+    }
+    buyerCurrentPage = 0;
+    renderBuyerHistory(lastBuyerHistoryRows);
+  });
+}
+
+document.getElementById("buyer-prev-page").addEventListener("click", () => {
+  buyerCurrentPage = Math.max(0, buyerCurrentPage - 1);
+  renderBuyerHistory(lastBuyerHistoryRows);
+});
+document.getElementById("buyer-next-page").addEventListener("click", () => {
+  buyerCurrentPage += 1;
+  renderBuyerHistory(lastBuyerHistoryRows);
+});
+document.getElementById("buyer-print-btn").addEventListener("click", () => window.print());
+document.getElementById("buyer-csv-btn").addEventListener("click", () => {
+  const headers = ["Käufer (eBay)", "Käufe", "Summe", "Letzter Kauf"];
+  const rows = sortedBuyerEntries(groupRowsByBuyer(lastBuyerHistoryRows)).map((g) => [
+    g.buyer, String(g.count), fmtNumber(g.total, 2), formatDate(g.lastSaleDate),
+  ]);
+  downloadCsv("kaeufer-historie.csv", headers, rows);
+});
 
 function buildBuyerDetailRow(sales) {
   const tr = document.createElement("tr");

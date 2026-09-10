@@ -356,3 +356,10 @@ alter table cards add column if not exists picked_up boolean not null default fa
 -- "Retoure" statt automatisiert.
 alter table ebay_sales add column if not exists delivered boolean not null default false;
 alter table manual_sales add column if not exists delivered boolean not null default false;
+
+-- Migration (2026-09-10): Zeitstempel fuers Ausblenden aelterer Eintraege in
+-- "Letzte Aktivitaet" (Dashboard) - die Liste wird live aus Kaeufen/
+-- Verkaeufen/Karten berechnet statt aus einem gespeicherten Protokoll,
+-- daher merkt sich nur dieser Zeitpunkt, ab wann wieder Ereignisse gezeigt
+-- werden sollen.
+alter table app_status add column if not exists activity_cleared_at timestamptz;

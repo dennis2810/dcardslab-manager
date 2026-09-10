@@ -1122,6 +1122,44 @@ class ManualSaleInfoByCardIdTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class SaleFlagsByCardIdTests(unittest.TestCase):
+    def _table(self, ebay_rows, manual_rows):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            response.data = ebay_rows if name == "ebay_sales" else manual_rows
+            builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        return table
+
+    def test_returns_flags_from_ebay_sales(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            ebay_rows=[{"card_id": "card-1", "delivered": True, "refunded": False}],
+            manual_rows=[],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sale_flags_by_card_id(["card-1"])
+        self.assertEqual(result, {"card-1": {"delivered": True, "refunded": False}})
+
+    def test_falls_back_to_manual_sales_when_no_ebay_sale(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            ebay_rows=[],
+            manual_rows=[{"card_id": "card-3", "delivered": False, "refunded": True}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sale_flags_by_card_id(["card-3"])
+        self.assertEqual(result, {"card-3": {"delivered": False, "refunded": True}})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sale_flags_by_card_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+
 class PurchaseCostByCardIdTests(unittest.TestCase):
     def test_returns_allocated_cost_keyed_by_card_id(self):
         mock_client = MagicMock()
@@ -1565,6 +1603,21 @@ class SalesByListingIdTests(unittest.TestCase):
         self.assertEqual(result["listing-1"]["tracking_number"], "1Z999")
         self.assertEqual(result["listing-1"]["shipping_carrier"], "UPS")
 
+    def test_includes_delivered_and_refunded_flags(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {
+                "id": "sale-1", "listing_id": "listing-1", "sale_date": "2026-08-02T00:00:00+00:00",
+                "gross_price": 25.0, "delivered": True, "refunded": False,
+            },
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sales_by_listing_id(["listing-1"])
+        self.assertTrue(result["listing-1"]["delivered"])
+        self.assertFalse(result["listing-1"]["refunded"])
+
 
 class GoogleSheetsSettingsTests(unittest.TestCase):
     def test_get_returns_none_when_no_row(self):
@@ -1665,6 +1718,16 @@ class AppStatusTests(unittest.TestCase):
             db.record_auto_backup("2026-09-10T03:00:00+00:00")
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "last_auto_backup_at": "2026-09-10T03:00:00+00:00"})
+
+    def test_set_activity_cleared_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "activity_cleared_at": "2026-09-10T12:00:00+00:00"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_activity_cleared("2026-09-10T12:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "activity_cleared_at": "2026-09-10T12:00:00+00:00"})
 
 
 class DashboardGoalTests(unittest.TestCase):

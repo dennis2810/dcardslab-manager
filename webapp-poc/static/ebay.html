@@ -562,6 +562,18 @@ function render(listings) {
       warn.title = `Karte wurde bereits anderweitig verkauft (${listing.manual_sale_channel}) - Angebot sollte beendet werden.`;
       statusTd.appendChild(warn);
     }
+    if (listing.status === "Verkauft" && listing.delivered) {
+      const flag = document.createElement("span");
+      flag.textContent = " 📦";
+      flag.title = "Als zugestellt markiert";
+      statusTd.appendChild(flag);
+    }
+    if (listing.status === "Verkauft" && listing.refunded) {
+      const flag = document.createElement("span");
+      flag.textContent = " ↩️";
+      flag.title = "Als Rückerstattung/Retoure markiert";
+      statusTd.appendChild(flag);
+    }
     tr.appendChild(statusTd);
 
     const scheduledTd = document.createElement("td");

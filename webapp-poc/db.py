@@ -467,6 +467,31 @@ def manual_sale_info_by_card_id(card_ids):
     return {row["card_id"]: {"channel": row["channel"]} for row in response.data}
 
 
+def sale_flags_by_card_id(card_ids):
+    # Bulk-Companion zu ebay_info_by_card_id()/manual_sale_info_by_card_id() -
+    # "Zugestellt"/"Retoure" leben auf ebay_sales bzw. manual_sales, nicht auf
+    # cards, werden aber in der Kartenuebersicht (cards.html) als Badges
+    # gebraucht. Eine Karte hat hoechstens einen der beiden Verkaufstypen.
+    if not card_ids:
+        return {}
+    result = {}
+    ebay_response = (
+        get_client().table("ebay_sales").select("card_id,delivered,refunded")
+        .in_("card_id", card_ids).execute()
+    )
+    for row in ebay_response.data:
+        result[row["card_id"]] = {"delivered": bool(row.get("delivered")), "refunded": bool(row.get("refunded"))}
+    manual_response = (
+        get_client().table("manual_sales").select("card_id,delivered,refunded")
+        .in_("card_id", card_ids).execute()
+    )
+    for row in manual_response.data:
+        result.setdefault(
+            row["card_id"], {"delivered": bool(row.get("delivered")), "refunded": bool(row.get("refunded"))},
+        )
+    return result
+
+
 def purchase_cost_by_card_id(card_ids):
     # Bulk-lookup companion to get_purchase_for_card() - used where the cost
     # basis of many cards is needed at once (e.g. inventory valuation)
@@ -680,7 +705,7 @@ def sales_by_listing_id(listing_ids):
         return {}
     response = (
         get_client().table("ebay_sales")
-        .select("id,listing_id,sale_date,gross_price,tracking_number,shipping_carrier")
+        .select("id,listing_id,sale_date,gross_price,tracking_number,shipping_carrier,delivered,refunded")
         .in_("listing_id", listing_ids).order("sale_date", desc=True).execute()
     )
     result = {}
@@ -688,6 +713,7 @@ def sales_by_listing_id(listing_ids):
         result.setdefault(row["listing_id"], {
             "id": row["id"], "sale_date": row["sale_date"], "gross_price": row["gross_price"],
             "tracking_number": row.get("tracking_number"), "shipping_carrier": row.get("shipping_carrier"),
+            "delivered": bool(row.get("delivered")), "refunded": bool(row.get("refunded")),
         })
     return result
 
@@ -745,6 +771,17 @@ def record_auto_backup(uploaded_at):
     # sind unterschiedliche Ereignisse, die getrennt sichtbar bleiben sollen.
     response = get_client().table("app_status").upsert({
         "id": True, "last_auto_backup_at": uploaded_at,
+    }).execute()
+    return response.data[0]
+
+
+def set_activity_cleared(cleared_at):
+    # Gleiches Singleton-Row-Muster wie record_auto_backup() - "Letzte
+    # Aktivitaet" auf dem Dashboard wird live aus Kaeufen/Verkaeufen/Karten
+    # berechnet (kein gespeichertes Protokoll), daher merkt sich dieser
+    # Zeitpunkt nur, ab wann wieder Ereignisse angezeigt werden sollen.
+    response = get_client().table("app_status").upsert({
+        "id": True, "activity_cleared_at": cleared_at,
     }).execute()
     return response.data[0]
 
