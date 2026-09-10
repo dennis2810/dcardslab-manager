@@ -311,3 +311,14 @@ alter table app_status add column if not exists last_auto_backup_at timestamptz;
 -- Käufer-Historie (Wiederholungskäufer erkennen) ohne personenbezogene
 -- Adressdaten dauerhaft vorzuhalten.
 alter table ebay_sales add column if not exists buyer_username text default '';
+
+-- Migration (2026-09-10): Automatische Preispruefung fuer Wunschlisten-
+-- Eintraege (Sourcing-Liste) - gleiches Prinzip wie last_price_research_at
+-- auf ebay_listings fuer bereits veroeffentlichte eigene Angebote, hier
+-- aber zusaetzlich mit dem guenstigsten gefundenen Treffer selbst
+-- (last_match_*), damit wishlist.html ihn ohne manuelles "Neu suchen"
+-- direkt anzeigen kann.
+alter table wishlist_items add column if not exists last_price_check_at timestamptz;
+alter table wishlist_items add column if not exists last_match_price numeric;
+alter table wishlist_items add column if not exists last_match_title text default '';
+alter table wishlist_items add column if not exists last_match_url text default '';

@@ -1879,6 +1879,56 @@ class DeleteWishlistItemTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class ListWishlistItemsDueForPriceCheckTests(unittest.TestCase):
+    def test_never_checked_item_comes_before_long_checked_one(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": "2020-01-01T00:00:00+00:00"},
+            {"id": "w2", "last_price_check_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2", "w1"])
+
+    def test_filters_out_recently_checked_item(self):
+        from datetime import datetime, timezone
+
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "w2", "last_price_check_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2"])
+
+    def test_respects_limit(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": f"w{i}", "last_price_check_at": None} for i in range(5)]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check(limit=2)
+        self.assertEqual(len(result), 2)
+
+
+class UpdateWishlistPriceCheckTests(unittest.TestCase):
+    def test_writes_match_fields_for_item(self):
+        mock_client = MagicMock()
+        fields = {
+            "last_price_check_at": "2026-09-10T12:00:00+00:00",
+            "last_match_price": 9.5, "last_match_title": "Musterkarte", "last_match_url": "https://ebay.de/x",
+        }
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_price_check("w1", fields)
+        mock_client.table.return_value.update.assert_called_once_with(fields)
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "w1")
+
+
 class CreatePriceResearchEntryTests(unittest.TestCase):
     def test_inserts_row_with_card_id_and_rounded_price(self):
         mock_client = MagicMock()

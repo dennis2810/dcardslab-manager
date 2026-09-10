@@ -923,6 +923,29 @@ def update_wishlist_item(item_id, fields):
     return response.data[0] if response.data else None
 
 
+def list_wishlist_items_due_for_price_check(limit=3, max_age_days=1):
+    # Sourcing-Liste: gleiches Muster wie list_listings_due_for_price_research()
+    # fuer bereits veroeffentlichte eigene Angebote - ein nie geprueftes
+    # Eintrag hat Vorrang vor laengst faelligen. Kuerzeres Zeitfenster als
+    # dort (1 statt 7 Tage), da ein guenstiges Kaufangebot schnell weg sein
+    # kann - Kauf-Entscheidungen sind zeitkritischer als reine
+    # Marktpreis-Beobachtung.
+    from datetime import datetime, timedelta, timezone
+
+    response = get_client().table("wishlist_items").select("*").execute()
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    due = [
+        row for row in response.data
+        if not row.get("last_price_check_at") or row["last_price_check_at"] <= cutoff_iso
+    ]
+    due.sort(key=lambda row: row.get("last_price_check_at") or "")
+    return due[:limit]
+
+
+def update_wishlist_price_check(item_id, fields):
+    get_client().table("wishlist_items").update(fields).eq("id", item_id).execute()
+
+
 def delete_wishlist_item(item_id):
     response = get_client().table("wishlist_items").select("id").eq("id", item_id).execute()
     if not response.data:
