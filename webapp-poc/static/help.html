@@ -29,9 +29,11 @@ if ("serviceWorker" in navigator) {
   h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   .back-link { font-size: 0.9rem; }
   .toc { background: rgba(127, 127, 127, 0.1); border-radius: 6px; padding: 0.75rem 1.25rem; }
   .toc li { margin: 0.15rem 0; }
@@ -58,10 +60,15 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
 
@@ -78,6 +85,8 @@ if ("serviceWorker" in navigator) {
       <li><a href="#inventur">Inventur</a></li>
       <li><a href="#versand">Versand</a></li>
       <li><a href="#wunschliste">Wunschliste</a></li>
+      <li><a href="#private-sammlung">Private Sammlung</a></li>
+      <li><a href="#suche">Suche</a></li>
       <li><a href="#statistiken">Statistiken</a></li>
       <li><a href="#dashboard">Dashboard</a></li>
       <li><a href="#einstellungen">Einstellungen</a></li>
@@ -96,12 +105,15 @@ if ("serviceWorker" in navigator) {
   <p>Stimmen Titel/Set/Kartennummer nicht exakt überein (z. B. weil die KI ein Feld falsch gelesen hat), prüft
     das Tool zusätzlich das Vorderseitenfoto: Sieht es einer bereits vorhandenen Karte sehr ähnlich, erscheint
     ebenfalls eine Duplikat-Warnung („per Foto erkannt").</p>
+  <p>Das Kästchen „Alle Karten dieses Scans für die private Sammlung" markiert den ganzen Scan-Stapel direkt als
+    Privatentnahme (siehe Private Sammlung) – die automatischen Inventar-Einträge starten dann mit Menge 0 statt 1.</p>
 
   <h2 id="karten-anlegen">Karte manuell anlegen</h2>
   <p>Über „+ Neue Karte anlegen" auf der Kartenübersicht lässt sich eine einzelne Karte ohne den 3×3-Scan
     anlegen: Vorder-/Rückseitenfoto hochladen, optional „KI erkennen" klicken, um die Felder automatisch zu
     befüllen, oder alles manuell eintragen. Auch hier wird auf mögliche Duplikate geprüft (Text und Foto). „Abbrechen" verwirft
-    die Eingabe und führt zurück zur Kartenübersicht.</p>
+    die Eingabe und führt zurück zur Kartenübersicht. Das Kästchen „Für die private Sammlung (Privatentnahme)"
+    markiert die Karte direkt beim Anlegen als privat (siehe Private Sammlung).</p>
 
   <h2 id="karten">Kartenübersicht</h2>
   <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-
@@ -115,11 +127,13 @@ if ("serviceWorker" in navigator) {
       der in die automatisch generierte Beschreibung eingefügt wird)</li>
     <li>Etiketten drucken (SKU/Team/Saison/Titel)</li>
     <li>Zu einem bestehenden Kauf hinzufügen</li>
+    <li>In private Sammlung überführen (Privatentnahme)</li>
   </ul>
-  <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe) lassen sich per „Rückgängig" zurücknehmen.
-    CSV-Export und Drucken stehen ebenfalls zur Verfügung. Die Spalte „Verkauf" zeigt sowohl den eBay-Status als
-    auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B. „Verkauft: Kleinanzeigen"). Direkt daneben
-    erscheinen bei Bedarf die Kennzeichen „Abgeholt", „Zugestellt" und „Retoure".</p>
+  <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe, Privatentnahme) lassen sich per „Rückgängig"
+    zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung. Die Spalte „Verkauf" zeigt sowohl den
+    eBay-Status als auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B. „Verkauft: Kleinanzeigen").
+    Direkt daneben erscheinen bei Bedarf die Kennzeichen „Abgeholt", „Zugestellt", „Retoure" und „Private
+    Sammlung".</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
@@ -175,7 +189,10 @@ if ("serviceWorker" in navigator) {
     ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich).</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
     ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
-    zurückziehen.</p>
+    zurückziehen. Derselbe Warnhinweis erscheint auch, wenn die Karte per Privatentnahme in die private Sammlung
+    überführt wurde, während das Angebot noch aktiv ist.</p>
+  <p>Der Button „In private Sammlung überführen (Privatentnahme)" (bzw. „Aus privater Sammlung zurückholen", wenn
+    die Karte schon dort ist) neben „Löschen" entnimmt die Karte dem Verkaufsbestand – siehe Private Sammlung.</p>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Sonstiges), Verkäufer,
@@ -192,15 +209,23 @@ if ("serviceWorker" in navigator) {
     Summe, Ø pro Kauf) und folgt dabei dem aktuellen Such-/Zeitfilter.</p>
   <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
     alle ausgewählten Käufe auf einmal zu setzen, das Kaufdatum um eine bestimmte Anzahl Tage zu verschieben (z. B.
-    nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen.</p>
+    nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen (mit kurzer Gnadenfrist samt „Rückgängig",
+    statt sofort endgültig zu sein).</p>
+  <p>„⭱ CSV importieren" legt mehrere Käufe auf einmal aus einer CSV-Datei an – Spalten: Datum (TT.MM.JJJJ),
+    Plattform, Verkäufer, Gesamt, Versand, Notizen (Semikolon-getrennt), also genau das Format des CSV-Exports
+    weiter unten. Fehlerhafte Zeilen (ungültiges Datum oder ungültiger Betrag) werden übersprungen und einzeln
+    gemeldet, ohne den restlichen Import abzubrechen. Ein Karten-Import gibt es bewusst nicht – Karten entstehen über
+    den Foto-Scan (siehe oben), nicht aus reinen Textdaten.</p>
 
   <h2 id="ebay">eBay</h2>
   <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Beendet, Fehler). Angebote
     lassen sich einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte
     Angebote auf einmal angepasst werden (z. B. „-10" für 10 % günstiger). Veröffentlichte Angebote lassen sich
     außerdem einzeln oder per Massenauswahl vorzeitig beenden – z. B. wenn eine Karte anderweitig verkauft wurde
-    und schnellstmöglich von eBay runter muss. Ein ⚠️-Hinweis in der Tabelle markiert Angebote, deren Karte bereits
-    anderweitig verkauft wurde. Die Spalte „Preis-Check" zeigt auf einen Blick, ob der Angebotspreis zum
+    und schnellstmöglich von eBay runter muss. Da das Beenden ein echter eBay-Aufruf ist und sich danach nicht mehr
+    zurücknehmen lässt, läuft die Massenauswahl über eine kurze Gnadenfrist mit „Rückgängig", bevor die Angebote
+    tatsächlich beendet werden. Ein ⚠️-Hinweis in der Tabelle markiert Angebote, deren Karte bereits
+    anderweitig verkauft oder per Privatentnahme in die private Sammlung überführt wurde. Die Spalte „Preis-Check" zeigt auf einen Blick, ob der Angebotspreis zum
     Marktdurchschnitt der Preisrecherche passt (✅) oder deutlich darüber (🔺) bzw. darunter (🔻) liegt – gleicher
     ±20&nbsp;%-Schwellwert wie der Preis-Alarm auf der Kartenseite. Ist eBay verbunden, führt oben ein Link direkt
     zum eigenen eBay-Verkäufer-Cockpit. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link
@@ -215,7 +240,9 @@ if ("serviceWorker" in navigator) {
     verkaufter Karten – der Lagerort bleibt nach einem Verkauf erhalten). Bestandswarnungen
     machen auf Karten ohne Lagerort oder mit Menge 0 aufmerksam, die weder über eBay noch über einen manuellen
     Verkauf als „Verkauft" erfasst sind, sowie – falls unter Einstellungen eine Mindestbestand-Schwelle größer 0
-    gesetzt ist – auf Karten mit einer Menge unterhalb dieser Schwelle.</p>
+    gesetzt ist – auf Karten mit einer Menge unterhalb dieser Schwelle. Per Privatentnahme in die private Sammlung
+    überführte Karten stehen mit Status „Privatentnahme" und Menge 0 in der Liste (auch als eigener Status-Filter
+    wählbar) und lösen keine Bestandswarnung aus.</p>
   <p>Mehrere Einträge lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, Lagerort, Menge
     oder Zustand für alle ausgewählten Einträge auf einmal zu setzen oder mehrere Einträge auf einmal zu löschen.
     Über „📋 Inventur starten" neben „+ Eintrag hinzufügen" geht es direkt zum Soll/Ist-Abgleich.</p>
@@ -256,7 +283,28 @@ if ("serviceWorker" in navigator) {
     aufklappen muss (✓-Markierung, wenn er auf/unter dem Wunschpreis liegt, mit Direktlink zum Angebot). Die
     Checkbox „Nur Sourcing-Treffer anzeigen" blendet alles andere aus – so wird die Wunschliste zu einer echten
     Sourcing-Liste: aktiv beobachten und bei einem Treffer sofort zuschlagen. Das Dashboard zeigt zusätzlich eine
-    Kachel „Sourcing-Treffer (Wunschliste)" mit der Gesamtzahl.</p>
+    Kachel „Sourcing-Treffer (Wunschliste)" mit der Gesamtzahl. Beim Aufklappen eines Eintrags zeigt ein kleines
+    Liniendiagramm den Verlauf der bisher gefundenen Treffer – sobald mindestens zwei Preise vorliegen (gleiche
+    Sparkline wie der Preisrecherche-Verlauf auf der Kartendetailseite).</p>
+
+  <h2 id="private-sammlung">Private Sammlung</h2>
+  <p>Für Karten, die per Privatentnahme aus dem Verkaufsbestand genommen wurden – z. B. weil man sie doch selbst
+    behalten möchte. Markierbar direkt beim Scannen/manuellen Anlegen (siehe oben) oder nachträglich über den
+    Button auf der Kartendetailseite. Die Karte bleibt in der Kartenübersicht sichtbar (mit dem Kennzeichen
+    „Private Sammlung"), fällt aber aus dem Inventar (Menge wird auf 0 gesetzt, Status „Privatentnahme") und aus
+    den Statistiken heraus. Ein eventuell noch aktives eBay-Angebot wird dadurch nicht automatisch beendet – dafür
+    erscheint derselbe Warnhinweis wie bei einem anderweitigen Verkauf, sowohl auf der Kartenseite als auch in der
+    eBay-Übersicht.</p>
+  <p>Die Seite listet alle Karten der privaten Sammlung – sortierbar, seitenweise blätterbar, über „🖨 Drucken"/
+    „⭳ CSV-Export" exportierbar. Der Button „Zurückholen" macht die Privatentnahme rückgängig und setzt den
+    Inventarbestand wieder auf 1.</p>
+
+  <h2 id="suche">Suche</h2>
+  <p>Ein Suchfeld direkt in der Seitennavigation (oben, neben der Seitenauswahl) ist auf jeder Seite verfügbar und
+    springt bei Enter zu dieser Ergebnisseite. Gesucht wird über Karten (Titel, Team, Set, Kartennummer, Tags, SKU),
+    Käufe (Verkäufer) und Verkäufe (eBay-Käufername, Verkaufskanal) hinweg – die Treffer werden nach diesen drei
+    Kategorien gruppiert mit Direktlink zur jeweiligen Karte bzw. zum Kauf angezeigt. Die Taste <code>/</code> bleibt
+    weiterhin für die lokale Suche auf der jeweiligen Listenseite reserviert (siehe Kürzel &amp; Tipps).</p>
 
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
@@ -308,7 +356,8 @@ if ("serviceWorker" in navigator) {
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>
-    <li>Die Taste <code>/</code> springt auf den meisten Listenseiten direkt in das Suchfeld.</li>
+    <li>Die Taste <code>/</code> springt auf den meisten Listenseiten direkt in das lokale Suchfeld. Das Suchfeld in
+      der Seitennavigation oben sucht dagegen seitenübergreifend über Karten, Käufe und Verkäufe (siehe Suche).</li>
     <li>In den Haupttabellen (Karten, Käufe, Inventar, eBay) lässt sich eine Zeile per Tab anspringen, mit den
       Pfeiltasten hoch/runter zur Nachbarzeile wechseln und mit Enter öffnen.</li>
     <li>Das Farbschema folgt standardmäßig der Betriebssystem-/Browser-Einstellung, lässt sich aber über den
@@ -316,8 +365,9 @@ if ("serviceWorker" in navigator) {
     <li>Auf fast jeder Listenseite gibt es 🖨 Drucken und ⭳ CSV-Export.</li>
     <li>Das Tool lässt sich als App auf dem Homescreen installieren (PWA) – im Browser-Menü nach „Zum
       Startbildschirm hinzufügen" bzw. „App installieren" suchen.</li>
-    <li>Löschen (Karte, Kauf, einzelner Preisrecherche-Eintrag) läuft über einen kurzen Countdown mit
-      „Rückgängig", statt sofort endgültig zu sein – erst wenn der Countdown abläuft, wird tatsächlich gelöscht.</li>
+    <li>Löschen (Karte, Kauf, einzelner Preisrecherche-Eintrag, Massenlöschen bei Käufen) sowie das
+      Massen-Beenden von eBay-Angeboten laufen über einen kurzen Countdown mit „Rückgängig", statt sofort
+      endgültig zu sein – erst wenn der Countdown abläuft, wird tatsächlich gelöscht bzw. beendet.</li>
   </ul>
 
 <script>

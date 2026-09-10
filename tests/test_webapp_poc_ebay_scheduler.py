@@ -262,7 +262,8 @@ class RunWishlistPriceCheckOnceTests(unittest.TestCase):
         with patch("ebay_scheduler.db.list_wishlist_items_due_for_price_check", return_value=due), \
              patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
              patch("ebay_scheduler.ebay_client.search_active_listings", return_value=results) as mock_search, \
-             patch("ebay_scheduler.db.update_wishlist_price_check") as mock_update:
+             patch("ebay_scheduler.db.update_wishlist_price_check") as mock_update, \
+             patch("ebay_scheduler.db.record_wishlist_price_check") as mock_record:
             ebay_scheduler.run_wishlist_price_check_once()
         mock_search.assert_called_once_with("tok", "Karte 1 FC Bayern Topps 2026")
         args, _ = mock_update.call_args[0]
@@ -272,16 +273,30 @@ class RunWishlistPriceCheckOnceTests(unittest.TestCase):
         self.assertEqual(fields["last_match_title"], "Angebot B")
         self.assertEqual(fields["last_match_url"], "https://ebay.de/b")
         self.assertIn("last_price_check_at", fields)
+        mock_record.assert_called_once_with("w1", 9.5, fields["last_price_check_at"])
 
     def test_clears_match_when_no_results_found(self):
         due = [{"id": "w1", "title": "Karte 1"}]
         with patch("ebay_scheduler.db.list_wishlist_items_due_for_price_check", return_value=due), \
              patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
              patch("ebay_scheduler.ebay_client.search_active_listings", return_value=[]), \
-             patch("ebay_scheduler.db.update_wishlist_price_check") as mock_update:
+             patch("ebay_scheduler.db.update_wishlist_price_check") as mock_update, \
+             patch("ebay_scheduler.db.record_wishlist_price_check") as mock_record:
             ebay_scheduler.run_wishlist_price_check_once()
         fields = mock_update.call_args[0][1]
         self.assertIsNone(fields["last_match_price"])
+        mock_record.assert_not_called()
+
+    def test_survives_history_write_failure(self):
+        due = [{"id": "w1", "title": "Karte 1"}]
+        results = [{"price": 9.5, "title": "Angebot B", "item_web_url": "https://ebay.de/b"}]
+        with patch("ebay_scheduler.db.list_wishlist_items_due_for_price_check", return_value=due), \
+             patch("ebay_scheduler.ebay_client.get_application_access_token", return_value="tok"), \
+             patch("ebay_scheduler.ebay_client.search_active_listings", return_value=results), \
+             patch("ebay_scheduler.db.update_wishlist_price_check") as mock_update, \
+             patch("ebay_scheduler.db.record_wishlist_price_check", side_effect=RuntimeError("db down")):
+            ebay_scheduler.run_wishlist_price_check_once()  # must not raise
+        mock_update.assert_called_once()
 
     def test_a_failing_item_does_not_abort_the_batch_and_is_still_marked_checked(self):
         due = [{"id": "w1", "title": "Karte 1"}, {"id": "w2", "title": "Karte 2"}]

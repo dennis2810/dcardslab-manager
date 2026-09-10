@@ -36,9 +36,11 @@ if ("serviceWorker" in navigator) {
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -51,6 +53,7 @@ if ("serviceWorker" in navigator) {
   tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
   .price-check-results { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
   .price-check-results li { display: flex; gap: 0.5rem; align-items: baseline; }
+  .price-sparkline-wrapper { max-width: 320px; margin: 0 0 0.5rem; }
   .price-hit { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600; }
   .sourcing-cell { font-size: 0.85rem; white-space: nowrap; }
   .sourcing-cell .note { color: #888; font-style: italic; }
@@ -92,10 +95,15 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
   <p class="empty-state">Karten, die (noch) nicht im Besitz sind – bewusst getrennt von der Kartenübersicht, damit
     Bestand und Auswertungen unberührt bleiben.</p>
@@ -376,6 +384,61 @@ function toggleExpand(itemId) {
   render();
 }
 
+// Kleines Liniendiagramm ueber die gespeicherten Treffer der automatischen
+// Hintergrund-Preispruefung (ebay_scheduler.run_wishlist_price_check_once())
+// - gleiche Funktion wie card.html's Preisrecherche-Sparkline, hier 1:1
+// dupliziert (kein Shared-JS im Projekt). Braucht mindestens zwei datierte
+// Preise fuer eine sinnvolle Linie.
+function buildPriceSparkline(entries) {
+  const points = (entries || [])
+    .map((entry) => ({ date: entry.checked_at, price: Number(entry.price) }))
+    .filter((p) => p.date && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (points.length < 2) return null;
+
+  const svgNs = "http://www.w3.org/2000/svg";
+  const width = 280;
+  const height = 60;
+  const padding = 8;
+  const prices = points.map((p) => p.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const range = maxPrice - minPrice || 1;
+  const xStep = (width - padding * 2) / (points.length - 1);
+  const coords = points.map((p, i) => ({
+    x: padding + i * xStep,
+    y: height - padding - ((p.price - minPrice) / range) * (height - padding * 2),
+    point: p,
+  }));
+
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", height);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Preisverlauf");
+
+  const polyline = document.createElementNS(svgNs, "polyline");
+  polyline.setAttribute("points", coords.map((c) => `${c.x},${c.y}`).join(" "));
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "#8ab4f8");
+  polyline.setAttribute("stroke-width", "2");
+  svg.appendChild(polyline);
+
+  for (const c of coords) {
+    const dot = document.createElementNS(svgNs, "circle");
+    dot.setAttribute("cx", c.x);
+    dot.setAttribute("cy", c.y);
+    dot.setAttribute("r", "3");
+    dot.setAttribute("fill", "#8ab4f8");
+    const title = document.createElementNS(svgNs, "title");
+    title.textContent = `${formatDate(c.point.date)} – ${fmtEuro(c.point.price)}`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  }
+  return svg;
+}
+
 async function runPriceCheck(item) {
   const q = [item.title, item.team, item.set_name].filter(Boolean).join(" ").trim();
   priceCheckState.set(item.id, { status: "loading" });
@@ -436,13 +499,21 @@ function buildDetailRow(item) {
   const td = document.createElement("td");
   td.colSpan = 8;
 
+  const sparkline = buildPriceSparkline(item.price_history);
+  if (sparkline) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "price-sparkline-wrapper";
+    wrapper.appendChild(sparkline);
+    td.appendChild(wrapper);
+  }
+
   const state = priceCheckState.get(item.id);
   if (!state || state.status === "loading") {
-    td.textContent = "Sucht aktive eBay-Angebote …";
+    td.appendChild(document.createTextNode("Sucht aktive eBay-Angebote …"));
   } else if (state.status === "error") {
-    td.textContent = "Fehler: " + state.message;
+    td.appendChild(document.createTextNode("Fehler: " + state.message));
   } else if (!state.results.length) {
-    td.textContent = "Keine aktiven Angebote gefunden.";
+    td.appendChild(document.createTextNode("Keine aktiven Angebote gefunden."));
   } else {
     const target = item.target_price != null && item.target_price !== "" ? Number(item.target_price) : null;
     const ul = document.createElement("ul");

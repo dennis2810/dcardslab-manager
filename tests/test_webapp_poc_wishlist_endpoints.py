@@ -22,16 +22,28 @@ client = TestClient(main.app)
 
 
 class ListWishlistEndpointTests(unittest.TestCase):
-    def test_returns_items(self):
+    def test_returns_items_with_price_history_attached(self):
         items = [{"id": "w1", "title": "Karte A"}]
-        with patch("main.db.list_wishlist_items", return_value=items) as mock_list:
+        history = {"w1": [{"price": 9.5, "checked_at": "2026-09-01T00:00:00+00:00"}]}
+        with patch("main.db.list_wishlist_items", return_value=items) as mock_list, \
+             patch("main.db.wishlist_price_history_by_item_id", return_value=history) as mock_history:
             response = client.get("/api/wishlist")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["items"], items)
+        body = response.json()
+        self.assertEqual(body["items"][0]["price_history"], history["w1"])
         mock_list.assert_called_once_with(q=None)
+        mock_history.assert_called_once_with(["w1"])
+
+    def test_item_without_history_gets_empty_list(self):
+        items = [{"id": "w1", "title": "Karte A"}]
+        with patch("main.db.list_wishlist_items", return_value=items), \
+             patch("main.db.wishlist_price_history_by_item_id", return_value={}):
+            response = client.get("/api/wishlist")
+        self.assertEqual(response.json()["items"][0]["price_history"], [])
 
     def test_passes_search_query_through(self):
-        with patch("main.db.list_wishlist_items", return_value=[]) as mock_list:
+        with patch("main.db.list_wishlist_items", return_value=[]) as mock_list, \
+             patch("main.db.wishlist_price_history_by_item_id", return_value={}):
             response = client.get("/api/wishlist?q=Bayern")
         self.assertEqual(response.status_code, 200)
         mock_list.assert_called_once_with(q="Bayern")

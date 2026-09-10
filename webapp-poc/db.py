@@ -40,6 +40,10 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
         # (find_duplicate_card_by_image_hash()) zusaetzlich zum bestehenden
         # Text-Abgleich (find_duplicate_card()).
         "front_image_hash": front_image_hash,
+        # Direkt beim Scannen/manuellen Anlegen fuer die private Sammlung
+        # markierbar (index.html/card-new.html) - main.py setzt zusaetzlich
+        # die Inventar-Menge auf 0 statt 1 fuer solche Karten.
+        "private_collection": bool(fields.get("private_collection")),
     })
     response = get_client().table("cards").insert(row).execute()
     return response.data[0]
@@ -60,6 +64,17 @@ def list_cards(q=None, status=None):
         query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year", "tags"]))
     if status:
         query = query.eq("recognition_status", status)
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+
+def list_private_collection_cards(q=None):
+    # Fuer die neue Seite private-collection.html - Karten, die per
+    # Privatentnahme aus dem Verkaufsbestand genommen wurden (siehe
+    # set_card_private_collection()). Gleiche Suchspalten wie list_cards().
+    query = get_client().table("cards").select("*").eq("private_collection", True)
+    if q:
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year", "tags"]))
     response = query.order("created_at", desc=True).execute()
     return response.data
 
@@ -138,6 +153,24 @@ def update_card(card_id, fields):
         return get_card(card_id)
     response = get_client().table("cards").update(row).eq("id", card_id).execute()
     return response.data[0] if response.data else None
+
+
+def set_card_private_collection(card_id, value):
+    # Privatentnahme: Karte wird aus dem Verkaufsbestand entnommen bzw.
+    # zurueckgeholt. Passt den Inventar-Bestand entsprechend an - gleiches
+    # Bestandsmuster wie beim Anlegen/Loeschen eines manuellen Verkaufs
+    # (zero_inventory_for_card()/restore_inventory_for_card()). Ein
+    # eventuell noch aktives eBay-Angebot bleibt bewusst unangetastet -
+    # main.py/ebay.html zeigen dafuer nur einen Hinweis (siehe
+    # _expand_ebay_listings()), gleich wie bei einem anderweitigen Verkauf.
+    response = get_client().table("cards").update({"private_collection": value}).eq("id", card_id).execute()
+    if not response.data:
+        return None
+    if value:
+        zero_inventory_for_card(card_id)
+    else:
+        restore_inventory_for_card(card_id)
+    return response.data[0]
 
 
 def set_card_image_path(card_id, side, object_path):
@@ -508,7 +541,10 @@ def purchase_cost_by_card_id(card_ids):
 def get_cards_by_ids(card_ids):
     if not card_ids:
         return []
-    response = get_client().table("cards").select("id,title,front_image_path").in_("id", card_ids).execute()
+    response = (
+        get_client().table("cards").select("id,title,front_image_path,private_collection")
+        .in_("id", card_ids).execute()
+    )
     return response.data
 
 
@@ -716,6 +752,43 @@ def sales_by_listing_id(listing_ids):
             "delivered": bool(row.get("delivered")), "refunded": bool(row.get("refunded")),
         })
     return result
+
+
+def search_sales(q):
+    """Fuer die globale Suche (search.html): sucht Verkaeufe nach eBay-
+    Kaeufername (ebay_sales.buyer_username) sowie Kanal (manual_sales.
+    channel) und reichert die Treffer mit dem Kartentitel an. Kein
+    gemeinsamer Index noetig bei der Groessenordnung dieses Tools - ein
+    einfacher ilike-Abgleich pro Tabelle reicht."""
+    safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
+    pattern = f"%{safe_q}%"
+    ebay_response = (
+        get_client().table("ebay_sales").select("card_id,sale_date,gross_price,buyer_username")
+        .ilike("buyer_username", pattern).execute()
+    )
+    manual_response = (
+        get_client().table("manual_sales").select("card_id,sale_date,gross_price,channel")
+        .ilike("channel", pattern).execute()
+    )
+    card_ids = {row["card_id"] for row in ebay_response.data} | {row["card_id"] for row in manual_response.data}
+    titles = {}
+    if card_ids:
+        cards_response = get_client().table("cards").select("id,title").in_("id", list(card_ids)).execute()
+        titles = {row["id"]: row["title"] for row in cards_response.data}
+    results = []
+    for row in ebay_response.data:
+        results.append({
+            "card_id": row["card_id"], "title": titles.get(row["card_id"], ""),
+            "channel": "eBay", "sale_date": row.get("sale_date"),
+            "gross_price": row.get("gross_price"), "buyer_username": row.get("buyer_username"),
+        })
+    for row in manual_response.data:
+        results.append({
+            "card_id": row["card_id"], "title": titles.get(row["card_id"], ""),
+            "channel": row.get("channel"), "sale_date": row.get("sale_date"),
+            "gross_price": row.get("gross_price"), "buyer_username": None,
+        })
+    return results
 
 
 GOOGLE_SHEETS_SETTINGS_FIELDS = {"refresh_token", "spreadsheet_id", "connected_at", "last_synced_at"}
@@ -1030,6 +1103,32 @@ def update_wishlist_price_check(item_id, fields):
     get_client().table("wishlist_items").update(fields).eq("id", item_id).execute()
 
 
+def record_wishlist_price_check(item_id, price, checked_at):
+    # Verlauf fuer die Sparkline auf wishlist.html (analog zu price_research
+    # bei Karten) - wird nur bei einem tatsaechlichen Treffer aufgerufen
+    # (siehe ebay_scheduler.run_wishlist_price_check_once()), damit die Linie
+    # nicht durch erfolglose Pruefungen verrauscht wird.
+    get_client().table("wishlist_price_checks").insert({
+        "item_id": item_id, "price": price, "checked_at": checked_at,
+    }).execute()
+
+
+def wishlist_price_history_by_item_id(item_ids):
+    # Bulk-Companion analog zu sale_flags_by_card_id() - eine Abfrage fuer
+    # die ganze Wunschliste statt einer pro Eintrag beim Laden von
+    # GET /api/wishlist.
+    if not item_ids:
+        return {}
+    response = (
+        get_client().table("wishlist_price_checks").select("item_id,price,checked_at")
+        .in_("item_id", item_ids).order("checked_at").execute()
+    )
+    result = {}
+    for row in response.data:
+        result.setdefault(row["item_id"], []).append({"price": row["price"], "checked_at": row["checked_at"]})
+    return result
+
+
 def delete_wishlist_item(item_id):
     response = get_client().table("wishlist_items").select("id").eq("id", item_id).execute()
     if not response.data:
@@ -1134,7 +1233,13 @@ def statistics_rows():
     # main.py, kept here since it's pure data assembly with no business
     # logic (profit/margin/holding-days math lives in the /api/statistics
     # endpoint instead).
-    cards = get_client().table("cards").select("id,title,card_no,team,set_name").execute().data
+    # Karten in der privaten Sammlung (Privatentnahme) zaehlen nicht mehr
+    # zum Verkaufsbestand - siehe set_card_private_collection() - und
+    # bleiben deshalb aus Statistiken/Dashboard-Kennzahlen aussen vor.
+    cards = (
+        get_client().table("cards").select("id,title,card_no,team,set_name")
+        .eq("private_collection", False).execute().data
+    )
     if not cards:
         return []
     card_ids = [c["id"] for c in cards]

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Suche</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
+  .search-form { display: flex; gap: 0.5rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+  .search-form input { flex: 1; min-width: 14rem; padding: 0.6rem 0.8rem; font-size: 1rem; }
+  .search-form button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  #status-msg { font-style: italic; color: #555; }
+  .search-results { list-style: none; padding: 0; margin: 0; }
+  .search-results li { padding: 0.5rem 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+  .search-results a { color: inherit; text-decoration: none; font-weight: 600; }
+  .search-results a:hover { text-decoration: underline; }
+  .search-meta { color: #555; font-size: 0.85rem; white-space: nowrap; }
+  .empty-state { color: #555; font-style: italic; }
+  .error { color: #b00020; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Suche</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+
+  <form class="search-form" action="search.html" method="get">
+    <input type="search" name="q" id="search-input" placeholder="Titel, Team, Set, Kartennr., Tags, SKU, Verkäufer, Käufer …" aria-label="Suche">
+    <button type="submit">Suchen</button>
+  </form>
+
+  <p id="status-msg"></p>
+
+  <h2>Karten (<span id="cards-count">0</span>)</h2>
+  <ul class="search-results" id="cards-results"></ul>
+  <p class="empty-state" id="cards-empty"></p>
+
+  <h2>Käufe (<span id="purchases-count">0</span>)</h2>
+  <ul class="search-results" id="purchases-results"></ul>
+  <p class="empty-state" id="purchases-empty"></p>
+
+  <h2>Verkäufe (<span id="sales-count">0</span>)</h2>
+  <ul class="search-results" id="sales-results"></ul>
+  <p class="empty-state" id="sales-empty"></p>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Einheitliches Datumsformat (DD.MM.YYYY) - sale_date/purchase_date koennen
+// reine Datums-Strings ("YYYY-MM-DD") oder volle Zeitstempel sein.
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return d.toLocaleDateString("de-DE");
+}
+
+function fmtEuro(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "–";
+}
+
+function renderResults(listId, emptyId, countId, items, emptyText, renderItem) {
+  const list = document.getElementById(listId);
+  const empty = document.getElementById(emptyId);
+  document.getElementById(countId).textContent = items.length;
+  list.innerHTML = "";
+  if (!items.length) {
+    empty.textContent = emptyText;
+    return;
+  }
+  empty.textContent = "";
+  for (const item of items) {
+    list.appendChild(renderItem(item));
+  }
+}
+
+function renderCard(card) {
+  const li = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = `card.html?id=${encodeURIComponent(card.id)}`;
+  link.textContent = card.title || "(ohne Titel)";
+  const meta = document.createElement("span");
+  meta.className = "search-meta";
+  meta.textContent = [card.team, card.set_name, card.card_number].filter(Boolean).join(" · ");
+  li.appendChild(link);
+  li.appendChild(meta);
+  return li;
+}
+
+function renderPurchase(purchase) {
+  const li = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = `purchase.html?id=${encodeURIComponent(purchase.id)}`;
+  link.textContent = purchase.seller || purchase.platform || "(ohne Verkäufer)";
+  const meta = document.createElement("span");
+  meta.className = "search-meta";
+  meta.textContent = [purchase.platform, formatDate(purchase.purchase_date)].filter(Boolean).join(" · ");
+  li.appendChild(link);
+  li.appendChild(meta);
+  return li;
+}
+
+function renderSale(sale) {
+  const li = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = `card.html?id=${encodeURIComponent(sale.card_id)}`;
+  link.textContent = sale.title || "(ohne Titel)";
+  const meta = document.createElement("span");
+  meta.className = "search-meta";
+  meta.textContent = [
+    sale.channel, sale.buyer_username, formatDate(sale.sale_date), fmtEuro(sale.gross_price),
+  ].filter(Boolean).join(" · ");
+  li.appendChild(link);
+  li.appendChild(meta);
+  return li;
+}
+
+async function runSearch(q) {
+  const statusEl = document.getElementById("status-msg");
+  if (!q) {
+    statusEl.textContent = "Bitte einen Suchbegriff eingeben.";
+    renderResults("cards-results", "cards-empty", "cards-count", [], "", renderCard);
+    renderResults("purchases-results", "purchases-empty", "purchases-count", [], "", renderPurchase);
+    renderResults("sales-results", "sales-empty", "sales-count", [], "", renderSale);
+    return;
+  }
+  statusEl.textContent = "Sucht …";
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      return;
+    }
+    statusEl.textContent = `Treffer für „${q}“`;
+    statusEl.className = "";
+    renderResults("cards-results", "cards-empty", "cards-count", body.cards || [], "Keine Karten gefunden.", renderCard);
+    renderResults("purchases-results", "purchases-empty", "purchases-count", body.purchases || [], "Keine Käufe gefunden.", renderPurchase);
+    renderResults("sales-results", "sales-empty", "sales-count", body.sales || [], "Keine Verkäufe gefunden.", renderSale);
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+  }
+}
+
+const params = new URLSearchParams(location.search);
+const initialQuery = params.get("q") || "";
+document.getElementById("search-input").value = initialQuery;
+runSearch(initialQuery.trim());
+</script>
+</body>
+</html>

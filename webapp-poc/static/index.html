@@ -33,9 +33,11 @@ if ("serviceWorker" in navigator) {
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
   label { font-weight: 600; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; width: fit-content; }
@@ -77,10 +79,15 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
 
   <p>
@@ -111,6 +118,7 @@ if ("serviceWorker" in navigator) {
     <input type="text" id="location" name="location">
     <label for="notes">Notiz (optional, für alle Karten dieses Scans)</label>
     <input type="text" id="notes" name="notes">
+    <label><input type="checkbox" id="private-collection" name="private_collection"> Alle Karten dieses Scans für die private Sammlung (Privatentnahme)</label>
     <button type="submit">Scannen &amp; erkennen</button>
   </form>
 
@@ -246,6 +254,7 @@ form.addEventListener("submit", async (ev) => {
   data.append("back", sideBlobs.back, "back.jpg");
   data.append("location", document.getElementById("location").value);
   data.append("notes", document.getElementById("notes").value);
+  data.append("private_collection", document.getElementById("private-collection").checked ? "true" : "false");
 
   try {
     const res = await fetch("/api/scan", { method: "POST", body: data });

@@ -363,3 +363,26 @@ alter table manual_sales add column if not exists delivered boolean not null def
 -- daher merkt sich nur dieser Zeitpunkt, ab wann wieder Ereignisse gezeigt
 -- werden sollen.
 alter table app_status add column if not exists activity_cleared_at timestamptz;
+
+-- Migration (2026-09-10): Verlauf der automatischen Wunschlisten-Preis-
+-- pruefung (siehe ebay_scheduler.run_wishlist_price_check_once()) - fuer
+-- eine Sparkline auf wishlist.html, analog zum Preisrecherche-Verlauf bei
+-- Karten (price_research). Nur Treffer werden gespeichert, keine
+-- erfolglosen Pruefungen.
+create table if not exists wishlist_price_checks (
+    id          uuid primary key default gen_random_uuid(),
+    item_id     uuid not null references wishlist_items(id) on delete cascade,
+    price       numeric not null,
+    checked_at  timestamptz not null default now()
+);
+
+create index if not exists wishlist_price_checks_item_id_idx on wishlist_price_checks(item_id);
+
+-- Migration (2026-09-10): Privatentnahme - eine Karte wird aus dem
+-- Verkaufsbestand in die private Sammlung ueberfuehrt. Setzt/loescht dieses
+-- Flag den Inventar-Bestand entsprechend auf 0 bzw. stellt ihn wieder her
+-- (siehe db.set_card_private_collection()); Statistiken/Inventar-Warnungen
+-- schliessen so markierte Karten aus, ein eventuell noch aktives eBay-
+-- Angebot bleibt aber bestehen und wird nur mit einem Hinweis versehen
+-- (gleiche Mechanik wie ein anderweitiger Verkauf).
+alter table cards add column if not exists private_collection boolean not null default false;

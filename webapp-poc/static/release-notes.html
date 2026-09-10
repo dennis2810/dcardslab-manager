@@ -28,9 +28,11 @@ if ("serviceWorker" in navigator) {
   h2 { font-size: 1.05rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   .back-link { font-size: 0.9rem; }
   .date { font-size: 0.8rem; color: #555; font-weight: normal; }
   p, li { line-height: 1.5; }
@@ -56,10 +58,15 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
@@ -95,6 +102,9 @@ if ("serviceWorker" in navigator) {
       „eBay", statt nur über die Statistik-Übersicht erreichbar zu sein.</li>
     <li>„Letzte Aktivität" zeigt jetzt nur noch die 5 statt 10 jüngsten Ereignisse. Neuer Button „Aktivitäten
       leeren" blendet ältere Ereignisse dauerhaft aus, bis wieder etwas Neues passiert.</li>
+    <li>Neues Suchfeld in der Seitennavigation (oben auf jeder Seite): sucht seitenübergreifend über Karten, Käufe
+      und Verkäufe und springt bei Enter zur neuen Ergebnisseite „Suche" mit nach Kategorie gruppierten Treffern
+      und Direktlinks.</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
@@ -136,6 +146,9 @@ if ("serviceWorker" in navigator) {
       ausgenommen.</li>
     <li>Die Kennzeichen "Zugestellt" und "Retoure" erscheinen jetzt ebenfalls in der Kartenübersicht
       (Kachel-/Listenansicht) und im CSV-Export, nicht mehr nur auf der Kartendetailseite.</li>
+    <li>Neue Massenaktion „In private Sammlung überführen" (Privatentnahme) – mit „Rückgängig" wie die anderen
+      Massenaktionen. Direkt beim Scannen/manuellen Anlegen lässt sich eine Karte ebenfalls schon als privat
+      markieren.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -153,6 +166,10 @@ if ("serviceWorker" in navigator) {
     <li>Das Verkäufer-Feld schlägt beim Anlegen eines Kaufs bereits erfasste Verkäufer zur Auswahl vor.</li>
     <li>Plattform-Auswertung und Verkäufer-Historie haben jetzt gleich breite Spalten und stehen bündig
       untereinander.</li>
+    <li>Neuer Button „⭱ CSV importieren": legt mehrere Käufe auf einmal aus einer CSV-Datei an (Datum, Plattform,
+      Verkäufer, Gesamt, Versand, Notizen) – im gleichen Format wie der bestehende CSV-Export.</li>
+    <li>Das Massenlöschen mehrerer Käufe läuft jetzt über eine kurze Gnadenfrist mit „Rückgängig" statt eines
+      Bestätigungsdialogs.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -231,6 +248,11 @@ if ("serviceWorker" in navigator) {
       CSV-Export-Button, unabhängig von der „Alle Verkäufe"-Tabelle darunter.</li>
     <li>Versand-Checkliste: jetzt ebenfalls sortierbar, seitenweise blätterbar und über „🖨 Drucken"/
       „⭳ CSV-Export" exportierbar.</li>
+    <li>Das Massen-Beenden von eBay-Angeboten läuft jetzt über eine kurze Gnadenfrist mit „Rückgängig" statt eines
+      Bestätigungsdialogs, bevor die Angebote tatsächlich bei eBay beendet werden.</li>
+    <li>Ein ⚠️-Hinweis (Angebotsübersicht und Kartenseite) erscheint jetzt auch, wenn eine Karte per
+      Privatentnahme in die private Sammlung überführt wurde, während das eBay-Angebot noch aktiv ist – analog
+      zum bestehenden Hinweis bei einem anderweitigen Verkauf.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -248,6 +270,8 @@ if ("serviceWorker" in navigator) {
     <li>Direkter Link „📋 Inventur starten" neben „+ Eintrag hinzufügen", der zur Inventur-Seite führt.</li>
     <li>Bestandswarnung für niedrigen Bestand, sobald in den Einstellungen eine Mindestbestand-Schwelle gesetzt
       ist.</li>
+    <li>Neuer Status „Privatentnahme" (Menge 0, eigener Status-Filter) für Karten, die in die private Sammlung
+      überführt wurden – löst keine Bestandswarnung aus.</li>
   </ul>
 
   <h2>Inventur <span class="date">September 2026</span></h2>
@@ -271,6 +295,20 @@ if ("serviceWorker" in navigator) {
       täglich je Eintrag) – der günstigste Treffer erscheint direkt in der neuen Spalte „Sourcing", ohne manuelles
       Aufklappen. Die Checkbox „Nur Sourcing-Treffer anzeigen" blendet den Rest aus, und eine neue Dashboard-Kachel
       „Sourcing-Treffer (Wunschliste)" zeigt die Gesamtzahl.</li>
+    <li>Beim Aufklappen eines Eintrags zeigt ein kleiner Verlaufs-Chart (Sparkline) die bisher gefundenen
+      Sourcing-Treffer über die Zeit, sobald mindestens zwei Preise vorliegen.</li>
+  </ul>
+
+  <h2>Private Sammlung <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite für Karten, die per Privatentnahme aus dem Verkaufsbestand genommen wurden – markierbar direkt
+      beim Scannen/manuellen Anlegen oder nachträglich über einen Button auf der Kartendetailseite (bzw. per
+      Massenaktion auf der Kartenübersicht).</li>
+    <li>Eine so markierte Karte bleibt in der Kartenübersicht sichtbar, fällt aber aus dem Inventar (Menge 0,
+      Status „Privatentnahme") und aus den Statistiken heraus. Ein noch aktives eBay-Angebot wird dadurch nicht
+      automatisch beendet – dafür derselbe Warnhinweis wie bei einem anderweitigen Verkauf.</li>
+    <li>Liste ist sortierbar (Klick auf Spaltenüberschrift) und bei vielen Einträgen seitenweise blätterbar, dazu
+      ein Druck- und ein CSV-Export-Button. Der Button „Zurückholen" macht die Privatentnahme rückgängig.</li>
   </ul>
 
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>

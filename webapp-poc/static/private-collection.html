@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Private Sammlung</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; --hover-bg: #f7f7f7; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  tr:hover { background: var(--hover-bg); }
+  th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  th .sort-arrow { color: #888; font-size: 0.8em; }
+  .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+  @media print {
+    .no-print, button { display: none !important; }
+  }
+  #status-msg { font-style: italic; color: #555; }
+  .error { color: #b00020; font-weight: 600; }
+  .empty-state { color: #555; font-style: italic; }
+  .table-scroll { overflow-x: auto; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Private Sammlung</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+  <p class="empty-state">Karten, die per Privatentnahme aus dem Verkaufsbestand genommen wurden – sie zählen nicht
+    mehr zum Inventar und fließen nicht mehr in die Statistiken ein. Ein eventuell noch aktives eBay-Angebot wird
+    dadurch nicht automatisch beendet.</p>
+
+  <div class="controls no-print">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., Tags)">
+  </div>
+
+  <p id="status-msg">Lädt …</p>
+  <div class="table-scroll">
+    <table id="items-table" style="display: none;">
+      <thead>
+        <tr>
+          <th data-key="title">Titel <span class="sort-arrow"></span></th>
+          <th data-key="team">Team <span class="sort-arrow"></span></th>
+          <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+          <th data-key="card_number">Kartennr. <span class="sort-arrow"></span></th>
+          <th>Tags</th>
+          <th class="no-print"></th>
+        </tr>
+      </thead>
+      <tbody id="items-body"></tbody>
+    </table>
+  </div>
+  <p id="items-empty"></p>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page">&larr; Zurück</button>
+    <span id="page-info"></span>
+    <button type="button" id="next-page">Weiter &rarr;</button>
+    <button type="button" id="print-btn">🖨 Drucken</button>
+    <button type="button" id="csv-btn">⭳ CSV-Export</button>
+  </div>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion - anders als
+// ein reiner Status-Text bleibt sie sichtbar, auch wenn man inzwischen
+// weitergescrollt hat.
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("items-table");
+const body = document.getElementById("items-body");
+const empty = document.getElementById("items-empty");
+const qInput = document.getElementById("q");
+const pageInfo = document.getElementById("page-info");
+
+const PAGE_SIZE = 40;
+let currentPage = 0;
+let sortKey = "title";
+let sortAsc = true;
+let allCards = [];
+
+function sortValue(card, key) {
+  return (card[key] || "").toString().toLowerCase();
+}
+
+function sortedCards() {
+  const rows = allCards.slice();
+  rows.sort((a, b) => {
+    const va = sortValue(a, sortKey);
+    const vb = sortValue(b, sortKey);
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+for (const th of document.querySelectorAll("th[data-key]")) {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    currentPage = 0;
+    render();
+  });
+}
+
+async function returnCard(card, button) {
+  if (!confirm(`„${card.title || "Karte"}" wieder aus der privaten Sammlung zurückholen? Der Inventarbestand wird auf 1 gesetzt.`)) return;
+  button.disabled = true;
+  try {
+    const res = await fetch(`/api/cards/${encodeURIComponent(card.id)}/private-collection`, { method: "DELETE" });
+    if (!res.ok) {
+      const responseBody = await res.json().catch(() => ({}));
+      showToast("Fehler: " + (responseBody.detail || res.statusText), true);
+      return;
+    }
+    showToast("Aus der privaten Sammlung zurückgeholt.");
+    loadCards();
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function render() {
+  const sorted = sortedCards();
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const visible = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  pageInfo.textContent = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
+  document.getElementById("prev-page").disabled = currentPage === 0;
+  document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+
+  for (const th of document.querySelectorAll("th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? "▲" : "▼") : "";
+  }
+
+  body.innerHTML = "";
+  if (!sorted.length) {
+    table.style.display = "none";
+    empty.textContent = qInput.value.trim()
+      ? "Nichts gefunden."
+      : "Noch keine Karten in der privaten Sammlung – auf der Kartenseite über „In private Sammlung überführen“.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const card of visible) {
+    const tr = document.createElement("tr");
+
+    for (const text of [card.title || "(ohne Titel)", card.team || "", card.set_name || "", card.card_number || ""]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+
+    const tagsTd = document.createElement("td");
+    tagsTd.textContent = card.tags || "";
+    tr.appendChild(tagsTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "no-print";
+    const link = document.createElement("a");
+    link.href = `card.html?id=${encodeURIComponent(card.id)}`;
+    link.textContent = "Zur Karte";
+    actionsTd.appendChild(link);
+    actionsTd.appendChild(document.createTextNode(" "));
+    const returnBtn = document.createElement("button");
+    returnBtn.type = "button";
+    returnBtn.textContent = "Zurückholen";
+    returnBtn.addEventListener("click", () => returnCard(card, returnBtn));
+    actionsTd.appendChild(returnBtn);
+    tr.appendChild(actionsTd);
+
+    body.appendChild(tr);
+  }
+}
+
+async function loadCards() {
+  const q = qInput.value.trim();
+  try {
+    const res = await fetch("/api/private-collection" + (q ? `?q=${encodeURIComponent(q)}` : ""));
+    const responseBody = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler: " + (responseBody.detail || res.statusText);
+      return;
+    }
+    statusMsg.textContent = "";
+    allCards = responseBody.cards || [];
+    currentPage = 0;
+    render();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+qInput.addEventListener("input", () => {
+  clearTimeout(qInput._debounce);
+  qInput._debounce = setTimeout(loadCards, 300);
+});
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  currentPage = Math.max(0, currentPage - 1);
+  render();
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  currentPage += 1;
+  render();
+});
+document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
+// Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("csv-btn").addEventListener("click", () => {
+  const headers = ["Titel", "Team", "Set", "Kartennummer", "Tags"];
+  const rows = sortedCards().map((card) => [
+    card.title || "", card.team || "", card.set_name || "", card.card_number || "", card.tags || "",
+  ]);
+  downloadCsv("private-sammlung.csv", headers, rows);
+});
+
+loadCards();
+</script>
+</body>
+</html>

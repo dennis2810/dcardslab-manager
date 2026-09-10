@@ -25,6 +25,8 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
 import asyncio
 import base64
+import csv
+import io
 import json
 import logging
 import re
@@ -143,19 +145,23 @@ def _find_duplicate_card_by_hash_safe(hash_value, exclude_card_id=None):
         return None
 
 
-def _create_default_inventory_item(card_id, location="", notes=""):
+def _create_default_inventory_item(card_id, location="", notes="", private=False):
     # Every scanned card gets a quantity-1 "NM" inventory row automatically -
     # the seller physically has the card in hand at scan time, so requiring
     # a separate manual step for the common case would just be busywork.
     # location/notes come from the same scan/manual-add form (one shared
     # storage spot for a whole scan batch, or per-card for a manual add) so
     # they don't need a second trip through card.html's Inventar section
-    # just to record where the card physically ended up.
+    # just to record where the card physically ended up. A card marked for
+    # the private Sammlung right at creation (Privatentnahme) never counts
+    # as sellable stock, so it starts at quantity 0 instead of 1.
     # Isolated from the card-insert's own error handling on purpose: this
     # failing must not make an otherwise-successful card insert look failed
     # to the caller (see process_one() below) - it's a soft warning only.
     try:
-        db.create_inventory_item(card_id, {"quantity": 1, "location": location, "notes": notes})
+        db.create_inventory_item(
+            card_id, {"quantity": 0 if private else 1, "location": location, "notes": notes}
+        )
     except Exception:
         logger.exception("Automatischer Inventareintrag fuer Karte %s fehlgeschlagen", card_id)
 
@@ -164,6 +170,7 @@ def _create_default_inventory_item(card_id, location="", notes=""):
 async def scan(
     front: UploadFile = File(...), back: UploadFile = File(...),
     location: str = Form(""), notes: str = Form(""),
+    private_collection: bool = Form(False),
 ):
     with tempfile.TemporaryDirectory(prefix="dcardslab_poc_") as tmp_str:
         tmp = Path(tmp_str)
@@ -197,6 +204,8 @@ async def scan(
             bp = back_map.get(number)
             if bp is None:
                 fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
+                if private_collection:
+                    fields["private_collection"] = True
                 try:
                     card_row = db.insert_card(batch_id, number, fields, None, None)
                 except Exception as exc:
@@ -205,10 +214,12 @@ async def scan(
                         **fields,
                         "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
                     }
-                _create_default_inventory_item(card_row["id"], location, notes)
+                _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
                 return {"number": number, **fields, "id": card_row["id"]}
 
             fields = recognize_card(front_path=fp, back_path=bp)
+            if private_collection:
+                fields["private_collection"] = True
             duplicate = _find_duplicate_card_safe(fields)
             front_hash = _compute_image_hash_safe(fp)
             if duplicate is None and front_hash:
@@ -241,7 +252,7 @@ async def scan(
                     image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
                 result["image_error"] = image_error
                 return result
-            _create_default_inventory_item(card_row["id"], location, notes)
+            _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
 
             if front_image_path:
                 try:
@@ -344,7 +355,9 @@ async def create_card_manual(
             ) from exc
 
     db.update_batch_status(batch_id, "ok")
-    _create_default_inventory_item(card_row["id"], location, notes)
+    _create_default_inventory_item(
+        card_row["id"], location, notes, private=bool(parsed_fields.get("private_collection"))
+    )
     result = _attach_signed_urls(card_row)
     if duplicate:
         # Gleiche Warnung wie beim Scannen (siehe process_one()) - bisher
@@ -406,6 +419,7 @@ def _expand_inventory_items(items):
         item["sku"] = info.get("sku")
         item["ebay_status"] = info.get("status")
         item["manual_sale_channel"] = (manual_sale_info.get(item["card_id"]) or {}).get("channel") or None
+        item["private_collection"] = bool(card.get("private_collection"))
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -490,6 +504,25 @@ async def list_cards(q: str | None = None, status: str | None = None):
     return JSONResponse({"cards": cards})
 
 
+@app.get("/api/search")
+async def global_search(q: str | None = None):
+    # Globale Suche (search.html) ueber Karten, Kaeufe und Verkaeufe - bei
+    # der Groessenordnung dieses Tools reicht ein einfacher ilike-Abgleich
+    # pro Tabelle statt eines Such-Index; jede Liste auf 20 Treffer gedeckelt,
+    # da das Ergebnis nur eine grobe Uebersicht mit Direktlinks sein soll.
+    q = (q or "").strip()
+    if not q:
+        return JSONResponse({"cards": [], "purchases": [], "sales": []})
+    matched_cards = db.list_cards(q=q)
+    existing_ids = {c["id"] for c in matched_cards}
+    matched_cards += [c for c in db.list_cards_by_sku(q) if c["id"] not in existing_ids]
+    return JSONResponse({
+        "cards": matched_cards[:20],
+        "purchases": db.list_purchases(q=q)[:20],
+        "sales": db.search_sales(q)[:20],
+    })
+
+
 @app.get("/api/cards/{card_id}")
 async def get_card(card_id: str):
     card = db.get_card(card_id)
@@ -518,6 +551,28 @@ async def update_card(card_id: str, fields: dict = Body(...)):
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.post("/api/cards/{card_id}/private-collection")
+async def mark_card_private_collection(card_id: str):
+    updated = db.set_card_private_collection(card_id, True)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.delete("/api/cards/{card_id}/private-collection")
+async def unmark_card_private_collection(card_id: str):
+    updated = db.set_card_private_collection(card_id, False)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.get("/api/private-collection")
+async def list_private_collection(q: str | None = None):
+    cards = [_attach_signed_urls(c) for c in db.list_private_collection_cards(q=q)]
+    return JSONResponse({"cards": cards})
 
 
 def _delete_card_and_images(card_id):
@@ -695,6 +750,75 @@ async def list_purchases(q: str | None = None):
     return JSONResponse({"purchases": db.list_purchases(q=q)})
 
 
+_PURCHASE_IMPORT_TEXT_COLUMNS = (("Plattform", "platform"), ("Verkäufer", "seller"), ("Notizen", "notes"))
+_PURCHASE_IMPORT_MONEY_COLUMNS = (("Gesamt", "total_price"), ("Versand", "shipping"))
+
+
+def _parse_import_date(value):
+    # Spiegelt formatDate() im Frontend (DD.MM.YYYY) - der CSV-Export der
+    # Kaeufe-Seite schreibt genau dieses Format, der Import soll also ohne
+    # Umformatierung wieder eingelesen werden koennen. "YYYY-MM-DD" wird
+    # zusaetzlich akzeptiert, falls jemand die Rohdaten direkt bearbeitet.
+    value = (value or "").strip()
+    if not value:
+        return ""
+    match = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", value)
+    if match:
+        d, m, y = match.groups()
+        return f"{y}-{m}-{d}"
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return value
+    return None
+
+
+@app.post("/api/purchases/import")
+async def import_purchases_csv(file: UploadFile = File(...)):
+    # Bulk-Import von Kaeufen ueber eine CSV-Datei im selben Format wie der
+    # bestehende CSV-Export auf purchases.html (Semikolon-getrennt, Spalten
+    # per Name statt Position erkannt, damit Reihenfolge/Zusatzspalten wie
+    # "Karten" nicht stoeren). Kein Karten-Import - Karten entstehen ueber
+    # den Foto-Scan/KI-Workflow, nicht aus reinen Textdaten.
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="CSV muss UTF-8-kodiert sein.") from exc
+
+    reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    imported = []
+    errors = []
+    for line_no, row in enumerate(reader, start=2):
+        fields = {}
+        date_raw = (row.get("Datum") or "").strip()
+        purchase_date = _parse_import_date(date_raw)
+        if purchase_date is None:
+            errors.append(f"Zeile {line_no}: Ungültiges Datum „{date_raw}“.")
+            continue
+        if purchase_date:
+            fields["purchase_date"] = purchase_date
+        for header, field_name in _PURCHASE_IMPORT_TEXT_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if value:
+                fields[field_name] = value
+        invalid_amount = False
+        for header, field_name in _PURCHASE_IMPORT_MONEY_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if not value:
+                continue
+            try:
+                fields[field_name] = float(value.replace(",", "."))
+            except ValueError:
+                errors.append(f"Zeile {line_no}: Ungültiger Betrag bei „{header}“: „{value}“.")
+                invalid_amount = True
+                break
+        if invalid_amount:
+            continue
+        if not fields:
+            continue
+        imported.append(db.create_purchase(fields))
+    return JSONResponse({"imported": len(imported), "errors": errors, "purchases": imported})
+
+
 @app.get("/api/purchases/{purchase_id}")
 async def get_purchase(purchase_id: str):
     purchase = db.get_purchase(purchase_id)
@@ -842,7 +966,11 @@ async def delete_inventory_item(item_id: str):
 
 @app.get("/api/wishlist")
 async def list_wishlist_items(q: str | None = None):
-    return JSONResponse({"items": db.list_wishlist_items(q=q)})
+    items = db.list_wishlist_items(q=q)
+    history = db.wishlist_price_history_by_item_id([item["id"] for item in items])
+    for item in items:
+        item["price_history"] = history.get(item["id"], [])
+    return JSONResponse({"items": items})
 
 
 @app.post("/api/wishlist")
@@ -1242,6 +1370,7 @@ def _expand_ebay_listings(listings):
         listing["delivered"] = bool(sale.get("delivered")) if sale else False
         listing["refunded"] = bool(sale.get("refunded")) if sale else False
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
+        listing["private_collection"] = bool(card.get("private_collection"))
         research = price_research_info.get(listing["card_id"])
         listing["price_research_avg"] = research["avg_price"] if research else None
         listing["price_research_count"] = research["count"] if research else 0

@@ -111,6 +111,31 @@ class InsertCardTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertIsNone(row["front_image_hash"])
 
+    def test_private_collection_passed_through(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        fields["private_collection"] = True
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, None, None)
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIs(row["private_collection"], True)
+
+    def test_private_collection_defaults_to_false(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, None, None)
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIs(row["private_collection"], False)
+
 
 class ListCardsTests(unittest.TestCase):
     def test_returns_all_cards_newest_first(self):
@@ -1945,6 +1970,93 @@ class RestoreInventoryForCardTests(unittest.TestCase):
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("card_id", "card-1")
 
 
+class SetCardPrivateCollectionTests(unittest.TestCase):
+    def _table(self, cards_data, tracked):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "cards":
+                response.data = cards_data
+                builder.update.return_value.eq.return_value.execute.return_value = response
+            elif name == "inventory":
+                inv_response = MagicMock()
+                inv_response.data = [{"id": "inv-1"}]
+                builder.update.return_value.eq.return_value.execute.return_value = inv_response
+                tracked.append(builder)
+            return builder
+        return table
+
+    def test_marking_private_zeroes_inventory(self):
+        mock_client = MagicMock()
+        tracked = []
+        mock_client.table.side_effect = self._table([{"id": "card-1", "private_collection": True}], tracked)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_card_private_collection("card-1", True)
+        self.assertEqual(result, {"id": "card-1", "private_collection": True})
+        mock_client.table.assert_any_call("cards")
+        mock_client.table.assert_any_call("inventory")
+        inventory_builder = tracked[0]
+        inventory_builder.update.assert_called_once_with({"quantity": 0})
+
+    def test_unmarking_private_restores_inventory(self):
+        mock_client = MagicMock()
+        tracked = []
+        mock_client.table.side_effect = self._table([{"id": "card-1", "private_collection": False}], tracked)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_card_private_collection("card-1", False)
+        self.assertEqual(result, {"id": "card-1", "private_collection": False})
+        inventory_builder = tracked[0]
+        inventory_builder.update.assert_called_once_with({"quantity": 1})
+
+    def test_returns_none_and_skips_inventory_when_card_not_found(self):
+        mock_client = MagicMock()
+        tracked = []
+        mock_client.table.side_effect = self._table([], tracked)
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_card_private_collection("does-not-exist", True)
+        self.assertIsNone(result)
+        self.assertEqual(tracked, [])
+
+
+class ListPrivateCollectionCardsTests(unittest.TestCase):
+    def test_returns_only_private_cards_newest_first(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "private_collection": True}]
+        mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_private_collection_cards()
+        self.assertEqual(result, [{"id": "card-1", "private_collection": True}])
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("private_collection", True)
+        mock_client.table.return_value.select.return_value.eq.return_value.order.assert_called_once_with(
+            "created_at", desc=True
+        )
+
+    def test_applies_text_search_filter(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        builder = mock_client.table.return_value.select.return_value.eq.return_value
+        builder.or_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_private_collection_cards(q="Bayern")
+        builder.or_.assert_called_once()
+
+
+class GetCardsByIdsTests(unittest.TestCase):
+    def test_selects_private_collection_column(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "title": "Karte 1", "front_image_path": None, "private_collection": False}]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_cards_by_ids(["card-1"])
+        self.assertEqual(result, response.data)
+        mock_client.table.return_value.select.assert_called_once_with(
+            "id,title,front_image_path,private_collection"
+        )
+
+
 class ListWishlistItemsTests(unittest.TestCase):
     def test_returns_all_items_ordered_by_created_at_desc(self):
         mock_client = MagicMock()
@@ -2099,6 +2211,45 @@ class UpdateWishlistPriceCheckTests(unittest.TestCase):
             db.update_wishlist_price_check("w1", fields)
         mock_client.table.return_value.update.assert_called_once_with(fields)
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "w1")
+
+
+class RecordWishlistPriceCheckTests(unittest.TestCase):
+    def test_inserts_history_row(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.record_wishlist_price_check("w1", 9.5, "2026-09-10T12:00:00+00:00")
+        mock_client.table.assert_called_once_with("wishlist_price_checks")
+        mock_client.table.return_value.insert.assert_called_once_with({
+            "item_id": "w1", "price": 9.5, "checked_at": "2026-09-10T12:00:00+00:00",
+        })
+
+
+class WishlistPriceHistoryByItemIdTests(unittest.TestCase):
+    def test_groups_history_rows_by_item_id_in_order(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"item_id": "w1", "price": 9.5, "checked_at": "2026-09-01T00:00:00+00:00"},
+            {"item_id": "w1", "price": 8.0, "checked_at": "2026-09-05T00:00:00+00:00"},
+            {"item_id": "w2", "price": 20.0, "checked_at": "2026-09-03T00:00:00+00:00"},
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.wishlist_price_history_by_item_id(["w1", "w2"])
+        self.assertEqual(result, {
+            "w1": [
+                {"price": 9.5, "checked_at": "2026-09-01T00:00:00+00:00"},
+                {"price": 8.0, "checked_at": "2026-09-05T00:00:00+00:00"},
+            ],
+            "w2": [{"price": 20.0, "checked_at": "2026-09-03T00:00:00+00:00"}],
+        })
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.wishlist_price_history_by_item_id([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
 
 
 class ListDescriptionTemplatesTests(unittest.TestCase):
@@ -2354,6 +2505,71 @@ class AllManualSalesTests(unittest.TestCase):
         mock_client.table.assert_called_once_with("manual_sales")
 
 
+class SearchSalesTests(unittest.TestCase):
+    def _table(self, ebay_rows, manual_rows, card_rows):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "ebay_sales":
+                response.data = ebay_rows
+                builder.select.return_value.ilike.return_value.execute.return_value = response
+            elif name == "manual_sales":
+                response.data = manual_rows
+                builder.select.return_value.ilike.return_value.execute.return_value = response
+            elif name == "cards":
+                response.data = card_rows
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        return table
+
+    def test_finds_ebay_sale_by_buyer_username_and_joins_title(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            ebay_rows=[{
+                "card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00",
+                "gross_price": 15.0, "buyer_username": "kartenfan99",
+            }],
+            manual_rows=[],
+            card_rows=[{"id": "card-1", "title": "Karte 1"}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.search_sales("kartenfan")
+        self.assertEqual(result, [{
+            "card_id": "card-1", "title": "Karte 1", "channel": "eBay",
+            "sale_date": "2026-02-01T00:00:00+00:00", "gross_price": 15.0,
+            "buyer_username": "kartenfan99",
+        }])
+
+    def test_finds_manual_sale_by_channel_and_joins_title(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            ebay_rows=[],
+            manual_rows=[{
+                "card_id": "card-2", "sale_date": "2026-03-01T00:00:00+00:00",
+                "gross_price": 8.0, "channel": "Kleinanzeigen",
+            }],
+            card_rows=[{"id": "card-2", "title": "Karte 2"}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.search_sales("Kleinanzeigen")
+        self.assertEqual(result, [{
+            "card_id": "card-2", "title": "Karte 2", "channel": "Kleinanzeigen",
+            "sale_date": "2026-03-01T00:00:00+00:00", "gross_price": 8.0,
+            "buyer_username": None,
+        }])
+
+    def test_no_matches_skips_card_lookup(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(ebay_rows=[], manual_rows=[], card_rows=[])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.search_sales("nichts")
+        self.assertEqual(result, [])
+        mock_client.table.assert_any_call("ebay_sales")
+        mock_client.table.assert_any_call("manual_sales")
+        called_tables = [call.args[0] for call in mock_client.table.call_args_list]
+        self.assertNotIn("cards", called_tables)
+
+
 class DeleteManualSaleTests(unittest.TestCase):
     def test_deletes_and_returns_entry_with_card_id(self):
         mock_client = MagicMock()
@@ -2388,7 +2604,7 @@ class StatisticsRowsTests(unittest.TestCase):
                     {"id": "card-2", "title": "Karte 2", "card_no": 2, "team": "", "set_name": ""},
                     {"id": "card-3", "title": "Karte 3", "card_no": 3, "team": "", "set_name": ""},
                 ]
-                builder.select.return_value.execute.return_value = response
+                builder.select.return_value.eq.return_value.execute.return_value = response
             elif name == "purchase_items":
                 response.data = [{"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 10.0}]
                 builder.select.return_value.in_.return_value.execute.return_value = response
@@ -2454,6 +2670,15 @@ class StatisticsRowsTests(unittest.TestCase):
         _mock_table(mock_client, "cards", [])
         with patch("db.get_client", return_value=mock_client):
             self.assertEqual(db.statistics_rows(), [])
+
+    def test_excludes_private_collection_cards_from_query(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [])
+        with patch("db.get_client", return_value=mock_client):
+            db.statistics_rows()
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with(
+            "private_collection", False
+        )
 
 
 if __name__ == "__main__":
