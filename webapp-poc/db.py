@@ -583,7 +583,7 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
-EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees", "refunded"}
+EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees", "refunded", "tracking_number", "shipping_carrier"}
 EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees"}
 
 
@@ -610,6 +610,11 @@ def update_ebay_sale(sale_id, fields):
     return response.data[0] if response.data else None
 
 
+def get_ebay_sale(sale_id):
+    response = get_client().table("ebay_sales").select("*").eq("id", sale_id).execute()
+    return response.data[0] if response.data else None
+
+
 def get_sale_for_card(card_id):
     response = (
         get_client().table("ebay_sales").select("*")
@@ -627,12 +632,16 @@ def sales_by_listing_id(listing_ids):
     if not listing_ids:
         return {}
     response = (
-        get_client().table("ebay_sales").select("listing_id,sale_date,gross_price")
+        get_client().table("ebay_sales")
+        .select("id,listing_id,sale_date,gross_price,tracking_number,shipping_carrier")
         .in_("listing_id", listing_ids).order("sale_date", desc=True).execute()
     )
     result = {}
     for row in response.data:
-        result.setdefault(row["listing_id"], {"sale_date": row["sale_date"], "gross_price": row["gross_price"]})
+        result.setdefault(row["listing_id"], {
+            "id": row["id"], "sale_date": row["sale_date"], "gross_price": row["gross_price"],
+            "tracking_number": row.get("tracking_number"), "shipping_carrier": row.get("shipping_carrier"),
+        })
     return result
 
 
@@ -671,6 +680,14 @@ def set_low_stock_threshold(threshold):
     # Gleiches Singleton-Row-Muster wie record_backup_downloaded().
     response = get_client().table("app_status").upsert({
         "id": True, "low_stock_threshold": threshold,
+    }).execute()
+    return response.data[0]
+
+
+def set_sender_address(address):
+    # Gleiches Singleton-Row-Muster wie set_low_stock_threshold().
+    response = get_client().table("app_status").upsert({
+        "id": True, "sender_address": address,
     }).execute()
     return response.data[0]
 
@@ -806,6 +823,7 @@ def restore_inventory_for_card(card_id):
 
 MANUAL_SALE_FIELDS = [
     "channel", "sale_date", "gross_price", "shipping_charged", "shipping_cost", "fees", "refunded", "notes",
+    "tracking_number", "shipping_carrier",
 ]
 MANUAL_SALE_NUMERIC_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
 MANUAL_SALE_MONEY_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
@@ -833,6 +851,10 @@ def create_manual_sale(card_id, fields):
 def get_manual_sale_for_card(card_id):
     response = get_client().table("manual_sales").select("*").eq("card_id", card_id).execute()
     return response.data[0] if response.data else None
+
+
+def all_manual_sales():
+    return get_client().table("manual_sales").select("*").execute().data
 
 
 def update_manual_sale(sale_id, fields):

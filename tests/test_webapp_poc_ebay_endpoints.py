@@ -873,5 +873,101 @@ class UpdateEbaySaleEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class SubmitEbaySaleTrackingEndpointTests(unittest.TestCase):
+    def _sale(self, **overrides):
+        sale = {
+            "id": "sale-1", "card_id": "card-1", "ebay_order_id": "O1",
+            "ebay_line_item_id": "LI1", "quantity": 1,
+        }
+        sale.update(overrides)
+        return sale
+
+    def test_submits_to_ebay_saves_tracking_and_marks_card_shipped(self):
+        with patch("main.db.get_ebay_sale", return_value=self._sale()), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.submit_shipping_fulfillment", return_value={}) as mock_submit, \
+             patch("main.db.update_ebay_sale", return_value={"id": "sale-1", "tracking_number": "1Z999", "shipping_carrier": "UPS"}), \
+             patch("main.db.update_card") as mock_update_card:
+            response = client.post(
+                "/api/ebay/sales/sale-1/submit-tracking",
+                json={"tracking_number": "1Z999", "shipping_carrier": "UPS"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["tracking_number"], "1Z999")
+        mock_submit.assert_called_once()
+        args = mock_submit.call_args[0]
+        self.assertEqual(args[:5], ("tok", "O1", "LI1", 1, "1Z999"))
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
+
+    def test_returns_404_when_sale_not_found(self):
+        with patch("main.db.get_ebay_sale", return_value=None):
+            response = client.post(
+                "/api/ebay/sales/does-not-exist/submit-tracking",
+                json={"tracking_number": "1Z999", "shipping_carrier": "UPS"},
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_400_when_tracking_number_missing(self):
+        with patch("main.db.get_ebay_sale", return_value=self._sale()):
+            response = client.post(
+                "/api/ebay/sales/sale-1/submit-tracking",
+                json={"tracking_number": "", "shipping_carrier": "UPS"},
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_502_on_ebay_api_error(self):
+        with patch("main.db.get_ebay_sale", return_value=self._sale()), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.submit_shipping_fulfillment", side_effect=ebay_client.EbayApiError("boom")):
+            response = client.post(
+                "/api/ebay/sales/sale-1/submit-tracking",
+                json={"tracking_number": "1Z999", "shipping_carrier": "UPS"},
+            )
+        self.assertEqual(response.status_code, 502)
+
+    def test_returns_401_when_not_authorized(self):
+        with patch("main.db.get_ebay_sale", return_value=self._sale()), \
+             patch("main.ebay_client.get_access_token", side_effect=ebay_client.EbayNotAuthorizedError("nope")):
+            response = client.post(
+                "/api/ebay/sales/sale-1/submit-tracking",
+                json={"tracking_number": "1Z999", "shipping_carrier": "UPS"},
+            )
+        self.assertEqual(response.status_code, 401)
+
+
+class EbaySaleShippingAddressEndpointTests(unittest.TestCase):
+    def test_returns_ship_to_address(self):
+        order = {
+            "fulfillmentStartInstructions": [
+                {"shippingStep": {"shipTo": {"fullName": "Max Mustermann", "contactAddress": {"city": "Berlin"}}}}
+            ]
+        }
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=order):
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["fullName"], "Max Mustermann")
+
+    def test_returns_404_when_sale_not_found(self):
+        with patch("main.db.get_ebay_sale", return_value=None):
+            response = client.get("/api/ebay/sales/does-not-exist/shipping-address")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_404_when_no_ship_to_in_order(self):
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value={"fulfillmentStartInstructions": []}):
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_502_on_ebay_api_error(self):
+        with patch("main.db.get_ebay_sale", return_value={"id": "sale-1", "ebay_order_id": "O1"}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", side_effect=ebay_client.EbayApiError("boom")):
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 502)
+
+
 if __name__ == "__main__":
     unittest.main()

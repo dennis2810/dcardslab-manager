@@ -135,6 +135,10 @@ if ("serviceWorker" in navigator) {
   .fee-input-row { display: flex; align-items: center; gap: 0.4rem; }
   .fee-input-row label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .fee-input-row input { width: 6rem; font-weight: normal; padding: 0.3rem; }
+  .tracking-block { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee; }
+  .tracking-block label { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; }
+  .tracking-block input, .tracking-block select { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
+  .tracking-block span { font-size: 0.85rem; }
   .inventory-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .inventory-section h2 { font-size: 1.1rem; }
   .inventory-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 0.6rem; margin-bottom: 0.5rem; }
@@ -185,6 +189,7 @@ if ("serviceWorker" in navigator) {
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
@@ -992,6 +997,15 @@ const EBAY_STATUS_BADGE_CLASS = {
   Verkauft: "badge-info", Fehler: "badge-danger", Beendet: "badge-neutral",
 };
 
+// eBays ShippingCarrierCodeType-Werte fuer den deutschen Marktplatz - noch
+// nicht gegen eine echte eBay-Bestellung verifiziert (Sandbox-Bestellungen
+// waren dafuer nicht verfuegbar), im Zweifel "Sonstiges" waehlen. Ein
+// abgelehnter Code zeigt eBays Fehlermeldung direkt im Status-Text an.
+const SHIPPING_CARRIERS = {
+  DHL: "DHL", DPD: "DPD", GLS: "GLS", HERMES: "Hermes", UPS: "UPS",
+  FEDEX: "FedEx", DEUTSCHE_POST: "Deutsche Post", OTHER: "Sonstiges",
+};
+
 function renderSaleStatusBadges(card) {
   const container = document.getElementById("sale-status-badges");
   container.innerHTML = "";
@@ -1212,6 +1226,9 @@ function renderManualSaleReadonly(section, sale, purchase) {
     ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
   if (sale.refunded) rows.push(["Status", "↩ Rückerstattet"]);
+  if (sale.tracking_number) {
+    rows.push(["Tracking", `${sale.tracking_number}${sale.shipping_carrier ? ` (${sale.shipping_carrier})` : ""}`]);
+  }
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
     const cost = Number(purchase.allocated_cost);
     const refunded = Boolean(sale.refunded);
@@ -1317,6 +1334,8 @@ function renderManualSaleForm(section, existingSale) {
   field("Versand erhalten (€)", "shipping_charged", existingSale?.shipping_charged, "number", "0.01");
   field("Versand-Kosten (€)", "shipping_cost", existingSale?.shipping_cost, "number", "0.01");
   field("Gebühren (€)", "fees", existingSale?.fees, "number", "0.01");
+  field("Trackingnummer", "tracking_number", existingSale?.tracking_number);
+  field("Versanddienstleister", "shipping_carrier", existingSale?.shipping_carrier);
   field("Notizen", "notes", existingSale?.notes);
 
   const refundedWrapper = document.createElement("label");
@@ -1356,6 +1375,8 @@ function renderManualSaleForm(section, existingSale) {
       shipping_charged: form.elements.shipping_charged.value,
       shipping_cost: form.elements.shipping_cost.value,
       fees: form.elements.fees.value,
+      tracking_number: form.elements.tracking_number.value,
+      shipping_carrier: form.elements.shipping_carrier.value,
       notes: form.elements.notes.value,
       refunded: refundedCheckbox.checked,
     };
@@ -2460,6 +2481,85 @@ function renderSaleStats(purchase, sale) {
   });
   ebayFeesP.appendChild(saveShippingBtn);
   ebayFeesP.appendChild(shippingStatus);
+
+  // Sendungsverfolgung - eigener Speichern-Button statt Teil des obigen
+  // PATCH, da das Uebermitteln hier zusaetzlich einen eBay-API-Aufruf
+  // ausloest (POST .../submit-tracking): eBay markiert die Bestellung dann
+  // selbst als versendet und benachrichtigt den Kaeufer, und das bereits
+  // bestehende "Versendet"-Kaestchen der Karte wird im selben Schritt mit
+  // gesetzt.
+  const trackingBlock = document.createElement("div");
+  trackingBlock.className = "tracking-block";
+
+  const trackingNumberLabel = document.createElement("label");
+  trackingNumberLabel.textContent = "Trackingnummer";
+  const trackingNumberInput = document.createElement("input");
+  trackingNumberInput.type = "text";
+  trackingNumberInput.value = sale.tracking_number || "";
+  trackingNumberLabel.appendChild(trackingNumberInput);
+  trackingBlock.appendChild(trackingNumberLabel);
+
+  const carrierLabel = document.createElement("label");
+  carrierLabel.textContent = "Versanddienstleister";
+  const carrierSelect = document.createElement("select");
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "– wählen –";
+  carrierSelect.appendChild(blankOpt);
+  for (const [code, label] of Object.entries(SHIPPING_CARRIERS)) {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = label;
+    carrierSelect.appendChild(opt);
+  }
+  carrierSelect.value = sale.shipping_carrier || "";
+  carrierLabel.appendChild(carrierSelect);
+  trackingBlock.appendChild(carrierLabel);
+
+  const submitTrackingBtn = document.createElement("button");
+  submitTrackingBtn.type = "button";
+  submitTrackingBtn.textContent = sale.tracking_number ? "Tracking aktualisieren" : "An eBay übermitteln";
+  const trackingStatus = document.createElement("span");
+  if (sale.tracking_number) {
+    trackingStatus.textContent = `Zuletzt übermittelt: ${sale.tracking_number} (${SHIPPING_CARRIERS[sale.shipping_carrier] || sale.shipping_carrier})`;
+  }
+  submitTrackingBtn.addEventListener("click", async () => {
+    if (!trackingNumberInput.value.trim() || !carrierSelect.value) {
+      trackingStatus.textContent = "Bitte Trackingnummer und Versanddienstleister angeben.";
+      trackingStatus.className = "error";
+      return;
+    }
+    submitTrackingBtn.disabled = true;
+    trackingStatus.textContent = "Übermittelt an eBay …";
+    trackingStatus.className = "";
+    try {
+      const res = await fetch(`/api/ebay/sales/${encodeURIComponent(sale.id)}/submit-tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tracking_number: trackingNumberInput.value.trim(), shipping_carrier: carrierSelect.value,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        trackingStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+        trackingStatus.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      showToast("Sendungsverfolgung an eBay übermittelt.");
+      loadCard();
+    } catch (err) {
+      trackingStatus.textContent = "Fehler: " + err;
+      trackingStatus.className = "error";
+      showToast("Fehler: " + err, true);
+    } finally {
+      submitTrackingBtn.disabled = false;
+    }
+  });
+  trackingBlock.appendChild(submitTrackingBtn);
+  trackingBlock.appendChild(trackingStatus);
+  wrapper.appendChild(trackingBlock);
 
   return wrapper;
 }

@@ -248,6 +248,18 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["last_auto_backup_at"], "2026-09-10T03:00:00+00:00")
 
+    def test_returns_sender_address(self):
+        with patch("main.db.get_app_status", return_value={"sender_address": "DCardsLab\nMusterstr. 1"}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sender_address"], "DCardsLab\nMusterstr. 1")
+
+    def test_sender_address_defaults_to_empty_string(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sender_address"], "")
+
 
 class LowStockThresholdEndpointTests(unittest.TestCase):
     def test_sets_threshold(self):
@@ -264,6 +276,21 @@ class LowStockThresholdEndpointTests(unittest.TestCase):
     def test_rejects_non_integer_threshold(self):
         response = client.put("/api/low-stock-threshold", json={"threshold": "abc"})
         self.assertEqual(response.status_code, 400)
+
+
+class SenderAddressEndpointTests(unittest.TestCase):
+    def test_sets_address(self):
+        with patch("main.db.set_sender_address", return_value={"id": True, "sender_address": "DCardsLab\nMusterstr. 1"}) as mock_set:
+            response = client.put("/api/sender-address", json={"address": "DCardsLab\nMusterstr. 1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sender_address"], "DCardsLab\nMusterstr. 1")
+        mock_set.assert_called_once_with("DCardsLab\nMusterstr. 1")
+
+    def test_allows_empty_address(self):
+        with patch("main.db.set_sender_address", return_value={"id": True, "sender_address": ""}) as mock_set:
+            response = client.put("/api/sender-address", json={"address": ""})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("")
 
 
 class RunBackupNowEndpointTests(unittest.TestCase):

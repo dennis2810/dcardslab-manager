@@ -856,6 +856,14 @@ async def create_manual_sale(card_id: str, fields: dict = Body(default={})):
     return JSONResponse(created)
 
 
+@app.get("/api/manual-sales")
+async def list_manual_sales():
+    # Fuer die Versand-Checkliste (shipping.html): Sendungsverfolgungs-Felder
+    # pro manuellem Verkauf, verknuepft client-seitig ueber card_id mit den
+    # bereits ueber /api/cards geladenen "verkauft, nicht versendet"-Karten.
+    return JSONResponse({"manual_sales": db.all_manual_sales()})
+
+
 @app.patch("/api/manual-sales/{sale_id}")
 async def update_manual_sale(sale_id: str, fields: dict = Body(...)):
     updated = db.update_manual_sale(sale_id, fields)
@@ -1158,6 +1166,9 @@ def _expand_ebay_listings(listings):
         sale = sales_by_listing.get(listing["id"])
         listing["sale_date"] = sale.get("sale_date") if sale else None
         listing["sale_price"] = sale.get("gross_price") if sale else None
+        listing["sale_id"] = sale.get("id") if sale else None
+        listing["tracking_number"] = sale.get("tracking_number") if sale else None
+        listing["shipping_carrier"] = sale.get("shipping_carrier") if sale else None
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
         research = price_research_info.get(listing["card_id"])
         listing["price_research_avg"] = research["avg_price"] if research else None
@@ -1561,6 +1572,63 @@ async def update_ebay_sale(sale_id: str, fields: dict = Body(...)):
     return JSONResponse(updated)
 
 
+@app.post("/api/ebay/sales/{sale_id}/submit-tracking")
+async def submit_ebay_sale_tracking(sale_id: str, fields: dict = Body(...)):
+    # Uebermittelt Trackingnummer + Versanddienstleister an eBay (markiert
+    # die Bestellung dort als versendet und benachrichtigt den Kaeufer
+    # automatisch), speichert beides lokal und setzt zusaetzlich das
+    # bestehende "Versendet"-Kaestchen der Karte - ein Schritt statt zwei.
+    sale = db.get_ebay_sale(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    tracking_number = (fields.get("tracking_number") or "").strip()
+    shipping_carrier = (fields.get("shipping_carrier") or "").strip()
+    if not tracking_number or not shipping_carrier:
+        raise HTTPException(status_code=400, detail="Trackingnummer und Versanddienstleister sind erforderlich.")
+    try:
+        token = ebay_client.get_access_token()
+        ebay_client.submit_shipping_fulfillment(
+            token, sale["ebay_order_id"], sale["ebay_line_item_id"], sale.get("quantity") or 1,
+            tracking_number, shipping_carrier, datetime.now(timezone.utc).isoformat(),
+        )
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    updated = db.update_ebay_sale(sale_id, {"tracking_number": tracking_number, "shipping_carrier": shipping_carrier})
+    if sale.get("card_id"):
+        try:
+            db.update_card(sale["card_id"], {"shipped": True})
+        except Exception:
+            # Tracking wurde bereits erfolgreich an eBay uebermittelt und
+            # lokal gespeichert - ein fehlgeschlagenes Setzen des
+            # "Versendet"-Kaestchens darf das nicht mehr zunichtemachen.
+            logger.exception("Konnte 'Versendet' nicht setzen fuer Karte %s", sale.get("card_id"))
+    return JSONResponse(updated)
+
+
+@app.get("/api/ebay/sales/{sale_id}/shipping-address")
+async def ebay_sale_shipping_address(sale_id: str):
+    # Bewusst nicht gespeichert (siehe supabase/README.md-Datenschutz-
+    # Ueberlegung dazu) - bei jedem Aufruf frisch von eBay geholt und nur
+    # fuer die Anzeige/den Druck eines Adress-Etiketts durchgereicht.
+    sale = db.get_ebay_sale(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    try:
+        token = ebay_client.get_access_token()
+        order = ebay_client.get_order(token, sale["ebay_order_id"])
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    instructions = order.get("fulfillmentStartInstructions") or []
+    ship_to = (instructions[0].get("shippingStep") or {}).get("shipTo") if instructions else None
+    if not ship_to:
+        raise HTTPException(status_code=404, detail="Keine Versandadresse in der eBay-Bestellung gefunden.")
+    return JSONResponse(ship_to)
+
+
 @app.post("/api/ebay/sync-sales")
 async def sync_ebay_sales():
     try:
@@ -1828,7 +1896,14 @@ async def app_status():
         "last_backup_at": status.get("last_backup_at"),
         "last_auto_backup_at": status.get("last_auto_backup_at"),
         "low_stock_threshold": status.get("low_stock_threshold") or 0,
+        "sender_address": status.get("sender_address") or "",
     })
+
+
+@app.put("/api/sender-address")
+async def set_sender_address(fields: dict = Body(...)):
+    updated = db.set_sender_address(fields.get("address", ""))
+    return JSONResponse(updated)
 
 
 @app.put("/api/low-stock-threshold")

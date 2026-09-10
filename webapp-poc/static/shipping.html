@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Versand-Checkliste</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --hover-bg: #f7f7f7;
+    --accent-bg: #f0f4f8; --accent-border: #d5dee6;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+    --danger-bg: #fdecea; --danger-fg: #611a15;
+    --neutral-bg: #eee; --neutral-fg: #444;
+    --info-bg: #e0ecff; --info-fg: #1a3d7a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --accent-bg: #1d2733; --accent-border: #3a4a5a;
+      --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82; --neutral-bg: #333; --neutral-fg: #ccc;
+      --info-bg: #1d3358; --info-fg: #9ec3ff; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --accent-bg: #1d2733; --accent-border: #3a4a5a;
+    --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+    --danger-bg: #3a1f1d; --danger-fg: #f28b82; --neutral-bg: #333; --neutral-fg: #ccc;
+    --info-bg: #1d3358; --info-fg: #9ec3ff; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .note { font-size: 0.85rem; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr:hover { background: var(--hover-bg); }
+  .table-scroll { overflow-x: auto; }
+  .thumb { width: 40px; height: auto; border-radius: 3px; display: block; }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+  .badge-info { background: var(--info-bg); color: var(--info-fg); }
+  .badge-neutral { background: var(--neutral-bg); color: var(--neutral-fg); }
+  .row-actions { display: flex; flex-direction: column; gap: 0.35rem; min-width: 200px; }
+  .row-actions .tracking-fields { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .row-actions input, .row-actions select { padding: 0.3rem; font-size: 0.9rem; }
+  .row-actions input[type="text"] { flex: 1 1 140px; }
+  .row-actions button { font-size: 0.85rem; }
+  .row-status { font-size: 0.8rem; }
+  #status-msg { font-style: italic; color: #555; }
+  .empty-state { color: #555; font-style: italic; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .error { color: var(--danger-fg); }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>DCardLabs – Versand-Checkliste</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+  </nav>
+  <p class="note">Alle verkauften, aber noch nicht als versendet markierten Karten an einem Ort - Trackingnummer
+    eintragen (bei eBay-Verkäufen wird sie direkt an eBay übermittelt, das markiert die Bestellung dort als
+    versendet und benachrichtigt den Käufer automatisch), ein Adress-Etikett/einen Lieferschein drucken oder ohne
+    Tracking als versendet abhaken. Sobald eine Karte als versendet markiert ist, verschwindet sie aus dieser
+    Liste.</p>
+
+  <p id="status-msg">Lädt …</p>
+
+  <div class="table-scroll">
+    <table id="items-table" style="display: none;">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Titel</th>
+          <th>Kanal</th>
+          <th>Verkauft am</th>
+          <th>Preis</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody id="items-body"></tbody>
+    </table>
+  </div>
+  <p id="items-empty" class="empty-state"></p>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+// de-DE liefert Tausenderpunkt + Dezimalkomma, deutlich lesbarer als toFixed().
+function fmtEuro(value) {
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
+// eBays ShippingCarrierCodeType-Werte fuer den deutschen Marktplatz - noch
+// nicht gegen eine echte eBay-Bestellung verifiziert (Sandbox-Bestellungen
+// waren dafuer nicht verfuegbar), im Zweifel "Sonstiges" waehlen. Ein
+// abgelehnter Code zeigt eBays Fehlermeldung direkt im Status-Text an.
+// Gleiche Liste wie card.html - dupliziert, da es keine gemeinsamen JS-Dateien
+// zwischen den statischen Seiten gibt.
+const SHIPPING_CARRIERS = {
+  DHL: "DHL", DPD: "DPD", GLS: "GLS", HERMES: "Hermes", UPS: "UPS",
+  FEDEX: "FedEx", DEUTSCHE_POST: "Deutsche Post", OTHER: "Sonstiges",
+};
+
+let senderAddress = "";
+
+// Adress-Etikett/Lieferschein - gleiches window.open()+document.write()-
+// Druckfenster-Muster wie printLabels() auf cards.html, hier aber mit
+// Absender-/Empfaengeradresse statt SKU-Etiketten.
+function printShippingLabel({ recipientHtml, title, price, orderRef }) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Lieferschein</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  .addresses { display: flex; justify-content: space-between; gap: 2rem; margin-bottom: 2.5rem; }
+  .sender { font-size: 0.8rem; color: #555; }
+  .recipient { border: 1px solid #333; border-radius: 4px; padding: 0.75rem 1rem; font-size: 1.05rem; min-width: 260px; min-height: 90px; white-space: pre-line; }
+  .content { border-top: 1px solid #999; padding-top: 1rem; }
+  .content table { width: 100%; border-collapse: collapse; }
+  .content th, .content td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd; }
+</style></head>
+<body>
+  <div class="addresses">
+    <div class="sender">${escapeHtml(senderAddress).replace(/\n/g, "<br>") || "(keine Absenderadresse hinterlegt - siehe Einstellungen)"}</div>
+    <div class="recipient">${recipientHtml}</div>
+  </div>
+  <div class="content">
+    <table>
+      <thead><tr><th>Artikel</th><th>Referenz</th><th>Preis</th></tr></thead>
+      <tbody><tr><td>${escapeHtml(title)}</td><td>${escapeHtml(orderRef || "")}</td><td>${escapeHtml(price)}</td></tr></tbody>
+    </table>
+  </div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+function formatShipToAddress(shipTo) {
+  if (!shipTo) return "";
+  const addr = shipTo.contactAddress || {};
+  const lines = [
+    shipTo.fullName,
+    addr.addressLine1,
+    addr.addressLine2,
+    [addr.postalCode, addr.city].filter(Boolean).join(" "),
+    [addr.stateOrProvince, addr.countryCode].filter(Boolean).join(" "),
+  ].filter(Boolean);
+  return lines.map(escapeHtml).join("<br>");
+}
+
+let items = [];
+
+const statusMsg = document.getElementById("status-msg");
+const table = document.getElementById("items-table");
+const body = document.getElementById("items-body");
+const empty = document.getElementById("items-empty");
+
+function buildActionsCell(item, tr) {
+  const wrap = document.createElement("div");
+  wrap.className = "row-actions";
+
+  const fieldsRow = document.createElement("div");
+  fieldsRow.className = "tracking-fields";
+  const trackingInput = document.createElement("input");
+  trackingInput.type = "text";
+  trackingInput.placeholder = "Trackingnummer";
+  trackingInput.value = item.trackingNumber || "";
+  fieldsRow.appendChild(trackingInput);
+
+  const carrierSelect = document.createElement("select");
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "– Dienstleister –";
+  carrierSelect.appendChild(blankOpt);
+  for (const [code, label] of Object.entries(SHIPPING_CARRIERS)) {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = label;
+    carrierSelect.appendChild(opt);
+  }
+  carrierSelect.value = item.shippingCarrier || "";
+  fieldsRow.appendChild(carrierSelect);
+  wrap.appendChild(fieldsRow);
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "tracking-fields";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = item.isEbay ? "An eBay übermitteln" : "Speichern";
+  btnRow.appendChild(saveBtn);
+
+  const shippedBtn = document.createElement("button");
+  shippedBtn.type = "button";
+  shippedBtn.textContent = "Nur als versendet markieren";
+  btnRow.appendChild(shippedBtn);
+
+  const labelBtn = document.createElement("button");
+  labelBtn.type = "button";
+  labelBtn.textContent = "🖨 Etikett drucken";
+  btnRow.appendChild(labelBtn);
+
+  wrap.appendChild(btnRow);
+
+  const statusEl = document.createElement("span");
+  statusEl.className = "row-status";
+  wrap.appendChild(statusEl);
+
+  saveBtn.addEventListener("click", async () => {
+    if (!trackingInput.value.trim() || !carrierSelect.value) {
+      statusEl.textContent = "Bitte Trackingnummer und Versanddienstleister angeben.";
+      statusEl.className = "row-status error";
+      return;
+    }
+    saveBtn.disabled = true;
+    statusEl.textContent = item.isEbay ? "Übermittelt an eBay …" : "Speichert …";
+    statusEl.className = "row-status";
+    try {
+      const url = item.isEbay
+        ? `/api/ebay/sales/${item.saleId}/submit-tracking`
+        : `/api/manual-sales/${item.saleId}`;
+      const res = await fetch(url, {
+        method: item.isEbay ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tracking_number: trackingInput.value.trim(), shipping_carrier: carrierSelect.value }),
+      });
+      const resBody = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (resBody.detail || res.statusText);
+        statusEl.className = "row-status error";
+        showToast("Fehler: " + (resBody.detail || res.statusText), true);
+        saveBtn.disabled = false;
+        return;
+      }
+      showToast(item.isEbay ? "An eBay übermittelt, Karte als versendet markiert." : "Gespeichert.");
+      load();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+      statusEl.className = "row-status error";
+      showToast("Fehler: " + err, true);
+      saveBtn.disabled = false;
+    }
+  });
+
+  shippedBtn.addEventListener("click", async () => {
+    shippedBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/cards/${item.cardId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipped: true }),
+      });
+      if (!res.ok) {
+        const resBody = await res.json();
+        showToast("Fehler: " + (resBody.detail || res.statusText), true);
+        shippedBtn.disabled = false;
+        return;
+      }
+      showToast(`"${item.title}" als versendet markiert.`);
+      load();
+    } catch (err) {
+      showToast("Fehler: " + err, true);
+      shippedBtn.disabled = false;
+    }
+  });
+
+  labelBtn.addEventListener("click", async () => {
+    if (item.isEbay) {
+      labelBtn.disabled = true;
+      statusEl.textContent = "Lade Versandadresse von eBay …";
+      statusEl.className = "row-status";
+      try {
+        const res = await fetch(`/api/ebay/sales/${item.saleId}/shipping-address`);
+        const resBody = await res.json();
+        if (!res.ok) {
+          statusEl.textContent = "Fehler: " + (resBody.detail || res.statusText);
+          statusEl.className = "row-status error";
+          showToast("Fehler: " + (resBody.detail || res.statusText), true);
+          return;
+        }
+        statusEl.textContent = "";
+        printShippingLabel({
+          recipientHtml: formatShipToAddress(resBody),
+          title: item.title, price: fmtEuro(item.price), orderRef: item.ebaySku || "",
+        });
+      } catch (err) {
+        statusEl.textContent = "Fehler: " + err;
+        statusEl.className = "row-status error";
+        showToast("Fehler: " + err, true);
+      } finally {
+        labelBtn.disabled = false;
+      }
+    } else {
+      // Kein API-Zugriff auf die Kaeuferadresse ausserhalb von eBay - leeres,
+      // umrandetes Feld zum Ausfuellen per Hand statt eines leeren Etiketts.
+      printShippingLabel({
+        recipientHtml: "(Adresse von Hand eintragen)",
+        title: item.title, price: fmtEuro(item.price), orderRef: "",
+      });
+    }
+  });
+
+  return wrap;
+}
+
+function render() {
+  body.innerHTML = "";
+  if (!items.length) {
+    table.style.display = "none";
+    empty.textContent = "Keine verkauften, unversendeten Karten - alles erledigt.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const item of items) {
+    const tr = document.createElement("tr");
+
+    const imgTd = document.createElement("td");
+    if (item.frontImageUrl) {
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.src = item.frontImageUrl;
+      img.alt = "";
+      imgTd.appendChild(img);
+    }
+    tr.appendChild(imgTd);
+
+    const titleTd = document.createElement("td");
+    const link = document.createElement("a");
+    link.href = `card.html?id=${encodeURIComponent(item.cardId)}`;
+    link.textContent = item.title || "(ohne Titel)";
+    titleTd.appendChild(link);
+    tr.appendChild(titleTd);
+
+    const channelTd = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "badge " + (item.isEbay ? "badge-info" : "badge-neutral");
+    badge.textContent = item.channel;
+    channelTd.appendChild(badge);
+    tr.appendChild(channelTd);
+
+    const dateTd = document.createElement("td");
+    dateTd.textContent = formatDate(item.saleDate);
+    tr.appendChild(dateTd);
+
+    const priceTd = document.createElement("td");
+    priceTd.textContent = fmtEuro(item.price);
+    tr.appendChild(priceTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.appendChild(buildActionsCell(item, tr));
+    tr.appendChild(actionsTd);
+
+    body.appendChild(tr);
+  }
+}
+
+async function load() {
+  try {
+    const [cardsRes, listingsRes, manualRes, statusRes] = await Promise.all([
+      fetch("/api/cards"),
+      fetch("/api/ebay/listings?status=Verkauft"),
+      fetch("/api/manual-sales"),
+      fetch("/api/app-status"),
+    ]);
+    const cardsBody = await cardsRes.json();
+    const listingsBody = await listingsRes.json();
+    const manualBody = await manualRes.json();
+    const statusBody = await statusRes.json();
+    if (!cardsRes.ok || !listingsRes.ok || !manualRes.ok || !statusRes.ok) {
+      statusMsg.textContent = "Fehler: " + (cardsBody.detail || listingsBody.detail || manualBody.detail || statusBody.detail || "Laden fehlgeschlagen.");
+      return;
+    }
+    senderAddress = statusBody.sender_address || "";
+
+    const listingByCardId = {};
+    for (const listing of listingsBody.listings || []) {
+      listingByCardId[listing.card_id] = listing;
+    }
+    const manualByCardId = {};
+    for (const sale of manualBody.manual_sales || []) {
+      manualByCardId[sale.card_id] = sale;
+    }
+
+    const unshipped = (cardsBody.cards || []).filter(
+      (c) => (c.ebay_status === "Verkauft" || c.manual_sale_channel) && !c.shipped
+    );
+
+    items = unshipped.map((c) => {
+      const listing = listingByCardId[c.id];
+      const manualSale = manualByCardId[c.id];
+      if (c.ebay_status === "Verkauft" && listing) {
+        return {
+          cardId: c.id, title: c.title, frontImageUrl: c.front_image_url,
+          isEbay: true, channel: "eBay", saleId: listing.sale_id,
+          saleDate: listing.sale_date, price: listing.sale_price,
+          trackingNumber: listing.tracking_number, shippingCarrier: listing.shipping_carrier,
+          ebaySku: listing.sku,
+        };
+      }
+      return {
+        cardId: c.id, title: c.title, frontImageUrl: c.front_image_url,
+        isEbay: false, channel: c.manual_sale_channel || manualSale?.channel || "Sonstiges",
+        saleId: manualSale?.id, saleDate: manualSale?.sale_date, price: manualSale?.gross_price,
+        trackingNumber: manualSale?.tracking_number, shippingCarrier: manualSale?.shipping_carrier,
+      };
+    }).filter((item) => item.saleId);
+
+    statusMsg.textContent = "";
+    render();
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

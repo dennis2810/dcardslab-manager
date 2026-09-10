@@ -603,6 +603,15 @@ class CreateManualSaleEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class ListManualSalesEndpointTests(unittest.TestCase):
+    def test_returns_all_manual_sales(self):
+        rows = [{"id": "ms-1", "card_id": "card-1"}, {"id": "ms-2", "card_id": "card-2"}]
+        with patch("main.db.all_manual_sales", return_value=rows):
+            response = client.get("/api/manual-sales")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["manual_sales"], rows)
+
+
 class UpdateManualSaleEndpointTests(unittest.TestCase):
     def test_updates_manual_sale(self):
         with patch("main.db.update_manual_sale", return_value={"id": "ms-1", "gross_price": 9.0}) as mock_update:
