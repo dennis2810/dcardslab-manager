@@ -142,6 +142,12 @@ def search_active_listings(token, query, limit=5):
             "currency": price.get("currency"),
             "condition": item.get("condition", ""),
             "item_web_url": item.get("itemWebUrl", ""),
+            # Format "v1|<listingId>|<variationId>" - der mittlere Teil ist
+            # dieselbe Item-ID, die publish_offer() beim Veroeffentlichen als
+            # ebay_listing_id zurueckbekommt. Erlaubt main.py, eigene
+            # Angebote in den Suchtreffern zu erkennen (siehe
+            # _filter_price_research_results()).
+            "item_id": item.get("itemId", ""),
         })
     return results
 

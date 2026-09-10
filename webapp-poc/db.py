@@ -667,6 +667,24 @@ def record_backup_downloaded(downloaded_at):
     return response.data[0]
 
 
+def set_low_stock_threshold(threshold):
+    # Gleiches Singleton-Row-Muster wie record_backup_downloaded().
+    response = get_client().table("app_status").upsert({
+        "id": True, "low_stock_threshold": threshold,
+    }).execute()
+    return response.data[0]
+
+
+def record_auto_backup(uploaded_at):
+    # Eigenes Feld statt last_backup_at (manueller Download) - ein
+    # automatischer Hintergrund-Upload und ein bewusster manueller Download
+    # sind unterschiedliche Ereignisse, die getrennt sichtbar bleiben sollen.
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_auto_backup_at": uploaded_at,
+    }).execute()
+    return response.data[0]
+
+
 DASHBOARD_GOAL_FIELDS = {"metric", "amount"}
 
 

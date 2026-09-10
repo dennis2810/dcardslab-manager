@@ -127,3 +127,25 @@ def delete_receipt(object_path):
     if not object_path:
         return
     get_client().storage.from_(RECEIPTS_BUCKET).remove([object_path])
+
+
+BACKUPS_BUCKET = "backups"
+# Privater Bucket (siehe supabase/README.md), gleiche Begruendung wie
+# purchase-receipts - Backups enthalten dieselben Daten wie die DB selbst.
+
+
+def upload_backup(filename, data):
+    get_client().storage.from_(BACKUPS_BUCKET).upload(
+        filename, data, file_options={"content-type": "application/zip", "upsert": "true"}
+    )
+
+
+def prune_old_backups(keep):
+    # Haelt den Bucket auf den letzten `keep` Stand begrenzt statt
+    # unbegrenzt zu wachsen (1GB Free-Tier-Storage-Limit) - Dateinamen sind
+    # "backup-YYYY-MM-DD.zip", sortieren also chronologisch als Strings.
+    files = get_client().storage.from_(BACKUPS_BUCKET).list()
+    names = sorted(f["name"] for f in files)
+    stale = names[:-keep] if keep > 0 and len(names) > keep else []
+    if stale:
+        get_client().storage.from_(BACKUPS_BUCKET).remove(stale)

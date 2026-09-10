@@ -293,15 +293,16 @@ let lastStats = null;
 
 async function load() {
   try {
-    const [statsRes, invRes, cardsRes, geplantRes, sheetsRes, appStatusRes] = await Promise.all([
+    const [statsRes, invRes, cardsRes, geplantRes, publishedRes, sheetsRes, appStatusRes] = await Promise.all([
       fetch("/api/statistics"), fetch("/api/inventory"), fetch("/api/cards"),
-      fetch("/api/ebay/listings?status=Geplant"), fetch("/api/sheets/status"),
-      fetch("/api/app-status"),
+      fetch("/api/ebay/listings?status=Geplant"), fetch("/api/ebay/listings?status=Veroeffentlicht"),
+      fetch("/api/sheets/status"), fetch("/api/app-status"),
     ]);
     const stats = await statsRes.json();
     const inventory = await invRes.json();
     const cardsBody = await cardsRes.json();
     const geplant = await geplantRes.json();
+    const published = await publishedRes.json();
     const sheets = await sheetsRes.json();
     const appStatus = await appStatusRes.json();
     const ebayStatus = await loadEbayStatus();
@@ -312,7 +313,7 @@ async function load() {
     renderConnectionAmpel(sheets, ebayStatus);
     renderLastUpdates(sheets, appStatus);
     renderGoal();
-    renderSummary(stats, inventory);
+    renderSummary(stats, inventory, published.listings || []);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
     renderActivity(stats);
   } catch (err) {
@@ -387,9 +388,18 @@ goalForm.addEventListener("submit", async (ev) => {
   }
 });
 
-function renderSummary(stats, inventory) {
+// Gleicher +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite/die
+// Preis-Check-Spalte auf der eBay-Seite (dupliziert, kein Shared-JS-Modul).
+function hasPriceAlert(listing) {
+  if (!listing.price_research_count || listing.price == null) return false;
+  const diffPct = ((Number(listing.price) - listing.price_research_avg) / listing.price_research_avg) * 100;
+  return Math.abs(diffPct) >= 20;
+}
+
+function renderSummary(stats, inventory, publishedListings) {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const monthBucket = (stats.monthly || []).find((m) => m.month === currentMonth) || { revenue: 0, profit: 0 };
+  const priceAlertCount = publishedListings.filter(hasPriceAlert).length;
 
   const cards = document.getElementById("summary-cards");
   cards.style.display = "flex";
@@ -403,6 +413,7 @@ function renderSummary(stats, inventory) {
     ["ROI (verkauft)", fmtPercent(stats.summary.roi_pct), "statistics.html"],
     ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count), "statistics-sales.html"],
     ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count), "cards.html"],
+    ["Preis-Alarme (eBay)", String(priceAlertCount), "ebay.html"],
   ];
   cards.innerHTML = "";
   for (const [label, value, href] of entries) {

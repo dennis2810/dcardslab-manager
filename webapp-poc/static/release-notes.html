@@ -72,6 +72,14 @@ if ("serviceWorker" in navigator) {
     <li>Link „📊 Tabelle öffnen" in den Einstellungen führt direkt zur verknüpften Google-Sheets-Tabelle.</li>
     <li>Kennzahlen-Kacheln und Verbindungsstatus auf dem Dashboard sind jetzt anklickbar – ebenso die
       Kennzahlen-Kacheln auf den Statistikseiten, die zur jeweils passenden Seite führen.</li>
+    <li>Neue Dashboard-Kachel „Preis-Alarme (eBay)": zählt veröffentlichte Angebote mit mehr als 20&nbsp;%
+      Preisabweichung vom Marktdurchschnitt der Preisrecherche und verlinkt zur eBay-Seite.</li>
+    <li>Die Wunschliste wird jetzt als eigener Reiter in den Google-Sheets-Export aufgenommen.</li>
+    <li>Automatisches, wöchentliches Backup im Hintergrund (zusätzlich zum manuellen Download) – wird in Supabase
+      Storage abgelegt, die letzten 4 Wochen werden aufbewahrt; Zeitpunkt des letzten automatischen Backups wird
+      in den Einstellungen angezeigt.</li>
+    <li>Neue Einstellung „Mindestbestand": globale Schwelle, ab der das Inventar eine Karte als niedrigen Bestand
+      markiert.</li>
     <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
     <li>Farbschema (System/Hell/Dunkel) über einen Schalter im Dashboard manuell festlegbar, statt nur der
       Betriebssystem-/Browser-Einstellung zu folgen.</li>
@@ -118,6 +126,7 @@ if ("serviceWorker" in navigator) {
     <li>Neue Verkäufer-Historie: Käufe gruppiert nach Verkäufer (Anzahl, Summe, Ø pro Kauf), folgt dem aktuellen
       Such-/Zeitfilter.</li>
     <li>Statuszeile mit der Anzahl Käufe steht jetzt direkt über statt unter der Summenzeile.</li>
+    <li>Das Verkäufer-Feld schlägt beim Anlegen eines Kaufs bereits erfasste Verkäufer zur Auswahl vor.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -147,6 +156,9 @@ if ("serviceWorker" in navigator) {
       verkauft wurde.</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
+    <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert
+      („🫵 Eigenes Angebot"), damit es nicht versehentlich als Marktpreis für sich selbst übernommen wird.</li>
+    <li>Der Preisrecherche-Verlauf zeigt ab zwei Einträgen zusätzlich einen kleinen Verlaufs-Chart (Sparkline).</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -162,6 +174,8 @@ if ("serviceWorker" in navigator) {
     <li>Massenauswahl: Lagerort, Menge oder Zustand für mehrere Einträge auf einmal setzen, mehrere Einträge
       auf einmal löschen.</li>
     <li>Direkter Link „📋 Inventur starten" neben „+ Eintrag hinzufügen", der zur Inventur-Seite führt.</li>
+    <li>Bestandswarnung für niedrigen Bestand, sobald in den Einstellungen eine Mindestbestand-Schwelle gesetzt
+      ist.</li>
   </ul>
 
   <h2>Inventur <span class="date">September 2026</span></h2>

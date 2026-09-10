@@ -1480,6 +1480,26 @@ class AppStatusTests(unittest.TestCase):
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "last_backup_at": "2026-09-09T10:00:00+00:00"})
 
+    def test_set_low_stock_threshold_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "low_stock_threshold": 3}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_low_stock_threshold(3)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "low_stock_threshold": 3})
+
+    def test_record_auto_backup_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_auto_backup_at": "2026-09-10T03:00:00+00:00"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_auto_backup("2026-09-10T03:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_auto_backup_at": "2026-09-10T03:00:00+00:00"})
+
 
 class DashboardGoalTests(unittest.TestCase):
     def test_get_returns_none_when_no_row_for_year(self):

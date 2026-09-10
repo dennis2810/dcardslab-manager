@@ -285,5 +285,43 @@ class DeleteReceiptTests(unittest.TestCase):
         mock_client.storage.from_.assert_not_called()
 
 
+class UploadBackupTests(unittest.TestCase):
+    def test_uploads_bytes_to_backups_bucket(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.upload_backup("backup-2026-09-10.zip", b"fake-zip-bytes")
+        mock_client.storage.from_.assert_called_once_with(storage.BACKUPS_BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        args, kwargs = upload_call.call_args
+        self.assertEqual(args[0], "backup-2026-09-10.zip")
+        self.assertEqual(args[1], b"fake-zip-bytes")
+        self.assertEqual(kwargs["file_options"]["content-type"], "application/zip")
+        self.assertEqual(kwargs["file_options"]["upsert"], "true")
+
+
+class PruneOldBackupsTests(unittest.TestCase):
+    def test_removes_oldest_files_beyond_keep_count(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.list.return_value = [
+            {"name": "backup-2026-08-01.zip"},
+            {"name": "backup-2026-08-08.zip"},
+            {"name": "backup-2026-08-15.zip"},
+            {"name": "backup-2026-08-22.zip"},
+            {"name": "backup-2026-08-29.zip"},
+        ]
+        with patch("storage.get_client", return_value=mock_client):
+            storage.prune_old_backups(keep=4)
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(["backup-2026-08-01.zip"])
+
+    def test_does_nothing_when_within_keep_count(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.list.return_value = [
+            {"name": "backup-2026-08-29.zip"},
+        ]
+        with patch("storage.get_client", return_value=mock_client):
+            storage.prune_old_backups(keep=4)
+        mock_client.storage.from_.return_value.remove.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

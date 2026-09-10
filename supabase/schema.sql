@@ -275,3 +275,13 @@ create table if not exists wishlist_items (
 );
 
 create index if not exists wishlist_items_created_at_idx on wishlist_items(created_at);
+
+-- Migration (2026-09-10): Mindestbestand-Schwelle fuer Bestandswarnungen -
+-- global statt pro Karte/Lagerort, damit die Einstellung einfach bleibt;
+-- gleiches Singleton-Row-Muster wie app_status.last_backup_at.
+alter table app_status add column if not exists low_stock_threshold int not null default 0;
+
+-- Migration (2026-09-10): Zeitstempel fuer das automatische, woechentliche
+-- Backup (backup.py's run_forever()) - eigenes Feld statt last_backup_at
+-- (manueller Download), da beides unterschiedliche Ereignisse sind.
+alter table app_status add column if not exists last_auto_backup_at timestamptz;

@@ -90,6 +90,11 @@ async def _start_ebay_scheduler():
     # ebay_scheduler.py (which already imports db/ebay_client, not main).
     asyncio.create_task(ebay_scheduler.run_forever(lambda listing: _publish_listing(listing)))
 
+
+@app.on_event("startup")
+async def _start_backup_scheduler():
+    asyncio.create_task(backup.run_forever())
+
 # Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
 JPEG_QUALITY = 97
 ROTATE = True
@@ -1514,8 +1519,26 @@ def _filter_price_research_results(query, results):
     return filtered
 
 
+def _own_listing_numeric_id(item_id):
+    # Buy-Browse-Suchtreffer-IDs haben das Format "v1|<listingId>|<var>" -
+    # der mittlere Teil ist dieselbe numerische ID, die publish_offer() beim
+    # Veroeffentlichen als ebay_listing_id zurueckbekommt (siehe ebay_client.py).
+    parts = (item_id or "").split("|")
+    return parts[1] if len(parts) == 3 else None
+
+
+def _mark_own_listings(results, own_listing_id):
+    # Ohne eigene Verkaeuferinfo in den Suchtreffern (Buy-Browse-API liefert
+    # dafuer keinen Verkaeufernamen mit) ist der Item-ID-Abgleich der einzige
+    # Weg, das eigene aktive Angebot in den Ergebnissen zu erkennen - wichtig,
+    # damit man es nicht versehentlich als "Marktpreis" fuer sich selbst uebernimmt.
+    for item in results:
+        item["is_own_listing"] = bool(own_listing_id) and _own_listing_numeric_id(item.get("item_id")) == own_listing_id
+    return results
+
+
 @app.get("/api/ebay/price-research")
-async def ebay_price_research(q: str):
+async def ebay_price_research(q: str, own_listing_id: str | None = None):
     # Aktive Angebote (Buy/Browse API), nicht verkaufte Artikel - die dafuer
     # noetige Marketplace-Insights-API braucht eine gesonderte, von eBay
     # einzeln zu genehmigende Freigabe. Braucht keinen autorisierten
@@ -1525,7 +1548,9 @@ async def ebay_price_research(q: str):
         results = ebay_client.search_active_listings(token, q)
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return JSONResponse({"results": _filter_price_research_results(q, results)})
+    results = _filter_price_research_results(q, results)
+    results = _mark_own_listings(results, own_listing_id)
+    return JSONResponse({"results": results})
 
 
 @app.patch("/api/ebay/sales/{sale_id}")
@@ -1697,6 +1722,9 @@ def _sheets_tabs():
         inventory_rows.append([str(row.get(h, "") or "") for h in inventory_headers])
     inventory_value = sum(item["value"] for item in inventory_items if item["value"] is not None)
 
+    wishlist_headers = ["title", "team", "set_name", "target_price", "notes"]
+    wishlist_rows = [[str(item.get(h, "") or "") for h in wishlist_headers] for item in db.list_wishlist_items()]
+
     stats_summary = _compute_statistics()["summary"]
     statistics_rows = [
         ["Gesamt-Einkaufswert", str(stats_summary["total_cost"])],
@@ -1731,6 +1759,7 @@ def _sheets_tabs():
     return {
         "Karten": (card_headers, card_rows), "Käufe": (purchase_headers, purchase_rows),
         "eBay": (ebay_headers, ebay_rows), "Inventar": (inventory_headers, inventory_rows),
+        "Wunschliste": (wishlist_headers, wishlist_rows),
         "Statistiken": (["Kennzahl", "Wert"], statistics_rows),
         "Dashboard": (["Kennzahl", "Wert"], dashboard_rows),
         "Sync_Info": sync_info,
@@ -1781,7 +1810,20 @@ async def download_backup():
 @app.get("/api/app-status")
 async def app_status():
     status = db.get_app_status() or {}
-    return JSONResponse({"last_backup_at": status.get("last_backup_at")})
+    return JSONResponse({
+        "last_backup_at": status.get("last_backup_at"),
+        "last_auto_backup_at": status.get("last_auto_backup_at"),
+        "low_stock_threshold": status.get("low_stock_threshold") or 0,
+    })
+
+
+@app.put("/api/low-stock-threshold")
+async def set_low_stock_threshold(fields: dict = Body(...)):
+    threshold = fields.get("threshold")
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 0:
+        raise HTTPException(status_code=400, detail="threshold muss eine Ganzzahl >= 0 sein.")
+    updated = db.set_low_stock_threshold(threshold)
+    return JSONResponse(updated)
 
 
 @app.middleware("http")

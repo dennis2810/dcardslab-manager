@@ -291,15 +291,21 @@ function fmtEuro(value) {
     : "";
 }
 
+let lowStockThreshold = 0;
+
 async function loadInventory() {
   statusMsg.textContent = "Lädt …";
   table.style.display = "none";
   try {
-    const res = await fetch("/api/inventory");
+    const [res, statusRes] = await Promise.all([fetch("/api/inventory"), fetch("/api/app-status")]);
     const data = await res.json();
     if (!res.ok) {
       statusMsg.textContent = "Fehler: " + (data.detail || res.statusText);
       return;
+    }
+    if (statusRes.ok) {
+      const statusBody = await statusRes.json();
+      lowStockThreshold = statusBody.low_stock_threshold || 0;
     }
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
     totalValueEl.textContent = `Gesamtwert: ${fmtEuro(data.total_value ?? 0)}`;
@@ -335,6 +341,9 @@ function renderWarnings() {
   const unexplainedZero = items.filter((item) =>
     (item.quantity ?? 0) === 0 && item.ebay_status !== "Verkauft" && !item.manual_sale_channel
   );
+  const lowStock = lowStockThreshold > 0
+    ? items.filter((item) => (item.quantity ?? 0) > 0 && (item.quantity ?? 0) < lowStockThreshold)
+    : [];
 
   const warnings = [];
   if (noLocation.length) {
@@ -342,6 +351,9 @@ function renderWarnings() {
   }
   if (unexplainedZero.length) {
     warnings.push(`❓ ${unexplainedZero.length} Karte(n) mit Menge 0, aber nicht als verkauft markiert.`);
+  }
+  if (lowStock.length) {
+    warnings.push(`⚠️ ${lowStock.length} Karte(n) mit niedrigem Bestand (unter ${lowStockThreshold}).`);
   }
   for (const text of warnings) {
     const p = document.createElement("p");
