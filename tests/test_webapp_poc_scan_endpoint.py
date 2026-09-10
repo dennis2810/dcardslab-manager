@@ -49,7 +49,7 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self.batch_ids = iter(["batch-1"])
         self.card_counter = 0
 
-        def fake_insert_card(batch_id, position, fields, front_path, back_path):
+        def fake_insert_card(batch_id, position, fields, front_path, back_path, front_image_hash=None):
             self.card_counter += 1
             return {"id": f"card-{position}", "batch_id": batch_id, "position_in_batch": position}
 
@@ -139,6 +139,39 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
     def test_duplicate_check_failure_does_not_fail_the_card(self):
         self.mocks["main.db.find_duplicate_card"].side_effect = RuntimeError("cards table down")
         response = self._post_scan()
+        body = response.json()
+        ok_card = next(c for c in body["cards"] if c["number"] == 1)
+        self.assertNotIn("image_error", ok_card)
+        self.assertNotIn("possible_duplicate", ok_card)
+
+    def test_flags_photo_duplicate_when_no_text_match_but_image_hash_matches(self):
+        # Deckt den Fall ab, dass Titel/Set/Kartennummer durch einen
+        # Erkennungsfehler nicht exakt uebereinstimmen, das Foto aber (nahezu)
+        # dasselbe ist wie bei einer bereits vorhandenen Karte.
+        photo_duplicate = {"id": "card-photo-match", "title": "Andere Schreibweise", "card_no": 4}
+        with patch("main.image_hash.compute_hash", return_value="abc123abc123abc1"), \
+             patch("main.db.find_duplicate_card_by_image_hash", return_value=photo_duplicate) as mock_photo:
+            response = self._post_scan()
+        body = response.json()
+        card = next(c for c in body["cards"] if c["number"] == 1)
+        self.assertEqual(card["possible_duplicate"], {**photo_duplicate, "matched_by": "photo"})
+        # /api/scan verarbeitet alle 9 Karten des Batches parallel, daher wird
+        # die Foto-Duplikat-Pruefung pro Karte einmal aufgerufen (nicht nur einmal
+        # insgesamt wie beim manuellen Einzelkarten-Endpoint).
+        mock_photo.assert_any_call("abc123abc123abc1", exclude_card_id=None)
+        insert_kwargs = self.mocks["main.db.insert_card"].call_args.kwargs
+        self.assertEqual(insert_kwargs["front_image_hash"], "abc123abc123abc1")
+
+    def test_skips_image_hash_lookup_when_text_duplicate_already_found(self):
+        self.mocks["main.db.find_duplicate_card"].return_value = {"id": "card-existing", "card_no": 7}
+        with patch("main.image_hash.compute_hash", return_value="abc123abc123abc1"), \
+             patch("main.db.find_duplicate_card_by_image_hash") as mock_photo:
+            self._post_scan()
+        mock_photo.assert_not_called()
+
+    def test_image_hash_failure_does_not_fail_the_card(self):
+        with patch("main.image_hash.compute_hash", side_effect=RuntimeError("bad image")):
+            response = self._post_scan()
         body = response.json()
         ok_card = next(c for c in body["cards"] if c["number"] == 1)
         self.assertNotIn("image_error", ok_card)

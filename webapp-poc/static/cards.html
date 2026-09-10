@@ -156,6 +156,11 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="bulk-mark-shipped">Als versendet markieren</button>
     <button type="button" id="bulk-unmark-shipped">Versand-Markierung entfernen</button>
     <button type="button" id="bulk-create-ebay-draft">eBay-Entwürfe anlegen</button>
+    <label>Textbaustein
+      <select id="bulk-ebay-draft-template">
+        <option value="">– keiner –</option>
+      </select>
+    </label>
     <button type="button" id="bulk-print-labels">🏷️ Etiketten drucken</button>
     <label>Zu Kauf hinzufügen
       <select id="bulk-add-purchase-select">
@@ -742,12 +747,13 @@ async function bulkCreateEbayDrafts() {
     return;
   }
   bulkStatusEl.textContent = "Lege Entwürfe an …";
+  const extraNote = document.getElementById("bulk-ebay-draft-template").value;
   try {
     const results = await Promise.all(targets.map((id) =>
       fetch(`/api/cards/${encodeURIComponent(id)}/ebay-listing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ extra_note: extraNote }),
       })
     ));
     const okResults = results.filter((r) => r.ok);
@@ -806,6 +812,28 @@ async function loadPurchasesForBulkSelect() {
   }
 }
 loadPurchasesForBulkSelect();
+
+// Gleiches Einmalig-beim-Laden-Muster wie loadPurchasesForBulkSelect() oben -
+// die Dropdown-Option traegt direkt den Textbaustein-Text als Wert (statt
+// nur die ID), damit bulkCreateEbayDrafts() ihn ohne Nachschlagen als
+// extra_note mitschicken kann.
+async function loadDescriptionTemplatesForBulkSelect() {
+  const select = document.getElementById("bulk-ebay-draft-template");
+  try {
+    const res = await fetch("/api/description-templates");
+    const data = await res.json();
+    if (!res.ok) return;
+    for (const t of data.templates || []) {
+      const option = document.createElement("option");
+      option.value = t.body || "";
+      option.textContent = t.name || "";
+      select.appendChild(option);
+    }
+  } catch (err) {
+    // Dropdown bleibt dann bei "keiner" - kein Blocker fuer den Rest der Seite.
+  }
+}
+loadDescriptionTemplatesForBulkSelect();
 
 // Eine Karte kann nur einem Kauf zugeordnet sein (unique(card_id) im
 // Schema) - bereits verknuepfte Karten in der Auswahl werden uebersprungen

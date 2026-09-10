@@ -52,6 +52,8 @@ if ("serviceWorker" in navigator) {
   .price-check-results { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
   .price-check-results li { display: flex; gap: 0.5rem; align-items: baseline; }
   .price-hit { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600; }
+  .sourcing-cell { font-size: 0.85rem; white-space: nowrap; }
+  .sourcing-cell .note { color: #888; font-style: italic; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
     .no-print, button { display: none !important; }
@@ -99,6 +101,7 @@ if ("serviceWorker" in navigator) {
 
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
+    <label><input type="checkbox" id="sourcing-only-filter"> Nur Sourcing-Treffer anzeigen</label>
     <button type="button" id="toggle-form">+ Eintrag hinzufügen</button>
   </div>
 
@@ -126,6 +129,7 @@ if ("serviceWorker" in navigator) {
           <th data-key="team">Team <span class="sort-arrow"></span></th>
           <th data-key="set_name">Set <span class="sort-arrow"></span></th>
           <th data-key="target_price">Wunschpreis <span class="sort-arrow"></span></th>
+          <th>Sourcing</th>
           <th>Notiz</th>
           <th></th>
         </tr>
@@ -180,6 +184,13 @@ function fmtEuro(value) {
   return value != null && value !== ""
     ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
     : "";
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
 const statusMsg = document.getElementById("status-msg");
@@ -314,8 +325,23 @@ function sortValue(item, key) {
   return (item[key] || "").toString().toLowerCase();
 }
 
+// Ein "Treffer" ist ein automatisch gefundenes aktives eBay-Angebot (siehe
+// ebay_scheduler.run_wishlist_price_check_once()) auf oder unter dem
+// eingetragenen Wunschpreis - ohne Wunschpreis zaehlt jeder Fund als
+// Treffer, da es dann nichts zu unterschreiten gibt.
+function isSourcingHit(item) {
+  if (item.last_match_price == null) return false;
+  if (item.target_price == null || item.target_price === "") return true;
+  return Number(item.last_match_price) <= Number(item.target_price);
+}
+
+function filteredItems() {
+  if (!document.getElementById("sourcing-only-filter").checked) return allItems;
+  return allItems.filter(isSourcingHit);
+}
+
 function sortedItems() {
-  const rows = allItems.slice();
+  const rows = filteredItems().slice();
   rows.sort((a, b) => {
     const va = sortValue(a, sortKey);
     const vb = sortValue(b, sortKey);
@@ -367,11 +393,47 @@ async function runPriceCheck(item) {
   render();
 }
 
+// Zeigt das Ergebnis der automatischen Hintergrund-Preispruefung (siehe
+// ebay_scheduler.run_wishlist_price_check_once()) direkt in der Tabelle -
+// ohne manuelles Aufklappen/"Neu suchen" wie beim Pfeil-Button links. Das
+// ist die eigentliche "Sourcing-Liste": aktiv beobachten und bei Treffer
+// sofort kaufen, statt Wunschliste und Preisrecherche getrennt pruefen zu
+// muessen.
+function buildSourcingCell(item) {
+  const frag = document.createDocumentFragment();
+  if (item.last_match_price == null) {
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = item.last_price_check_at ? "Kein Treffer" : "Noch nicht geprüft";
+    frag.appendChild(note);
+    return frag;
+  }
+  if (isSourcingHit(item)) {
+    const badge = document.createElement("span");
+    badge.className = "price-hit";
+    badge.textContent = "✓ " + fmtEuro(item.last_match_price);
+    frag.appendChild(badge);
+  } else {
+    frag.appendChild(document.createTextNode(fmtEuro(item.last_match_price)));
+  }
+  if (item.last_match_url) {
+    frag.appendChild(document.createTextNode(" "));
+    const link = document.createElement("a");
+    link.href = item.last_match_url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "↗";
+    link.title = item.last_match_title || "";
+    frag.appendChild(link);
+  }
+  return frag;
+}
+
 function buildDetailRow(item) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 7;
+  td.colSpan = 8;
 
   const state = priceCheckState.get(item.id);
   if (!state || state.status === "loading") {
@@ -431,11 +493,17 @@ function render() {
   }
 
   body.innerHTML = "";
-  if (!allItems.length) {
+  if (!sorted.length) {
     table.style.display = "none";
-    empty.textContent = qInput.value.trim()
-      ? "Nichts gefunden."
-      : "Noch keine Wunschlisten-Einträge – über „+ Eintrag hinzufügen“ eine Karte notieren, die du dir wünschst.";
+    if (!allItems.length) {
+      empty.textContent = qInput.value.trim()
+        ? "Nichts gefunden."
+        : "Noch keine Wunschlisten-Einträge – über „+ Eintrag hinzufügen“ eine Karte notieren, die du dir wünschst.";
+    } else {
+      empty.textContent = document.getElementById("sourcing-only-filter").checked
+        ? "Keine Sourcing-Treffer im aktuellen Filter."
+        : "Nichts gefunden.";
+    }
     return;
   }
   table.style.display = "table";
@@ -457,11 +525,21 @@ function render() {
     toggleTd.appendChild(toggleBtn);
     tr.appendChild(toggleTd);
 
-    for (const text of [item.title, item.team || "", item.set_name || "", fmtEuro(item.target_price), item.notes || ""]) {
+    for (const text of [item.title, item.team || "", item.set_name || "", fmtEuro(item.target_price)]) {
       const td = document.createElement("td");
       td.textContent = text;
       tr.appendChild(td);
     }
+
+    const sourcingTd = document.createElement("td");
+    sourcingTd.className = "sourcing-cell";
+    sourcingTd.appendChild(buildSourcingCell(item));
+    tr.appendChild(sourcingTd);
+
+    const notesTd = document.createElement("td");
+    notesTd.textContent = item.notes || "";
+    tr.appendChild(notesTd);
+
     const actionsTd = document.createElement("td");
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -505,6 +583,11 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(loadItems, 300);
 });
 
+document.getElementById("sourcing-only-filter").addEventListener("change", () => {
+  currentPage = 0;
+  render();
+});
+
 document.getElementById("prev-page").addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);
   render();
@@ -536,9 +619,10 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Notiz"];
+  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz"];
   const rows = sortedItems().map((item) => [
-    item.title || "", item.team || "", item.set_name || "", item.target_price ?? "", item.notes || "",
+    item.title || "", item.team || "", item.set_name || "", item.target_price ?? "",
+    item.last_match_price ?? "", formatDate(item.last_price_check_at), item.notes || "",
   ]);
   downloadCsv("wunschliste.csv", headers, rows);
 });

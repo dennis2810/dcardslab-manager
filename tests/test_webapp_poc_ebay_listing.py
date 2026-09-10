@@ -80,6 +80,24 @@ class GenerateDescriptionTests(unittest.TestCase):
         self.assertNotIn("<script>", description)
         self.assertIn("A &amp; B &lt;script&gt;", description)
 
+    def test_omits_extra_note_paragraph_when_not_given(self):
+        description = ebay_listing.generate_description(_card())
+        self.assertNotIn('class="extra-note"', description)
+
+    def test_inserts_extra_note_before_the_footer(self):
+        description = ebay_listing.generate_description(_card(), extra_note="Aus meiner Sammelkarten-Sammlung.")
+        self.assertIn("Aus meiner Sammelkarten-Sammlung.", description)
+        self.assertLess(description.index("Aus meiner Sammelkarten-Sammlung."), description.index("Kombiversand"))
+
+    def test_escapes_html_in_extra_note(self):
+        description = ebay_listing.generate_description(_card(), extra_note="<script>evil()</script>")
+        self.assertNotIn("<script>evil()</script>", description)
+        self.assertIn("&lt;script&gt;", description)
+
+    def test_blank_extra_note_is_omitted_like_none(self):
+        description = ebay_listing.generate_description(_card(), extra_note="   ")
+        self.assertNotIn('class="extra-note"', description)
+
 
 class DeriveListingTypeTests(unittest.TestCase):
     def test_known_sport_is_sport(self):

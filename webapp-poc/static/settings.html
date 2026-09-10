@@ -36,6 +36,10 @@ if ("serviceWorker" in navigator) {
   input, textarea { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; font-family: inherit; }
   textarea { resize: vertical; }
   button { padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; margin-right: 0.5rem; }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .table-scroll { overflow-x: auto; }
+  .template-body-cell { max-width: 340px; white-space: pre-wrap; font-size: 0.85rem; color: #555; }
   .status { font-style: italic; color: #555; margin-top: 0.5rem; }
   .error { color: #b00020; font-weight: 600; }
   .connected { color: #1e4620; font-weight: 600; }
@@ -127,6 +131,33 @@ if ("serviceWorker" in navigator) {
     </label>
     <button type="button" id="save-sender-address-btn">Speichern</button>
     <p class="status" id="sender-address-status"></p>
+  </section>
+
+  <section id="description-templates-section">
+    <h2>Angebots-Textbausteine</h2>
+    <p>Wiederverwendbare Textbausteine für eBay-Beschreibungen (z. B. ein Hinweis für eine ganze Kartenserie) –
+      lassen sich beim Anlegen eines Angebots (einzeln auf der Kartenseite oder per Massenaktion auf der
+      Kartenübersicht) optional in die automatisch generierte Beschreibung einfügen, statt denselben Text bei
+      jeder ähnlichen Karte neu zu tippen.</p>
+    <div class="table-scroll">
+      <table id="templates-table" style="display: none;">
+        <thead><tr><th>Name</th><th>Text</th><th></th></tr></thead>
+        <tbody id="templates-body"></tbody>
+      </table>
+    </div>
+    <p id="templates-empty" class="status"></p>
+    <form id="template-form">
+      <input type="hidden" id="template-id">
+      <label>Name
+        <input type="text" id="template-name-input" placeholder="z. B. Set-Hinweis">
+      </label>
+      <label>Text
+        <textarea id="template-body-input" rows="3" placeholder="z. B. Aus meiner Sammlung, alle Karten stammen aus demselben Kauf."></textarea>
+      </label>
+      <button type="submit" id="template-form-submit">Hinzufügen</button>
+      <button type="button" id="template-form-cancel" style="display:none;">Abbrechen</button>
+      <span id="template-form-status" class="status"></span>
+    </form>
   </section>
 
 <script>
@@ -381,8 +412,138 @@ document.getElementById("save-low-stock-threshold-btn").addEventListener("click"
   }
 });
 
+const templatesTable = document.getElementById("templates-table");
+const templatesBody = document.getElementById("templates-body");
+const templatesEmpty = document.getElementById("templates-empty");
+const templateForm = document.getElementById("template-form");
+const templateIdInput = document.getElementById("template-id");
+const templateNameInput = document.getElementById("template-name-input");
+const templateBodyInput = document.getElementById("template-body-input");
+const templateFormSubmit = document.getElementById("template-form-submit");
+const templateFormStatus = document.getElementById("template-form-status");
+const templateFormCancel = document.getElementById("template-form-cancel");
+
+function resetTemplateForm() {
+  templateForm.reset();
+  templateIdInput.value = "";
+  templateFormSubmit.textContent = "Hinzufügen";
+  templateFormCancel.style.display = "none";
+  templateFormStatus.textContent = "";
+  templateFormStatus.className = "status";
+}
+
+function renderTemplates(templates) {
+  templatesBody.innerHTML = "";
+  if (!templates.length) {
+    templatesTable.style.display = "none";
+    templatesEmpty.textContent = "Noch keine Textbausteine angelegt.";
+    return;
+  }
+  templatesTable.style.display = "table";
+  templatesEmpty.textContent = "";
+  for (const t of templates) {
+    const tr = document.createElement("tr");
+    const nameTd = document.createElement("td");
+    nameTd.textContent = t.name || "";
+    tr.appendChild(nameTd);
+    const bodyTd = document.createElement("td");
+    bodyTd.className = "template-body-cell";
+    bodyTd.textContent = t.body || "";
+    tr.appendChild(bodyTd);
+    const actionsTd = document.createElement("td");
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "Bearbeiten";
+    editBtn.addEventListener("click", () => {
+      templateIdInput.value = t.id;
+      templateNameInput.value = t.name || "";
+      templateBodyInput.value = t.body || "";
+      templateFormSubmit.textContent = "Aktualisieren";
+      templateFormCancel.style.display = "inline-block";
+      templateNameInput.focus();
+    });
+    actionsTd.appendChild(editBtn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Löschen";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Textbaustein "${t.name}" wirklich löschen?`)) return;
+      try {
+        const res = await fetch(`/api/description-templates/${encodeURIComponent(t.id)}`, { method: "DELETE" });
+        if (!res.ok && res.status !== 204) {
+          const body = await res.json();
+          showToast("Fehler: " + (body.detail || res.statusText), true);
+          return;
+        }
+        showToast("Textbaustein gelöscht.");
+        loadTemplates();
+      } catch (err) {
+        showToast("Fehler: " + err, true);
+      }
+    });
+    actionsTd.appendChild(deleteBtn);
+    tr.appendChild(actionsTd);
+    templatesBody.appendChild(tr);
+  }
+}
+
+async function loadTemplates() {
+  try {
+    const res = await fetch("/api/description-templates");
+    const body = await res.json();
+    if (!res.ok) {
+      templatesEmpty.textContent = "Fehler: " + (body.detail || res.statusText);
+      return;
+    }
+    renderTemplates(body.templates || []);
+  } catch (err) {
+    templatesEmpty.textContent = "Fehler: " + err;
+  }
+}
+
+templateForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = templateNameInput.value.trim();
+  if (!name) {
+    templateFormStatus.textContent = "Bitte einen Namen eingeben.";
+    templateFormStatus.className = "error";
+    return;
+  }
+  const templateId = templateIdInput.value;
+  const fields = { name, body: templateBodyInput.value };
+  templateFormStatus.textContent = "Speichert …";
+  templateFormStatus.className = "status";
+  try {
+    const res = await fetch(
+      templateId ? `/api/description-templates/${encodeURIComponent(templateId)}` : "/api/description-templates",
+      {
+        method: templateId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      }
+    );
+    const body = await res.json();
+    if (!res.ok) {
+      templateFormStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+      templateFormStatus.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast(templateId ? "Textbaustein aktualisiert." : "Textbaustein hinzugefügt.");
+    resetTemplateForm();
+    loadTemplates();
+  } catch (err) {
+    templateFormStatus.textContent = "Fehler: " + err;
+    templateFormStatus.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+templateFormCancel.addEventListener("click", resetTemplateForm);
+
 loadSheetsStatus();
 loadBackupStatus();
+loadTemplates();
 </script>
 </body>
 </html>

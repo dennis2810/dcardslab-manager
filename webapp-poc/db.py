@@ -25,7 +25,7 @@ def update_batch_status(batch_id, status):
     get_client().table("scan_batches").update({"status": status}).eq("id", batch_id).execute()
 
 
-def insert_card(batch_id, position_in_batch, fields, front_image_path, back_image_path):
+def insert_card(batch_id, position_in_batch, fields, front_image_path, back_image_path, front_image_hash=None):
     row = {name: fields.get(name, "") for name in CARD_FIELDS}
     row.update({
         "batch_id": batch_id,
@@ -35,6 +35,11 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
         "recognition_status": fields.get("status", ""),
         "front_image_path": front_image_path,
         "back_image_path": back_image_path,
+        # Perzeptueller Bild-Hash (dHash, siehe image_hash.py) des
+        # Vorderseitenfotos - fuer die Foto-basierte Duplikat-Erkennung
+        # (find_duplicate_card_by_image_hash()) zusaetzlich zum bestehenden
+        # Text-Abgleich (find_duplicate_card()).
+        "front_image_hash": front_image_hash,
     })
     response = get_client().table("cards").insert(row).execute()
     return response.data[0]
@@ -89,6 +94,34 @@ def find_duplicate_card(title, set_name, card_number):
         .limit(1).execute()
     )
     return response.data[0] if response.data else None
+
+
+def find_duplicate_card_by_image_hash(image_hash_value, exclude_card_id=None, max_distance=8):
+    # Foto-basierte Ergaenzung zu find_duplicate_card() oben - faengt
+    # Duplikate ab, bei denen Titel/Set/Kartennummer durch einen OCR-/KI-
+    # Erkennungsfehler nicht exakt uebereinstimmen, das Foto aber (nahezu)
+    # dasselbe ist. Client-seitiger Distanzvergleich statt SQL, da Supabase/
+    # PostgREST keinen Hamming-Distanz-Operator anbietet - fuer eine
+    # ueberschaubare Sammlung (kein Massen-Retail-Bestand) unproblematisch.
+    if not image_hash_value:
+        return None
+    from image_hash import hamming_distance
+
+    query = get_client().table("cards").select("id,title,set_name,card_number,card_no,front_image_hash")
+    if exclude_card_id:
+        query = query.neq("id", exclude_card_id)
+    response = query.execute()
+
+    best = None
+    best_distance = None
+    for row in response.data:
+        row_hash = row.get("front_image_hash")
+        if not row_hash:
+            continue
+        distance = hamming_distance(image_hash_value, row_hash)
+        if distance <= max_distance and (best_distance is None or distance < best_distance):
+            best, best_distance = row, distance
+    return best
 
 
 def get_card(card_id):
@@ -615,6 +648,15 @@ def get_ebay_sale(sale_id):
     return response.data[0] if response.data else None
 
 
+def set_ebay_sale_buyer_username(sale_id, username):
+    # Eigene Funktion statt update_ebay_sale() (dessen EBAY_SALE_WRITABLE_FIELDS
+    # bewusst nur die manuell editierbaren Felder erlaubt) - buyer_username
+    # kommt sonst nur aus sync_ebay_sales(), hier zusaetzlich als Backfill
+    # fuer bereits vor diesem Feld synchronisierte Verkaeufe (siehe
+    # GET /api/ebay/sales/{id}/shipping-address).
+    get_client().table("ebay_sales").update({"buyer_username": username}).eq("id", sale_id).execute()
+
+
 def get_sale_for_card(card_id):
     response = (
         get_client().table("ebay_sales").select("*")
@@ -923,11 +965,65 @@ def update_wishlist_item(item_id, fields):
     return response.data[0] if response.data else None
 
 
+def list_wishlist_items_due_for_price_check(limit=3, max_age_days=1):
+    # Sourcing-Liste: gleiches Muster wie list_listings_due_for_price_research()
+    # fuer bereits veroeffentlichte eigene Angebote - ein nie geprueftes
+    # Eintrag hat Vorrang vor laengst faelligen. Kuerzeres Zeitfenster als
+    # dort (1 statt 7 Tage), da ein guenstiges Kaufangebot schnell weg sein
+    # kann - Kauf-Entscheidungen sind zeitkritischer als reine
+    # Marktpreis-Beobachtung.
+    from datetime import datetime, timedelta, timezone
+
+    response = get_client().table("wishlist_items").select("*").execute()
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    due = [
+        row for row in response.data
+        if not row.get("last_price_check_at") or row["last_price_check_at"] <= cutoff_iso
+    ]
+    due.sort(key=lambda row: row.get("last_price_check_at") or "")
+    return due[:limit]
+
+
+def update_wishlist_price_check(item_id, fields):
+    get_client().table("wishlist_items").update(fields).eq("id", item_id).execute()
+
+
 def delete_wishlist_item(item_id):
     response = get_client().table("wishlist_items").select("id").eq("id", item_id).execute()
     if not response.data:
         return None
     get_client().table("wishlist_items").delete().eq("id", item_id).execute()
+    return response.data[0]
+
+
+DESCRIPTION_TEMPLATE_FIELDS = ["name", "body"]
+
+
+def list_description_templates():
+    response = get_client().table("description_templates").select("*").order("created_at", desc=True).execute()
+    return response.data
+
+
+def create_description_template(fields):
+    row = {name: fields[name] for name in DESCRIPTION_TEMPLATE_FIELDS if name in fields}
+    response = get_client().table("description_templates").insert(row).execute()
+    return response.data[0]
+
+
+def update_description_template(template_id, fields):
+    row = {name: fields[name] for name in DESCRIPTION_TEMPLATE_FIELDS if name in fields}
+    if not row:
+        response = get_client().table("description_templates").select("*").eq("id", template_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("description_templates").update(row).eq("id", template_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_description_template(template_id):
+    response = get_client().table("description_templates").select("id").eq("id", template_id).execute()
+    if not response.data:
+        return None
+    get_client().table("description_templates").delete().eq("id", template_id).execute()
     return response.data[0]
 
 

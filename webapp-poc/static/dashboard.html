@@ -294,10 +294,10 @@ let lastStats = null;
 
 async function load() {
   try {
-    const [statsRes, invRes, cardsRes, geplantRes, publishedRes, sheetsRes, appStatusRes] = await Promise.all([
+    const [statsRes, invRes, cardsRes, geplantRes, publishedRes, sheetsRes, appStatusRes, wishlistRes] = await Promise.all([
       fetch("/api/statistics"), fetch("/api/inventory"), fetch("/api/cards"),
       fetch("/api/ebay/listings?status=Geplant"), fetch("/api/ebay/listings?status=Veroeffentlicht"),
-      fetch("/api/sheets/status"), fetch("/api/app-status"),
+      fetch("/api/sheets/status"), fetch("/api/app-status"), fetch("/api/wishlist"),
     ]);
     const stats = await statsRes.json();
     const inventory = await invRes.json();
@@ -306,6 +306,7 @@ async function load() {
     const published = await publishedRes.json();
     const sheets = await sheetsRes.json();
     const appStatus = await appStatusRes.json();
+    const wishlist = await wishlistRes.json();
     const ebayStatus = await loadEbayStatus();
     dashboardGoal = await loadGoal();
     lastStats = stats;
@@ -314,7 +315,7 @@ async function load() {
     renderConnectionAmpel(sheets, ebayStatus);
     renderLastUpdates(sheets, appStatus);
     renderGoal();
-    renderSummary(stats, inventory, published.listings || []);
+    renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
     renderActivity(stats, cardsBody.cards || []);
   } catch (err) {
@@ -397,10 +398,22 @@ function hasPriceAlert(listing) {
   return Math.abs(diffPct) >= 20;
 }
 
-function renderSummary(stats, inventory, publishedListings) {
+// Gleiche Logik wie wishlist.html's isSourcingHit() - dupliziert, kein
+// Shared-JS-Modul zwischen den statischen Seiten. Ein "Treffer" ist ein
+// automatisch gefundenes aktives eBay-Angebot (siehe
+// ebay_scheduler.run_wishlist_price_check_once()) auf oder unter dem
+// eingetragenen Wunschpreis.
+function isSourcingHit(item) {
+  if (item.last_match_price == null) return false;
+  if (item.target_price == null || item.target_price === "") return true;
+  return Number(item.last_match_price) <= Number(item.target_price);
+}
+
+function renderSummary(stats, inventory, publishedListings, wishlistItems) {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const monthBucket = (stats.monthly || []).find((m) => m.month === currentMonth) || { revenue: 0, profit: 0 };
   const priceAlertCount = publishedListings.filter(hasPriceAlert).length;
+  const sourcingHitCount = (wishlistItems || []).filter(isSourcingHit).length;
 
   const cards = document.getElementById("summary-cards");
   cards.style.display = "flex";
@@ -415,6 +428,7 @@ function renderSummary(stats, inventory, publishedListings) {
     ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count), "statistics-sales.html"],
     ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count), "cards.html"],
     ["Preis-Alarme (eBay)", String(priceAlertCount), "ebay.html"],
+    ["Sourcing-Treffer (Wunschliste)", String(sourcingHitCount), "wishlist.html"],
   ];
   cards.innerHTML = "";
   for (const [label, value, href] of entries) {

@@ -311,3 +311,35 @@ alter table app_status add column if not exists last_auto_backup_at timestamptz;
 -- Käufer-Historie (Wiederholungskäufer erkennen) ohne personenbezogene
 -- Adressdaten dauerhaft vorzuhalten.
 alter table ebay_sales add column if not exists buyer_username text default '';
+
+-- Migration (2026-09-10): Automatische Preispruefung fuer Wunschlisten-
+-- Eintraege (Sourcing-Liste) - gleiches Prinzip wie last_price_research_at
+-- auf ebay_listings fuer bereits veroeffentlichte eigene Angebote, hier
+-- aber zusaetzlich mit dem guenstigsten gefundenen Treffer selbst
+-- (last_match_*), damit wishlist.html ihn ohne manuelles "Neu suchen"
+-- direkt anzeigen kann.
+alter table wishlist_items add column if not exists last_price_check_at timestamptz;
+alter table wishlist_items add column if not exists last_match_price numeric;
+alter table wishlist_items add column if not exists last_match_title text default '';
+alter table wishlist_items add column if not exists last_match_url text default '';
+
+-- Migration (2026-09-10): Wiederverwendbare Textbausteine fuer eBay-
+-- Beschreibungen (z.B. ein Hinweis fuer eine ganze Set-Serie) - werden beim
+-- Anlegen eines Angebots optional in die automatisch generierte
+-- Beschreibung eingefuegt (siehe ebay_listing.generate_description()),
+-- statt denselben Text bei jeder aehnlichen Karte neu zu tippen. Eigene
+-- Tabelle statt an eine Karte/ein Angebot gebunden, da ein Baustein ueber
+-- viele Angebote hinweg wiederverwendet wird.
+create table if not exists description_templates (
+    id          uuid primary key default gen_random_uuid(),
+    name        text not null default '',
+    body        text not null default '',
+    created_at  timestamptz not null default now()
+);
+
+-- Migration (2026-09-10): Perceptual-Hash (dHash) des Vorderseitenfotos je
+-- Karte, fuer die Foto-basierte Duplikat-Erkennung beim Scannen - ergaenzt
+-- den bestehenden exakten Titel/Set/Kartennummer-Abgleich (find_duplicate_card)
+-- um Faelle, in denen die Texterkennung ein Feld falsch liest, das Foto aber
+-- (nahezu) identisch zu einer bereits vorhandenen Karte ist.
+alter table cards add column if not exists front_image_hash text;

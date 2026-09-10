@@ -650,7 +650,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale);
-    renderManualSaleSection(card.manual_sale, card.purchase);
+    renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
       card.ebay_listing?.ebay_listing_id
@@ -1205,13 +1205,26 @@ function renderInventoryRow(item) {
 // POST/PATCH/DELETE /api/manual-sales), analog zu renderSaleStats() fuer
 // eBay-Verkaeufe, aber mit editierbarem Kanal/Preis/Datum statt nur
 // nachtraeglich anpassbaren Gebuehren.
-function renderManualSaleSection(manualSale, purchase) {
+function renderManualSaleSection(manualSale, purchase, ebayListing) {
   const section = document.getElementById("manual-sale-section");
   if (manualSale) {
     renderManualSaleReadonly(section, manualSale, purchase);
+  } else if (ebayListing && ebayListing.status === "Verkauft") {
+    // Schon ueber eBay verkauft - ein zusaetzlicher manueller Verkauf fuer
+    // dieselbe Karte waere widerspruechlich, daher hier ausgegraut statt
+    // des editierbaren Formulars.
+    renderManualSaleDisabled(section);
   } else {
     renderManualSaleForm(section, null);
   }
+}
+
+function renderManualSaleDisabled(section) {
+  section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
+  const hint = document.createElement("p");
+  hint.className = "workflow-hint";
+  hint.textContent = "Diese Karte wurde bereits über eBay verkauft – ein zusätzlicher manueller Verkauf ist hier nicht möglich.";
+  section.appendChild(hint);
 }
 
 function renderManualSaleReadonly(section, sale, purchase) {
@@ -1859,6 +1872,25 @@ async function renderEbaySection(listing, purchase, sale, manualSale) {
 }
 
 function renderEbayCreateForm(section) {
+  const templateLabel = document.createElement("label");
+  templateLabel.textContent = "Textbaustein ";
+  templateLabel.style.marginRight = "0.6rem";
+  const templateSelect = document.createElement("select");
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "– keiner –";
+  templateSelect.appendChild(blankOpt);
+  fetch("/api/description-templates").then((res) => res.json()).then((data) => {
+    for (const t of data.templates || []) {
+      const opt = document.createElement("option");
+      opt.value = t.body || "";
+      opt.textContent = t.name || "";
+      templateSelect.appendChild(opt);
+    }
+  }).catch(() => {});
+  templateLabel.appendChild(templateSelect);
+  section.appendChild(templateLabel);
+
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = "eBay-Angebot erstellen";
@@ -1874,7 +1906,7 @@ function renderEbayCreateForm(section) {
       const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/ebay-listing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ extra_note: templateSelect.value }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -2373,6 +2405,7 @@ function renderSaleStats(purchase, sale) {
   const ebayFees = Number(sale.ebay_fees || 0);
   const rows = [
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
+    ["Käufer (eBay)", sale.buyer_username || "–", "sale-buyer-dd"],
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
     ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
@@ -2401,11 +2434,59 @@ function renderSaleStats(purchase, sale) {
   }
   const wrapper = document.createElement("div");
   wrapper.className = "ebay-readonly sale-stats";
-  for (const [label, value] of rows) {
+  for (const [label, value, id] of rows) {
     const dt = document.createElement("dt"); dt.textContent = label; dl.appendChild(dt);
-    const dd = document.createElement("dd"); dd.textContent = value; dl.appendChild(dd);
+    const dd = document.createElement("dd"); dd.textContent = value; if (id) dd.id = id; dl.appendChild(dd);
   }
   wrapper.appendChild(dl);
+
+  // Kaeufername ist seit dem automatischen Sync bekannt (sync_ebay_sales()),
+  // bei aelteren, schon vorher synchronisierten Verkaeufen aber ggf. noch
+  // leer - dieser Button holt Kaeufername + Versandadresse einmalig direkt
+  // von eBay nach (gleicher Endpunkt wie shipping.html's Etikettendruck) und
+  // traegt den Kaeufernamen dabei serverseitig nach (siehe
+  // GET /api/ebay/sales/{id}/shipping-address). Die Adresse selbst wird
+  // bewusst nicht gespeichert, nur hier zur Ansicht angezeigt.
+  const buyerInfoBlock = document.createElement("div");
+  buyerInfoBlock.className = "tracking-block";
+  const loadBuyerBtn = document.createElement("button");
+  loadBuyerBtn.type = "button";
+  loadBuyerBtn.textContent = "Käufer-/Versanddaten von eBay laden";
+  const buyerInfoStatus = document.createElement("span");
+  loadBuyerBtn.addEventListener("click", async () => {
+    loadBuyerBtn.disabled = true;
+    buyerInfoStatus.textContent = "Lädt von eBay …";
+    buyerInfoStatus.className = "";
+    try {
+      const res = await fetch(`/api/ebay/sales/${encodeURIComponent(sale.id)}/shipping-address`);
+      const body = await res.json();
+      if (!res.ok) {
+        buyerInfoStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+        buyerInfoStatus.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      const buyerDd = document.getElementById("sale-buyer-dd");
+      if (buyerDd) buyerDd.textContent = body.buyer_username || "–";
+      const addr = body.contactAddress || {};
+      const addressLines = [
+        body.fullName, addr.addressLine1, addr.addressLine2,
+        [addr.postalCode, addr.city].filter(Boolean).join(" "),
+        [addr.stateOrProvince, addr.countryCode].filter(Boolean).join(" "),
+      ].filter(Boolean);
+      buyerInfoStatus.textContent = addressLines.length ? addressLines.join(", ") : "Keine Versandadresse gefunden.";
+      buyerInfoStatus.className = "";
+    } catch (err) {
+      buyerInfoStatus.textContent = "Fehler: " + err;
+      buyerInfoStatus.className = "error";
+      showToast("Fehler: " + err, true);
+    } finally {
+      loadBuyerBtn.disabled = false;
+    }
+  });
+  buyerInfoBlock.appendChild(loadBuyerBtn);
+  buyerInfoBlock.appendChild(buyerInfoStatus);
+  wrapper.appendChild(buyerInfoBlock);
 
   const shippingCostP = document.createElement("p");
   shippingCostP.className = "fee-input-row";

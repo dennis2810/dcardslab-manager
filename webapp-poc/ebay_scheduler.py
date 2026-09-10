@@ -117,8 +117,67 @@ def run_price_research_once():
                 logger.exception("Konnte last_price_research_at nicht setzen fuer Angebot %s", listing.get("id"))
 
 
+WISHLIST_PRICE_CHECK_BATCH_SIZE = 3
+WISHLIST_PRICE_CHECK_MAX_AGE_DAYS = 1
+
+
+def run_wishlist_price_check_once():
+    # Sourcing-Unterstuetzung: sucht fuer ein paar faellige Wunschlisten-
+    # Eintraege aktive eBay-Angebote (gleiche Buy/Browse-API wie
+    # run_price_research_once() oben) und merkt sich den guenstigsten
+    # Treffer direkt am Eintrag - wishlist.html zeigt ihn dann ohne
+    # manuelles "Neu suchen" sofort in der Tabelle, und ein Dashboard-KPI
+    # fasst Treffer unter dem Wunschpreis zusammen ("aktiv beobachten und
+    # bei Preis X kaufen" statt Wunschliste/Preisrecherche getrennt pruefen
+    # zu muessen).
+    try:
+        due = db.list_wishlist_items_due_for_price_check(
+            limit=WISHLIST_PRICE_CHECK_BATCH_SIZE, max_age_days=WISHLIST_PRICE_CHECK_MAX_AGE_DAYS
+        )
+    except Exception:
+        logger.exception("Konnte faellige Wunschlisten-Eintraege fuer die Preispruefung nicht laden")
+        return
+    if not due:
+        return
+
+    try:
+        token = ebay_client.get_application_access_token()
+    except Exception:
+        logger.exception("Konnte keinen Application-Token fuer die Wunschlisten-Preispruefung holen")
+        return
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for item in due:
+        fields = {
+            "last_price_check_at": now_iso,
+            "last_match_price": None, "last_match_title": "", "last_match_url": "",
+        }
+        try:
+            query = " ".join(p for p in [item.get("title"), item.get("team"), item.get("set_name")] if p).strip()
+            if query:
+                results = ebay_client.search_active_listings(token, query)
+                priced = [r for r in results if r.get("price") is not None]
+                if priced:
+                    cheapest = min(priced, key=lambda r: r["price"])
+                    fields["last_match_price"] = cheapest["price"]
+                    fields["last_match_title"] = cheapest.get("title", "")
+                    fields["last_match_url"] = cheapest.get("item_web_url", "")
+        except Exception:
+            logger.exception("Preispruefung fehlgeschlagen für Wunschlisten-Eintrag %s", item.get("id"))
+        finally:
+            # Auch bei Fehlschlag/leerem Ergebnis gesetzt, damit ein
+            # dauerhaft erfolgloser Eintrag nicht bei jedem Takt erneut
+            # versucht wird, sondern regulaer am naechsten Tag - gleiches
+            # Prinzip wie mark_price_research_checked() oben.
+            try:
+                db.update_wishlist_price_check(item["id"], fields)
+            except Exception:
+                logger.exception("Konnte Preispruefungs-Ergebnis nicht speichern für Wunschlisten-Eintrag %s", item.get("id"))
+
+
 async def run_forever(publish_fn):
     while True:
         run_once(publish_fn)
         run_price_research_once()
+        run_wishlist_price_check_once()
         await asyncio.sleep(INTERVAL_SECONDS)

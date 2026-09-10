@@ -87,6 +87,30 @@ class InsertCardTests(unittest.TestCase):
         self.assertIsNone(row["front_image_path"])
         self.assertIsNone(row["back_image_path"])
 
+    def test_stores_front_image_hash_when_given(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, "p.jpg", "b.jpg", front_image_hash="abcd1234abcd1234")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["front_image_hash"], "abcd1234abcd1234")
+
+    def test_front_image_hash_defaults_to_none(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, None, None)
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["front_image_hash"])
+
 
 class ListCardsTests(unittest.TestCase):
     def test_returns_all_cards_newest_first(self):
@@ -436,6 +460,60 @@ class FindDuplicateCardTests(unittest.TestCase):
         chain.limit.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.find_duplicate_card("Karte 1", "Set A", "5")
+        self.assertIsNone(result)
+
+
+class FindDuplicateCardByImageHashTests(unittest.TestCase):
+    def test_returns_none_when_hash_is_blank(self):
+        with patch("db.get_client") as mock_get_client:
+            result = db.find_duplicate_card_by_image_hash("")
+        self.assertIsNone(result)
+        mock_get_client.assert_not_called()
+
+    def test_returns_closest_match_within_threshold(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            # Distanz zu "0000000000000000": card-1 = 1 Bit (...0001),
+            # card-2 = 3 Bit (...0111) - card-1 ist der naehere Treffer.
+            {"id": "card-1", "front_image_hash": "0000000000000001"},
+            {"id": "card-2", "front_image_hash": "0000000000000007"},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card_by_image_hash("0000000000000000", max_distance=8)
+        self.assertEqual(result["id"], "card-1")
+
+    def test_returns_none_when_nothing_within_threshold(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "front_image_hash": "ffffffffffffffff"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card_by_image_hash("0000000000000000", max_distance=8)
+        self.assertIsNone(result)
+
+    def test_excludes_given_card_id(self):
+        # Die eigentliche Filterung passiert serverseitig (PostgREST) - hier
+        # wird nur geprueft, dass .neq() ueberhaupt mit den richtigen
+        # Argumenten aufgerufen wird, wenn eine eigene Karten-ID (z.B. beim
+        # nachtraeglichen Ersetzen eines Fotos) ausgeschlossen werden soll.
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-2", "front_image_hash": "0000000000000000"}]
+        mock_client.table.return_value.select.return_value.neq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card_by_image_hash("0000000000000000", exclude_card_id="card-1")
+        self.assertEqual(result["id"], "card-2")
+        mock_client.table.return_value.select.return_value.neq.assert_called_once_with("id", "card-1")
+
+    def test_returns_none_when_no_rows_have_a_hash(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "card-1", "front_image_hash": None}, {"id": "card-2", "front_image_hash": ""}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.find_duplicate_card_by_image_hash("0000000000000000")
         self.assertIsNone(result)
 
 
@@ -1397,6 +1475,15 @@ class GetEbaySaleTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class SetEbaySaleBuyerUsernameTests(unittest.TestCase):
+    def test_writes_username_for_sale(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.set_ebay_sale_buyer_username("sale-1", "kartenfan99")
+        mock_client.table.return_value.update.assert_called_once_with({"buyer_username": "kartenfan99"})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "sale-1")
+
+
 class GetSaleForCardTests(unittest.TestCase):
     def test_returns_most_recent_sale(self):
         mock_client = MagicMock()
@@ -1876,6 +1963,124 @@ class DeleteWishlistItemTests(unittest.TestCase):
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.delete_wishlist_item("does-not-exist")
+        self.assertIsNone(result)
+
+
+class ListWishlistItemsDueForPriceCheckTests(unittest.TestCase):
+    def test_never_checked_item_comes_before_long_checked_one(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": "2020-01-01T00:00:00+00:00"},
+            {"id": "w2", "last_price_check_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2", "w1"])
+
+    def test_filters_out_recently_checked_item(self):
+        from datetime import datetime, timezone
+
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "w2", "last_price_check_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2"])
+
+    def test_respects_limit(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": f"w{i}", "last_price_check_at": None} for i in range(5)]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check(limit=2)
+        self.assertEqual(len(result), 2)
+
+
+class UpdateWishlistPriceCheckTests(unittest.TestCase):
+    def test_writes_match_fields_for_item(self):
+        mock_client = MagicMock()
+        fields = {
+            "last_price_check_at": "2026-09-10T12:00:00+00:00",
+            "last_match_price": 9.5, "last_match_title": "Musterkarte", "last_match_url": "https://ebay.de/x",
+        }
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_price_check("w1", fields)
+        mock_client.table.return_value.update.assert_called_once_with(fields)
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "w1")
+
+
+class ListDescriptionTemplatesTests(unittest.TestCase):
+    def test_returns_all_templates_ordered_by_created_at_desc(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1", "name": "Set-Hinweis", "body": "Text"}]
+        mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_description_templates()
+        self.assertEqual(result, [{"id": "t1", "name": "Set-Hinweis", "body": "Text"}])
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with(
+            "created_at", desc=True
+        )
+
+
+class CreateDescriptionTemplateTests(unittest.TestCase):
+    def test_inserts_row(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "description_templates", [{"id": "t1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_description_template({"name": "Set-Hinweis", "body": "Aus meiner Sammlung."})
+        self.assertEqual(result["id"], "t1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["name"], "Set-Hinweis")
+        self.assertEqual(row["body"], "Aus meiner Sammlung.")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "description_templates", [{"id": "t1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_description_template({"name": "x", "not_a_column": "y"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+
+class UpdateDescriptionTemplateTests(unittest.TestCase):
+    def test_updates_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1", "name": "Neuer Name"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_description_template("t1", {"name": "Neuer Name"})
+        self.assertEqual(result["name"], "Neuer Name")
+        mock_client.table.return_value.update.assert_called_once_with({"name": "Neuer Name"})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "t1")
+
+
+class DeleteDescriptionTemplateTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "t1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_description_template("t1")
+        self.assertEqual(result, {"id": "t1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "t1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_description_template("does-not-exist")
         self.assertIsNone(result)
 
 
