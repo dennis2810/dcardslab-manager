@@ -266,5 +266,21 @@ class LowStockThresholdEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class RunBackupNowEndpointTests(unittest.TestCase):
+    def test_triggers_backup_and_returns_timestamp(self):
+        with patch("main.backup.run_backup_now") as mock_run, \
+             patch("main.db.get_app_status", return_value={"last_auto_backup_at": "2026-09-10T12:00:00+00:00"}):
+            response = client.post("/api/backup/run-now")
+        self.assertEqual(response.status_code, 200)
+        mock_run.assert_called_once()
+        self.assertEqual(response.json()["last_auto_backup_at"], "2026-09-10T12:00:00+00:00")
+
+    def test_returns_502_when_backup_fails(self):
+        with patch("main.backup.run_backup_now", side_effect=RuntimeError("bucket down")):
+            response = client.post("/api/backup/run-now")
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("bucket down", response.json()["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()

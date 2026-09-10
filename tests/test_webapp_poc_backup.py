@@ -141,5 +141,29 @@ class RunScheduledBackupOnceTests(unittest.TestCase):
         mock_record.assert_not_called()
 
 
+class RunBackupNowTests(unittest.TestCase):
+    # Manuelles Antriggern (Einstellungen-Button) - anders als
+    # run_scheduled_backup_once() bewusst OHNE den _is_backup_due()-Gate,
+    # da ein expliziter Klick nicht durch den 7-Tage-Automatik-Rhythmus
+    # blockiert werden soll.
+    def test_uploads_regardless_of_last_backup_time(self):
+        recent = datetime.now(timezone.utc).isoformat()
+        with patch("backup.db.get_app_status", return_value={"last_auto_backup_at": recent}), \
+             patch("backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("backup.storage.upload_backup") as mock_upload, \
+             patch("backup.storage.prune_old_backups") as mock_prune, \
+             patch("backup.db.record_auto_backup") as mock_record:
+            backup.run_backup_now()
+        mock_upload.assert_called_once()
+        mock_prune.assert_called_once()
+        mock_record.assert_called_once()
+
+    def test_propagates_errors_to_caller(self):
+        with patch("backup.build_backup_zip", return_value=b"fake-zip-bytes"), \
+             patch("backup.storage.upload_backup", side_effect=RuntimeError("bucket down")):
+            with self.assertRaises(RuntimeError):
+                backup.run_backup_now()
+
+
 if __name__ == "__main__":
     unittest.main()

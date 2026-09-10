@@ -101,6 +101,7 @@ if ("serviceWorker" in navigator) {
       ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt
       (die letzten 4 Wochen werden aufbewahrt).</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
+    <button type="button" id="run-backup-now-btn">Jetzt automatisches Backup starten</button>
     <p class="status" id="last-backup-status"></p>
     <p class="status" id="last-auto-backup-status"></p>
   </section>
@@ -281,6 +282,32 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
     syncStatusEl.textContent = "Fehler: " + err;
     syncStatusEl.className = "error";
     showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("run-backup-now-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("run-backup-now-btn");
+  const statusEl = document.getElementById("last-auto-backup-status");
+  btn.disabled = true;
+  statusEl.textContent = "Sichert …";
+  statusEl.className = "status";
+  try {
+    const res = await fetch("/api/backup/run-now", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast("Automatisches Backup erstellt.");
+    loadBackupStatus();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    btn.disabled = false;
   }
 });
 

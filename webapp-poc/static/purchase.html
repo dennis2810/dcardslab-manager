@@ -37,6 +37,8 @@ if ("serviceWorker" in navigator) {
   .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
+  .pending-delete { opacity: 0.5; }
+  .pending-delete-status { font-size: 0.85em; color: #555; margin-right: 0.4rem; }
   .error { color: #b00020; font-weight: 600; }
   .receipt-section { margin-top: 2rem; }
   #receipt-upload { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
@@ -133,6 +135,60 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Verzoegertes Loeschen (wie bei Gmail): statt sofort zu loeschen, laeuft
+// erst ein kurzer Countdown mit "Rueckgaengig" - erst danach geht der
+// eigentliche DELETE-Request raus. Vermeidet ein "echtes" Nachtraeglich-
+// Wiederherstellen (Neuanlegen mit denselben Daten), das wegen der
+// verknuepften Karten-Zuordnung ohnehin nicht verlustfrei moeglich waere -
+// solange nichts tatsaechlich geloescht wurde, gibt es auch nichts
+// wiederherzustellen. Gleiches Muster wie card.html.
+const DELETE_GRACE_SECONDS = 6;
+
+function scheduleDelayedDelete({ row, deleteBtn, actionsTd, label, commit }) {
+  row.classList.add("pending-delete");
+  deleteBtn.hidden = true;
+
+  const statusSpan = document.createElement("span");
+  statusSpan.className = "pending-delete-status";
+  const undoBtn = document.createElement("button");
+  undoBtn.type = "button";
+  undoBtn.textContent = "Rückgängig";
+  actionsTd.append(statusSpan, undoBtn);
+
+  let remaining = DELETE_GRACE_SECONDS;
+  const updateStatus = () => { statusSpan.textContent = `Wird in ${remaining}s gelöscht … `; };
+  updateStatus();
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  function finishCountdown() {
+    clearInterval(tick);
+    statusSpan.remove();
+    undoBtn.remove();
+  }
+
+  const timeout = setTimeout(async () => {
+    finishCountdown();
+    try {
+      await commit();
+      showToast(`${label} gelöscht.`);
+    } catch (err) {
+      row.classList.remove("pending-delete");
+      deleteBtn.hidden = false;
+      showToast("Fehler: " + err.message, true);
+    }
+  }, DELETE_GRACE_SECONDS * 1000);
+
+  undoBtn.addEventListener("click", () => {
+    clearTimeout(timeout);
+    finishCountdown();
+    row.classList.remove("pending-delete");
+    deleteBtn.hidden = false;
+  });
 }
 
 const FIELDS = [
@@ -251,7 +307,23 @@ function render(purchase) {
   deleteBtn.type = "button";
   deleteBtn.id = "delete-btn";
   deleteBtn.textContent = "Kauf löschen";
-  deleteBtn.addEventListener("click", onDeletePurchase);
+  deleteBtn.title = "Verknüpfte Karten bleiben erhalten, nur die Zuordnung geht verloren.";
+  deleteBtn.addEventListener("click", () => {
+    scheduleDelayedDelete({
+      row: form,
+      deleteBtn,
+      actionsTd: actions,
+      label: "Kauf",
+      commit: async () => {
+        const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}`, { method: "DELETE" });
+        if (!res.ok && res.status !== 204) {
+          const body = await res.json();
+          throw new Error(body.detail || res.statusText);
+        }
+        location.href = "purchases.html";
+      },
+    });
+  });
   actions.appendChild(deleteBtn);
   form.appendChild(actions);
   const statusP = document.createElement("p");
@@ -434,21 +506,6 @@ form.addEventListener("submit", async (ev) => {
     showToast("Fehler: " + err, true);
   }
 });
-
-async function onDeletePurchase() {
-  if (!confirm("Diesen Kauf wirklich löschen? Verknüpfte Karten bleiben erhalten, nur die Zuordnung geht verloren.")) return;
-  try {
-    const res = await fetch(`/api/purchases/${encodeURIComponent(purchaseId)}`, { method: "DELETE" });
-    if (!res.ok && res.status !== 204) {
-      const body = await res.json();
-      alert("Fehler beim Löschen: " + (body.detail || res.statusText));
-      return;
-    }
-    location.href = "purchases.html";
-  } catch (err) {
-    alert("Fehler beim Löschen: " + err);
-  }
-}
 
 async function onRemoveItem(itemId) {
   if (!confirm("Diese Karte aus dem Kauf entfernen?")) return;

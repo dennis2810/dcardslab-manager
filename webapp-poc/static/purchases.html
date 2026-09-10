@@ -48,6 +48,9 @@ if ("serviceWorker" in navigator) {
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
   tr.row:hover { background: var(--hover-bg); }
+  /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
+     makeRowKeyboardNavigable()). */
+  tr.row:focus { background: var(--hover-bg); outline: 2px solid #8ab4f8; outline-offset: -2px; }
   .expand-btn { border: none; background: none; cursor: pointer; font-size: 0.9rem; padding: 0 0.4rem; }
   tr.detail-row { cursor: default; }
   tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
@@ -64,6 +67,16 @@ if ("serviceWorker" in navigator) {
     .no-print { display: none !important; }
   }
   .table-scroll { overflow-x: auto; }
+  /* Feste, gleiche Spaltenbreiten fuer Plattform-Auswertung und
+     Verkaeufer-Historie - beide 4-spaltig (Name/Anzahl/Betrag/Betrag),
+     sonst sizen sich table-layout: auto's Spalten unabhaengig auf den
+     jeweils laengsten Zellinhalt und die Tabellen stehen nicht bündig
+     untereinander (gleiches Muster wie statistics.html's .ranking-table). */
+  .ranking-table { table-layout: fixed; }
+  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 40%; }
+  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
+  .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
+  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
   [hidden] { display: none !important; }
   /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
      Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
@@ -104,7 +117,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Plattform-Auswertung (Einkauf)</h2>
   <div class="table-scroll">
-    <table id="platform-ranking-table" style="display: none;">
+    <table id="platform-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
         <tbody id="platform-ranking-body"></tbody>
       </table>
@@ -113,7 +126,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Verkäufer-Historie</h2>
   <div class="table-scroll">
-    <table id="seller-history-table" style="display: none;">
+    <table id="seller-history-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Verkäufer</th><th>Käufe</th><th>Summe (inkl. Versand)</th><th>Ø pro Kauf</th></tr></thead>
         <tbody id="seller-history-body"></tbody>
       </table>
@@ -226,6 +239,32 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Macht eine Tabellenzeile per Tastatur bedienbar - Tab fokussiert sie
+// (tabIndex=0), Pfeil hoch/runter wandert zur Nachbarzeile, Enter loest
+// dieselbe Aktion wie ein Klick aus (row.click()). Ergaenzt die bereits
+// bestehende Maus-Bedienung, ersetzt sie nicht.
+function makeRowKeyboardNavigable(row) {
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      row.click();
+    } else if (ev.key === "ArrowDown") {
+      const next = row.nextElementSibling;
+      if (next) {
+        ev.preventDefault();
+        next.focus();
+      }
+    } else if (ev.key === "ArrowUp") {
+      const prev = row.previousElementSibling;
+      if (prev) {
+        ev.preventDefault();
+        prev.focus();
+      }
+    }
+  });
 }
 
 const PAGE_SIZE = 40;
@@ -565,6 +604,7 @@ function render(purchases, allFiltered) {
     tr.addEventListener("click", () => {
       location.href = `purchase.html?id=${encodeURIComponent(p.id)}`;
     });
+    makeRowKeyboardNavigable(tr);
 
     const checkboxTd = document.createElement("td");
     const checkbox = document.createElement("input");

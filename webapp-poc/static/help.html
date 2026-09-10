@@ -135,8 +135,9 @@ if ("serviceWorker" in navigator) {
     Auto(gramm)- und nummerierte Angebote (z. B. „/50") aus, sofern der Suchbegriff selbst nicht danach fragt – bei
     einer gesuchten Auflage werden zusätzlich nur Angebote mit exakt derselben Auflage berücksichtigt, damit die
     Preise nicht mit teureren/selteneren Varianten vermischt werden. Das eigene, bereits veröffentlichte Angebot wird
-    in den Suchtreffern erkannt und mit „🫵 Eigenes Angebot" markiert (Checkbox und „Übernehmen" deaktiviert), damit
-    es nicht versehentlich als Marktpreis für sich selbst übernommen wird. Ab zwei Einträgen zeigt der
+    in den Suchtreffern erkannt und mit „🫵 Eigenes Angebot" markiert (nur die Checkbox für die Mehrfachauswahl ist
+    dafür gesperrt, der einzelne „Übernehmen"-Button bleibt klickbar), damit es nicht versehentlich als Marktpreis
+    für sich selbst übernommen wird. Ab zwei Einträgen zeigt der
     Preisrecherche-Verlauf zusätzlich einen kleinen Verlaufs-Chart (Sparkline).</p>
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
@@ -226,7 +227,8 @@ if ("serviceWorker" in navigator) {
     Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als 20&nbsp;% vom
     Preisrecherche-Marktdurchschnitt abweicht, und verlinkt zur eBay-Übersicht. Ein
     QR-Code verlinkt direkt zum Dashboard, um das Tool schnell auf dem Handy zu öffnen. Zeitpunkt der letzten
-    Google-Sheets-Synchronisierung und des letzten Backups werden oben angezeigt. Der Schalter „Design" (System/
+    Google-Sheets-Synchronisierung, des letzten manuell heruntergeladenen Backups sowie des letzten automatischen
+    Backups werden oben angezeigt. Der Schalter „Design" (System/
     Hell/Dunkel) legt das Farbschema fest – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
@@ -234,7 +236,9 @@ if ("serviceWorker" in navigator) {
     Wunschliste als eigener Reiter) und ein vollständiges Backup (ZIP mit allen Daten als JSON sowie allen
     Kartenbildern) herunterladen; der Zeitpunkt des letzten Downloads wird angezeigt. Zusätzlich wird automatisch
     einmal pro Woche ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt (die letzten 4 Wochen
-    werden aufbewahrt); der Zeitpunkt des letzten automatischen Backups wird ebenfalls angezeigt. Ein Link
+    werden aufbewahrt); der Zeitpunkt des letzten automatischen Backups wird ebenfalls angezeigt. Der Button
+    „Jetzt automatisches Backup starten" löst diesen Hintergrund-Lauf sofort aus, statt auf den wöchentlichen
+    Rhythmus zu warten. Ein Link
     „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle. Die Mindestbestand-Schwelle legt fest, ab
     welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Von hier aus geht es auch
     zu dieser Anleitung und zu den Release-Notes.</p>
@@ -242,11 +246,15 @@ if ("serviceWorker" in navigator) {
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>
     <li>Die Taste <code>/</code> springt auf den meisten Listenseiten direkt in das Suchfeld.</li>
+    <li>In den Haupttabellen (Karten, Käufe, Inventar, eBay) lässt sich eine Zeile per Tab anspringen, mit den
+      Pfeiltasten hoch/runter zur Nachbarzeile wechseln und mit Enter öffnen.</li>
     <li>Das Farbschema folgt standardmäßig der Betriebssystem-/Browser-Einstellung, lässt sich aber über den
       Schalter „Design" im Dashboard-Header manuell auf Hell oder Dunkel festlegen (gilt dann für das ganze Tool).</li>
     <li>Auf fast jeder Listenseite gibt es 🖨 Drucken und ⭳ CSV-Export.</li>
     <li>Das Tool lässt sich als App auf dem Homescreen installieren (PWA) – im Browser-Menü nach „Zum
       Startbildschirm hinzufügen" bzw. „App installieren" suchen.</li>
+    <li>Löschen (Karte, Kauf, einzelner Preisrecherche-Eintrag) läuft über einen kurzen Countdown mit
+      „Rückgängig", statt sofort endgültig zu sein – erst wenn der Countdown abläuft, wird tatsächlich gelöscht.</li>
   </ul>
 
 <script>

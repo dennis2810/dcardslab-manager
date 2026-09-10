@@ -1807,6 +1807,20 @@ async def download_backup():
     )
 
 
+@app.post("/api/backup/run-now")
+async def run_backup_now():
+    # Manueller Trigger (Einstellungen-Button) fuer das automatische Backup -
+    # etwa direkt nach dem Anlegen des Storage-Buckets, ohne eine Woche oder
+    # einen Server-Neustart abzuwarten. Nutzt dieselbe run_backup_now()
+    # wie der Hintergrund-Loop, nur ohne dessen _is_backup_due()-Gate.
+    try:
+        backup.run_backup_now()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    status = db.get_app_status() or {}
+    return JSONResponse({"last_auto_backup_at": status.get("last_auto_backup_at")})
+
+
 @app.get("/api/app-status")
 async def app_status():
     status = db.get_app_status() or {}
