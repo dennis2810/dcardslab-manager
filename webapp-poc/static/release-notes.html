@@ -53,6 +53,7 @@ if ("serviceWorker" in navigator) {
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
@@ -117,6 +118,8 @@ if ("serviceWorker" in navigator) {
     <li>„+ Neue Karte anlegen" sitzt in der Filterzeile rechtsbündig am Zeilenende, statt bei schmalem
       Fenster in eine eigene Zeile umzubrechen.</li>
     <li>Massenaktion, um mehrere ausgewählte Karten auf einmal einem Kauf zuzuordnen.</li>
+    <li>Verkaufsstatus (eBay-Status bzw. manueller Verkaufskanal, plus „Versendet") als Badge direkt oben auf der
+      Kartendetailseite, neben dem Drucken-Button.</li>
     <li>Tag-Filter, Schnellsuche-Kürzel (<code>/</code>), Abbrechen-Buttons bei neuen Formularen.</li>
     <li>Freie, kommagetrennte Tags/Kategorien pro Karte.</li>
     <li>Settbares "Versendet"-Kennzeichen für verkaufte Karten.</li>
@@ -171,6 +174,18 @@ if ("serviceWorker" in navigator) {
       der einzelne „Übernehmen"-Button bleibt dabei klickbar (nur die Mehrfachauswahl-Checkbox ist gesperrt), da
       ein hartes Sperren sich als zu aggressiv erwiesen hat, wenn fast alle Treffer das eigene Angebot sind.</li>
     <li>Der Preisrecherche-Verlauf zeigt ab zwei Einträgen zusätzlich einen kleinen Verlaufs-Chart (Sparkline).</li>
+    <li>Auf der Kartenseite zeigt ein Badge direkt neben „Drucken" den aktuellen Verkaufsstatus (eBay-Status bzw.
+      Verkaufskanal, zusätzlich „Versendet" falls zutreffend) – ohne erst zum Verkaufs-Abschnitt weiter unten
+      scrollen zu müssen.</li>
+    <li>Trackingnummer + Versanddienstleister lassen sich jetzt pro Verkauf eintragen. Bei eBay-Verkäufen wird das
+      direkt an eBay übermittelt – eBay markiert die Bestellung dort automatisch als versendet und benachrichtigt
+      den Käufer, gleichzeitig wird das „Versendet"-Kästchen der Karte mitgesetzt.</li>
+    <li>Neue Seite „Versand": sammelt alle verkauften, aber noch nicht versendeten Karten (eBay und manuelle
+      Verkäufe) an einem Ort zum Abarbeiten – Trackingnummer eintragen/übermitteln, ohne Tracking direkt als
+      versendet markieren, oder ein druckbares Adress-Etikett/Lieferschein erzeugen (die eBay-Käuferadresse wird
+      dafür bei Bedarf live von eBay geladen, nicht dauerhaft gespeichert). Das Dashboard verlinkt bei offenen
+      Versendungen jetzt direkt dorthin.</li>
+    <li>Neue Einstellung „Absenderadresse" für das gedruckte Adress-Etikett/den Lieferschein.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>

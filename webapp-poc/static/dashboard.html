@@ -102,6 +102,7 @@ if ("serviceWorker" in navigator) {
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
@@ -467,10 +468,10 @@ function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
   list.innerHTML = "";
   let count = 0;
 
-  const unshipped = cards.filter((c) => c.ebay_status === "Verkauft" && !c.shipped);
+  const unshipped = cards.filter((c) => (c.ebay_status === "Verkauft" || c.manual_sale_channel) && !c.shipped);
   if (unshipped.length) {
     count++;
-    addAction(list, `📦 ${unshipped.length} verkaufte Karte(n) noch nicht versendet – <a href="cards.html">zu den Karten &rarr;</a>`);
+    addAction(list, `📦 ${unshipped.length} verkaufte Karte(n) noch nicht versendet – <a href="shipping.html">zur Versand-Checkliste &rarr;</a>`);
   }
 
   const longHolding = (stats.rows || []).filter((r) => {

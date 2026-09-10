@@ -55,6 +55,7 @@ if ("serviceWorker" in navigator) {
         <option value="ebay.html">eBay</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
         <option value="settings.html">Einstellungen</option>
@@ -74,6 +75,7 @@ if ("serviceWorker" in navigator) {
       <li><a href="#ebay">eBay</a></li>
       <li><a href="#inventar">Inventar</a></li>
       <li><a href="#inventur">Inventur</a></li>
+      <li><a href="#versand">Versand</a></li>
       <li><a href="#wunschliste">Wunschliste</a></li>
       <li><a href="#statistiken">Statistiken</a></li>
       <li><a href="#dashboard">Dashboard</a></li>
@@ -118,7 +120,10 @@ if ("serviceWorker" in navigator) {
     Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt) und das „Versendet"-Kästchen umschalten.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
     Beschädigungen) – sie werden beim Veröffentlichen automatisch mit an eBay übertragen (bis zu eBays Limit von
-    12 Fotos pro Angebot). Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte.</p>
+    12 Fotos pro Angebot). Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
+    ein Badge den aktuellen Verkaufsstatus (eBay-Status bzw. „Verkauft: &lt;Kanal&gt;" bei einem manuellen Verkauf,
+    zusätzlich „Versendet" falls zutreffend) – ohne erst zum eBay-/Verkaufs-Abschnitt weiter unten scrollen zu
+    müssen.</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
     Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
@@ -126,7 +131,11 @@ if ("serviceWorker" in navigator) {
     und auf einmal löschen.</p>
   <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots. Nach einem Verkauf lassen
     sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
-    automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Schickt ein Käufer die Karte zurück,
+    automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Dort lässt sich auch die Trackingnummer
+    samt Versanddienstleister eintragen und „An eBay übermitteln" klicken: eBay markiert die Bestellung dann selbst
+    als versendet und benachrichtigt den Käufer automatisch, gleichzeitig wird das „Versendet"-Kästchen der Karte
+    mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
+    Verfügung, siehe unten). Schickt ein Käufer die Karte zurück,
     markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
     erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.
     Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
@@ -199,6 +208,18 @@ if ("serviceWorker" in navigator) {
     und was unerwartet war. Die Checkliste lässt sich per Klick auf eine Spaltenüberschrift sortieren, ist bei
     vielen Karten seitenweise blätterbar und über „🖨 Drucken" ausdruckbar sowie über „⭳ CSV-Export" exportierbar.</p>
 
+  <h2 id="versand">Versand</h2>
+  <p>Sammelt alle verkauften, aber noch nicht als versendet markierten Karten an einem Ort – sowohl eBay- als auch
+    manuelle Verkäufe (Kleinanzeigen, Vinted, …). Pro Zeile lässt sich Trackingnummer + Versanddienstleister
+    eintragen: bei eBay-Verkäufen wird das direkt an eBay übermittelt (eBay markiert die Bestellung dort als
+    versendet und benachrichtigt den Käufer), bei manuellen Verkäufen dient es nur der eigenen Notiz, da es dafür
+    keine externe API gibt. Ohne Trackingnummer (z. B. bei persönlicher Übergabe) reicht „Nur als versendet
+    markieren". Sobald eine Karte versendet ist, verschwindet sie aus der Liste.</p>
+  <p>„🖨 Etikett drucken" öffnet einen druckbaren Lieferschein mit Absender- (aus den Einstellungen) und
+    Empfängeradresse. Bei eBay-Verkäufen wird die Käuferadresse dafür live von eBay abgerufen – sie wird bewusst
+    nicht dauerhaft gespeichert, sondern nur bei Bedarf für den Druck geladen. Bei manuellen Verkäufen gibt es dafür
+    keine API, hier bleibt das Adressfeld leer zum Selbstausfüllen.</p>
+
   <h2 id="wunschliste">Wunschliste</h2>
   <p>Für Karten, die (noch) nicht im Besitz sind: Titel, Team, Set, Wunschpreis und eine Notiz erfassen. Bewusst
     getrennt von der Kartenübersicht/dem Inventar – ein Wunschlisten-Eintrag zählt nirgends als vorhandene Karte
@@ -241,8 +262,9 @@ if ("serviceWorker" in navigator) {
     „Jetzt automatisches Backup starten" löst diesen Hintergrund-Lauf sofort aus, statt auf den wöchentlichen
     Rhythmus zu warten. Ein Link
     „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle. Die Mindestbestand-Schwelle legt fest, ab
-    welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Von hier aus geht es auch
-    zu dieser Anleitung und zu den Release-Notes.</p>
+    welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Die Absenderadresse wird
+    als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Von hier aus geht es
+    auch zu dieser Anleitung und zu den Release-Notes.</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>

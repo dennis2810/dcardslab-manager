@@ -1365,6 +1365,37 @@ class UpdateEbaySaleTests(unittest.TestCase):
             result = db.update_ebay_sale("does-not-exist", {"shipping_cost": 1})
         self.assertIsNone(result)
 
+    def test_updates_tracking_number_and_carrier(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "tracking_number": "1Z999", "shipping_carrier": "UPS"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"tracking_number": "1Z999", "shipping_carrier": "UPS"})
+        self.assertEqual(result["tracking_number"], "1Z999")
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"tracking_number": "1Z999", "shipping_carrier": "UPS"})
+
+
+class GetEbaySaleTests(unittest.TestCase):
+    def test_returns_the_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "ebay_order_id": "O1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_ebay_sale("sale-1")
+        self.assertEqual(result["ebay_order_id"], "O1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_ebay_sale("does-not-exist")
+        self.assertIsNone(result)
+
 
 class GetSaleForCardTests(unittest.TestCase):
     def test_returns_most_recent_sale(self):
@@ -1392,9 +1423,9 @@ class SalesByListingIdTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [
-            {"listing_id": "listing-1", "sale_date": "2026-08-02T00:00:00+00:00", "gross_price": 25.0},
-            {"listing_id": "listing-1", "sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 20.0},
-            {"listing_id": "listing-2", "sale_date": "2026-08-03T00:00:00+00:00", "gross_price": 5.0},
+            {"id": "sale-1a", "listing_id": "listing-1", "sale_date": "2026-08-02T00:00:00+00:00", "gross_price": 25.0},
+            {"id": "sale-1b", "listing_id": "listing-1", "sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 20.0},
+            {"id": "sale-2", "listing_id": "listing-2", "sale_date": "2026-08-03T00:00:00+00:00", "gross_price": 5.0},
         ]
         mock_client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
@@ -1408,6 +1439,22 @@ class SalesByListingIdTests(unittest.TestCase):
             result = db.sales_by_listing_id([])
         self.assertEqual(result, {})
         mock_client.table.assert_not_called()
+
+    def test_includes_id_and_tracking_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {
+                "id": "sale-1", "listing_id": "listing-1", "sale_date": "2026-08-02T00:00:00+00:00",
+                "gross_price": 25.0, "tracking_number": "1Z999", "shipping_carrier": "UPS",
+            },
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sales_by_listing_id(["listing-1"])
+        self.assertEqual(result["listing-1"]["id"], "sale-1")
+        self.assertEqual(result["listing-1"]["tracking_number"], "1Z999")
+        self.assertEqual(result["listing-1"]["shipping_carrier"], "UPS")
 
 
 class GoogleSheetsSettingsTests(unittest.TestCase):
@@ -1479,6 +1526,16 @@ class AppStatusTests(unittest.TestCase):
             db.record_backup_downloaded("2026-09-09T10:00:00+00:00")
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "last_backup_at": "2026-09-09T10:00:00+00:00"})
+
+    def test_set_sender_address_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "sender_address": "DCardsLab\nMusterstr. 1\n12345 Musterstadt"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_sender_address("DCardsLab\nMusterstr. 1\n12345 Musterstadt")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "sender_address": "DCardsLab\nMusterstr. 1\n12345 Musterstadt"})
 
     def test_set_low_stock_threshold_upserts_with_singleton_id(self):
         mock_client = MagicMock()
@@ -1973,6 +2030,29 @@ class UpdateManualSaleTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.update_manual_sale("does-not-exist", {"not_a_column": "x"})
         self.assertIsNone(result)
+
+    def test_updates_tracking_number_and_carrier(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "tracking_number": "TRACK1", "shipping_carrier": "DHL"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_manual_sale("ms-1", {"tracking_number": "TRACK1", "shipping_carrier": "DHL"})
+        self.assertEqual(result["tracking_number"], "TRACK1")
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"tracking_number": "TRACK1", "shipping_carrier": "DHL"})
+
+
+class AllManualSalesTests(unittest.TestCase):
+    def test_returns_all_rows(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1"}, {"id": "ms-2"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.all_manual_sales()
+        self.assertEqual(result, [{"id": "ms-1"}, {"id": "ms-2"}])
+        mock_client.table.assert_called_once_with("manual_sales")
 
 
 class DeleteManualSaleTests(unittest.TestCase):

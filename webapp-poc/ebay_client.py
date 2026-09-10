@@ -371,3 +371,28 @@ def get_orders(token, created_since_iso):
     params = {"filter": f"creationdate:[{since}..]", "limit": "200"}
     response = _request("GET", token, "/sell/fulfillment/v1/order", params=params)
     return response.json().get("orders", [])
+
+
+def get_order(token, order_id):
+    """Full order detail (incl. the buyer's shipTo shipping address, needed
+    for a printable address label/packing slip) - get_orders() above only
+    returns the fields useful for the automatic sales sync, not the whole
+    order."""
+    return _request("GET", token, f"/sell/fulfillment/v1/order/{order_id}").json()
+
+
+def submit_shipping_fulfillment(token, order_id, line_item_id, quantity, tracking_number, shipping_carrier, shipped_date):
+    """Tells eBay a line item has shipped (tracking number + carrier) -
+    eBay then marks the order fulfilled and notifies the buyer itself, no
+    separate customer email needed from here."""
+    # Same eBay quirk as get_orders()'s creationdate filter - a literal
+    # "+00:00" offset gets rejected here too; eBay's own docs use "Z".
+    shipped_date = shipped_date.replace("+00:00", "Z")
+    payload = {
+        "lineItems": [{"lineItemId": line_item_id, "quantity": quantity}],
+        "shippedDate": shipped_date,
+        "shippingCarrierCode": shipping_carrier,
+        "trackingNumber": tracking_number,
+    }
+    response = _request("POST", token, f"/sell/fulfillment/v1/order/{order_id}/shipping_fulfillment", payload)
+    return response.json()

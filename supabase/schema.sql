@@ -245,6 +245,24 @@ create table if not exists manual_sales (
 
 create index if not exists manual_sales_card_id_idx on manual_sales(card_id);
 
+-- Migration (2026-09-10): Sendungsverfolgung - Trackingnummer + Versand-
+-- dienstleister pro Verkauf, damit sich der Status nachvollziehen laesst.
+-- Bei eBay-Verkaeufen wird die Trackingnummer zusaetzlich an eBay
+-- uebermittelt (siehe ebay_client.submit_shipping_fulfillment()), was dort
+-- automatisch die Bestellung als versendet markiert und den Kaeufer
+-- benachrichtigt - bei manuellen Verkaeufen (Kleinanzeigen, Vinted, ...)
+-- gibt es dafuer keine API, das Feld dient dort nur der eigenen Notiz.
+alter table ebay_sales add column if not exists tracking_number text default '';
+alter table ebay_sales add column if not exists shipping_carrier text default '';
+alter table manual_sales add column if not exists tracking_number text default '';
+alter table manual_sales add column if not exists shipping_carrier text default '';
+
+-- Migration (2026-09-10): Absenderadresse fuer das druckbare Adress-
+-- Etikett/den Lieferschein - freier Mehrzeilen-Text statt einzelner
+-- Adressfelder, da hier nur der Ausdruck davon abhaengt, keine
+-- Auswertung/Validierung noetig ist.
+alter table app_status add column if not exists sender_address text default '';
+
 -- Migration (2026-09-10): weitere Fotos pro Karte, zusaetzlich zu Vorder-/
 -- Rueckseite (z.B. Detailaufnahmen bei Beschaedigungen) - kommagetrennte
 -- Storage-Objektpfade im card-images-Bucket, gleiches Freitext-Muster wie

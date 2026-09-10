@@ -417,5 +417,49 @@ class GetOrdersTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["filter"], "creationdate:[2026-06-02T17:42:55.134065Z..]")
 
 
+class SubmitShippingFulfillmentTests(unittest.TestCase):
+    def test_posts_tracking_info_to_fulfillment_path(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"fulfillmentId": "F1"})) as mock_request:
+            result = ebay_client.submit_shipping_fulfillment(
+                "tok", "order-1", "line-1", 1, "1Z999AA10123456784", "UPS", "2026-09-10T12:00:00Z",
+            )
+        self.assertEqual(result, {"fulfillmentId": "F1"})
+        args, kwargs = mock_request.call_args
+        self.assertEqual(args[0], "POST")
+        self.assertIn("/order/order-1/shipping_fulfillment", args[1])
+        body = kwargs["json"]
+        self.assertEqual(body["lineItems"], [{"lineItemId": "line-1", "quantity": 1}])
+        self.assertEqual(body["trackingNumber"], "1Z999AA10123456784")
+        self.assertEqual(body["shippingCarrierCode"], "UPS")
+        self.assertEqual(body["shippedDate"], "2026-09-10T12:00:00Z")
+
+    def test_normalizes_utc_offset_suffix_to_z(self):
+        # Same eBay quirk as get_orders()'s creationdate filter - a literal
+        # "+00:00" offset gets rejected, "Z" is what eBay's docs use.
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.submit_shipping_fulfillment(
+                "tok", "order-1", "line-1", 1, "TRACK123", "DHL", "2026-09-10T12:00:00+00:00",
+            )
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["shippedDate"], "2026-09-10T12:00:00Z")
+
+    def test_raises_on_error_response(self):
+        with patch("ebay_client.httpx.request", return_value=_response(400, text="Invalid tracking number")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.submit_shipping_fulfillment(
+                    "tok", "order-1", "line-1", 1, "bad", "DHL", "2026-09-10T12:00:00Z",
+                )
+
+
+class GetOrderTests(unittest.TestCase):
+    def test_returns_order_json(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"orderId": "order-1"})) as mock_request:
+            order = ebay_client.get_order("tok", "order-1")
+        self.assertEqual(order, {"orderId": "order-1"})
+        args, _ = mock_request.call_args
+        self.assertEqual(args[0], "GET")
+        self.assertIn("/order/order-1", args[1])
+
+
 if __name__ == "__main__":
     unittest.main()
