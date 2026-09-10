@@ -1645,15 +1645,21 @@ async def sync_ebay_sales():
 
     synced = skipped = 0
     for order in orders:
+        order_id = order.get("orderId", "")
+        # Lazily geladen und pro Bestellung gecacht (nicht pro Line Item) -
+        # eine Bestellung mit mehreren Karten braucht sonst denselben Aufruf
+        # mehrfach. None = noch nicht versucht, [] = versucht, nichts
+        # gefunden bzw. Ladefehler (siehe except unten).
+        fulfillments = None
         for line_item in order.get("lineItems", []):
             listing = ebay_listing.match_sale_line_item(line_item, listings_by_sku)
             if listing is None:
                 skipped += 1
                 continue
             delivery_cost = (line_item.get("deliveryCost") or {}).get("shippingCost") or {}
-            db.upsert_ebay_sale({
+            sale_fields = {
                 "listing_id": listing["id"], "card_id": listing["card_id"],
-                "ebay_order_id": order.get("orderId", ""),
+                "ebay_order_id": order_id,
                 "ebay_line_item_id": line_item.get("lineItemId", ""),
                 "sale_date": order.get("creationDate"),
                 "quantity": line_item.get("quantity", 1),
@@ -1661,8 +1667,42 @@ async def sync_ebay_sales():
                 # Vom Kaeufer gezahlter Versand - durchlaufender Posten, siehe
                 # shipping_cost (manuell, tatsaechliches Porto) im Gewinn.
                 "shipping_charged": float(delivery_cost.get("value", 0) or 0),
-            })
+                # Pseudonymer eBay-Handle fuer die Kaeufer-Historie (siehe
+                # statistics-sales.html) - bewusst kein Klarname/Adresse.
+                "buyer_username": (order.get("buyer") or {}).get("username") or "",
+            }
+            # Deckt den Fall ab, dass direkt im eBay Seller Hub versendet
+            # wurde statt ueber dieses Tool - Trackingdaten trotzdem
+            # automatisch uebernehmen und die Karte als versendet markieren,
+            # statt dass sie faelschlich in der Versand-Checkliste haengen
+            # bleibt. Nur bei bereits abgeschlossener Bestellung nachgeladen,
+            # um unnoetige eBay-Aufrufe bei den meisten (offenen) Sync-Laeufen
+            # zu vermeiden.
+            tracking_pulled = False
+            if order.get("orderFulfillmentStatus") == "FULFILLED":
+                if fulfillments is None:
+                    try:
+                        fulfillments = ebay_client.list_shipping_fulfillments(token, order_id)
+                    except ebay_client.EbayApiError:
+                        logger.exception(
+                            "Sendungsverfolgung konnte nicht von eBay geladen werden für Bestellung %s", order_id,
+                        )
+                        fulfillments = []
+                line_item_id = line_item.get("lineItemId", "")
+                for fulfillment in fulfillments:
+                    tracked_ids = {li.get("lineItemId") for li in fulfillment.get("lineItems") or []}
+                    if line_item_id in tracked_ids:
+                        sale_fields["tracking_number"] = fulfillment.get("trackingNumber", "")
+                        sale_fields["shipping_carrier"] = fulfillment.get("shippingCarrierCode", "")
+                        tracking_pulled = True
+                        break
+            db.upsert_ebay_sale(sale_fields)
             db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
+            if tracking_pulled:
+                try:
+                    db.update_card(listing["card_id"], {"shipped": True})
+                except Exception:
+                    logger.exception("Konnte 'Versendet' nicht setzen für Karte %s", listing["card_id"])
             try:
                 db.zero_inventory_for_card(listing["card_id"])
             except Exception:

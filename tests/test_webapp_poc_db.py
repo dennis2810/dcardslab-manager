@@ -2100,6 +2100,7 @@ class StatisticsRowsTests(unittest.TestCase):
                 response.data = [{
                     "card_id": "card-1", "sale_date": "2026-02-01T00:00:00+00:00",
                     "gross_price": 15.0, "ebay_fees": 1.75, "refunded": True,
+                    "buyer_username": "kartenfan99",
                 }]
                 builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
             elif name == "ebay_listings":
@@ -2140,6 +2141,9 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertEqual(by_id["card-3"]["channel"], "Kleinanzeigen")
         self.assertEqual(by_id["card-3"]["sale_date"], "2026-03-01T00:00:00+00:00")
         self.assertFalse(by_id["card-3"]["refunded"])
+        self.assertEqual(by_id["card-1"]["buyer_username"], "kartenfan99")
+        # Manueller Verkauf (card-3) hat keinen eBay-Kaeufernamen.
+        self.assertIsNone(by_id["card-3"]["buyer_username"])
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()
