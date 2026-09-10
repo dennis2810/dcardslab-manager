@@ -54,6 +54,9 @@ if ("serviceWorker" in navigator) {
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
   tr.row:hover { background: var(--hover-bg); }
+  /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
+     makeRowKeyboardNavigable()). */
+  tr.row:focus { background: var(--hover-bg); outline: 2px solid #8ab4f8; outline-offset: -2px; }
   img.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; background: var(--placeholder-bg); vertical-align: middle; margin-right: 0.5rem; }
   #status-msg { font-style: italic; color: #555; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
@@ -223,6 +226,32 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Macht eine Tabellenzeile per Tastatur bedienbar - Tab fokussiert sie
+// (tabIndex=0), Pfeil hoch/runter wandert zur Nachbarzeile, Enter loest
+// dieselbe Aktion wie ein Klick aus (row.click()). Ergaenzt die bereits
+// bestehende Maus-Bedienung, ersetzt sie nicht.
+function makeRowKeyboardNavigable(row) {
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      row.click();
+    } else if (ev.key === "ArrowDown") {
+      const next = row.nextElementSibling;
+      if (next) {
+        ev.preventDefault();
+        next.focus();
+      }
+    } else if (ev.key === "ArrowUp") {
+      const prev = row.previousElementSibling;
+      if (prev) {
+        ev.preventDefault();
+        prev.focus();
+      }
+    }
+  });
 }
 
 const PAGE_SIZE = 40;
@@ -473,6 +502,7 @@ function render() {
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(item.card_id)}`;
     });
+    makeRowKeyboardNavigable(tr);
 
     const checkboxTd = document.createElement("td");
     const checkbox = document.createElement("input");

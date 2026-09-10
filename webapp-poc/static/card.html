@@ -134,6 +134,8 @@ if ("serviceWorker" in navigator) {
   .price-research-section h2 { font-size: 1.1rem; }
   .price-research-table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; }
   .price-research-table th, .price-research-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+  .pending-delete { opacity: 0.5; }
+  .pending-delete-status { font-size: 0.85em; color: #555; margin-right: 0.4rem; }
   .price-research-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; }
   .price-research-form label { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; }
   .price-research-form input { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
@@ -250,6 +252,60 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Verzoegertes Loeschen (wie bei Gmail): statt sofort zu loeschen, laeuft
+// erst ein kurzer Countdown mit "Rueckgaengig" - erst danach geht der
+// eigentliche DELETE-Request raus. Vermeidet ein "echtes" Nachtraeglich-
+// Wiederherstellen (Neuanlegen mit denselben Daten), das bei Karten wegen
+// verknuepfter Daten (Inventar, eBay-Angebot, Preisrecherche-Verlauf,
+// Kauf-Zuordnung) ohnehin nicht verlustfrei moeglich waere - solange nichts
+// tatsaechlich geloescht wurde, gibt es auch nichts wiederherzustellen.
+const DELETE_GRACE_SECONDS = 6;
+
+function scheduleDelayedDelete({ row, deleteBtn, actionsTd, label, commit }) {
+  row.classList.add("pending-delete");
+  deleteBtn.hidden = true;
+
+  const statusSpan = document.createElement("span");
+  statusSpan.className = "pending-delete-status";
+  const undoBtn = document.createElement("button");
+  undoBtn.type = "button";
+  undoBtn.textContent = "Rückgängig";
+  actionsTd.append(statusSpan, undoBtn);
+
+  let remaining = DELETE_GRACE_SECONDS;
+  const updateStatus = () => { statusSpan.textContent = `Wird in ${remaining}s gelöscht … `; };
+  updateStatus();
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  function finishCountdown() {
+    clearInterval(tick);
+    statusSpan.remove();
+    undoBtn.remove();
+  }
+
+  const timeout = setTimeout(async () => {
+    finishCountdown();
+    try {
+      await commit();
+      showToast(`${label} gelöscht.`);
+    } catch (err) {
+      row.classList.remove("pending-delete");
+      deleteBtn.hidden = false;
+      showToast("Fehler: " + err.message, true);
+    }
+  }, DELETE_GRACE_SECONDS * 1000);
+
+  undoBtn.addEventListener("click", () => {
+    clearTimeout(timeout);
+    finishCountdown();
+    row.classList.remove("pending-delete");
+    deleteBtn.hidden = false;
+  });
 }
 
 // Schwellwert fuer die "auffaellig hohe Marge"-Markierung - deckungsgleich
@@ -663,7 +719,23 @@ function render(card) {
   deleteBtn.type = "button";
   deleteBtn.id = "delete-btn";
   deleteBtn.textContent = "Löschen";
-  deleteBtn.addEventListener("click", onDelete);
+  deleteBtn.addEventListener("click", () => {
+    scheduleDelayedDelete({
+      row: form,
+      deleteBtn,
+      actionsTd: actions,
+      label: "Karte",
+      commit: async () => {
+        const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
+        if (!res.ok) {
+          const body = await res.json();
+          throw new Error(body.detail || res.statusText);
+        }
+        formIsDirty = false;
+        location.href = "cards.html";
+      },
+    });
+  });
   actions.appendChild(deleteBtn);
 
   form.appendChild(actions);
@@ -707,22 +779,6 @@ form.addEventListener("submit", async (ev) => {
     showToast("Fehler: " + err, true);
   }
 });
-
-async function onDelete() {
-  if (!confirm("Diese Karte wirklich löschen?")) return;
-  try {
-    const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
-    if (!res.ok) {
-      const body = await res.json();
-      alert("Fehler beim Löschen: " + (body.detail || res.statusText));
-      return;
-    }
-    formIsDirty = false;
-    location.href = "cards.html";
-  } catch (err) {
-    alert("Fehler beim Löschen: " + err);
-  }
-}
 
 function renderPurchaseSection(purchase) {
   const section = document.getElementById("purchase-section");
@@ -1450,20 +1506,21 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.textContent = "Löschen";
-      deleteBtn.addEventListener("click", async () => {
-        if (!confirm("Diesen Preisrecherche-Eintrag wirklich löschen?")) return;
-        try {
-          const res = await fetch(`/api/price-research/${encodeURIComponent(entry.id)}`, { method: "DELETE" });
-          if (!res.ok && res.status !== 204) {
-            const body = await res.json();
-            alert("Fehler: " + (body.detail || res.statusText));
-            return;
-          }
-          showToast("Preisrecherche-Eintrag gelöscht.");
-          loadCard();
-        } catch (err) {
-          alert("Fehler: " + err);
-        }
+      deleteBtn.addEventListener("click", () => {
+        scheduleDelayedDelete({
+          row: tr,
+          deleteBtn,
+          actionsTd,
+          label: "Preisrecherche-Eintrag",
+          commit: async () => {
+            const res = await fetch(`/api/price-research/${encodeURIComponent(entry.id)}`, { method: "DELETE" });
+            if (!res.ok && res.status !== 204) {
+              const body = await res.json();
+              throw new Error(body.detail || res.statusText);
+            }
+            loadCard();
+          },
+        });
       });
       actionsTd.appendChild(deleteBtn);
       tr.appendChild(actionsTd);

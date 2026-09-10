@@ -78,15 +78,27 @@ def _is_backup_due():
     return datetime.now(timezone.utc) - last_dt >= timedelta(days=BACKUP_INTERVAL_DAYS)
 
 
+def run_backup_now():
+    # Tatsaechliche Arbeit fuer ein automatisches Backup - bewusst ohne den
+    # _is_backup_due()-Gate, damit sowohl der Hintergrund-Loop (der ihn vorher
+    # selbst prueft) als auch ein manueller "Jetzt sichern"-Klick in den
+    # Einstellungen dieselbe Funktion nutzen koennen. Fehler werden hier NICHT
+    # abgefangen - der Hintergrund-Loop faengt sie selbst ab (siehe
+    # run_scheduled_backup_once()), ein manueller Trigger soll den Fehler an
+    # den aufrufenden Endpoint durchreichen, damit er dem Menschen angezeigt
+    # werden kann.
+    data = build_backup_zip()
+    filename = f"backup-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.zip"
+    storage.upload_backup(filename, data)
+    storage.prune_old_backups(BACKUPS_KEEP)
+    db.record_auto_backup(datetime.now(timezone.utc).isoformat())
+
+
 def run_scheduled_backup_once():
     if not _is_backup_due():
         return
     try:
-        data = build_backup_zip()
-        filename = f"backup-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.zip"
-        storage.upload_backup(filename, data)
-        storage.prune_old_backups(BACKUPS_KEEP)
-        db.record_auto_backup(datetime.now(timezone.utc).isoformat())
+        run_backup_now()
     except Exception:
         # Ein fehlgeschlagenes automatisches Backup darf den Hintergrund-
         # Loop nicht abbrechen - naechster Versuch beim naechsten Takt

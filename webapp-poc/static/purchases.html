@@ -48,6 +48,9 @@ if ("serviceWorker" in navigator) {
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
   tr.row:hover { background: var(--hover-bg); }
+  /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
+     makeRowKeyboardNavigable()). */
+  tr.row:focus { background: var(--hover-bg); outline: 2px solid #8ab4f8; outline-offset: -2px; }
   .expand-btn { border: none; background: none; cursor: pointer; font-size: 0.9rem; padding: 0 0.4rem; }
   tr.detail-row { cursor: default; }
   tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
@@ -236,6 +239,32 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Macht eine Tabellenzeile per Tastatur bedienbar - Tab fokussiert sie
+// (tabIndex=0), Pfeil hoch/runter wandert zur Nachbarzeile, Enter loest
+// dieselbe Aktion wie ein Klick aus (row.click()). Ergaenzt die bereits
+// bestehende Maus-Bedienung, ersetzt sie nicht.
+function makeRowKeyboardNavigable(row) {
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      row.click();
+    } else if (ev.key === "ArrowDown") {
+      const next = row.nextElementSibling;
+      if (next) {
+        ev.preventDefault();
+        next.focus();
+      }
+    } else if (ev.key === "ArrowUp") {
+      const prev = row.previousElementSibling;
+      if (prev) {
+        ev.preventDefault();
+        prev.focus();
+      }
+    }
+  });
 }
 
 const PAGE_SIZE = 40;
@@ -575,6 +604,7 @@ function render(purchases, allFiltered) {
     tr.addEventListener("click", () => {
       location.href = `purchase.html?id=${encodeURIComponent(p.id)}`;
     });
+    makeRowKeyboardNavigable(tr);
 
     const checkboxTd = document.createElement("td");
     const checkbox = document.createElement("input");

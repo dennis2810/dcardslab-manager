@@ -23,6 +23,7 @@ if ("serviceWorker" in navigator) {
   :root {
     color-scheme: light dark;
     --placeholder-bg: #f0f0f0;
+    --hover-bg: #f7f7f7;
     --success-bg: #d4edda; --success-fg: #155724;
     --warn-bg: #fff3cd; --warn-fg: #856404;
     --info-bg: #cce5ff; --info-fg: #004085;
@@ -30,14 +31,14 @@ if ("serviceWorker" in navigator) {
     --neutral-bg: #e2e3e5; --neutral-fg: #383d41;
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --placeholder-bg: #2a2a2a;
+    :root:not([data-theme="light"]) { --placeholder-bg: #2a2a2a; --hover-bg: #2a2a2a;
       --success-bg: #1c3324; --success-fg: #7fd99a;
       --warn-bg: #4a3c00; --warn-fg: #ffd866;
       --info-bg: #1d2c44; --info-fg: #8ab4f8;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82;
       --neutral-bg: #333; --neutral-fg: #ccc; }
   }
-  :root[data-theme="dark"] { color-scheme: dark; --placeholder-bg: #2a2a2a;
+  :root[data-theme="dark"] { color-scheme: dark; --placeholder-bg: #2a2a2a; --hover-bg: #2a2a2a;
       --success-bg: #1c3324; --success-fg: #7fd99a;
       --warn-bg: #4a3c00; --warn-fg: #ffd866;
       --info-bg: #1d2c44; --info-fg: #8ab4f8;
@@ -83,6 +84,10 @@ if ("serviceWorker" in navigator) {
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
   .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   .list th .sort-arrow { color: #888; font-size: 0.8em; }
+  /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
+     makeRowKeyboardNavigable()) - deckungsgleiches Muster auf allen
+     Listenseiten mit Tabelle. */
+  .list tr[tabindex="0"]:focus { background: var(--hover-bg); outline: 2px solid #8ab4f8; outline-offset: -2px; }
   .card .sku { font-size: 0.75rem; color: #888; }
   .list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .list a.row-link { color: inherit; text-decoration: none; display: block; }
@@ -225,6 +230,32 @@ function showToast(message, isError) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
+}
+
+// Macht eine Tabellenzeile per Tastatur bedienbar - Tab fokussiert sie
+// (tabIndex=0), Pfeil hoch/runter wandert zur Nachbarzeile, Enter loest
+// dieselbe Aktion wie ein Klick aus (row.click()). Ergaenzt die bereits
+// bestehende Maus-Bedienung, ersetzt sie nicht.
+function makeRowKeyboardNavigable(row) {
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      row.click();
+    } else if (ev.key === "ArrowDown") {
+      const next = row.nextElementSibling;
+      if (next) {
+        ev.preventDefault();
+        next.focus();
+      }
+    } else if (ev.key === "ArrowUp") {
+      const prev = row.previousElementSibling;
+      if (prev) {
+        ev.preventDefault();
+        prev.focus();
+      }
+    }
+  });
 }
 
 const PAGE_SIZE = 40;
@@ -582,6 +613,7 @@ function renderList(cards) {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;
     });
     tr.style.cursor = "pointer";
+    makeRowKeyboardNavigable(tr);
     listBody.appendChild(tr);
   }
 }
