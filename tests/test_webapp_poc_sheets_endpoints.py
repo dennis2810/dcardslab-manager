@@ -125,10 +125,11 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
             patch("main.db.all_ebay_sales", return_value=[]),
             patch("main.db.list_inventory", return_value=[]),
             patch("main.db.list_wishlist_items", return_value=[]),
+            patch("main.db.list_private_collection_cards", return_value=[]),
             patch("main.db.statistics_rows", return_value=[]),
         ]
 
-    def test_syncs_eight_tabs_on_success(self):
+    def test_syncs_nine_tabs_on_success(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
         patchers = self._patch_sheets_data_sources()
         for p in patchers:
@@ -143,7 +144,10 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
         tabs = mock_sync.call_args[0][2]
         self.assertEqual(
             set(tabs.keys()),
-            {"Karten", "Käufe", "eBay", "Inventar", "Wunschliste", "Statistiken", "Dashboard", "Sync_Info"},
+            {
+                "Karten", "Käufe", "eBay", "Inventar", "Wunschliste", "Private Sammlung",
+                "Statistiken", "Dashboard", "Sync_Info",
+            },
         )
         self.assertIn("last_synced_at", mock_save.call_args[0][0])
 
@@ -168,6 +172,28 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
         headers, rows = tabs["Wunschliste"]
         self.assertIn("title", headers)
         self.assertEqual(rows[0][headers.index("title")], "Lionel Messi")
+
+    def test_private_sammlung_tab_lists_cards(self):
+        settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
+        patchers = self._patch_sheets_data_sources()
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+        private_card = {
+            "id": "c1", "title": "Kylian Mbappe", "team": "PSG", "set_name": "Panini",
+            "card_number": "12", "tags": "auto",
+        }
+        with patch("main.db.get_google_sheets_settings", return_value=settings), \
+             patch("main.db.save_google_sheets_settings"), \
+             patch("main.db.list_private_collection_cards", return_value=[private_card]), \
+             patch("main.google_sheets_client.refresh_access_token", return_value="access-tok"), \
+             patch("main.google_sheets_client.sync_to_sheets") as mock_sync:
+            response = client.post("/api/sheets/sync")
+        self.assertEqual(response.status_code, 200)
+        tabs = mock_sync.call_args[0][2]
+        headers, rows = tabs["Private Sammlung"]
+        self.assertIn("title", headers)
+        self.assertEqual(rows[0][headers.index("title")], "Kylian Mbappe")
 
     def test_returns_502_on_google_api_error(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}

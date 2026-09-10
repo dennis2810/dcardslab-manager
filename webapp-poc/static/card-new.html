@@ -35,9 +35,9 @@ if ("serviceWorker" in navigator) {
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
-  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .side { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.5rem; }
   label { font-weight: 600; }
@@ -49,6 +49,8 @@ if ("serviceWorker" in navigator) {
   form#card-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   form#card-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   form#card-form input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  form#card-form .checkbox-field { grid-column: 1 / -1; display: flex; flex-direction: row; align-items: center; gap: 0.4rem; }
+  form#card-form .checkbox-field input { margin-top: 0; }
   .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   button:disabled { opacity: 0.5; cursor: default; }
@@ -224,6 +226,7 @@ for (const [key, label] of [["location", "Lagerort"], ["notes", "Notiz"]]) {
 // Direkt beim Anlegen fuer die private Sammlung markierbar (Privatentnahme) -
 // zusaetzlich zur nachtraeglichen Ueberfuehrung auf card.html.
 const privateCollectionWrapper = document.createElement("label");
+privateCollectionWrapper.className = "checkbox-field";
 const privateCollectionCheckbox = document.createElement("input");
 privateCollectionCheckbox.type = "checkbox";
 privateCollectionCheckbox.name = "private_collection";

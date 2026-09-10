@@ -2088,6 +2088,11 @@ def _sheets_tabs():
     wishlist_headers = ["title", "team", "set_name", "target_price", "notes"]
     wishlist_rows = [[str(item.get(h, "") or "") for h in wishlist_headers] for item in db.list_wishlist_items()]
 
+    private_headers = ["title", "team", "set_name", "card_number", "tags"]
+    private_rows = [
+        [str(c.get(h, "") or "") for h in private_headers] for c in db.list_private_collection_cards()
+    ]
+
     stats_summary = _compute_statistics()["summary"]
     statistics_rows = [
         ["Gesamt-Einkaufswert", str(stats_summary["total_cost"])],
@@ -2123,6 +2128,7 @@ def _sheets_tabs():
         "Karten": (card_headers, card_rows), "Käufe": (purchase_headers, purchase_rows),
         "eBay": (ebay_headers, ebay_rows), "Inventar": (inventory_headers, inventory_rows),
         "Wunschliste": (wishlist_headers, wishlist_rows),
+        "Private Sammlung": (private_headers, private_rows),
         "Statistiken": (["Kennzahl", "Wert"], statistics_rows),
         "Dashboard": (["Kennzahl", "Wert"], dashboard_rows),
         "Sync_Info": sync_info,
