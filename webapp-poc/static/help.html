@@ -53,6 +53,7 @@ if ("serviceWorker" in navigator) {
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
@@ -141,10 +142,13 @@ if ("serviceWorker" in navigator) {
     mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
     Verfügung, siehe unten). Der Versand über das Tool ist dabei komplett optional – wird stattdessen direkt im
     eBay Seller Hub versendet, übernimmt der automatische Hintergrund-Sync Trackingnummer und Versanddienstleister
-    trotzdem von dort und markiert die Karte ebenfalls als versendet. Nach einem eBay-Verkauf wird auch der
-    (pseudonyme) eBay-Käufer-Benutzername angezeigt – ist er bei einem schon vor dieser Funktion synchronisierten
+    trotzdem von dort und markiert die Karte ebenfalls als versendet – auch ohne Trackingnummer (z. B. bei einer
+    Sendung per Warenpost/Brief), solange eBay die Bestellung als versendet führt. Nach einem eBay-Verkauf wird auch
+    der (pseudonyme) eBay-Käufer-Benutzername angezeigt – ist er bei einem schon vor dieser Funktion synchronisierten
     Verkauf noch leer, holt der Button „Käufer-/Versanddaten von eBay laden" ihn zusammen mit der aktuellen
-    Versandadresse einmalig nach (die Adresse wird dabei nur angezeigt, nicht gespeichert). Schickt ein Käufer die
+    Versandadresse einmalig nach (die Adresse wird dabei nur angezeigt, nicht gespeichert). Derselbe Button aktualisiert
+    dabei auch Trackingnummer, Versanddienstleister und das „Versendet"-Kästchen direkt von eBay, ohne auf den
+    nächsten automatischen Hintergrund-Sync warten zu müssen. Schickt ein Käufer die
     Karte zurück, markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend:
     Verkaufspreis und erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben
     als Verlust stehen.

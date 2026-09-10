@@ -187,6 +187,7 @@ if ("serviceWorker" in navigator) {
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
@@ -2476,6 +2477,29 @@ function renderSaleStats(purchase, sale) {
       ].filter(Boolean);
       buyerInfoStatus.textContent = addressLines.length ? addressLines.join(", ") : "Keine Versandadresse gefunden.";
       buyerInfoStatus.className = "";
+      // Sendungsverfolgung/Versandstatus kommen im selben Aufruf mit (siehe
+      // main.py) - Trackingfelder unten sowie das "Versendet"-Kaestchen/Badge
+      // direkt aktualisieren, statt auf den naechsten Hintergrund-Sync oder
+      // einen manuellen Seiten-Reload warten zu muessen.
+      trackingNumberInput.value = body.tracking_number || "";
+      carrierSelect.value = body.shipping_carrier || "";
+      submitTrackingBtn.textContent = body.tracking_number ? "Tracking aktualisieren" : "An eBay übermitteln";
+      trackingStatus.textContent = body.tracking_number
+        ? `Zuletzt übermittelt: ${body.tracking_number} (${SHIPPING_CARRIERS[body.shipping_carrier] || body.shipping_carrier})`
+        : "";
+      trackingStatus.className = "";
+      if (body.shipped) {
+        const shippedCheckbox = form.querySelector('input[name="shipped"]');
+        if (shippedCheckbox) shippedCheckbox.checked = true;
+        const badgeContainer = document.getElementById("sale-status-badges");
+        const alreadyShown = Array.from(badgeContainer.children).some((el) => el.textContent === "Versendet");
+        if (!alreadyShown) {
+          const badge = document.createElement("span");
+          badge.className = "badge badge-info";
+          badge.textContent = "Versendet";
+          badgeContainer.appendChild(badge);
+        }
+      }
     } catch (err) {
       buyerInfoStatus.textContent = "Fehler: " + err;
       buyerInfoStatus.className = "error";
