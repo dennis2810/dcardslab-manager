@@ -377,3 +377,12 @@ create table if not exists wishlist_price_checks (
 );
 
 create index if not exists wishlist_price_checks_item_id_idx on wishlist_price_checks(item_id);
+
+-- Migration (2026-09-10): Privatentnahme - eine Karte wird aus dem
+-- Verkaufsbestand in die private Sammlung ueberfuehrt. Setzt/loescht dieses
+-- Flag den Inventar-Bestand entsprechend auf 0 bzw. stellt ihn wieder her
+-- (siehe db.set_card_private_collection()); Statistiken/Inventar-Warnungen
+-- schliessen so markierte Karten aus, ein eventuell noch aktives eBay-
+-- Angebot bleibt aber bestehen und wird nur mit einem Hinweis versehen
+-- (gleiche Mechanik wie ein anderweitiger Verkauf).
+alter table cards add column if not exists private_collection boolean not null default false;

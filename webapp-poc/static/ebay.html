@@ -117,6 +117,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -567,6 +568,13 @@ function render(listings) {
       warn.className = "manual-sale-warning";
       warn.textContent = " ⚠️";
       warn.title = `Karte wurde bereits anderweitig verkauft (${listing.manual_sale_channel}) - Angebot sollte beendet werden.`;
+      statusTd.appendChild(warn);
+    }
+    if (listing.private_collection && (listing.status === "Veroeffentlicht" || listing.status === "Geplant")) {
+      const warn = document.createElement("span");
+      warn.className = "manual-sale-warning";
+      warn.textContent = " ⚠️";
+      warn.title = "Karte wurde in die private Sammlung überführt (Privatentnahme) - Angebot sollte beendet werden.";
       statusTd.appendChild(warn);
     }
     if (listing.status === "Verkauft" && listing.delivered) {

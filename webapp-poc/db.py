@@ -40,6 +40,10 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
         # (find_duplicate_card_by_image_hash()) zusaetzlich zum bestehenden
         # Text-Abgleich (find_duplicate_card()).
         "front_image_hash": front_image_hash,
+        # Direkt beim Scannen/manuellen Anlegen fuer die private Sammlung
+        # markierbar (index.html/card-new.html) - main.py setzt zusaetzlich
+        # die Inventar-Menge auf 0 statt 1 fuer solche Karten.
+        "private_collection": bool(fields.get("private_collection")),
     })
     response = get_client().table("cards").insert(row).execute()
     return response.data[0]
@@ -60,6 +64,17 @@ def list_cards(q=None, status=None):
         query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year", "tags"]))
     if status:
         query = query.eq("recognition_status", status)
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+
+def list_private_collection_cards(q=None):
+    # Fuer die neue Seite private-collection.html - Karten, die per
+    # Privatentnahme aus dem Verkaufsbestand genommen wurden (siehe
+    # set_card_private_collection()). Gleiche Suchspalten wie list_cards().
+    query = get_client().table("cards").select("*").eq("private_collection", True)
+    if q:
+        query = query.or_(_ilike_search_filter(q, ["title", "team", "set_name", "card_number", "season_year", "tags"]))
     response = query.order("created_at", desc=True).execute()
     return response.data
 
@@ -138,6 +153,24 @@ def update_card(card_id, fields):
         return get_card(card_id)
     response = get_client().table("cards").update(row).eq("id", card_id).execute()
     return response.data[0] if response.data else None
+
+
+def set_card_private_collection(card_id, value):
+    # Privatentnahme: Karte wird aus dem Verkaufsbestand entnommen bzw.
+    # zurueckgeholt. Passt den Inventar-Bestand entsprechend an - gleiches
+    # Bestandsmuster wie beim Anlegen/Loeschen eines manuellen Verkaufs
+    # (zero_inventory_for_card()/restore_inventory_for_card()). Ein
+    # eventuell noch aktives eBay-Angebot bleibt bewusst unangetastet -
+    # main.py/ebay.html zeigen dafuer nur einen Hinweis (siehe
+    # _expand_ebay_listings()), gleich wie bei einem anderweitigen Verkauf.
+    response = get_client().table("cards").update({"private_collection": value}).eq("id", card_id).execute()
+    if not response.data:
+        return None
+    if value:
+        zero_inventory_for_card(card_id)
+    else:
+        restore_inventory_for_card(card_id)
+    return response.data[0]
 
 
 def set_card_image_path(card_id, side, object_path):
@@ -508,7 +541,10 @@ def purchase_cost_by_card_id(card_ids):
 def get_cards_by_ids(card_ids):
     if not card_ids:
         return []
-    response = get_client().table("cards").select("id,title,front_image_path").in_("id", card_ids).execute()
+    response = (
+        get_client().table("cards").select("id,title,front_image_path,private_collection")
+        .in_("id", card_ids).execute()
+    )
     return response.data
 
 
@@ -1197,7 +1233,13 @@ def statistics_rows():
     # main.py, kept here since it's pure data assembly with no business
     # logic (profit/margin/holding-days math lives in the /api/statistics
     # endpoint instead).
-    cards = get_client().table("cards").select("id,title,card_no,team,set_name").execute().data
+    # Karten in der privaten Sammlung (Privatentnahme) zaehlen nicht mehr
+    # zum Verkaufsbestand - siehe set_card_private_collection() - und
+    # bleiben deshalb aus Statistiken/Dashboard-Kennzahlen aussen vor.
+    cards = (
+        get_client().table("cards").select("id,title,card_no,team,set_name")
+        .eq("private_collection", False).execute().data
+    )
     if not cards:
         return []
     card_ids = [c["id"] for c in cards]

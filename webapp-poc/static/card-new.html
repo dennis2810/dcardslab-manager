@@ -82,6 +82,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -219,6 +220,15 @@ for (const [key, label] of [["location", "Lagerort"], ["notes", "Notiz"]]) {
   wrapper.appendChild(input);
   form.insertBefore(wrapper, statusEl);
 }
+
+// Direkt beim Anlegen fuer die private Sammlung markierbar (Privatentnahme) -
+// zusaetzlich zur nachtraeglichen Ueberfuehrung auf card.html.
+const privateCollectionWrapper = document.createElement("label");
+const privateCollectionCheckbox = document.createElement("input");
+privateCollectionCheckbox.type = "checkbox";
+privateCollectionCheckbox.name = "private_collection";
+privateCollectionWrapper.append(privateCollectionCheckbox, " Für die private Sammlung (Privatentnahme)");
+form.insertBefore(privateCollectionWrapper, statusEl);
 
 function updatePreview(side) {
   const img = document.getElementById(`${side}-preview`);
@@ -400,6 +410,7 @@ form.addEventListener("submit", async (ev) => {
   for (const [key] of FIELDS) {
     fields[key] = form.elements[key].value;
   }
+  fields.private_collection = form.elements.private_collection.checked;
 
   const data = new FormData();
   data.append("front", sideBlobs.front, "front.jpg");

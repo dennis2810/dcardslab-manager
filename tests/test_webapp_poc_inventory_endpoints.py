@@ -76,6 +76,28 @@ class ListInventoryEndpointTests(unittest.TestCase):
             response = client.get("/api/inventory")
         self.assertIsNone(response.json()["inventory"][0]["manual_sale_channel"])
 
+    def test_attaches_the_private_collection_flag(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 0}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{
+                 "id": "card-1", "title": "Karte 1", "front_image_path": None, "private_collection": True,
+             }]), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
+            response = client.get("/api/inventory")
+        self.assertTrue(response.json()["inventory"][0]["private_collection"])
+
+    def test_private_collection_flag_defaults_to_false(self):
+        rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 2}]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": None}]), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
+            response = client.get("/api/inventory")
+        self.assertFalse(response.json()["inventory"][0]["private_collection"])
+
     def test_returns_empty_list_when_no_rows(self):
         with patch("main.db.list_inventory", return_value=[]):
             response = client.get("/api/inventory")

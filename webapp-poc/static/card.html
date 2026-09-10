@@ -194,6 +194,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -656,7 +657,7 @@ async function loadCard() {
     renderExtraImages(card.extra_image_urls);
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
-    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale);
+    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection);
     renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
@@ -774,6 +775,40 @@ function render(card) {
     });
   });
   actions.appendChild(deleteBtn);
+
+  // Privatentnahme: eigener Button statt eines Kaestchens im Formular, da
+  // die Aktion einen Seiteneffekt hat (Inventar wird auf 0 gesetzt bzw.
+  // wiederhergestellt - siehe db.set_card_private_collection()) und nicht
+  // erst beim naechsten "Speichern" ausgeloest werden soll.
+  const privateBtn = document.createElement("button");
+  privateBtn.type = "button";
+  privateBtn.id = "private-collection-btn";
+  privateBtn.textContent = card.private_collection
+    ? "Aus privater Sammlung zurückholen" : "In private Sammlung überführen (Privatentnahme)";
+  privateBtn.title = "Entnimmt die Karte aus dem Verkaufsbestand - der Inventarbestand wird auf 0 gesetzt. "
+    + "Ein eventuell noch aktives eBay-Angebot muss weiterhin manuell beendet werden.";
+  privateBtn.addEventListener("click", async () => {
+    const goingPrivate = !card.private_collection;
+    if (goingPrivate && !confirm("Karte in die private Sammlung überführen? Der Inventarbestand wird auf 0 gesetzt.")) return;
+    privateBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/private-collection`, {
+        method: goingPrivate ? "POST" : "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      showToast(goingPrivate ? "In die private Sammlung überführt." : "Aus der privaten Sammlung zurückgeholt.");
+      loadCard();
+    } catch (err) {
+      showToast("Fehler: " + err, true);
+    } finally {
+      privateBtn.disabled = false;
+    }
+  });
+  actions.appendChild(privateBtn);
 
   form.appendChild(actions);
 
@@ -1029,6 +1064,12 @@ const SHIPPING_CARRIERS = {
 function renderSaleStatusBadges(card) {
   const container = document.getElementById("sale-status-badges");
   container.innerHTML = "";
+  if (card.private_collection) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Private Sammlung";
+    container.appendChild(badge);
+  }
   if (card.manual_sale) {
     const badge = document.createElement("span");
     badge.className = "badge badge-info";
@@ -1874,7 +1915,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
   section.appendChild(form);
 }
 
-async function renderEbaySection(listing, purchase, sale, manualSale) {
+async function renderEbaySection(listing, purchase, sale, manualSale, privateCollection) {
   const section = document.getElementById("ebay-section");
   section.innerHTML = "<h2>eBay</h2>";
 
@@ -1911,7 +1952,7 @@ async function renderEbaySection(listing, purchase, sale, manualSale) {
     renderEbayScheduledView(section, listing, environment);
   } else {
     const environment = await getEbayEnvironment();
-    renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale);
+    renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale, privateCollection);
   }
 }
 
@@ -2356,11 +2397,17 @@ function renderEbayScheduledView(section, listing, environment) {
 // Erstveroeffentlichung oder eine spaetere Bearbeitung war.
 const RECENTLY_UPDATED_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
-function renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale) {
+function renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale, privateCollection) {
   if (manualSale && listing.status === "Veroeffentlicht") {
     const warn = document.createElement("p");
     warn.className = "workflow-hint";
     warn.textContent = `⚠️ Diese Karte wurde bereits anderweitig verkauft (${manualSale.channel}) - das eBay-Angebot sollte schnellstmöglich beendet werden.`;
+    section.appendChild(warn);
+  }
+  if (privateCollection && listing.status === "Veroeffentlicht") {
+    const warn = document.createElement("p");
+    warn.className = "workflow-hint";
+    warn.textContent = "⚠️ Diese Karte wurde in die private Sammlung überführt (Privatentnahme) - das eBay-Angebot sollte schnellstmöglich beendet werden.";
     section.appendChild(warn);
   }
 

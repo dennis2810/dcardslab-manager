@@ -124,6 +124,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -175,6 +176,7 @@ if ("serviceWorker" in navigator) {
       </select>
     </label>
     <button type="button" id="bulk-add-to-purchase-btn">Verknüpfen</button>
+    <button type="button" id="bulk-private-collection">In private Sammlung überführen</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-status"></span>
   </div>
@@ -370,6 +372,14 @@ function refundedBadge(refunded) {
   const badge = document.createElement("span");
   badge.className = "manual-sale-badge";
   badge.textContent = "Retoure";
+  return badge;
+}
+
+function privateCollectionBadge(privateCollection) {
+  if (!privateCollection) return null;
+  const badge = document.createElement("span");
+  badge.className = "manual-sale-badge";
+  badge.textContent = "Private Sammlung";
   return badge;
 }
 
@@ -573,6 +583,9 @@ function render(cards) {
     const refunded = refundedBadge(card.refunded);
     if (refunded) a.appendChild(refunded);
 
+    const privateBadge = privateCollectionBadge(card.private_collection);
+    if (privateBadge) a.appendChild(privateBadge);
+
     if (card.ebay_sku) {
       const skuEl = document.createElement("div");
       skuEl.className = "sku";
@@ -655,6 +668,8 @@ function renderList(cards) {
     if (delivered) shippedTd.appendChild(delivered);
     const refunded = refundedBadge(card.refunded);
     if (refunded) shippedTd.appendChild(refunded);
+    const privateBadge = privateCollectionBadge(card.private_collection);
+    if (privateBadge) shippedTd.appendChild(privateBadge);
     tr.appendChild(shippedTd);
 
     const tagsTd = document.createElement("td");
@@ -728,6 +743,13 @@ async function undoLastBulkAction() {
       await Promise.all(action.ids.map((id) =>
         fetch(`/api/ebay/listings/${encodeURIComponent(id)}`, { method: "DELETE" })
       ));
+    } else if (action.type === "private-collection") {
+      // DELETE macht sowohl das Flag als auch die Inventar-Nullung
+      // rueckgaengig (setzt die Menge auf 1 zurueck - siehe
+      // db.set_card_private_collection()).
+      await Promise.all(action.ids.map((id) =>
+        fetch(`/api/cards/${encodeURIComponent(id)}/private-collection`, { method: "DELETE" })
+      ));
     }
     clearUndo();
     loadCards();
@@ -772,6 +794,35 @@ async function bulkSetShipped(shipped) {
 
 document.getElementById("bulk-mark-shipped").addEventListener("click", () => bulkSetShipped(true));
 document.getElementById("bulk-unmark-shipped").addEventListener("click", () => bulkSetShipped(false));
+
+// Massen-Privatentnahme - ein POST pro ausgewaehlter Karte (setzt Flag +
+// Inventar auf 0, siehe db.set_card_private_collection()). Karten, die
+// schon in der privaten Sammlung sind, werden uebersprungen.
+async function bulkSetPrivateCollection() {
+  const ids = [...selectedIds].filter((id) => !currentCards.find((c) => c.id === id)?.private_collection);
+  if (!ids.length) {
+    showToast("Keine der ausgewählten Karten kann überführt werden (schon in der privaten Sammlung).", true);
+    return;
+  }
+  if (!confirm(`${ids.length} Karte(n) in die private Sammlung überführen? Der Inventarbestand wird jeweils auf 0 gesetzt.`)) return;
+  bulkStatusEl.textContent = "Überführt …";
+  try {
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}/private-collection`, { method: "POST" })
+    ));
+    bulkStatusEl.textContent = "";
+    selectedIds.clear();
+    updateBulkBar();
+    setUndo({ type: "private-collection", ids }, `${ids.length} Karte(n) in die private Sammlung überführt.`);
+    showToast(`${ids.length} Karte(n) in die private Sammlung überführt.`);
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
+  }
+}
+
+document.getElementById("bulk-private-collection").addEventListener("click", bulkSetPrivateCollection);
 
 document.getElementById("bulk-clear-selection").addEventListener("click", () => {
   selectedIds.clear();
@@ -1004,13 +1055,14 @@ function downloadCsv(filename, headers, rows) {
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status",
-    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Tags",
+    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung", "Tags",
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
-    c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein", c.tags || "",
+    c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein",
+    c.private_collection ? "Ja" : "Nein", c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
 });

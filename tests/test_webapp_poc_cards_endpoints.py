@@ -177,6 +177,60 @@ class UpdateCardEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class SetCardPrivateCollectionEndpointTests(unittest.TestCase):
+    def test_post_marks_card_private_and_returns_it_with_signed_urls(self):
+        updated = {
+            "id": "card-1", "title": "Karte 1", "private_collection": True,
+            "front_image_path": "b1/1_front.jpg", "back_image_path": None,
+        }
+        with patch("main.db.set_card_private_collection", return_value=updated) as mock_set, \
+             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+            response = client.post("/api/cards/card-1/private-collection")
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("card-1", True)
+        body = response.json()
+        self.assertTrue(body["private_collection"])
+        self.assertEqual(body["front_image_url"], "https://signed/b1/1_front.jpg")
+
+    def test_post_returns_404_when_not_found(self):
+        with patch("main.db.set_card_private_collection", return_value=None):
+            response = client.post("/api/cards/does-not-exist/private-collection")
+        self.assertEqual(response.status_code, 404)
+
+    def test_delete_unmarks_card_private(self):
+        updated = {"id": "card-1", "title": "Karte 1", "private_collection": False}
+        with patch("main.db.set_card_private_collection", return_value=updated) as mock_set:
+            response = client.delete("/api/cards/card-1/private-collection")
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("card-1", False)
+        self.assertFalse(response.json()["private_collection"])
+
+    def test_delete_returns_404_when_not_found(self):
+        with patch("main.db.set_card_private_collection", return_value=None):
+            response = client.delete("/api/cards/does-not-exist/private-collection")
+        self.assertEqual(response.status_code, 404)
+
+
+class ListPrivateCollectionEndpointTests(unittest.TestCase):
+    def test_returns_private_cards_with_signed_urls(self):
+        rows = [
+            {"id": "card-1", "title": "Karte 1", "private_collection": True, "front_image_path": "b1/1_front.jpg"},
+        ]
+        with patch("main.db.list_private_collection_cards", return_value=rows) as mock_list, \
+             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+            response = client.get("/api/private-collection")
+        self.assertEqual(response.status_code, 200)
+        mock_list.assert_called_once_with(q=None)
+        body = response.json()
+        self.assertEqual(body["cards"][0]["front_image_url"], "https://signed/b1/1_front.jpg")
+
+    def test_passes_search_query_through(self):
+        with patch("main.db.list_private_collection_cards", return_value=[]) as mock_list:
+            response = client.get("/api/private-collection?q=Bayern")
+        self.assertEqual(response.status_code, 200)
+        mock_list.assert_called_once_with(q="Bayern")
+
+
 class DeleteCardEndpointTests(unittest.TestCase):
     def test_deletes_card_and_its_images(self):
         deleted = {
@@ -869,6 +923,13 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         self._post_create(location="Regal B", notes="Einzelkarte")
         mocks["main.db.create_inventory_item"].assert_called_once_with(
             "card-1", {"quantity": 1, "location": "Regal B", "notes": "Einzelkarte"}
+        )
+
+    def test_private_collection_field_creates_zero_quantity_inventory(self):
+        mocks = self._patch_all()
+        self._post_create(fields={"title": "Max Mustermann", "private_collection": True})
+        mocks["main.db.create_inventory_item"].assert_called_once_with(
+            "card-1", {"quantity": 0, "location": "", "notes": ""}
         )
 
     def test_inventory_item_creation_failure_does_not_fail_the_request(self):

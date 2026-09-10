@@ -58,6 +58,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -145,6 +146,9 @@ if ("serviceWorker" in navigator) {
       ausgenommen.</li>
     <li>Die Kennzeichen "Zugestellt" und "Retoure" erscheinen jetzt ebenfalls in der Kartenübersicht
       (Kachel-/Listenansicht) und im CSV-Export, nicht mehr nur auf der Kartendetailseite.</li>
+    <li>Neue Massenaktion „In private Sammlung überführen" (Privatentnahme) – mit „Rückgängig" wie die anderen
+      Massenaktionen. Direkt beim Scannen/manuellen Anlegen lässt sich eine Karte ebenfalls schon als privat
+      markieren.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -246,6 +250,9 @@ if ("serviceWorker" in navigator) {
       „⭳ CSV-Export" exportierbar.</li>
     <li>Das Massen-Beenden von eBay-Angeboten läuft jetzt über eine kurze Gnadenfrist mit „Rückgängig" statt eines
       Bestätigungsdialogs, bevor die Angebote tatsächlich bei eBay beendet werden.</li>
+    <li>Ein ⚠️-Hinweis (Angebotsübersicht und Kartenseite) erscheint jetzt auch, wenn eine Karte per
+      Privatentnahme in die private Sammlung überführt wurde, während das eBay-Angebot noch aktiv ist – analog
+      zum bestehenden Hinweis bei einem anderweitigen Verkauf.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -263,6 +270,8 @@ if ("serviceWorker" in navigator) {
     <li>Direkter Link „📋 Inventur starten" neben „+ Eintrag hinzufügen", der zur Inventur-Seite führt.</li>
     <li>Bestandswarnung für niedrigen Bestand, sobald in den Einstellungen eine Mindestbestand-Schwelle gesetzt
       ist.</li>
+    <li>Neuer Status „Privatentnahme" (Menge 0, eigener Status-Filter) für Karten, die in die private Sammlung
+      überführt wurden – löst keine Bestandswarnung aus.</li>
   </ul>
 
   <h2>Inventur <span class="date">September 2026</span></h2>
@@ -288,6 +297,18 @@ if ("serviceWorker" in navigator) {
       „Sourcing-Treffer (Wunschliste)" zeigt die Gesamtzahl.</li>
     <li>Beim Aufklappen eines Eintrags zeigt ein kleiner Verlaufs-Chart (Sparkline) die bisher gefundenen
       Sourcing-Treffer über die Zeit, sobald mindestens zwei Preise vorliegen.</li>
+  </ul>
+
+  <h2>Private Sammlung <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite für Karten, die per Privatentnahme aus dem Verkaufsbestand genommen wurden – markierbar direkt
+      beim Scannen/manuellen Anlegen oder nachträglich über einen Button auf der Kartendetailseite (bzw. per
+      Massenaktion auf der Kartenübersicht).</li>
+    <li>Eine so markierte Karte bleibt in der Kartenübersicht sichtbar, fällt aber aus dem Inventar (Menge 0,
+      Status „Privatentnahme") und aus den Statistiken heraus. Ein noch aktives eBay-Angebot wird dadurch nicht
+      automatisch beendet – dafür derselbe Warnhinweis wie bei einem anderweitigen Verkauf.</li>
+    <li>Liste ist sortierbar (Klick auf Spaltenüberschrift) und bei vielen Einträgen seitenweise blätterbar, dazu
+      ein Druck- und ein CSV-Export-Button. Der Button „Zurückholen" macht die Privatentnahme rückgängig.</li>
   </ul>
 
   <h2>Statistiken &amp; Dashboard <span class="date">August/September 2026</span></h2>

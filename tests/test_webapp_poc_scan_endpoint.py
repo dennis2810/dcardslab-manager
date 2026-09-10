@@ -70,7 +70,7 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             self.mocks[target] = p.start()
             self.addCleanup(p.stop)
 
-    def _post_scan(self, location=None, notes=None):
+    def _post_scan(self, location=None, notes=None, private_collection=None):
         files = {
             "front": ("front.jpg", b"fake-front-bytes", "image/jpeg"),
             "back": ("back.jpg", b"fake-back-bytes", "image/jpeg"),
@@ -80,6 +80,8 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             data["location"] = location
         if notes is not None:
             data["notes"] = notes
+        if private_collection is not None:
+            data["private_collection"] = "true" if private_collection else "false"
         return client.post("/api/scan", files=files, data=data)
 
     def test_creates_one_batch_for_the_scan(self):
@@ -110,6 +112,23 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self._post_scan(location="Regal A", notes="Aus Sammlung X")
         self.mocks["main.db.create_inventory_item"].assert_any_call(
             "card-1", {"quantity": 1, "location": "Regal A", "notes": "Aus Sammlung X"}
+        )
+
+    def test_private_collection_flag_defaults_to_false_on_inserted_cards(self):
+        self._post_scan()
+        fields = self.mocks["main.db.insert_card"].call_args_list[0].args[2]
+        self.assertNotIn("private_collection", fields)
+
+    def test_private_collection_flag_marks_all_inserted_cards(self):
+        self._post_scan(private_collection=True)
+        for call in self.mocks["main.db.insert_card"].call_args_list:
+            fields = call.args[2]
+            self.assertIs(fields["private_collection"], True)
+
+    def test_private_collection_flag_creates_zero_quantity_inventory(self):
+        self._post_scan(private_collection=True)
+        self.mocks["main.db.create_inventory_item"].assert_any_call(
+            "card-1", {"quantity": 0, "location": "", "notes": ""}
         )
 
     def test_inventory_item_creation_failure_does_not_fail_the_card(self):

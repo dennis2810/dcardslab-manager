@@ -178,6 +178,23 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
             response = client.get("/api/ebay/listings")
         self.assertEqual(response.json()["listings"][0]["manual_sale_channel"], "Kleinanzeigen")
 
+    def test_attaches_private_collection_flag(self):
+        listing = _listing(status="Veroeffentlicht")
+        with patch("main.db.list_ebay_listings", return_value=[listing]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card(private_collection=True)]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
+            response = client.get("/api/ebay/listings")
+        self.assertTrue(response.json()["listings"][0]["private_collection"])
+
+    def test_private_collection_flag_defaults_to_false(self):
+        with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
+            response = client.get("/api/ebay/listings")
+        self.assertFalse(response.json()["listings"][0]["private_collection"])
+
     def test_attaches_price_research_average_and_count(self):
         with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \

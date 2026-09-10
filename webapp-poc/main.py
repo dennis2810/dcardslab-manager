@@ -145,19 +145,23 @@ def _find_duplicate_card_by_hash_safe(hash_value, exclude_card_id=None):
         return None
 
 
-def _create_default_inventory_item(card_id, location="", notes=""):
+def _create_default_inventory_item(card_id, location="", notes="", private=False):
     # Every scanned card gets a quantity-1 "NM" inventory row automatically -
     # the seller physically has the card in hand at scan time, so requiring
     # a separate manual step for the common case would just be busywork.
     # location/notes come from the same scan/manual-add form (one shared
     # storage spot for a whole scan batch, or per-card for a manual add) so
     # they don't need a second trip through card.html's Inventar section
-    # just to record where the card physically ended up.
+    # just to record where the card physically ended up. A card marked for
+    # the private Sammlung right at creation (Privatentnahme) never counts
+    # as sellable stock, so it starts at quantity 0 instead of 1.
     # Isolated from the card-insert's own error handling on purpose: this
     # failing must not make an otherwise-successful card insert look failed
     # to the caller (see process_one() below) - it's a soft warning only.
     try:
-        db.create_inventory_item(card_id, {"quantity": 1, "location": location, "notes": notes})
+        db.create_inventory_item(
+            card_id, {"quantity": 0 if private else 1, "location": location, "notes": notes}
+        )
     except Exception:
         logger.exception("Automatischer Inventareintrag fuer Karte %s fehlgeschlagen", card_id)
 
@@ -166,6 +170,7 @@ def _create_default_inventory_item(card_id, location="", notes=""):
 async def scan(
     front: UploadFile = File(...), back: UploadFile = File(...),
     location: str = Form(""), notes: str = Form(""),
+    private_collection: bool = Form(False),
 ):
     with tempfile.TemporaryDirectory(prefix="dcardslab_poc_") as tmp_str:
         tmp = Path(tmp_str)
@@ -199,6 +204,8 @@ async def scan(
             bp = back_map.get(number)
             if bp is None:
                 fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
+                if private_collection:
+                    fields["private_collection"] = True
                 try:
                     card_row = db.insert_card(batch_id, number, fields, None, None)
                 except Exception as exc:
@@ -207,10 +214,12 @@ async def scan(
                         **fields,
                         "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
                     }
-                _create_default_inventory_item(card_row["id"], location, notes)
+                _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
                 return {"number": number, **fields, "id": card_row["id"]}
 
             fields = recognize_card(front_path=fp, back_path=bp)
+            if private_collection:
+                fields["private_collection"] = True
             duplicate = _find_duplicate_card_safe(fields)
             front_hash = _compute_image_hash_safe(fp)
             if duplicate is None and front_hash:
@@ -243,7 +252,7 @@ async def scan(
                     image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
                 result["image_error"] = image_error
                 return result
-            _create_default_inventory_item(card_row["id"], location, notes)
+            _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
 
             if front_image_path:
                 try:
@@ -346,7 +355,9 @@ async def create_card_manual(
             ) from exc
 
     db.update_batch_status(batch_id, "ok")
-    _create_default_inventory_item(card_row["id"], location, notes)
+    _create_default_inventory_item(
+        card_row["id"], location, notes, private=bool(parsed_fields.get("private_collection"))
+    )
     result = _attach_signed_urls(card_row)
     if duplicate:
         # Gleiche Warnung wie beim Scannen (siehe process_one()) - bisher
@@ -408,6 +419,7 @@ def _expand_inventory_items(items):
         item["sku"] = info.get("sku")
         item["ebay_status"] = info.get("status")
         item["manual_sale_channel"] = (manual_sale_info.get(item["card_id"]) or {}).get("channel") or None
+        item["private_collection"] = bool(card.get("private_collection"))
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -539,6 +551,28 @@ async def update_card(card_id: str, fields: dict = Body(...)):
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
     return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.post("/api/cards/{card_id}/private-collection")
+async def mark_card_private_collection(card_id: str):
+    updated = db.set_card_private_collection(card_id, True)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.delete("/api/cards/{card_id}/private-collection")
+async def unmark_card_private_collection(card_id: str):
+    updated = db.set_card_private_collection(card_id, False)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.get("/api/private-collection")
+async def list_private_collection(q: str | None = None):
+    cards = [_attach_signed_urls(c) for c in db.list_private_collection_cards(q=q)]
+    return JSONResponse({"cards": cards})
 
 
 def _delete_card_and_images(card_id):
@@ -1336,6 +1370,7 @@ def _expand_ebay_listings(listings):
         listing["delivered"] = bool(sale.get("delivered")) if sale else False
         listing["refunded"] = bool(sale.get("refunded")) if sale else False
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
+        listing["private_collection"] = bool(card.get("private_collection"))
         research = price_research_info.get(listing["card_id"])
         listing["price_research_avg"] = research["avg_price"] if research else None
         listing["price_research_count"] = research["count"] if research else 0

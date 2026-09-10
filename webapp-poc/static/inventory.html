@@ -68,6 +68,7 @@ if ("serviceWorker" in navigator) {
   .status-sold { background: var(--info-bg); color: var(--info-fg); }
   .status-in-stock { background: var(--success-bg); color: var(--success-fg); }
   .status-out { background: var(--neutral-bg); color: #555; }
+  .status-private { background: var(--accent-bg); border: 1px solid var(--accent-border); }
   .sale-channel-hint { font-size: 0.8rem; color: #555; }
   @media print {
     .no-print { display: none !important; }
@@ -112,6 +113,7 @@ if ("serviceWorker" in navigator) {
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
@@ -143,6 +145,7 @@ if ("serviceWorker" in navigator) {
         <option value="">Alle</option>
         <option value="Auf Lager">Auf Lager</option>
         <option value="Verkauft">Verkauft</option>
+        <option value="Privatentnahme">Privatentnahme</option>
         <option value="Nicht vorrätig">Nicht vorrätig</option>
       </select>
     </label>
@@ -359,7 +362,10 @@ function statusInfo(item) {
   // ueber einen manuellen Verkauf (Kleinanzeigen, Vinted, ...). Der Status-
   // Filter oben matcht exakt auf "Verkauft", daher bewusst kein
   // kanal-spezifischer Zusatztext im Label selbst (siehe render() fuer den
-  // Kanal-Hinweis daneben).
+  // Kanal-Hinweis daneben). Privatentnahme wird zuerst geprueft - eine
+  // solche Karte hat nie gleichzeitig einen Verkauf (siehe
+  // set_card_private_collection()).
+  if (item.private_collection) return ["Privatentnahme", "status-private"];
   if (item.ebay_status === "Verkauft" || item.manual_sale_channel) return ["Verkauft", "status-sold"];
   if ((item.quantity ?? 0) > 0) return ["Auf Lager", "status-in-stock"];
   return ["Nicht vorrätig", "status-out"];
@@ -377,6 +383,7 @@ function renderWarnings() {
   const noLocation = items.filter((item) => (item.quantity ?? 0) > 0 && !(item.location || "").trim());
   const unexplainedZero = items.filter((item) =>
     (item.quantity ?? 0) === 0 && item.ebay_status !== "Verkauft" && !item.manual_sale_channel
+    && !item.private_collection
   );
   const lowStock = lowStockThreshold > 0
     ? items.filter((item) => (item.quantity ?? 0) > 0 && (item.quantity ?? 0) < lowStockThreshold)
