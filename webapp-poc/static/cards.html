@@ -57,7 +57,7 @@ if ("serviceWorker" in navigator) {
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
      Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
@@ -151,6 +151,14 @@ if ("serviceWorker" in navigator) {
       <option value="Verkauft">Verkauft</option>
       <option value="Fehler">Fehler</option>
       <option value="Beendet">Beendet</option>
+    </select>
+    <select id="shipping-filter">
+      <option value="">Alle Versandstatus</option>
+      <option value="not_shipped">Nicht versendet</option>
+      <option value="shipped">Versendet</option>
+      <option value="picked_up">Abgeholt</option>
+      <option value="delivered">Zugestellt</option>
+      <option value="refunded">Retoure</option>
     </select>
     <select id="tag-filter">
       <option value="">Alle Tags</option>
@@ -290,6 +298,7 @@ document.addEventListener("keydown", (ev) => {
 });
 const statusSelect = document.getElementById("status");
 const ebayFilterSelect = document.getElementById("ebay-filter");
+const shippingFilterSelect = document.getElementById("shipping-filter");
 const tagFilterSelect = document.getElementById("tag-filter");
 const statusMsg = document.getElementById("status-msg");
 const grid = document.getElementById("grid");
@@ -456,10 +465,27 @@ function cardTags(card) {
   return (card.tags || "").split(",").map((t) => t.trim()).filter(Boolean);
 }
 
+// Nicht exklusiv (z.B. "versendet" UND spaeter "zugestellt" koennen beide
+// zutreffen) - der Filter zeigt daher Karten, auf die das gewaehlte Merkmal
+// zutrifft, nicht einen einzelnen "Status" pro Karte.
+function matchesShippingFilter(card, value) {
+  switch (value) {
+    case "shipped": return Boolean(card.shipped);
+    case "picked_up": return Boolean(card.picked_up);
+    case "delivered": return Boolean(card.delivered);
+    case "refunded": return Boolean(card.refunded);
+    case "not_shipped": return !card.shipped && !card.picked_up && !card.delivered;
+    default: return true;
+  }
+}
+
 function visibleCards() {
   let filtered = sortedCards();
   if (ebayFilterSelect.value) {
     filtered = filtered.filter((c) => (c.ebay_status || "") === ebayFilterSelect.value);
+  }
+  if (shippingFilterSelect.value) {
+    filtered = filtered.filter((c) => matchesShippingFilter(c, shippingFilterSelect.value));
   }
   if (tagFilterSelect.value) {
     filtered = filtered.filter((c) => cardTags(c).includes(tagFilterSelect.value));
@@ -691,6 +717,11 @@ qInput.addEventListener("input", () => {
 });
 statusSelect.addEventListener("change", loadCards);
 ebayFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
+
+shippingFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });
