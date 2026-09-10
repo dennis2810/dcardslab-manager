@@ -280,5 +280,71 @@ class DeletePurchaseReceiptEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ImportPurchasesCsvEndpointTests(unittest.TestCase):
+    def _upload(self, csv_text):
+        return client.post(
+            "/api/purchases/import",
+            files={"file": ("kaeufe.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+        )
+
+    def test_imports_rows_and_calls_create_purchase_per_row(self):
+        csv_text = (
+            "Datum;Plattform;Verkäufer;Gesamt;Versand;Notizen\r\n"
+            "27.08.2026;eBay;Kartenfan99;12.5;2.99;Erste Zeile\r\n"
+            "01.09.2026;Kleinanzeigen;;8;;\r\n"
+        )
+        with patch("main.db.create_purchase", side_effect=[{"id": "p1"}, {"id": "p2"}]) as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 2)
+        self.assertEqual(body["errors"], [])
+        self.assertEqual(mock_create.call_count, 2)
+        mock_create.assert_any_call({
+            "purchase_date": "2026-08-27", "platform": "eBay", "seller": "Kartenfan99",
+            "total_price": 12.5, "shipping": 2.99, "notes": "Erste Zeile",
+        })
+        mock_create.assert_any_call({"purchase_date": "2026-09-01", "platform": "Kleinanzeigen", "total_price": 8.0})
+
+    def test_invalid_date_is_reported_as_error_and_row_skipped(self):
+        csv_text = "Datum;Plattform;Verkäufer;Gesamt;Versand;Notizen\r\nnicht-ein-datum;eBay;;;;\r\n"
+        with patch("main.db.create_purchase") as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(len(body["errors"]), 1)
+        self.assertIn("Zeile 2", body["errors"][0])
+        mock_create.assert_not_called()
+
+    def test_invalid_amount_is_reported_as_error_and_row_skipped(self):
+        csv_text = "Datum;Plattform;Verkäufer;Gesamt;Versand;Notizen\r\n27.08.2026;eBay;;zwölf;;\r\n"
+        with patch("main.db.create_purchase") as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(len(body["errors"]), 1)
+        self.assertIn("Zeile 2", body["errors"][0])
+        mock_create.assert_not_called()
+
+    def test_fully_empty_row_is_skipped_without_error(self):
+        csv_text = "Datum;Plattform;Verkäufer;Gesamt;Versand;Notizen\r\n;;;;;\r\n27.08.2026;eBay;;;;\r\n"
+        with patch("main.db.create_purchase", return_value={"id": "p1"}) as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 1)
+        self.assertEqual(body["errors"], [])
+        mock_create.assert_called_once_with({"purchase_date": "2026-08-27", "platform": "eBay"})
+
+    def test_returns_400_for_non_utf8_file(self):
+        response = client.post(
+            "/api/purchases/import",
+            files={"file": ("kaeufe.csv", b"\xff\xfe\x00broken", "text/csv")},
+        )
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -718,6 +718,43 @@ def sales_by_listing_id(listing_ids):
     return result
 
 
+def search_sales(q):
+    """Fuer die globale Suche (search.html): sucht Verkaeufe nach eBay-
+    Kaeufername (ebay_sales.buyer_username) sowie Kanal (manual_sales.
+    channel) und reichert die Treffer mit dem Kartentitel an. Kein
+    gemeinsamer Index noetig bei der Groessenordnung dieses Tools - ein
+    einfacher ilike-Abgleich pro Tabelle reicht."""
+    safe_q = q.replace(",", " ").replace("(", " ").replace(")", " ")
+    pattern = f"%{safe_q}%"
+    ebay_response = (
+        get_client().table("ebay_sales").select("card_id,sale_date,gross_price,buyer_username")
+        .ilike("buyer_username", pattern).execute()
+    )
+    manual_response = (
+        get_client().table("manual_sales").select("card_id,sale_date,gross_price,channel")
+        .ilike("channel", pattern).execute()
+    )
+    card_ids = {row["card_id"] for row in ebay_response.data} | {row["card_id"] for row in manual_response.data}
+    titles = {}
+    if card_ids:
+        cards_response = get_client().table("cards").select("id,title").in_("id", list(card_ids)).execute()
+        titles = {row["id"]: row["title"] for row in cards_response.data}
+    results = []
+    for row in ebay_response.data:
+        results.append({
+            "card_id": row["card_id"], "title": titles.get(row["card_id"], ""),
+            "channel": "eBay", "sale_date": row.get("sale_date"),
+            "gross_price": row.get("gross_price"), "buyer_username": row.get("buyer_username"),
+        })
+    for row in manual_response.data:
+        results.append({
+            "card_id": row["card_id"], "title": titles.get(row["card_id"], ""),
+            "channel": row.get("channel"), "sale_date": row.get("sale_date"),
+            "gross_price": row.get("gross_price"), "buyer_username": None,
+        })
+    return results
+
+
 GOOGLE_SHEETS_SETTINGS_FIELDS = {"refresh_token", "spreadsheet_id", "connected_at", "last_synced_at"}
 
 
@@ -1028,6 +1065,32 @@ def list_wishlist_items_due_for_price_check(limit=3, max_age_days=1):
 
 def update_wishlist_price_check(item_id, fields):
     get_client().table("wishlist_items").update(fields).eq("id", item_id).execute()
+
+
+def record_wishlist_price_check(item_id, price, checked_at):
+    # Verlauf fuer die Sparkline auf wishlist.html (analog zu price_research
+    # bei Karten) - wird nur bei einem tatsaechlichen Treffer aufgerufen
+    # (siehe ebay_scheduler.run_wishlist_price_check_once()), damit die Linie
+    # nicht durch erfolglose Pruefungen verrauscht wird.
+    get_client().table("wishlist_price_checks").insert({
+        "item_id": item_id, "price": price, "checked_at": checked_at,
+    }).execute()
+
+
+def wishlist_price_history_by_item_id(item_ids):
+    # Bulk-Companion analog zu sale_flags_by_card_id() - eine Abfrage fuer
+    # die ganze Wunschliste statt einer pro Eintrag beim Laden von
+    # GET /api/wishlist.
+    if not item_ids:
+        return {}
+    response = (
+        get_client().table("wishlist_price_checks").select("item_id,price,checked_at")
+        .in_("item_id", item_ids).order("checked_at").execute()
+    )
+    result = {}
+    for row in response.data:
+        result.setdefault(row["item_id"], []).append({"price": row["price"], "checked_at": row["checked_at"]})
+    return result
 
 
 def delete_wishlist_item(item_id):

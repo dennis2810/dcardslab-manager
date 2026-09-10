@@ -37,9 +37,11 @@ if ("serviceWorker" in navigator) {
   .profit-negative { color: #b00020; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -60,6 +62,9 @@ if ("serviceWorker" in navigator) {
   #new-purchase-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   #new-purchase-form input, #new-purchase-form select { font-weight: normal; margin-top: 0.2rem; }
   #new-purchase-form .actions { grid-column: 1 / -1; }
+  #import-form { display: none; flex-direction: column; gap: 0.6rem; align-items: flex-start; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+  #import-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .import-hint { font-size: 0.85rem; color: #555; margin: 0; }
   .error { color: #b00020; font-weight: 600; }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
@@ -109,9 +114,13 @@ if ("serviceWorker" in navigator) {
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
 
   <p id="status-msg"></p>
@@ -142,6 +151,7 @@ if ("serviceWorker" in navigator) {
     <label>Bis <input type="date" id="date-to"></label>
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
     <button type="button" id="toggle-new">+ Neuer Kauf</button>
+    <button type="button" id="toggle-import">⭱ CSV importieren</button>
   </div>
 
   <form id="new-purchase-form" class="no-print">
@@ -167,6 +177,16 @@ if ("serviceWorker" in navigator) {
     </div>
   </form>
 
+  <form id="import-form" class="no-print">
+    <p class="import-hint">CSV-Datei im Format des CSV-Exports unten (Spalten: Datum;Plattform;Verkäufer;Gesamt;Versand;Notizen, Semikolon-getrennt).</p>
+    <label>CSV-Datei <input type="file" name="file" accept=".csv,text/csv" required></label>
+    <div class="actions">
+      <button type="submit">Importieren</button>
+      <button type="button" id="import-cancel">Abbrechen</button>
+      <span id="import-status"></span>
+    </div>
+  </form>
+
   <div id="bulk-actions" class="controls no-print" hidden>
     <span id="bulk-count"></span>
     <label>Plattform setzen auf
@@ -182,6 +202,7 @@ if ("serviceWorker" in navigator) {
     <label>Kaufdatum verschieben um <input type="number" id="bulk-date-shift-days" step="1" style="width: 4.5rem;" placeholder="-3"> Tage</label>
     <button type="button" id="bulk-date-shift-btn">Anwenden</button>
     <button type="button" id="bulk-delete-btn">Löschen</button>
+    <button type="button" id="bulk-delete-undo" hidden>↩ Rückgängig</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-results"></span>
   </div>
@@ -515,6 +536,52 @@ document.getElementById("new-purchase-cancel").addEventListener("click", () => {
   newFormIsDirty = false;
 });
 
+const importForm = document.getElementById("import-form");
+
+document.getElementById("toggle-import").addEventListener("click", () => {
+  importForm.style.display = importForm.style.display === "flex" ? "none" : "flex";
+});
+
+document.getElementById("import-cancel").addEventListener("click", () => {
+  importForm.reset();
+  importForm.style.display = "none";
+  document.getElementById("import-status").textContent = "";
+});
+
+importForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("import-status");
+  const fileInput = importForm.querySelector('input[name="file"]');
+  if (!fileInput.files.length) return;
+  statusEl.textContent = "Importiert …";
+  statusEl.className = "";
+  const data = new FormData();
+  data.append("file", fileInput.files[0]);
+  try {
+    const res = await fetch("/api/purchases/import", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    importForm.reset();
+    importForm.style.display = "none";
+    statusEl.textContent = "";
+    if (body.errors.length) {
+      showToast(`${body.imported} Käufe importiert, ${body.errors.length} Zeile(n) übersprungen: ${body.errors.join(" ")}`, true);
+    } else {
+      showToast(`${body.imported} Käufe importiert.`);
+    }
+    loadPurchases();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
 // Vorschlaege aus bereits erfassten Verkaeufern statt eines eigenen
 // Stammdaten-Endpunkts - reicht fuer Tippfehler-Vermeidung, ohne das
 // Verkaeufer-Feld als eigene Entitaet einzufuehren.
@@ -825,12 +892,48 @@ document.getElementById("bulk-date-shift-btn").addEventListener("click", async (
   }
 });
 
-document.getElementById("bulk-delete-btn").addEventListener("click", async () => {
+// Verzoegertes Loeschen (wie bei purchase.html's Einzel-Loeschen) statt
+// eines confirm()-Dialogs - die Gnadenfrist mit "Rueckgaengig" ersetzt die
+// Bestaetigung, ohne dass danach noch etwas wiederhergestellt werden muesste.
+const BULK_DELETE_GRACE_SECONDS = 6;
+const bulkDeleteUndoBtn = document.getElementById("bulk-delete-undo");
+let pendingBulkDelete = null;
+
+document.getElementById("bulk-delete-btn").addEventListener("click", () => {
   const ids = [...selectedIds];
-  if (!ids.length) return;
-  if (!confirm(`${ids.length} Kauf/Käufe wirklich löschen? Verknüpfte Karten bleiben erhalten, nur die Zuordnung geht verloren.`)) return;
-  bulkResultsEl.textContent = "Löscht …";
+  if (!ids.length || pendingBulkDelete) return;
+
+  let remaining = BULK_DELETE_GRACE_SECONDS;
+  const updateStatus = () => {
+    bulkResultsEl.textContent = `${ids.length} Kauf/Käufe werden in ${remaining}s gelöscht … `;
+  };
   bulkResultsEl.className = "";
+  updateStatus();
+  bulkDeleteUndoBtn.hidden = false;
+
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  const timeout = setTimeout(() => runBulkDelete(ids), BULK_DELETE_GRACE_SECONDS * 1000);
+  pendingBulkDelete = { timeout, tick };
+});
+
+bulkDeleteUndoBtn.addEventListener("click", () => {
+  if (!pendingBulkDelete) return;
+  clearTimeout(pendingBulkDelete.timeout);
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkResultsEl.textContent = "Löschen abgebrochen.";
+});
+
+async function runBulkDelete(ids) {
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkResultsEl.textContent = "Löscht …";
   try {
     const results = await Promise.all(ids.map((id) =>
       fetch(`/api/purchases/${encodeURIComponent(id)}`, { method: "DELETE" })
@@ -849,7 +952,7 @@ document.getElementById("bulk-delete-btn").addEventListener("click", async () =>
     bulkResultsEl.className = "error";
     showToast("Fehler: " + err, true);
   }
-});
+}
 
 qInput.addEventListener("input", () => {
   clearTimeout(qInput._debounce);

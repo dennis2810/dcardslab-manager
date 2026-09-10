@@ -25,6 +25,8 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 """
 import asyncio
 import base64
+import csv
+import io
 import json
 import logging
 import re
@@ -490,6 +492,25 @@ async def list_cards(q: str | None = None, status: str | None = None):
     return JSONResponse({"cards": cards})
 
 
+@app.get("/api/search")
+async def global_search(q: str | None = None):
+    # Globale Suche (search.html) ueber Karten, Kaeufe und Verkaeufe - bei
+    # der Groessenordnung dieses Tools reicht ein einfacher ilike-Abgleich
+    # pro Tabelle statt eines Such-Index; jede Liste auf 20 Treffer gedeckelt,
+    # da das Ergebnis nur eine grobe Uebersicht mit Direktlinks sein soll.
+    q = (q or "").strip()
+    if not q:
+        return JSONResponse({"cards": [], "purchases": [], "sales": []})
+    matched_cards = db.list_cards(q=q)
+    existing_ids = {c["id"] for c in matched_cards}
+    matched_cards += [c for c in db.list_cards_by_sku(q) if c["id"] not in existing_ids]
+    return JSONResponse({
+        "cards": matched_cards[:20],
+        "purchases": db.list_purchases(q=q)[:20],
+        "sales": db.search_sales(q)[:20],
+    })
+
+
 @app.get("/api/cards/{card_id}")
 async def get_card(card_id: str):
     card = db.get_card(card_id)
@@ -695,6 +716,75 @@ async def list_purchases(q: str | None = None):
     return JSONResponse({"purchases": db.list_purchases(q=q)})
 
 
+_PURCHASE_IMPORT_TEXT_COLUMNS = (("Plattform", "platform"), ("Verkäufer", "seller"), ("Notizen", "notes"))
+_PURCHASE_IMPORT_MONEY_COLUMNS = (("Gesamt", "total_price"), ("Versand", "shipping"))
+
+
+def _parse_import_date(value):
+    # Spiegelt formatDate() im Frontend (DD.MM.YYYY) - der CSV-Export der
+    # Kaeufe-Seite schreibt genau dieses Format, der Import soll also ohne
+    # Umformatierung wieder eingelesen werden koennen. "YYYY-MM-DD" wird
+    # zusaetzlich akzeptiert, falls jemand die Rohdaten direkt bearbeitet.
+    value = (value or "").strip()
+    if not value:
+        return ""
+    match = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", value)
+    if match:
+        d, m, y = match.groups()
+        return f"{y}-{m}-{d}"
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return value
+    return None
+
+
+@app.post("/api/purchases/import")
+async def import_purchases_csv(file: UploadFile = File(...)):
+    # Bulk-Import von Kaeufen ueber eine CSV-Datei im selben Format wie der
+    # bestehende CSV-Export auf purchases.html (Semikolon-getrennt, Spalten
+    # per Name statt Position erkannt, damit Reihenfolge/Zusatzspalten wie
+    # "Karten" nicht stoeren). Kein Karten-Import - Karten entstehen ueber
+    # den Foto-Scan/KI-Workflow, nicht aus reinen Textdaten.
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="CSV muss UTF-8-kodiert sein.") from exc
+
+    reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    imported = []
+    errors = []
+    for line_no, row in enumerate(reader, start=2):
+        fields = {}
+        date_raw = (row.get("Datum") or "").strip()
+        purchase_date = _parse_import_date(date_raw)
+        if purchase_date is None:
+            errors.append(f"Zeile {line_no}: Ungültiges Datum „{date_raw}“.")
+            continue
+        if purchase_date:
+            fields["purchase_date"] = purchase_date
+        for header, field_name in _PURCHASE_IMPORT_TEXT_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if value:
+                fields[field_name] = value
+        invalid_amount = False
+        for header, field_name in _PURCHASE_IMPORT_MONEY_COLUMNS:
+            value = (row.get(header) or "").strip()
+            if not value:
+                continue
+            try:
+                fields[field_name] = float(value.replace(",", "."))
+            except ValueError:
+                errors.append(f"Zeile {line_no}: Ungültiger Betrag bei „{header}“: „{value}“.")
+                invalid_amount = True
+                break
+        if invalid_amount:
+            continue
+        if not fields:
+            continue
+        imported.append(db.create_purchase(fields))
+    return JSONResponse({"imported": len(imported), "errors": errors, "purchases": imported})
+
+
 @app.get("/api/purchases/{purchase_id}")
 async def get_purchase(purchase_id: str):
     purchase = db.get_purchase(purchase_id)
@@ -842,7 +932,11 @@ async def delete_inventory_item(item_id: str):
 
 @app.get("/api/wishlist")
 async def list_wishlist_items(q: str | None = None):
-    return JSONResponse({"items": db.list_wishlist_items(q=q)})
+    items = db.list_wishlist_items(q=q)
+    history = db.wishlist_price_history_by_item_id([item["id"] for item in items])
+    for item in items:
+        item["price_history"] = history.get(item["id"], [])
+    return JSONResponse({"items": items})
 
 
 @app.post("/api/wishlist")

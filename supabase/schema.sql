@@ -363,3 +363,17 @@ alter table manual_sales add column if not exists delivered boolean not null def
 -- daher merkt sich nur dieser Zeitpunkt, ab wann wieder Ereignisse gezeigt
 -- werden sollen.
 alter table app_status add column if not exists activity_cleared_at timestamptz;
+
+-- Migration (2026-09-10): Verlauf der automatischen Wunschlisten-Preis-
+-- pruefung (siehe ebay_scheduler.run_wishlist_price_check_once()) - fuer
+-- eine Sparkline auf wishlist.html, analog zum Preisrecherche-Verlauf bei
+-- Karten (price_research). Nur Treffer werden gespeichert, keine
+-- erfolglosen Pruefungen.
+create table if not exists wishlist_price_checks (
+    id          uuid primary key default gen_random_uuid(),
+    item_id     uuid not null references wishlist_items(id) on delete cascade,
+    price       numeric not null,
+    checked_at  timestamptz not null default now()
+);
+
+create index if not exists wishlist_price_checks_item_id_idx on wishlist_price_checks(item_id);

@@ -33,9 +33,11 @@ if ("serviceWorker" in navigator) {
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
-  .page-nav { margin: 0.75rem 0 1.25rem; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.95rem; font-weight: normal; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; }
   .images { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .side { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.5rem; }
   label { font-weight: 600; }
@@ -81,9 +83,13 @@ if ("serviceWorker" in navigator) {
         <option value="shipping.html">Versand</option>
         <option value="wishlist.html">Wunschliste</option>
         <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
   </nav>
 
   <div class="images">

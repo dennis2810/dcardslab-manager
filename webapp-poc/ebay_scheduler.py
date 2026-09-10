@@ -162,6 +162,10 @@ def run_wishlist_price_check_once():
                     fields["last_match_price"] = cheapest["price"]
                     fields["last_match_title"] = cheapest.get("title", "")
                     fields["last_match_url"] = cheapest.get("item_web_url", "")
+                    try:
+                        db.record_wishlist_price_check(item["id"], cheapest["price"], now_iso)
+                    except Exception:
+                        logger.exception("Konnte Preisverlauf nicht speichern für Wunschlisten-Eintrag %s", item.get("id"))
         except Exception:
             logger.exception("Preispruefung fehlgeschlagen für Wunschlisten-Eintrag %s", item.get("id"))
         finally:
