@@ -51,6 +51,7 @@ if ("serviceWorker" in navigator) {
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
@@ -90,6 +91,8 @@ if ("serviceWorker" in navigator) {
       Betriebssystem-/Browser-Einstellung zu folgen.</li>
     <li>Seiten laden nach einem Update jetzt zuverlässig die aktuelle Version, statt teils eine im Browser
       zwischengespeicherte ältere Fassung anzuzeigen (betraf u. a. diese Release-Notes und die Anleitung).</li>
+    <li>„Alle Verkäufe" ist jetzt direkt in der Seiten-Auswahl (oben auf jeder Seite) verlinkt, gleich neben
+      „eBay", statt nur über die Statistik-Übersicht erreichbar zu sein.</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
@@ -126,6 +129,9 @@ if ("serviceWorker" in navigator) {
     <li>Tag-Filter, Schnellsuche-Kürzel (<code>/</code>), Abbrechen-Buttons bei neuen Formularen.</li>
     <li>Freie, kommagetrennte Tags/Kategorien pro Karte.</li>
     <li>Settbares "Versendet"-Kennzeichen für verkaufte Karten.</li>
+    <li>Neues, unabhängiges "Abgeholt"-Kästchen für Selbstabholer (keine Versand-Markierung nötig) – sichtbar in
+      der Kartenübersicht (Kachel- und Listenansicht) sowie im CSV-Export, und aus der Versand-Checkliste
+      ausgenommen.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -203,6 +209,18 @@ if ("serviceWorker" in navigator) {
     <li>Neue Angebots-Textbausteine (Einstellungen): wiederverwendbare Beschreibungstexte, die sich beim Anlegen
       eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf der Kartenübersicht – optional
       in die automatisch generierte Beschreibung einfügen lassen.</li>
+    <li>Bugfix: Wurde eine Karte direkt im eBay Seller Hub ohne Trackingnummer versendet (z. B. Warenpost/Brief),
+      wurde das „Versendet"-Kästchen bisher nicht automatisch gesetzt. Gilt eine Bestellung bei eBay als versendet,
+      wird die Karte jetzt auch ohne Sendungsverfolgung entsprechend markiert.</li>
+    <li>Der Button „Käufer-/Versanddaten von eBay laden" auf der Kartenseite lädt jetzt zusätzlich Trackingnummer,
+      Versanddienstleister und den „Versendet"-Status direkt von eBay nach, statt nur auf den nächsten
+      automatischen Hintergrund-Sync zu warten.</li>
+    <li>Neues Kästchen „Als zugestellt markieren" für eBay- und manuelle Verkäufe – manuell zu setzen, da eBay
+      über die API keine automatische Zustellbestätigung liefert.</li>
+    <li>Neue Spalte „Ansehen ↗" in der eBay-Angebotsübersicht: verlinkt direkt zum Angebot auf eBay, wie bisher
+      schon auf der Kartenseite.</li>
+    <li>Die Käufer-Historie auf „Alle Verkäufe" lässt sich pro Käufer aufklappen und zeigt dann die einzelnen
+      Käufe mit Kartentitel, Preis, Datum sowie eBay-Artikelnummer und Link zum Angebot.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>

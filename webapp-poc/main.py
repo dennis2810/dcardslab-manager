@@ -1702,7 +1702,49 @@ async def ebay_sale_shipping_address(sale_id: str):
             db.set_ebay_sale_buyer_username(sale_id, buyer_username)
         except Exception:
             logger.exception("Konnte buyer_username nicht nachtragen fuer Verkauf %s", sale_id)
-    return JSONResponse({**ship_to, "buyer_username": buyer_username})
+
+    # Sendungsverfolgung/Versandstatus ebenfalls hier auf Anfrage nachladen,
+    # nicht nur ueber den periodischen Hintergrund-Sync (sync_ebay_sales) -
+    # deckt den Fall ab, dass direkt im eBay Seller Hub (und ggf. ohne
+    # Trackingnummer, z. B. Warenpost/Brief) versendet wurde: die Bestellung
+    # gilt bei eBay dann trotzdem als FULFILLED.
+    tracking_number = sale.get("tracking_number") or ""
+    shipping_carrier = sale.get("shipping_carrier") or ""
+    shipped = order.get("orderFulfillmentStatus") == "FULFILLED"
+    if shipped:
+        try:
+            fulfillments = ebay_client.list_shipping_fulfillments(token, sale["ebay_order_id"])
+        except ebay_client.EbayApiError:
+            logger.exception(
+                "Sendungsverfolgung konnte nicht von eBay geladen werden für Bestellung %s", sale["ebay_order_id"],
+            )
+            fulfillments = []
+        for fulfillment in fulfillments:
+            tracked_ids = {li.get("lineItemId") for li in fulfillment.get("lineItems") or []}
+            if sale.get("ebay_line_item_id") in tracked_ids:
+                tracking_number = fulfillment.get("trackingNumber", "") or tracking_number
+                shipping_carrier = fulfillment.get("shippingCarrierCode", "") or shipping_carrier
+                break
+        update_fields = {}
+        if tracking_number and tracking_number != sale.get("tracking_number"):
+            update_fields["tracking_number"] = tracking_number
+        if shipping_carrier and shipping_carrier != sale.get("shipping_carrier"):
+            update_fields["shipping_carrier"] = shipping_carrier
+        if update_fields:
+            try:
+                db.update_ebay_sale(sale_id, update_fields)
+            except Exception:
+                logger.exception("Konnte Sendungsverfolgung nicht speichern für Verkauf %s", sale_id)
+        if sale.get("card_id"):
+            try:
+                db.update_card(sale["card_id"], {"shipped": True})
+            except Exception:
+                logger.exception("Konnte 'Versendet' nicht setzen für Karte %s", sale.get("card_id"))
+
+    return JSONResponse({
+        **ship_to, "buyer_username": buyer_username,
+        "tracking_number": tracking_number, "shipping_carrier": shipping_carrier, "shipped": shipped,
+    })
 
 
 @app.post("/api/ebay/sync-sales")
@@ -1751,11 +1793,14 @@ async def sync_ebay_sales():
             # wurde statt ueber dieses Tool - Trackingdaten trotzdem
             # automatisch uebernehmen und die Karte als versendet markieren,
             # statt dass sie faelschlich in der Versand-Checkliste haengen
-            # bleibt. Nur bei bereits abgeschlossener Bestellung nachgeladen,
-            # um unnoetige eBay-Aufrufe bei den meisten (offenen) Sync-Laeufen
-            # zu vermeiden.
-            tracking_pulled = False
-            if order.get("orderFulfillmentStatus") == "FULFILLED":
+            # bleibt. Die Karte gilt bereits als versendet, sobald eBay die
+            # Bestellung als FULFILLED fuehrt, auch wenn keine passende
+            # Sendungsverfolgung gefunden wird (z. B. Warenpost/Brief ohne
+            # Tracking - bei eBay trotzdem als versendet erfasst). Nur bei
+            # bereits abgeschlossener Bestellung nachgeladen, um unnoetige
+            # eBay-Aufrufe bei den meisten (offenen) Sync-Laeufen zu vermeiden.
+            order_fulfilled = order.get("orderFulfillmentStatus") == "FULFILLED"
+            if order_fulfilled:
                 if fulfillments is None:
                     try:
                         fulfillments = ebay_client.list_shipping_fulfillments(token, order_id)
@@ -1770,11 +1815,10 @@ async def sync_ebay_sales():
                     if line_item_id in tracked_ids:
                         sale_fields["tracking_number"] = fulfillment.get("trackingNumber", "")
                         sale_fields["shipping_carrier"] = fulfillment.get("shippingCarrierCode", "")
-                        tracking_pulled = True
                         break
             db.upsert_ebay_sale(sale_fields)
             db.update_ebay_listing(listing["id"], {"status": "Verkauft"})
-            if tracking_pulled:
+            if order_fulfilled:
                 try:
                     db.update_card(listing["card_id"], {"shipped": True})
                 except Exception:

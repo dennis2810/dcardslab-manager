@@ -187,6 +187,7 @@ if ("serviceWorker" in navigator) {
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
@@ -714,6 +715,18 @@ function render(card) {
   shippedWrapper.append(shippedCheckbox, " Versendet");
   form.appendChild(shippedWrapper);
 
+  // Eigenes, von "Versendet" unabhaengiges Kaestchen fuer Selbstabholer -
+  // eine persoenliche Abholung ist kein Versand und soll daher nicht in der
+  // Versand-Checkliste (shipping.html) auftauchen.
+  const pickedUpWrapper = document.createElement("label");
+  pickedUpWrapper.className = "checkbox-field";
+  const pickedUpCheckbox = document.createElement("input");
+  pickedUpCheckbox.type = "checkbox";
+  pickedUpCheckbox.name = "picked_up";
+  pickedUpCheckbox.checked = Boolean(card.picked_up);
+  pickedUpWrapper.append(pickedUpCheckbox, " Abgeholt (Selbstabholer)");
+  form.appendChild(pickedUpWrapper);
+
   const tagsWrapper = document.createElement("label");
   tagsWrapper.textContent = "Tags";
   tagsWrapper.title = "Kommagetrennt, z. B. Rookie, PSA-würdig, Investment";
@@ -771,6 +784,7 @@ form.addEventListener("submit", async (ev) => {
   }
   fields.recognition_status = form.elements["recognition_status"].value;
   fields.shipped = form.elements["shipped"].checked;
+  fields.picked_up = form.elements["picked_up"].checked;
   fields.tags = form.elements["tags"].value;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
@@ -1024,6 +1038,18 @@ function renderSaleStatusBadges(card) {
     const badge = document.createElement("span");
     badge.className = "badge badge-info";
     badge.textContent = "Versendet";
+    container.appendChild(badge);
+  }
+  if (card.ebay_sale?.delivered || card.manual_sale?.delivered) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Zugestellt";
+    container.appendChild(badge);
+  }
+  if (card.picked_up) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Abgeholt";
     container.appendChild(badge);
   }
 }
@@ -1359,6 +1385,17 @@ function renderManualSaleForm(section, existingSale) {
   refundedWrapper.append(refundedCheckbox, " Als Rückerstattung/Retoure markieren");
   form.appendChild(refundedWrapper);
 
+  // Manuelles Kaestchen statt automatischer Zustellverfolgung - dafuer
+  // braeuchte es pro Versanddienstleister eine eigene Tracking-API-Anbindung
+  // mit eigenen Zugangsdaten, was fuer diesen Anwendungsfall nicht lohnt.
+  const deliveredWrapper = document.createElement("label");
+  deliveredWrapper.className = "checkbox-field";
+  const deliveredCheckbox = document.createElement("input");
+  deliveredCheckbox.type = "checkbox";
+  deliveredCheckbox.checked = Boolean(existingSale?.delivered);
+  deliveredWrapper.append(deliveredCheckbox, " Als zugestellt markieren");
+  form.appendChild(deliveredWrapper);
+
   const actions = document.createElement("div");
   actions.className = "actions";
   const saveBtn = document.createElement("button");
@@ -1392,6 +1429,7 @@ function renderManualSaleForm(section, existingSale) {
       shipping_carrier: form.elements.shipping_carrier.value,
       notes: form.elements.notes.value,
       refunded: refundedCheckbox.checked,
+      delivered: deliveredCheckbox.checked,
     };
     statusEl.textContent = "Speichert …";
     statusEl.className = "";
@@ -2476,6 +2514,29 @@ function renderSaleStats(purchase, sale) {
       ].filter(Boolean);
       buyerInfoStatus.textContent = addressLines.length ? addressLines.join(", ") : "Keine Versandadresse gefunden.";
       buyerInfoStatus.className = "";
+      // Sendungsverfolgung/Versandstatus kommen im selben Aufruf mit (siehe
+      // main.py) - Trackingfelder unten sowie das "Versendet"-Kaestchen/Badge
+      // direkt aktualisieren, statt auf den naechsten Hintergrund-Sync oder
+      // einen manuellen Seiten-Reload warten zu muessen.
+      trackingNumberInput.value = body.tracking_number || "";
+      carrierSelect.value = body.shipping_carrier || "";
+      submitTrackingBtn.textContent = body.tracking_number ? "Tracking aktualisieren" : "An eBay übermitteln";
+      trackingStatus.textContent = body.tracking_number
+        ? `Zuletzt übermittelt: ${body.tracking_number} (${SHIPPING_CARRIERS[body.shipping_carrier] || body.shipping_carrier})`
+        : "";
+      trackingStatus.className = "";
+      if (body.shipped) {
+        const shippedCheckbox = form.querySelector('input[name="shipped"]');
+        if (shippedCheckbox) shippedCheckbox.checked = true;
+        const badgeContainer = document.getElementById("sale-status-badges");
+        const alreadyShown = Array.from(badgeContainer.children).some((el) => el.textContent === "Versendet");
+        if (!alreadyShown) {
+          const badge = document.createElement("span");
+          badge.className = "badge badge-info";
+          badge.textContent = "Versendet";
+          badgeContainer.appendChild(badge);
+        }
+      }
     } catch (err) {
       buyerInfoStatus.textContent = "Fehler: " + err;
       buyerInfoStatus.className = "error";
@@ -2529,6 +2590,18 @@ function renderSaleStats(purchase, sale) {
   refundedWrapper.append(refundedCheckbox, " Als Rückerstattung/Retoure markieren");
   wrapper.appendChild(refundedWrapper);
 
+  // Manuelles Kaestchen statt automatischer Zustellverfolgung - eBay liefert
+  // ueber die API keine echte Zustellbestaetigung (das braeuchte pro
+  // Versanddienstleister eine eigene Tracking-API-Anbindung mit eigenen
+  // Zugangsdaten).
+  const deliveredWrapper = document.createElement("label");
+  deliveredWrapper.className = "checkbox-field";
+  const deliveredCheckbox = document.createElement("input");
+  deliveredCheckbox.type = "checkbox";
+  deliveredCheckbox.checked = Boolean(sale.delivered);
+  deliveredWrapper.append(deliveredCheckbox, " Als zugestellt markieren");
+  wrapper.appendChild(deliveredWrapper);
+
   const saveShippingBtn = document.createElement("button");
   saveShippingBtn.type = "button";
   saveShippingBtn.textContent = "Speichern";
@@ -2542,7 +2615,7 @@ function renderSaleStats(purchase, sale) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value,
-          refunded: refundedCheckbox.checked,
+          refunded: refundedCheckbox.checked, delivered: deliveredCheckbox.checked,
         }),
       });
       const body = await res.json();

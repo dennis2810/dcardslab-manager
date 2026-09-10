@@ -132,7 +132,7 @@ def get_card(card_id):
 def update_card(card_id, fields):
     row = {
         name: value for name, value in fields.items()
-        if name in CARD_FIELDS or name in ("recognition_status", "shipped", "tags")
+        if name in CARD_FIELDS or name in ("recognition_status", "shipped", "picked_up", "tags")
     }
     if not row:
         return get_card(card_id)
@@ -442,11 +442,14 @@ def ebay_info_by_card_id(card_ids):
     if not card_ids:
         return {}
     response = (
-        get_client().table("ebay_listings").select("card_id,status,sku,price")
+        get_client().table("ebay_listings").select("card_id,status,sku,price,ebay_listing_id")
         .in_("card_id", card_ids).execute()
     )
     return {
-        row["card_id"]: {"status": row["status"], "sku": row["sku"], "price": row["price"]}
+        row["card_id"]: {
+            "status": row["status"], "sku": row["sku"], "price": row["price"],
+            "ebay_listing_id": row.get("ebay_listing_id"),
+        }
         for row in response.data
     }
 
@@ -616,7 +619,9 @@ def upsert_ebay_sale(fields):
     return response.data[0]
 
 
-EBAY_SALE_WRITABLE_FIELDS = {"shipping_cost", "ebay_fees", "refunded", "tracking_number", "shipping_carrier"}
+EBAY_SALE_WRITABLE_FIELDS = {
+    "shipping_cost", "ebay_fees", "refunded", "delivered", "tracking_number", "shipping_carrier",
+}
 EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees"}
 
 
@@ -864,8 +869,8 @@ def restore_inventory_for_card(card_id):
 
 
 MANUAL_SALE_FIELDS = [
-    "channel", "sale_date", "gross_price", "shipping_charged", "shipping_cost", "fees", "refunded", "notes",
-    "tracking_number", "shipping_carrier",
+    "channel", "sale_date", "gross_price", "shipping_charged", "shipping_cost", "fees", "refunded", "delivered",
+    "notes", "tracking_number", "shipping_carrier",
 ]
 MANUAL_SALE_NUMERIC_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
 MANUAL_SALE_MONEY_FIELDS = {"gross_price", "shipping_charged", "shipping_cost", "fees"}
@@ -1152,6 +1157,10 @@ def statistics_rows():
             "set_name": card.get("set_name", ""),
             "platform": purchase.get("platform", "") if purchase else "",
             "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
+            # Fuer den "Auf eBay ansehen"-Link in der Kaeufer-Historie
+            # (statistics-sales.html) - nur bei veroeffentlichten/verkauften
+            # eBay-Angeboten gesetzt.
+            "ebay_listing_id": (ebay_info.get(card["id"]) or {}).get("ebay_listing_id"),
             "purchase_date": purchase.get("purchase_date") if purchase else None,
             "cost": item.get("allocated_cost") if item else None,
             "channel": channel,

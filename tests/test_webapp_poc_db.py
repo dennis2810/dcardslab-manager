@@ -176,6 +176,17 @@ class UpdateCardTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"shipped": True})
 
+    def test_picked_up_flag_is_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "picked_up": True}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"picked_up": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"picked_up": True})
+
     def test_tags_field_is_writable(self):
         mock_client = MagicMock()
         saved_row = {"id": "card-1", "tags": "Rookie, Investment"}
@@ -1043,15 +1054,15 @@ class EbayStatusByCardIdTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [
-            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99},
-            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0},
+            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1"},
+            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": ""},
         ]
         mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.ebay_info_by_card_id(["card-1", "card-2", "card-3"])
         self.assertEqual(result, {
-            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99},
-            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0},
+            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1"},
+            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": ""},
         })
 
     def test_empty_input_skips_query(self):
@@ -1424,6 +1435,17 @@ class UpdateEbaySaleTests(unittest.TestCase):
         self.assertTrue(result["refunded"])
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"refunded": True})
+
+    def test_updates_delivered_flag(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "delivered": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"delivered": True})
+        self.assertTrue(result["delivered"])
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"delivered": True})
 
     def test_ignores_unknown_fields(self):
         mock_client = MagicMock()
@@ -2218,6 +2240,15 @@ class UpdateManualSaleTests(unittest.TestCase):
             result = db.update_manual_sale("ms-1", {"refunded": True})
         self.assertTrue(result["refunded"])
 
+    def test_updates_delivered_flag(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "delivered": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_manual_sale("ms-1", {"delivered": True})
+        self.assertTrue(result["delivered"])
+
     def test_ignores_unknown_fields(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -2309,7 +2340,10 @@ class StatisticsRowsTests(unittest.TestCase):
                 }]
                 builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
             elif name == "ebay_listings":
-                response.data = []
+                response.data = [{
+                    "card_id": "card-1", "status": "Verkauft", "sku": "webapp-000001", "price": 15.0,
+                    "ebay_listing_id": "110123456789",
+                }]
                 builder.select.return_value.in_.return_value.execute.return_value = response
             elif name == "manual_sales":
                 response.data = [{
@@ -2349,6 +2383,8 @@ class StatisticsRowsTests(unittest.TestCase):
         self.assertEqual(by_id["card-1"]["buyer_username"], "kartenfan99")
         # Manueller Verkauf (card-3) hat keinen eBay-Kaeufernamen.
         self.assertIsNone(by_id["card-3"]["buyer_username"])
+        self.assertEqual(by_id["card-1"]["ebay_listing_id"], "110123456789")
+        self.assertIsNone(by_id["card-2"]["ebay_listing_id"])
 
     def test_returns_empty_list_when_no_cards(self):
         mock_client = MagicMock()

@@ -22,13 +22,13 @@ if ("serviceWorker" in navigator) {
 <style>
   :root {
     color-scheme: light dark;
-    --hover-bg: #f7f7f7;
+    --hover-bg: #f7f7f7; --detail-bg: #fafafa;
     scroll-behavior: smooth;
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; }
+    :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --detail-bg: #202020; }
   }
-  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; }
+  :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --detail-bg: #202020; }
   :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
@@ -63,10 +63,15 @@ if ("serviceWorker" in navigator) {
      Zahlenspalten buendig untereinander stehen (gleiches Muster wie
      purchases.html's .ranking-table). */
   .ranking-table { table-layout: fixed; }
-  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 40%; }
-  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
+  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 2rem; }
+  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2) { width: 38%; }
   .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
-  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
+  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4),
+  .ranking-table th:nth-child(5), .ranking-table td:nth-child(5) { width: 20%; }
+  .expand-btn { border: none; background: none; cursor: pointer; font-size: 0.9rem; padding: 0 0.4rem; }
+  tr.detail-row { cursor: default; }
+  tr.detail-row td { background: var(--detail-bg); padding: 0.5rem 1rem; }
+  .detail-items { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
 </style>
 </head>
 <body>
@@ -84,6 +89,7 @@ if ("serviceWorker" in navigator) {
         <option value="cards.html">Karten</option>
         <option value="purchases.html">Käufe</option>
         <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
         <option value="inventory.html">Inventar</option>
         <option value="inventur.html">Inventur</option>
         <option value="shipping.html">Versand</option>
@@ -102,7 +108,7 @@ if ("serviceWorker" in navigator) {
     Wiederholungskäufer und folgt dem aktuellen Zeit-/Kanal-/Suchfilter unten.</p>
   <div class="table-scroll">
     <table id="buyer-history-table" class="ranking-table" style="display: none;">
-      <thead><tr><th>Käufer (eBay)</th><th>Käufe</th><th>Summe</th><th>Letzter Kauf</th></tr></thead>
+      <thead><tr><th></th><th>Käufer (eBay)</th><th>Käufe</th><th>Summe</th><th>Letzter Kauf</th></tr></thead>
       <tbody id="buyer-history-body"></tbody>
     </table>
   </div>
@@ -261,6 +267,25 @@ async function loadInventoryValue() {
   }
 }
 
+// Fuer den "Auf eBay ansehen"-Link in der aufgeklappten Kaeufer-Historie -
+// gleiches Muster wie ebay.html/card.html.
+let ebayEnvironment = "sandbox";
+
+async function loadEbayEnvironment() {
+  try {
+    const res = await fetch("/api/ebay/oauth/status");
+    const body = await res.json();
+    ebayEnvironment = body.environment || "sandbox";
+  } catch (err) {
+    ebayEnvironment = "sandbox";
+  }
+}
+
+function ebayListingUrl(ebayListingId) {
+  const host = ebayEnvironment === "production" ? "ebay.de" : "sandbox.ebay.de";
+  return `https://www.${host}/itm/${encodeURIComponent(ebayListingId)}`;
+}
+
 async function load() {
   try {
     const res = await fetch("/api/statistics");
@@ -271,6 +296,7 @@ async function load() {
     }
     statusMsg.textContent = "";
     await loadInventoryValue();
+    await loadEbayEnvironment();
     allRows = data.rows;
     populateChannelFilter();
     renderRows();
@@ -409,6 +435,11 @@ function computeSummary(rows) {
   };
 }
 
+// Welche Kaeufer aktuell aufgeklappt sind - bleibt ueber ein Re-Render
+// (z. B. Filteraenderung) hinweg bestehen, gleiches Muster wie
+// purchases.html's expandedIds.
+const expandedBuyers = new Set();
+
 // Gruppiert nach eBay-Kaeufer-Benutzernamen (pseudonymer Handle, siehe
 // sync_ebay_sales()) - manuelle Verkaeufe haben keinen buyer_username und
 // werden hier ausgeblendet, da es dafuer keine vergleichbare eBay-Kennung
@@ -424,10 +455,11 @@ function renderBuyerHistory(rows) {
   for (const r of rows) {
     const buyer = (r.buyer_username || "").trim();
     if (!buyer || r.sale_price == null) continue;
-    const g = byBuyer.get(buyer) || { count: 0, total: 0, lastSaleDate: null };
+    const g = byBuyer.get(buyer) || { count: 0, total: 0, lastSaleDate: null, sales: [] };
     g.count += 1;
     g.total += Number(r.sale_price) || 0;
     if (r.sale_date && (!g.lastSaleDate || r.sale_date > g.lastSaleDate)) g.lastSaleDate = r.sale_date;
+    g.sales.push(r);
     byBuyer.set(buyer, g);
   }
 
@@ -441,13 +473,64 @@ function renderBuyerHistory(rows) {
   empty.textContent = "";
   for (const [buyer, g] of entries) {
     const tr = document.createElement("tr");
+
+    const toggleTd = document.createElement("td");
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "expand-btn";
+    toggleBtn.textContent = expandedBuyers.has(buyer) ? "▼" : "▶";
+    toggleBtn.title = "Einzelne Käufe anzeigen";
+    toggleBtn.addEventListener("click", () => {
+      if (expandedBuyers.has(buyer)) expandedBuyers.delete(buyer);
+      else expandedBuyers.add(buyer);
+      renderBuyerHistory(rows);
+    });
+    toggleTd.appendChild(toggleBtn);
+    tr.appendChild(toggleTd);
+
     for (const text of [buyer, String(g.count), fmtEuro(g.total), formatDate(g.lastSaleDate)]) {
       const td = document.createElement("td");
       td.textContent = text;
       tr.appendChild(td);
     }
     body.appendChild(tr);
+
+    if (expandedBuyers.has(buyer)) {
+      body.appendChild(buildBuyerDetailRow(g.sales));
+    }
   }
+}
+
+function buildBuyerDetailRow(sales) {
+  const tr = document.createElement("tr");
+  tr.className = "detail-row";
+  const td = document.createElement("td");
+  td.colSpan = 5;
+
+  const list = document.createElement("div");
+  list.className = "detail-items";
+  const sorted = [...sales].sort((a, b) => (b.sale_date || "").localeCompare(a.sale_date || ""));
+  for (const sale of sorted) {
+    const row = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = `card.html?id=${encodeURIComponent(sale.card_id)}`;
+    link.textContent = sale.title || "(ohne Titel)";
+    row.appendChild(link);
+    row.appendChild(document.createTextNode(` – ${fmtEuro(sale.sale_price)} – ${formatDate(sale.sale_date)}`));
+    if (sale.ebay_listing_id) {
+      row.appendChild(document.createTextNode(" – Art.-Nr. " + sale.ebay_listing_id + " – "));
+      const ebayLink = document.createElement("a");
+      ebayLink.href = ebayListingUrl(sale.ebay_listing_id);
+      ebayLink.target = "_blank";
+      ebayLink.rel = "noopener";
+      ebayLink.textContent = "Auf eBay ansehen";
+      row.appendChild(ebayLink);
+    }
+    list.appendChild(row);
+  }
+  td.appendChild(list);
+  tr.appendChild(td);
+  return tr;
 }
 
 function sortedRows(rows) {

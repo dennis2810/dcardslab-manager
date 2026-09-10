@@ -972,7 +972,11 @@ class SyncSalesEndpointTests(unittest.TestCase):
         sale_fields = mock_upsert.call_args[0][0]
         self.assertNotIn("tracking_number", sale_fields)
 
-    def test_fulfilled_order_without_matching_line_item_fulfillment_is_skipped(self):
+    def test_fulfilled_order_without_matching_line_item_fulfillment_still_marks_shipped(self):
+        # Deckt z. B. eine Sendung ohne Sendungsverfolgung ab (Warenpost/
+        # Brief) - eBay fuehrt die Bestellung trotzdem als FULFILLED, auch
+        # ohne passenden Fulfillment-Datensatz, also gilt die Karte als
+        # versendet, nur ohne Trackingnummer.
         matched_listing = _listing(id="listing-1", sku="webapp-card-1")
         orders = [{
             "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
@@ -991,7 +995,7 @@ class SyncSalesEndpointTests(unittest.TestCase):
             client.post("/api/ebay/sync-sales")
         sale_fields = mock_upsert.call_args[0][0]
         self.assertNotIn("tracking_number", sale_fields)
-        mock_update_card.assert_not_called()
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
 
     def test_fulfillment_lookup_failure_does_not_fail_the_sync(self):
         # Isolation principle, same as the existing inventory-zeroing test
@@ -1011,7 +1015,8 @@ class SyncSalesEndpointTests(unittest.TestCase):
              patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
              patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
              patch("main.db.update_ebay_listing", return_value=matched_listing), \
-             patch("main.db.zero_inventory_for_card"):
+             patch("main.db.zero_inventory_for_card"), \
+             patch("main.db.update_card"):
             response = client.post("/api/ebay/sync-sales")
         self.assertEqual(response.status_code, 200)
         sale_fields = mock_upsert.call_args[0][0]
@@ -1172,6 +1177,88 @@ class EbaySaleShippingAddressEndpointTests(unittest.TestCase):
             response = client.get("/api/ebay/sales/sale-1/shipping-address")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["buyer_username"], "kartenfan99")
+
+    def _order_with_ship_to(self, **overrides):
+        order = {
+            "orderFulfillmentStatus": "FULFILLED",
+            "fulfillmentStartInstructions": [
+                {"shippingStep": {"shipTo": {"fullName": "Max Mustermann"}}}
+            ],
+        }
+        order.update(overrides)
+        return order
+
+    def test_pulls_and_persists_tracking_when_order_is_fulfilled(self):
+        # Deckt den Fall ab, dass der Verkauf schon vor dieser Funktion
+        # synchronisiert wurde oder direkt im eBay Seller Hub versendet
+        # wurde - die Sendungsverfolgung soll nicht erst auf den naechsten
+        # Hintergrund-Sync warten muessen, wenn der Nutzer aktiv nachlaedt.
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "ebay_line_item_id": "LI1", "card_id": "card-1"}
+        fulfillments = [{
+            "lineItems": [{"lineItemId": "LI1"}],
+            "trackingNumber": "1Z999AA10123456784", "shippingCarrierCode": "UPS",
+        }]
+        with patch("main.db.get_ebay_sale", return_value=sale), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=self._order_with_ship_to()), \
+             patch("main.ebay_client.list_shipping_fulfillments", return_value=fulfillments), \
+             patch("main.db.update_ebay_sale") as mock_update_sale, \
+             patch("main.db.update_card") as mock_update_card:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["tracking_number"], "1Z999AA10123456784")
+        self.assertEqual(body["shipping_carrier"], "UPS")
+        self.assertTrue(body["shipped"])
+        mock_update_sale.assert_called_once_with(
+            "sale-1", {"tracking_number": "1Z999AA10123456784", "shipping_carrier": "UPS"},
+        )
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
+
+    def test_marks_shipped_even_without_a_matching_fulfillment(self):
+        # Warenpost/Brief ohne Sendungsverfolgung - eBay fuehrt die
+        # Bestellung trotzdem als FULFILLED.
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "ebay_line_item_id": "LI1", "card_id": "card-1"}
+        with patch("main.db.get_ebay_sale", return_value=sale), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=self._order_with_ship_to()), \
+             patch("main.ebay_client.list_shipping_fulfillments", return_value=[]), \
+             patch("main.db.update_ebay_sale") as mock_update_sale, \
+             patch("main.db.update_card") as mock_update_card:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["tracking_number"], "")
+        self.assertTrue(body["shipped"])
+        mock_update_sale.assert_not_called()
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
+
+    def test_does_not_pull_tracking_when_order_not_yet_fulfilled(self):
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "ebay_line_item_id": "LI1", "card_id": "card-1"}
+        order = self._order_with_ship_to(orderFulfillmentStatus="NOT_STARTED")
+        with patch("main.db.get_ebay_sale", return_value=sale), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=order), \
+             patch("main.ebay_client.list_shipping_fulfillments") as mock_fulfillments, \
+             patch("main.db.update_card") as mock_update_card:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        body = response.json()
+        self.assertFalse(body["shipped"])
+        self.assertEqual(body["tracking_number"], "")
+        mock_fulfillments.assert_not_called()
+        mock_update_card.assert_not_called()
+
+    def test_fulfillment_lookup_failure_still_marks_shipped(self):
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "ebay_line_item_id": "LI1", "card_id": "card-1"}
+        with patch("main.db.get_ebay_sale", return_value=sale), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_order", return_value=self._order_with_ship_to()), \
+             patch("main.ebay_client.list_shipping_fulfillments", side_effect=ebay_client.EbayApiError("boom")), \
+             patch("main.db.update_card") as mock_update_card:
+            response = client.get("/api/ebay/sales/sale-1/shipping-address")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["shipped"])
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
 
 
 if __name__ == "__main__":
