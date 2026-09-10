@@ -343,3 +343,16 @@ create table if not exists description_templates (
 -- um Faelle, in denen die Texterkennung ein Feld falsch liest, das Foto aber
 -- (nahezu) identisch zu einer bereits vorhandenen Karte ist.
 alter table cards add column if not exists front_image_hash text;
+
+-- Migration (2026-09-10): "Abgeholt"-Flag fuer Selbstabholer - eigenes,
+-- von "shipped" unabhaengiges Kaestchen, da eine persoenliche Abholung kein
+-- Versand ist und eBay dafuer auch keinen FULFILLED-Status/Tracking liefert.
+alter table cards add column if not exists picked_up boolean not null default false;
+
+-- Migration (2026-09-10): manuell setzbares "Zugestellt"-Kaestchen pro
+-- Verkauf - eBay liefert ueber die API keine echte Zustellbestaetigung
+-- (das braeuchte pro Versanddienstleister eine eigene Tracking-API-
+-- Anbindung mit eigenen Zugangsdaten), daher bewusst manuell wie "Versendet"/
+-- "Retoure" statt automatisiert.
+alter table ebay_sales add column if not exists delivered boolean not null default false;
+alter table manual_sales add column if not exists delivered boolean not null default false;

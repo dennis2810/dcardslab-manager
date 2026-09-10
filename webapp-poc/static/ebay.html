@@ -172,6 +172,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
             <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
+            <th>eBay</th>
           </tr>
         </thead>
         <tbody id="listings-body"></tbody>
@@ -332,6 +333,15 @@ let selectedIds = new Set();
 let sortKey = "sku";
 let sortAsc = true;
 
+// Fuer den "Auf eBay ansehen"-Link je Zeile - von loadOauthStatus() gesetzt,
+// gleiches Muster wie card.html's getEbayEnvironment().
+let ebayEnvironment = "sandbox";
+
+function ebayListingUrl(listing) {
+  const host = ebayEnvironment === "production" ? "ebay.de" : "sandbox.ebay.de";
+  return `https://www.${host}/itm/${encodeURIComponent(listing.ebay_listing_id)}`;
+}
+
 function sortedListings() {
   if (!sortKey) return currentListings;
   return [...currentListings].sort((a, b) => {
@@ -373,6 +383,7 @@ async function loadOauthStatus() {
   try {
     const res = await fetch("/api/ebay/oauth/status");
     const body = await res.json();
+    ebayEnvironment = body.environment || "sandbox";
     if (res.ok && body.authorized) {
       banner.className = "ok";
       const text = document.createElement("span");
@@ -568,6 +579,20 @@ function render(listings) {
     const updatedTd = document.createElement("td");
     updatedTd.textContent = formatDateTime(listing.published_at);
     tr.appendChild(updatedTd);
+
+    const ebayLinkTd = document.createElement("td");
+    if (listing.ebay_listing_id) {
+      const a = document.createElement("a");
+      a.href = ebayListingUrl(listing);
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Ansehen ↗";
+      // Sonst loest der Klick auf den Link zusaetzlich die Zeilennavigation
+      // zu card.html aus (siehe row-link-Klick-Handler unten).
+      a.addEventListener("click", (ev) => ev.stopPropagation());
+      ebayLinkTd.appendChild(a);
+    }
+    tr.appendChild(ebayLinkTd);
 
     tr.classList.add("row-link");
     tr.addEventListener("click", () => {

@@ -129,6 +129,9 @@ if ("serviceWorker" in navigator) {
     <li>Tag-Filter, Schnellsuche-Kürzel (<code>/</code>), Abbrechen-Buttons bei neuen Formularen.</li>
     <li>Freie, kommagetrennte Tags/Kategorien pro Karte.</li>
     <li>Settbares "Versendet"-Kennzeichen für verkaufte Karten.</li>
+    <li>Neues, unabhängiges "Abgeholt"-Kästchen für Selbstabholer (keine Versand-Markierung nötig) – sichtbar in
+      der Kartenübersicht (Kachel- und Listenansicht) sowie im CSV-Export, und aus der Versand-Checkliste
+      ausgenommen.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -212,6 +215,12 @@ if ("serviceWorker" in navigator) {
     <li>Der Button „Käufer-/Versanddaten von eBay laden" auf der Kartenseite lädt jetzt zusätzlich Trackingnummer,
       Versanddienstleister und den „Versendet"-Status direkt von eBay nach, statt nur auf den nächsten
       automatischen Hintergrund-Sync zu warten.</li>
+    <li>Neues Kästchen „Als zugestellt markieren" für eBay- und manuelle Verkäufe – manuell zu setzen, da eBay
+      über die API keine automatische Zustellbestätigung liefert.</li>
+    <li>Neue Spalte „Ansehen ↗" in der eBay-Angebotsübersicht: verlinkt direkt zum Angebot auf eBay, wie bisher
+      schon auf der Kartenseite.</li>
+    <li>Die Käufer-Historie auf „Alle Verkäufe" lässt sich pro Käufer aufklappen und zeigt dann die einzelnen
+      Käufe mit Kartentitel, Preis, Datum sowie eBay-Artikelnummer und Link zum Angebot.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>

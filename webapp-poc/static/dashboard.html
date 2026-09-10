@@ -483,7 +483,7 @@ function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
   list.innerHTML = "";
   let count = 0;
 
-  const unshipped = cards.filter((c) => (c.ebay_status === "Verkauft" || c.manual_sale_channel) && !c.shipped);
+  const unshipped = cards.filter((c) => (c.ebay_status === "Verkauft" || c.manual_sale_channel) && !c.shipped && !c.picked_up);
   if (unshipped.length) {
     count++;
     addAction(list, `📦 ${unshipped.length} verkaufte Karte(n) noch nicht versendet – <a href="shipping.html">zur Versand-Checkliste &rarr;</a>`);

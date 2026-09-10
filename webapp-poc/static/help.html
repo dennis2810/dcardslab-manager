@@ -123,6 +123,8 @@ if ("serviceWorker" in navigator) {
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
     Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt) und das „Versendet"-Kästchen umschalten.
+    Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
+    nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
     Beschädigungen) – sie werden beim Veröffentlichen automatisch mit an eBay übertragen (bis zu eBays Limit von
     12 Fotos pro Angebot). Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
@@ -151,7 +153,8 @@ if ("serviceWorker" in navigator) {
     nächsten automatischen Hintergrund-Sync warten zu müssen. Schickt ein Käufer die
     Karte zurück, markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend:
     Verkaufspreis und erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben
-    als Verlust stehen.
+    als Verlust stehen. Ein weiteres Kästchen „Als zugestellt markieren" hält manuell fest, wann das Paket
+    angekommen ist – eBay liefert dafür über die API keine automatische Zustellbestätigung, daher von Hand.
     Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
     Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich,
     auch mehrere Suchtreffer auf einmal per Checkbox und „Ausgewählte übernehmen". Die Suche blendet dabei
@@ -165,7 +168,8 @@ if ("serviceWorker" in navigator) {
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
     das Inventar wird dabei automatisch auf 0 gesetzt und der Verkauf fließt genau wie ein eBay-Verkauf in
-    Statistiken, Rankings und Jahresübersicht ein. Wird ein solcher Verkauf wieder gelöscht, wird der
+    Statistiken, Rankings und Jahresübersicht ein. Auch hier lassen sich „Als Rückerstattung/Retoure markieren"
+    und „Als zugestellt markieren" setzen. Wird ein solcher Verkauf wieder gelöscht, wird der
     Inventareintrag automatisch zurückgesetzt. Wurde die Karte bereits über eBay verkauft, ist dieser Abschnitt
     ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich).</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
@@ -200,7 +204,8 @@ if ("serviceWorker" in navigator) {
     ±20&nbsp;%-Schwellwert wie der Preis-Alarm auf der Kartenseite. Ist eBay verbunden, führt oben ein Link direkt
     zum eigenen eBay-Verkäufer-Cockpit. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link
     führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit
-    Filtern/Suche auflistet.</p>
+    Filtern/Suche auflistet. Eine eigene Spalte „Ansehen ↗" verlinkt bei veröffentlichten/verkauften Angeboten
+    direkt zur Anzeige auf eBay.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
@@ -264,7 +269,8 @@ if ("serviceWorker" in navigator) {
     für DATEV/Lexoffice aufbereiteten Buchhaltungsexport. Eine Käufer-Historie darüber zeigt Wiederholungskäufer bei
     eBay (gruppiert nach dem pseudonymen eBay-Benutzernamen – keine Adresse oder echter Name wird dafür
     gespeichert), inklusive Anzahl Käufe, Summe und letztem Kauf; folgt dem aktuellen Zeit-/Kanal-/Suchfilter der
-    Seite.</p>
+    Seite. Ein Pfeil-Button pro Käufer klappt die einzelnen Käufe auf, jeweils mit Kartentitel, Verkaufspreis,
+    -datum sowie eBay-Artikelnummer und Link zum Angebot.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
