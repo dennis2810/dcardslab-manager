@@ -1667,10 +1667,14 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
         link.rel = "noopener";
         link.textContent = `${item.title} – ${item.price != null ? fmtEuro(item.price) : "?"}`;
         li.appendChild(link);
+        // Der einzelne "Übernehmen"-Button bleibt bewusst auch beim eigenen
+        // Angebot klickbar (nur die Checkbox/Mehrfachauswahl ist gesperrt) -
+        // die Badge warnt sichtbar genug, ein hartes Sperren hat sich als zu
+        // aggressiv erwiesen, wenn (v.a. in der eBay-Sandbox oder bei
+        // Nischenkarten) fast alle Treffer ohnehin das eigene Angebot sind.
         const useBtn = document.createElement("button");
         useBtn.type = "button";
         useBtn.textContent = "Übernehmen";
-        useBtn.disabled = item.is_own_listing;
         useBtn.addEventListener("click", () => {
           if (item.price != null) priceInput.value = item.price.toFixed(2);
           noteInput.value = "Aktives eBay-Angebot: " + item.title;

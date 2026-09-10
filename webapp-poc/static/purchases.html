@@ -64,6 +64,16 @@ if ("serviceWorker" in navigator) {
     .no-print { display: none !important; }
   }
   .table-scroll { overflow-x: auto; }
+  /* Feste, gleiche Spaltenbreiten fuer Plattform-Auswertung und
+     Verkaeufer-Historie - beide 4-spaltig (Name/Anzahl/Betrag/Betrag),
+     sonst sizen sich table-layout: auto's Spalten unabhaengig auf den
+     jeweils laengsten Zellinhalt und die Tabellen stehen nicht bündig
+     untereinander (gleiches Muster wie statistics.html's .ranking-table). */
+  .ranking-table { table-layout: fixed; }
+  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 40%; }
+  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
+  .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
+  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
   [hidden] { display: none !important; }
   /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
      Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
@@ -104,7 +114,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Plattform-Auswertung (Einkauf)</h2>
   <div class="table-scroll">
-    <table id="platform-ranking-table" style="display: none;">
+    <table id="platform-ranking-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Plattform</th><th>Verkäufe</th><th>Ø Gewinn</th><th>Ø Marge</th></tr></thead>
         <tbody id="platform-ranking-body"></tbody>
       </table>
@@ -113,7 +123,7 @@ if ("serviceWorker" in navigator) {
 
   <h2>Verkäufer-Historie</h2>
   <div class="table-scroll">
-    <table id="seller-history-table" style="display: none;">
+    <table id="seller-history-table" class="ranking-table" style="display: none;">
         <thead><tr><th>Verkäufer</th><th>Käufe</th><th>Summe (inkl. Versand)</th><th>Ø pro Kauf</th></tr></thead>
         <tbody id="seller-history-body"></tbody>
       </table>

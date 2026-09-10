@@ -457,6 +457,7 @@ function renderLastUpdates(sheets, appStatus) {
   const parts = [
     `Google Sheets zuletzt synchronisiert: ${sheets.last_synced_at ? formatDateTime(sheets.last_synced_at) : "noch nie"}`,
     `Backup zuletzt heruntergeladen: ${appStatus.last_backup_at ? formatDateTime(appStatus.last_backup_at) : "noch nie"}`,
+    `Automatisches Backup zuletzt: ${appStatus.last_auto_backup_at ? formatDateTime(appStatus.last_auto_backup_at) : "noch keins"}`,
   ];
   el.textContent = parts.join(" · ");
 }

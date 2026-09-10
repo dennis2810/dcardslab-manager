@@ -77,7 +77,7 @@ if ("serviceWorker" in navigator) {
     <li>Die Wunschliste wird jetzt als eigener Reiter in den Google-Sheets-Export aufgenommen.</li>
     <li>Automatisches, wöchentliches Backup im Hintergrund (zusätzlich zum manuellen Download) – wird in Supabase
       Storage abgelegt, die letzten 4 Wochen werden aufbewahrt; Zeitpunkt des letzten automatischen Backups wird
-      in den Einstellungen angezeigt.</li>
+      in den Einstellungen und jetzt auch auf dem Dashboard angezeigt.</li>
     <li>Neue Einstellung „Mindestbestand": globale Schwelle, ab der das Inventar eine Karte als niedrigen Bestand
       markiert.</li>
     <li>Diese Anleitung sowie die Release-Notes, verlinkt in den Einstellungen.</li>
@@ -127,6 +127,8 @@ if ("serviceWorker" in navigator) {
       Such-/Zeitfilter.</li>
     <li>Statuszeile mit der Anzahl Käufe steht jetzt direkt über statt unter der Summenzeile.</li>
     <li>Das Verkäufer-Feld schlägt beim Anlegen eines Kaufs bereits erfasste Verkäufer zur Auswahl vor.</li>
+    <li>Plattform-Auswertung und Verkäufer-Historie haben jetzt gleich breite Spalten und stehen bündig
+      untereinander.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -157,7 +159,9 @@ if ("serviceWorker" in navigator) {
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert
-      („🫵 Eigenes Angebot"), damit es nicht versehentlich als Marktpreis für sich selbst übernommen wird.</li>
+      („🫵 Eigenes Angebot"), damit es nicht versehentlich als Marktpreis für sich selbst übernommen wird –
+      der einzelne „Übernehmen"-Button bleibt dabei klickbar (nur die Mehrfachauswahl-Checkbox ist gesperrt), da
+      ein hartes Sperren sich als zu aggressiv erwiesen hat, wenn fast alle Treffer das eigene Angebot sind.</li>
     <li>Der Preisrecherche-Verlauf zeigt ab zwei Einträgen zusätzlich einen kleinen Verlaufs-Chart (Sparkline).</li>
   </ul>
 

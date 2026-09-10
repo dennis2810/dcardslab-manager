@@ -135,8 +135,9 @@ if ("serviceWorker" in navigator) {
     Auto(gramm)- und nummerierte Angebote (z. B. „/50") aus, sofern der Suchbegriff selbst nicht danach fragt – bei
     einer gesuchten Auflage werden zusätzlich nur Angebote mit exakt derselben Auflage berücksichtigt, damit die
     Preise nicht mit teureren/selteneren Varianten vermischt werden. Das eigene, bereits veröffentlichte Angebot wird
-    in den Suchtreffern erkannt und mit „🫵 Eigenes Angebot" markiert (Checkbox und „Übernehmen" deaktiviert), damit
-    es nicht versehentlich als Marktpreis für sich selbst übernommen wird. Ab zwei Einträgen zeigt der
+    in den Suchtreffern erkannt und mit „🫵 Eigenes Angebot" markiert (nur die Checkbox für die Mehrfachauswahl ist
+    dafür gesperrt, der einzelne „Übernehmen"-Button bleibt klickbar), damit es nicht versehentlich als Marktpreis
+    für sich selbst übernommen wird. Ab zwei Einträgen zeigt der
     Preisrecherche-Verlauf zusätzlich einen kleinen Verlaufs-Chart (Sparkline).</p>
   <p>Für Verkäufe außerhalb von eBay (Kleinanzeigen, Vinted, privat, …) gibt es einen eigenen Abschnitt „Verkauf
     außerhalb eBay": Kanal, Datum, Verkaufspreis, Versand und Gebühren eintragen und „Verkauf erfassen" klicken –
@@ -226,7 +227,8 @@ if ("serviceWorker" in navigator) {
     Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als 20&nbsp;% vom
     Preisrecherche-Marktdurchschnitt abweicht, und verlinkt zur eBay-Übersicht. Ein
     QR-Code verlinkt direkt zum Dashboard, um das Tool schnell auf dem Handy zu öffnen. Zeitpunkt der letzten
-    Google-Sheets-Synchronisierung und des letzten Backups werden oben angezeigt. Der Schalter „Design" (System/
+    Google-Sheets-Synchronisierung, des letzten manuell heruntergeladenen Backups sowie des letzten automatischen
+    Backups werden oben angezeigt. Der Schalter „Design" (System/
     Hell/Dunkel) legt das Farbschema fest – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
