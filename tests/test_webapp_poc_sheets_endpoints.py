@@ -260,6 +260,28 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["sender_address"], "")
 
+    def test_returns_activity_cleared_at(self):
+        with patch("main.db.get_app_status", return_value={"activity_cleared_at": "2026-09-10T12:00:00+00:00"}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["activity_cleared_at"], "2026-09-10T12:00:00+00:00")
+
+    def test_activity_cleared_at_defaults_to_none(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["activity_cleared_at"])
+
+
+class ClearActivityEndpointTests(unittest.TestCase):
+    def test_stores_current_timestamp(self):
+        with patch("main.db.set_activity_cleared", return_value={"activity_cleared_at": "now"}) as mock_set:
+            response = client.post("/api/app-status/clear-activity")
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once()
+        timestamp = mock_set.call_args[0][0]
+        self.assertTrue(timestamp.endswith("+00:00"))
+
 
 class LowStockThresholdEndpointTests(unittest.TestCase):
     def test_sets_threshold(self):

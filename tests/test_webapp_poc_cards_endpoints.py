@@ -32,6 +32,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
             response = client.get("/api/cards")
 
@@ -56,6 +57,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.storage.signed_url", side_effect=fake_signed_url):
             response = client.get("/api/cards")
 
@@ -121,7 +123,8 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.list_cards_by_sku", return_value=[]), \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards?q=Bayern&status=pr%C3%BCfen")
         self.assertEqual(response.status_code, 200)
         mock_list.assert_called_once_with(q="Bayern", status="prüfen")
@@ -133,7 +136,8 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.list_cards_by_sku", return_value=[sku_match]) as mock_sku, \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards?q=webapp-000002")
         self.assertEqual(response.status_code, 200)
         ids = [c["id"] for c in response.json()["cards"]]
@@ -146,7 +150,8 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.list_cards_by_sku", return_value=[card]), \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards?q=Karte")
         ids = [c["id"] for c in response.json()["cards"]]
         self.assertEqual(ids, ["card-1"])
@@ -729,7 +734,8 @@ class ListCardsHasPurchaseFieldTests(unittest.TestCase):
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value={"card-1"}), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertTrue(cards[0]["has_purchase"])
@@ -746,7 +752,8 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value=info), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertEqual(cards[0]["ebay_status"], "Veroeffentlicht")
@@ -762,11 +769,30 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={"card-1": {"channel": "Vinted"}}):
+             patch("main.db.manual_sale_info_by_card_id", return_value={"card-1": {"channel": "Vinted"}}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
         self.assertEqual(cards[0]["manual_sale_channel"], "Vinted")
         self.assertIsNone(cards[1]["manual_sale_channel"])
+
+    def test_attaches_delivered_and_refunded_flags(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None},
+        ]
+        flags = {"card-1": {"delivered": True, "refunded": False}}
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value=flags):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertTrue(cards[0]["delivered"])
+        self.assertFalse(cards[0]["refunded"])
+        self.assertFalse(cards[1]["delivered"])
+        self.assertFalse(cards[1]["refunded"])
 
 
 class RecognizeCardImagesEndpointTests(unittest.TestCase):

@@ -65,6 +65,9 @@ if ("serviceWorker" in navigator) {
   .goal-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; }
   .goal-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; font-weight: 600; }
   .goal-header button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .section-header h2 { margin: 2rem 0 0; }
+  .section-header button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
   .goal-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.5rem; }
   .goal-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
   .goal-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap; }
@@ -138,7 +141,10 @@ if ("serviceWorker" in navigator) {
   <h2>Was jetzt tun?</h2>
   <ul class="action-list" id="action-list"></ul>
 
-  <h2>Letzte Aktivität</h2>
+  <div class="section-header">
+    <h2>Letzte Aktivität</h2>
+    <button type="button" id="clear-activity-btn">Aktivitäten leeren</button>
+  </div>
   <ul class="activity-list" id="activity-list"></ul>
 
   <h2>Schneller Zugriff</h2>
@@ -318,11 +324,36 @@ async function load() {
     renderGoal();
     renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
-    renderActivity(stats, cardsBody.cards || []);
+    activityClearedAt = appStatus.activity_cleared_at || null;
+    lastActivityCards = cardsBody.cards || [];
+    renderActivity(stats, lastActivityCards);
   } catch (err) {
     document.getElementById("status-msg").textContent = "Fehler: " + err;
   }
 }
+
+// Zeitpunkt, ab dem "Letzte Aktivität" wieder Ereignisse zeigt (siehe
+// renderActivity()) - null solange nie geleert wurde. lastActivityCards
+// haelt die zuletzt geladenen Karten fest, damit der "Leeren"-Button ohne
+// neuen API-Aufruf neu rendern kann.
+let activityClearedAt = null;
+let lastActivityCards = [];
+
+document.getElementById("clear-activity-btn").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/app-status/clear-activity", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    activityClearedAt = body.activity_cleared_at || null;
+    renderActivity(lastStats, lastActivityCards);
+    showToast("Aktivitäten geleert.");
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  }
+});
 
 let dashboardGoal = null;
 
@@ -560,13 +591,20 @@ function renderActivity(stats, cards) {
     .filter((c) => c.created_at && !c.has_purchase)
     .map((c) => ({ date: c.created_at, text: `Neu angelegt: ${c.title || "(ohne Titel)"}`, href: `card.html?id=${encodeURIComponent(c.id)}` }));
 
-  const combined = [...sales, ...purchases, ...newCards]
+  // "Aktivitäten leeren" merkt sich nur einen Zeitpunkt (siehe
+  // clear-activity-btn) - Ereignisse davor werden ausgeblendet, statt
+  // tatsächlich gelöscht zu werden.
+  const afterCleared = activityClearedAt
+    ? [...sales, ...purchases, ...newCards].filter((e) => String(e.date) > activityClearedAt)
+    : [...sales, ...purchases, ...newCards];
+
+  const combined = afterCleared
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    .slice(0, 10);
+    .slice(0, 5);
 
   if (!combined.length) {
     const li = document.createElement("li");
-    li.textContent = "Noch keine Aktivität.";
+    li.textContent = activityClearedAt ? "Keine neue Aktivität seit dem Leeren." : "Noch keine Aktivität.";
     list.appendChild(li);
     return;
   }

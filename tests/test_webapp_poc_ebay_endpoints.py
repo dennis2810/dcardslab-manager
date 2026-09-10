@@ -140,6 +140,35 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         self.assertIsNone(response.json()["listings"][0]["sale_price"])
         mock_sales.assert_not_called()
 
+    def test_attaches_delivered_and_refunded_flags_for_sold_listings(self):
+        sold_listing = _listing(status="Verkauft")
+        with patch("main.db.list_ebay_listings", return_value=[sold_listing]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.sales_by_listing_id", return_value={
+                 "listing-1": {
+                     "sale_date": "2026-08-01T00:00:00+00:00", "gross_price": 12.5,
+                     "delivered": True, "refunded": False,
+                 }
+             }):
+            response = client.get("/api/ebay/listings")
+        listing = response.json()["listings"][0]
+        self.assertTrue(listing["delivered"])
+        self.assertFalse(listing["refunded"])
+
+    def test_delivered_and_refunded_default_to_false_when_nothing_sold(self):
+        with patch("main.db.list_ebay_listings", return_value=[_listing()]), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.sales_by_listing_id") as mock_sales:
+            response = client.get("/api/ebay/listings")
+        listing = response.json()["listings"][0]
+        self.assertFalse(listing["delivered"])
+        self.assertFalse(listing["refunded"])
+        mock_sales.assert_not_called()
+
     def test_attaches_manual_sale_channel_when_card_sold_elsewhere(self):
         listing = _listing(status="Veroeffentlicht")
         with patch("main.db.list_ebay_listings", return_value=[listing]), \

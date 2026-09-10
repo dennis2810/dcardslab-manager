@@ -351,6 +351,22 @@ function pickedUpBadge(pickedUp) {
   return badge;
 }
 
+function deliveredBadge(delivered) {
+  if (!delivered) return null;
+  const badge = document.createElement("span");
+  badge.className = "shipped-badge";
+  badge.textContent = "Zugestellt";
+  return badge;
+}
+
+function refundedBadge(refunded) {
+  if (!refunded) return null;
+  const badge = document.createElement("span");
+  badge.className = "manual-sale-badge";
+  badge.textContent = "Retoure";
+  return badge;
+}
+
 let currentView = "grid";
 try {
   currentView = localStorage.getItem("cardsView") || "grid";
@@ -545,6 +561,12 @@ function render(cards) {
     const pickedUp = pickedUpBadge(card.picked_up);
     if (pickedUp) a.appendChild(pickedUp);
 
+    const delivered = deliveredBadge(card.delivered);
+    if (delivered) a.appendChild(delivered);
+
+    const refunded = refundedBadge(card.refunded);
+    if (refunded) a.appendChild(refunded);
+
     if (card.ebay_sku) {
       const skuEl = document.createElement("div");
       skuEl.className = "sku";
@@ -623,6 +645,10 @@ function renderList(cards) {
     if (shipped) shippedTd.appendChild(shipped);
     const pickedUp = pickedUpBadge(card.picked_up);
     if (pickedUp) shippedTd.appendChild(pickedUp);
+    const delivered = deliveredBadge(card.delivered);
+    if (delivered) shippedTd.appendChild(delivered);
+    const refunded = refundedBadge(card.refunded);
+    if (refunded) shippedTd.appendChild(refunded);
     tr.appendChild(shippedTd);
 
     const tagsTd = document.createElement("td");
@@ -970,11 +996,15 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status", "Versendet", "Abgeholt", "Tags"];
+  const headers = [
+    "SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status",
+    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Tags",
+  ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
-    c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein", c.tags || "",
+    c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
+    c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein", c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
 });

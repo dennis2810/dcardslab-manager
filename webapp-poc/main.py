@@ -477,12 +477,16 @@ async def list_cards(q: str | None = None, status: str | None = None):
     linked_ids = db.cards_with_purchase(card_ids)
     ebay_info = db.ebay_info_by_card_id(card_ids)
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
+    sale_flags = db.sale_flags_by_card_id(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
         info = ebay_info.get(c["id"]) or {}
         c["ebay_status"] = info.get("status")
         c["ebay_sku"] = info.get("sku")
         c["manual_sale_channel"] = (manual_sale_info.get(c["id"]) or {}).get("channel") or None
+        flags = sale_flags.get(c["id"]) or {}
+        c["delivered"] = flags.get("delivered", False)
+        c["refunded"] = flags.get("refunded", False)
     return JSONResponse({"cards": cards})
 
 
@@ -1235,6 +1239,8 @@ def _expand_ebay_listings(listings):
         listing["sale_id"] = sale.get("id") if sale else None
         listing["tracking_number"] = sale.get("tracking_number") if sale else None
         listing["shipping_carrier"] = sale.get("shipping_carrier") if sale else None
+        listing["delivered"] = bool(sale.get("delivered")) if sale else False
+        listing["refunded"] = bool(sale.get("refunded")) if sale else False
         listing["manual_sale_channel"] = (manual_sale_info.get(listing["card_id"]) or {}).get("channel") or None
         research = price_research_info.get(listing["card_id"])
         listing["price_research_avg"] = research["avg_price"] if research else None
@@ -2057,7 +2063,19 @@ async def app_status():
         "last_auto_backup_at": status.get("last_auto_backup_at"),
         "low_stock_threshold": status.get("low_stock_threshold") or 0,
         "sender_address": status.get("sender_address") or "",
+        "activity_cleared_at": status.get("activity_cleared_at"),
     })
+
+
+@app.post("/api/app-status/clear-activity")
+async def clear_activity():
+    # "Letzte Aktivitaet" auf dem Dashboard ist kein gespeichertes Protokoll,
+    # sondern wird live aus Kaeufen/Verkaeufen/Karten berechnet - "leeren"
+    # merkt sich daher nur einen Zeitpunkt, ab dem wieder Ereignisse
+    # angezeigt werden, statt tatsaechlich Daten zu loeschen.
+    now = datetime.now(timezone.utc).isoformat()
+    updated = db.set_activity_cleared(now)
+    return JSONResponse(updated)
 
 
 @app.put("/api/sender-address")
