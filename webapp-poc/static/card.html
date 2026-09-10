@@ -101,6 +101,17 @@ if ("serviceWorker" in navigator) {
   .ebay-status-Verkauft { background: var(--info-bg); color: var(--info-fg); }
   .ebay-status-Fehler { background: var(--danger-bg); color: var(--danger-fg); }
   .ebay-status-Beendet { background: var(--neutral-bg); color: var(--neutral-fg); }
+  /* Verkaufsstatus oben im Seitenkopf, neben "Drucken" - eigene, schmale
+     Badge-Klassen statt .ebay-status-badge wiederzuverwenden, damit dessen
+     margin-bottom (fuer den Block-Kontext im eBay-Abschnitt gedacht) hier
+     im Kopf keine ungewollte Zeilenhoehe erzeugt. */
+  #sale-status-badges { display: inline-flex; gap: 0.4rem; margin-left: 0.75rem; vertical-align: middle; }
+  #sale-status-badges .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+  #sale-status-badges .badge-neutral { background: var(--neutral-bg); color: var(--neutral-fg); }
+  #sale-status-badges .badge-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  #sale-status-badges .badge-success { background: var(--success-bg); color: var(--success-fg); }
+  #sale-status-badges .badge-info { background: var(--info-bg); color: var(--info-fg); }
+  #sale-status-badges .badge-danger { background: var(--danger-bg); color: var(--danger-fg); }
   .ebay-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .ebay-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   .ebay-form input, .ebay-form select, .ebay-form textarea { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
@@ -161,7 +172,8 @@ if ("serviceWorker" in navigator) {
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
   <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a>
-    <button type="button" id="print-btn" class="no-print">🖨 Drucken</button></p>
+    <button type="button" id="print-btn" class="no-print">🖨 Drucken</button>
+    <span id="sale-status-badges"></span></p>
   <nav class="page-nav">
     <label>Seite
       <select id="page-nav-select">
@@ -638,6 +650,7 @@ async function loadCard() {
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
       card.ebay_listing?.ebay_listing_id
     );
+    renderSaleStatusBadges(card);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -969,6 +982,37 @@ const EBAY_STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
   Verkauft: "Verkauft", Fehler: "Fehler", Beendet: "Beendet",
 };
+
+// Gleiche Statusfarben wie die Badge im eBay-Abschnitt weiter unten (siehe
+// .ebay-status-*), hier oben im Seitenkopf aber ohne Umweg ueber die Karte
+// scrollen zu muessen - der Verkaufsstatus ist damit direkt beim Aufrufen
+// der Karte sichtbar.
+const EBAY_STATUS_BADGE_CLASS = {
+  Entwurf: "badge-neutral", Geplant: "badge-warn", Veroeffentlicht: "badge-success",
+  Verkauft: "badge-info", Fehler: "badge-danger", Beendet: "badge-neutral",
+};
+
+function renderSaleStatusBadges(card) {
+  const container = document.getElementById("sale-status-badges");
+  container.innerHTML = "";
+  if (card.manual_sale) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Verkauft: " + card.manual_sale.channel;
+    container.appendChild(badge);
+  } else if (card.ebay_listing) {
+    const badge = document.createElement("span");
+    badge.className = "badge " + (EBAY_STATUS_BADGE_CLASS[card.ebay_listing.status] || "badge-neutral");
+    badge.textContent = "eBay: " + (EBAY_STATUS_LABELS[card.ebay_listing.status] || card.ebay_listing.status);
+    container.appendChild(badge);
+  }
+  if (card.shipped) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Versendet";
+    container.appendChild(badge);
+  }
+}
 
 // Same URL formulas as ebay_listing.price_research_links() on the backend
 // - built client-side here so the links update live as the title is
