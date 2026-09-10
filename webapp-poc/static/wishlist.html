@@ -67,6 +67,10 @@ if ("serviceWorker" in navigator) {
   #item-form input { font-weight: normal; margin-top: 0.2rem; }
   #item-form .full-row { grid-column: 1 / -1; }
   #item-form .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; align-items: center; }
+  #import-form { display: none; flex-direction: column; gap: 0.6rem; align-items: flex-start; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+  #import-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .import-hint { font-size: 0.85rem; color: #555; margin: 0; }
+  #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   .error { color: #b00020; font-weight: 600; }
   .empty-state { color: #555; font-style: italic; }
   .table-scroll { overflow-x: auto; }
@@ -112,6 +116,7 @@ if ("serviceWorker" in navigator) {
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
     <label><input type="checkbox" id="sourcing-only-filter"> Nur Sourcing-Treffer anzeigen</label>
     <button type="button" id="toggle-form">+ Eintrag hinzufügen</button>
+    <button type="button" id="toggle-import">⭱ CSV importieren</button>
   </div>
 
   <form id="item-form" class="no-print">
@@ -128,11 +133,30 @@ if ("serviceWorker" in navigator) {
     </div>
   </form>
 
+  <form id="import-form" class="no-print">
+    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz, Semikolon-getrennt).</p>
+    <label>CSV-Datei <input type="file" name="file" accept=".csv,text/csv" required></label>
+    <div class="actions">
+      <button type="submit">Importieren</button>
+      <button type="button" id="import-cancel">Abbrechen</button>
+      <span id="import-status"></span>
+    </div>
+  </form>
+
+  <div id="bulk-actions" class="controls no-print" hidden>
+    <span id="bulk-count"></span>
+    <button type="button" id="bulk-delete-btn">Löschen</button>
+    <button type="button" id="bulk-delete-undo" hidden>↩ Rückgängig</button>
+    <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
+    <span id="bulk-results"></span>
+  </div>
+
   <p id="status-msg">Lädt …</p>
   <div class="table-scroll">
     <table id="items-table" style="display: none;">
       <thead>
         <tr>
+          <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
           <th></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
@@ -214,6 +238,34 @@ let currentPage = 0;
 let sortKey = "title";
 let sortAsc = true;
 let allItems = [];
+
+// Mehrfachauswahl fuer Massenaktionen - gleiches Muster wie purchases.html.
+let selectedIds = new Set();
+let currentPageItems = [];
+const bulkActionsBar = document.getElementById("bulk-actions");
+const bulkCountEl = document.getElementById("bulk-count");
+const bulkResultsEl = document.getElementById("bulk-results");
+const selectAllCheckbox = document.getElementById("select-all-checkbox");
+
+function updateBulkBar() {
+  bulkActionsBar.hidden = selectedIds.size === 0;
+  bulkCountEl.textContent = `${selectedIds.size} Eintrag/Einträge ausgewählt`;
+}
+
+selectAllCheckbox.addEventListener("change", () => {
+  for (const item of currentPageItems) {
+    if (selectAllCheckbox.checked) selectedIds.add(item.id);
+    else selectedIds.delete(item.id);
+  }
+  updateBulkBar();
+  render();
+});
+
+document.getElementById("bulk-clear-selection").addEventListener("click", () => {
+  selectedIds.clear();
+  updateBulkBar();
+  render();
+});
 
 // Preisprüfung ueber die bestehende eBay-Preisrecherche (aktive Angebote,
 // siehe card.html) - bewusst keine eigene Persistenz/Historie wie bei
@@ -328,6 +380,113 @@ async function deleteItem(itemId) {
     showToast("Fehler: " + err, true);
   }
 }
+
+// Kurze Gnadenfrist mit "Rueckgaengig" statt eines confirm()-Dialogs -
+// gleiches Muster wie purchases.html's Massenloeschen.
+const BULK_DELETE_GRACE_SECONDS = 6;
+const bulkDeleteUndoBtn = document.getElementById("bulk-delete-undo");
+let pendingBulkDelete = null;
+
+document.getElementById("bulk-delete-btn").addEventListener("click", () => {
+  const ids = [...selectedIds];
+  if (!ids.length || pendingBulkDelete) return;
+
+  let remaining = BULK_DELETE_GRACE_SECONDS;
+  const updateStatus = () => {
+    bulkResultsEl.textContent = `${ids.length} Eintrag/Einträge werden in ${remaining}s gelöscht … `;
+  };
+  bulkResultsEl.className = "";
+  updateStatus();
+  bulkDeleteUndoBtn.hidden = false;
+
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  const timeout = setTimeout(() => runBulkDelete(ids), BULK_DELETE_GRACE_SECONDS * 1000);
+  pendingBulkDelete = { timeout, tick };
+});
+
+bulkDeleteUndoBtn.addEventListener("click", () => {
+  if (!pendingBulkDelete) return;
+  clearTimeout(pendingBulkDelete.timeout);
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkResultsEl.textContent = "Löschen abgebrochen.";
+});
+
+async function runBulkDelete(ids) {
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkResultsEl.textContent = "Löscht …";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/wishlist/${encodeURIComponent(id)}`, { method: "DELETE" })
+    ));
+    const okCount = results.filter((r) => r.ok || r.status === 204).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Eintrag/Einträge gelöscht.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkResultsEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadItems();
+  } catch (err) {
+    bulkResultsEl.textContent = "Fehler: " + err;
+    bulkResultsEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+}
+
+const importForm = document.getElementById("import-form");
+
+document.getElementById("toggle-import").addEventListener("click", () => {
+  importForm.style.display = importForm.style.display === "flex" ? "none" : "flex";
+});
+
+document.getElementById("import-cancel").addEventListener("click", () => {
+  importForm.reset();
+  importForm.style.display = "none";
+  document.getElementById("import-status").textContent = "";
+});
+
+importForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const statusEl = document.getElementById("import-status");
+  const fileInput = importForm.querySelector('input[name="file"]');
+  if (!fileInput.files.length) return;
+  statusEl.textContent = "Importiert …";
+  statusEl.className = "";
+  const data = new FormData();
+  data.append("file", fileInput.files[0]);
+  try {
+    const res = await fetch("/api/wishlist/import", { method: "POST", body: data });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    importForm.reset();
+    importForm.style.display = "none";
+    statusEl.textContent = "";
+    if (body.errors.length) {
+      showToast(`${body.imported} Einträge importiert, ${body.errors.length} Zeile(n) übersprungen: ${body.errors.join(" ")}`, true);
+    } else {
+      showToast(`${body.imported} Einträge importiert.`);
+    }
+    loadItems();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
 
 function sortValue(item, key) {
   if (key === "target_price") return item.target_price ?? -Infinity;
@@ -497,7 +656,7 @@ function buildDetailRow(item) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 8;
+  td.colSpan = 9;
 
   const sparkline = buildPriceSparkline(item.price_history);
   if (sparkline) {
@@ -555,6 +714,8 @@ function render() {
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const visible = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  currentPageItems = visible;
+  selectAllCheckbox.checked = visible.length > 0 && visible.every((x) => selectedIds.has(x.id));
   pageInfo.textContent = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
@@ -582,6 +743,20 @@ function render() {
   empty.textContent = "";
   for (const item of visible) {
     const tr = document.createElement("tr");
+
+    const checkTd = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "no-print";
+    checkbox.checked = selectedIds.has(item.id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedIds.add(item.id);
+      else selectedIds.delete(item.id);
+      selectAllCheckbox.checked = currentPageItems.length > 0 && currentPageItems.every((x) => selectedIds.has(x.id));
+      updateBulkBar();
+    });
+    checkTd.appendChild(checkbox);
+    tr.appendChild(checkTd);
 
     const toggleTd = document.createElement("td");
     const toggleBtn = document.createElement("button");

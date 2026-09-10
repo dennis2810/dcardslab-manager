@@ -134,5 +134,73 @@ class DeleteDescriptionTemplateEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ImportWishlistCsvEndpointTests(unittest.TestCase):
+    def _upload(self, csv_text):
+        return client.post(
+            "/api/wishlist/import",
+            files={"file": ("wunschliste.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+        )
+
+    def test_imports_rows_and_calls_create_wishlist_item_per_row(self):
+        csv_text = (
+            "Titel;Team;Set;Wunschpreis;Notiz\r\n"
+            "Lionel Messi;PSG;Panini;12.5;Auto gesucht\r\n"
+            "Kylian Mbappe;PSG;Topps;;\r\n"
+        )
+        with patch(
+            "main.db.create_wishlist_item", side_effect=[{"id": "w1"}, {"id": "w2"}]
+        ) as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 2)
+        self.assertEqual(body["errors"], [])
+        self.assertEqual(mock_create.call_count, 2)
+        mock_create.assert_any_call({
+            "title": "Lionel Messi", "team": "PSG", "set_name": "Panini",
+            "target_price": 12.5, "notes": "Auto gesucht",
+        })
+        mock_create.assert_any_call({"title": "Kylian Mbappe", "team": "PSG", "set_name": "Topps"})
+
+    def test_invalid_amount_is_reported_as_error_and_row_skipped(self):
+        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\nLionel Messi;;;zwölf;\r\n"
+        with patch("main.db.create_wishlist_item") as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(len(body["errors"]), 1)
+        self.assertIn("Zeile 2", body["errors"][0])
+        mock_create.assert_not_called()
+
+    def test_row_without_title_is_reported_as_error_and_skipped(self):
+        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\n;PSG;;;\r\n"
+        with patch("main.db.create_wishlist_item") as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 0)
+        self.assertEqual(len(body["errors"]), 1)
+        self.assertIn("Zeile 2", body["errors"][0])
+        mock_create.assert_not_called()
+
+    def test_fully_empty_row_is_skipped_without_error(self):
+        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\n;;;;\r\nLionel Messi;;;;\r\n"
+        with patch("main.db.create_wishlist_item", return_value={"id": "w1"}) as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["imported"], 1)
+        self.assertEqual(body["errors"], [])
+        mock_create.assert_called_once_with({"title": "Lionel Messi"})
+
+    def test_returns_400_for_non_utf8_file(self):
+        response = client.post(
+            "/api/wishlist/import",
+            files={"file": ("wunschliste.csv", b"\xff\xfe\x00broken", "text/csv")},
+        )
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()
