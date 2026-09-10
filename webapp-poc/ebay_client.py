@@ -381,6 +381,16 @@ def get_order(token, order_id):
     return _request("GET", token, f"/sell/fulfillment/v1/order/{order_id}").json()
 
 
+def list_shipping_fulfillments(token, order_id):
+    """Bereits vorhandene Sendungsverfolgung fuer eine Bestellung - deckt
+    auch den Fall ab, dass der Verkaeufer direkt im eBay Seller Hub (statt
+    im Tool) versendet hat: eBay legt intern denselben ShippingFulfillment-
+    Datensatz an, egal ob er per API (submit_shipping_fulfillment() oben)
+    oder ueber die eBay-Oberflaeche entsteht."""
+    response = _request("GET", token, f"/sell/fulfillment/v1/order/{order_id}/shipping_fulfillment")
+    return response.json().get("fulfillments") or []
+
+
 def submit_shipping_fulfillment(token, order_id, line_item_id, quantity, tracking_number, shipping_carrier, shipped_date):
     """Tells eBay a line item has shipped (tracking number + carrier) -
     eBay then marks the order fulfilled and notifies the buyer itself, no

@@ -57,6 +57,16 @@ if ("serviceWorker" in navigator) {
   #status-msg { font-style: italic; color: #555; }
   .controls { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; align-items: center; }
   .table-scroll { overflow-x: auto; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .note { font-size: 0.85rem; color: #555; }
+  /* Feste Spaltenbreiten statt an Inhalten ausgerichtet, damit alle
+     Zahlenspalten buendig untereinander stehen (gleiches Muster wie
+     purchases.html's .ranking-table). */
+  .ranking-table { table-layout: fixed; }
+  .ranking-table th:nth-child(1), .ranking-table td:nth-child(1) { width: 40%; }
+  .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
+  .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
+  .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
 </style>
 </head>
 <body>
@@ -86,6 +96,17 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg">Lädt …</p>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
+
+  <h2>Käufer-Historie (eBay)</h2>
+  <p class="note">Nur eBay-Verkäufe haben einen Käufer-Benutzernamen (pseudonymer eBay-Handle, keine Adresse) - zeigt
+    Wiederholungskäufer und folgt dem aktuellen Zeit-/Kanal-/Suchfilter unten.</p>
+  <div class="table-scroll">
+    <table id="buyer-history-table" class="ranking-table" style="display: none;">
+      <thead><tr><th>Käufer (eBay)</th><th>Käufe</th><th>Summe</th><th>Letzter Kauf</th></tr></thead>
+      <tbody id="buyer-history-body"></tbody>
+    </table>
+  </div>
+  <p id="buyer-history-empty" class="note"></p>
 
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
@@ -388,6 +409,47 @@ function computeSummary(rows) {
   };
 }
 
+// Gruppiert nach eBay-Kaeufer-Benutzernamen (pseudonymer Handle, siehe
+// sync_ebay_sales()) - manuelle Verkaeufe haben keinen buyer_username und
+// werden hier ausgeblendet, da es dafuer keine vergleichbare eBay-Kennung
+// gibt. Folgt dem aktuellen Zeit-/Kanal-/Suchfilter (rows kommt bereits
+// gefiltert rein), gleiches Prinzip wie purchases.html's Verkaeufer-Historie.
+function renderBuyerHistory(rows) {
+  const table = document.getElementById("buyer-history-table");
+  const body = document.getElementById("buyer-history-body");
+  const empty = document.getElementById("buyer-history-empty");
+  body.innerHTML = "";
+
+  const byBuyer = new Map();
+  for (const r of rows) {
+    const buyer = (r.buyer_username || "").trim();
+    if (!buyer || r.sale_price == null) continue;
+    const g = byBuyer.get(buyer) || { count: 0, total: 0, lastSaleDate: null };
+    g.count += 1;
+    g.total += Number(r.sale_price) || 0;
+    if (r.sale_date && (!g.lastSaleDate || r.sale_date > g.lastSaleDate)) g.lastSaleDate = r.sale_date;
+    byBuyer.set(buyer, g);
+  }
+
+  const entries = [...byBuyer.entries()].sort((a, b) => b[1].total - a[1].total);
+  if (!entries.length) {
+    table.style.display = "none";
+    empty.textContent = "Keine eBay-Käufer im aktuellen Filter.";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const [buyer, g] of entries) {
+    const tr = document.createElement("tr");
+    for (const text of [buyer, String(g.count), fmtEuro(g.total), formatDate(g.lastSaleDate)]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
 function sortedRows(rows) {
   if (!sortKey) return rows;
   return [...rows].sort((a, b) => {
@@ -410,6 +472,7 @@ function setSortIndicator() {
 function renderRows() {
   renderSummary(computeSummary(dateFilteredRows()));
   const allFiltered = sortedRows(filteredRows());
+  renderBuyerHistory(allFiltered);
   setSortIndicator();
   const table = document.getElementById("rows-table");
   const body = document.getElementById("rows-body");

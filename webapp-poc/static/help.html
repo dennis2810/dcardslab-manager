@@ -135,7 +135,9 @@ if ("serviceWorker" in navigator) {
     samt Versanddienstleister eintragen und „An eBay übermitteln" klicken: eBay markiert die Bestellung dann selbst
     als versendet und benachrichtigt den Käufer automatisch, gleichzeitig wird das „Versendet"-Kästchen der Karte
     mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
-    Verfügung, siehe unten). Schickt ein Käufer die Karte zurück,
+    Verfügung, siehe unten). Der Versand über das Tool ist dabei komplett optional – wird stattdessen direkt im
+    eBay Seller Hub versendet, übernimmt der automatische Hintergrund-Sync Trackingnummer und Versanddienstleister
+    trotzdem von dort und markiert die Karte ebenfalls als versendet. Schickt ein Käufer die Karte zurück,
     markiert das Kästchen „Als Rückerstattung/Retoure markieren" den Verkauf entsprechend: Verkaufspreis und
     erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben als Verlust stehen.
     Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
@@ -240,7 +242,10 @@ if ("serviceWorker" in navigator) {
     „Als PDF speichern" im Druckdialog wählen).
     Die zweite Seite („Alle Verkäufe") listet jeden Verkauf einzeln – inklusive Verkaufskanal (eBay oder der
     jeweilige manuelle Kanal), nach dem sich auch filtern lässt –, filter- und sortierbar, mit CSV-Export und einem
-    für DATEV/Lexoffice aufbereiteten Buchhaltungsexport.</p>
+    für DATEV/Lexoffice aufbereiteten Buchhaltungsexport. Eine Käufer-Historie darüber zeigt Wiederholungskäufer bei
+    eBay (gruppiert nach dem pseudonymen eBay-Benutzernamen – keine Adresse oder echter Name wird dafür
+    gespeichert), inklusive Anzahl Käufe, Summe und letztem Kauf; folgt dem aktuellen Zeit-/Kanal-/Suchfilter der
+    Seite.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit

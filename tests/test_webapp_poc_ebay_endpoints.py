@@ -858,6 +858,136 @@ class SyncSalesEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
         self.assertIn("eBay lehnt die Anfrage ab", response.json()["detail"])
 
+    def test_captures_buyer_username(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "buyer": {"username": "kartenfan99"},
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["buyer_username"], "kartenfan99")
+
+    def test_missing_buyer_defaults_username_to_empty_string(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["buyer_username"], "")
+
+    def test_pulls_tracking_from_ebay_when_order_already_fulfilled(self):
+        # Deckt den Fall ab, dass direkt im eBay Seller Hub versendet wurde
+        # (statt ueber das Tool) - die Trackingdaten sollen trotzdem lokal
+        # ankommen und die Karte automatisch als versendet markiert werden.
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "orderFulfillmentStatus": "FULFILLED",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        fulfillments = [{
+            "lineItems": [{"lineItemId": "LI1"}],
+            "trackingNumber": "1Z999AA10123456784", "shippingCarrierCode": "UPS",
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.ebay_client.list_shipping_fulfillments", return_value=fulfillments) as mock_fulfillments, \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1", "card_id": "card-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"), \
+             patch("main.db.update_card") as mock_update_card:
+            client.post("/api/ebay/sync-sales")
+        mock_fulfillments.assert_called_once_with("tok", "O1")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["tracking_number"], "1Z999AA10123456784")
+        self.assertEqual(sale_fields["shipping_carrier"], "UPS")
+        mock_update_card.assert_called_once_with("card-1", {"shipped": True})
+
+    def test_does_not_look_up_fulfillments_when_order_not_yet_fulfilled(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "orderFulfillmentStatus": "NOT_STARTED",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.ebay_client.list_shipping_fulfillments") as mock_fulfillments, \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        mock_fulfillments.assert_not_called()
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertNotIn("tracking_number", sale_fields)
+
+    def test_fulfilled_order_without_matching_line_item_fulfillment_is_skipped(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "orderFulfillmentStatus": "FULFILLED",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.ebay_client.list_shipping_fulfillments", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"), \
+             patch("main.db.update_card") as mock_update_card:
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertNotIn("tracking_number", sale_fields)
+        mock_update_card.assert_not_called()
+
+    def test_fulfillment_lookup_failure_does_not_fail_the_sync(self):
+        # Isolation principle, same as the existing inventory-zeroing test
+        # above - a Fehler beim Nachladen der Trackingdaten darf den
+        # restlichen Sync (inkl. des eigentlichen Verkaufs-Upserts) nicht
+        # verhindern.
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "orderFulfillmentStatus": "FULFILLED",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.ebay_client.list_shipping_fulfillments", side_effect=ebay_client.EbayApiError("boom")), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            response = client.post("/api/ebay/sync-sales")
+        self.assertEqual(response.status_code, 200)
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertNotIn("tracking_number", sale_fields)
+
 
 class UpdateEbaySaleEndpointTests(unittest.TestCase):
     def test_updates_shipping_cost(self):

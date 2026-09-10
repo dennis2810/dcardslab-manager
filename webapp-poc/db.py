@@ -1017,7 +1017,7 @@ def statistics_rows():
 
     sales_response = (
         get_client().table("ebay_sales")
-        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost,ebay_fees,refunded")
+        .select("card_id,sale_date,gross_price,shipping_charged,shipping_cost,ebay_fees,refunded,buyer_username")
         .in_("card_id", card_ids).order("sale_date", desc=True).execute()
     )
     sales_by_card = {}
@@ -1065,5 +1065,9 @@ def statistics_rows():
             "shipping_cost": sale.get("shipping_cost") if sale else (manual_sale.get("shipping_cost") if manual_sale else None),
             "ebay_fees": sale.get("ebay_fees") if sale else (manual_sale.get("fees") if manual_sale else None),
             "refunded": bool((sale or manual_sale or {}).get("refunded")) if (sale or manual_sale) else False,
+            # Nur bei eBay-Verkaeufen vorhanden (pseudonymer Handle, siehe
+            # sync_ebay_sales()) - fuer die Kaeufer-Historie auf
+            # statistics-sales.html.
+            "buyer_username": sale.get("buyer_username") if sale else None,
         })
     return rows

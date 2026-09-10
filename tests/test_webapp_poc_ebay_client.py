@@ -461,5 +461,21 @@ class GetOrderTests(unittest.TestCase):
         self.assertIn("/order/order-1", args[1])
 
 
+class ListShippingFulfillmentsTests(unittest.TestCase):
+    def test_returns_fulfillments_list(self):
+        fulfillments = [{"lineItems": [{"lineItemId": "line-1"}], "trackingNumber": "TRACK1", "shippingCarrierCode": "DHL"}]
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"fulfillments": fulfillments})) as mock_request:
+            result = ebay_client.list_shipping_fulfillments("tok", "order-1")
+        self.assertEqual(result, fulfillments)
+        args, _ = mock_request.call_args
+        self.assertEqual(args[0], "GET")
+        self.assertIn("/order/order-1/shipping_fulfillment", args[1])
+
+    def test_returns_empty_list_when_no_fulfillments_key(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})):
+            result = ebay_client.list_shipping_fulfillments("tok", "order-1")
+        self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()

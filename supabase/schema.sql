@@ -303,3 +303,11 @@ alter table app_status add column if not exists low_stock_threshold int not null
 -- Backup (backup.py's run_forever()) - eigenes Feld statt last_backup_at
 -- (manueller Download), da beides unterschiedliche Ereignisse sind.
 alter table app_status add column if not exists last_auto_backup_at timestamptz;
+
+-- Migration (2026-09-10): eBay-Käufer-Benutzername je Verkauf - bewusst nur
+-- der pseudonyme eBay-Handle (aus order.buyer.username), keine
+-- Klarname/Adresse (die bleibt weiterhin nicht gespeichert, siehe
+-- GET /api/ebay/sales/{id}/shipping-address). Ermöglicht eine einfache
+-- Käufer-Historie (Wiederholungskäufer erkennen) ohne personenbezogene
+-- Adressdaten dauerhaft vorzuhalten.
+alter table ebay_sales add column if not exists buyer_username text default '';
