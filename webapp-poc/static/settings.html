@@ -82,6 +82,13 @@ if ("serviceWorker" in navigator) {
     </form>
   </nav>
 
+  <section id="version-section">
+    <h2>Version</h2>
+    <p>Zeigt, mit welchem Code-Stand dieser Container gerade läuft – praktisch, um nach einem Update/Rebuild zu
+      prüfen, ob die erwarteten Änderungen wirklich im laufenden Container angekommen sind.</p>
+    <p class="status" id="version-status">Lädt …</p>
+  </section>
+
   <section id="login-section">
     <h2>Login</h2>
     <p>Schützt das gesamte Tool mit einem gemeinsamen Passwort (siehe README.md, „Login einrichten") – ohne
@@ -258,6 +265,20 @@ function showToast(message, isError) {
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
+
+(async () => {
+  const versionStatus = document.getElementById("version-status");
+  try {
+    const res = await fetch("/api/version");
+    const body = await res.json();
+    const parts = [`Gebaut am: ${body.built_at || "unbekannt"}`];
+    if (body.git_commit && body.git_commit !== "unbekannt") parts.push(`Commit: ${body.git_commit}`);
+    versionStatus.textContent = parts.join(" · ");
+  } catch (err) {
+    versionStatus.textContent = "Fehler: " + err;
+    versionStatus.className = "status error";
+  }
+})();
 
 document.getElementById("logout-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("logout-status");

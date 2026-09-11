@@ -113,6 +113,24 @@ if APP_PASSWORD and not SESSION_SECRET_KEY:
         "geheimer Zufallswert), damit Sitzungen einen Neustart ueberleben."
     )
 
+# Vom Docker-Build gesetzter Git-Commit-Kurzhash (siehe Dockerfile's
+# GIT_COMMIT-Build-Arg + README.md, "docker build") - ohne diesen bleibt
+# "unbekannt" (z.B. bei einem Build ohne --build-arg). Ueber GET /api/version
+# abrufbar, damit sich per simplem HTTP-Request pruefen laesst, ob ein
+# erwarteter PR/Commit tatsaechlich im laufenden Container steckt, ohne
+# Shell-Zugriff auf den Deployment-Host zu brauchen - gleiches Prinzip wie
+# ebay-oauth-server's /health mit configured_scopes.
+GIT_COMMIT = os.environ.get("GIT_COMMIT", "unbekannt").strip() or "unbekannt"
+
+# Vom Dockerfile automatisch erzeugter Build-Zeitstempel (kein --build-arg
+# noetig, funktioniert daher auch bei einem Rebuild ueber eine NAS-Docker-App
+# ohne eigene Kommandozeile) - "unbekannt" ausserhalb eines Docker-Builds
+# (z.B. lokaler Testlauf via uvicorn direkt).
+try:
+    BUILD_TIME = (Path(__file__).parent / "BUILD_TIME").read_text().strip() or "unbekannt"
+except FileNotFoundError:
+    BUILD_TIME = "unbekannt"
+
 
 @app.on_event("startup")
 async def _start_ebay_scheduler():
@@ -2837,6 +2855,16 @@ async def login(request: Request, fields: dict = Body(...)):
 async def logout(request: Request):
     request.session.clear()
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/version")
+async def get_version():
+    # Beantwortet "laeuft im Container wirklich der erwartete PR/Commit?"
+    # ohne Shell-Zugriff auf den Deployment-Host. built_at kommt automatisch
+    # von jedem Docker-Build (auch ueber eine NAS-Docker-App); git_commit nur,
+    # wenn beim Build zusaetzlich --build-arg GIT_COMMIT=... gesetzt wurde
+    # (siehe Dockerfile, README.md "docker build").
+    return JSONResponse({"git_commit": GIT_COMMIT, "built_at": BUILD_TIME})
 
 
 @app.middleware("http")

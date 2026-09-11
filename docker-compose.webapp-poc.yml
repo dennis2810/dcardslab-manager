@@ -9,6 +9,13 @@ services:
     build:
       context: .
       dockerfile: webapp-poc/Dockerfile
+      # Optional - siehe README.md, "Pruefen, ob ein Update/PR wirklich im
+      # laufenden Container angekommen ist". Ohne gesetztes GIT_COMMIT (z.B.
+      # per "export GIT_COMMIT=$(git rev-parse --short HEAD)" vor dem Build)
+      # bleibt es leer; GET /api/version zeigt dann trotzdem automatisch
+      # einen Build-Zeitstempel an, der braucht kein Build-Arg.
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
     container_name: dcardslab-webapp-poc
     ports:
       - "8000:8000"
