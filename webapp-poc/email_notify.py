@@ -48,8 +48,31 @@ def send_email(settings, subject, body):
         if use_tls:
             server.starttls()
         if username:
-            server.login(username, password)
+            try:
+                server.login(username, password)
+            except smtplib.SMTPAuthenticationError as exc:
+                raise SMTPAuthenticationHintError(_friendly_auth_error(exc)) from exc
         server.sendmail(settings["smtp_from"], [settings["smtp_to"]], msg.as_string())
+
+
+class SMTPAuthenticationHintError(Exception):
+    """Wraps SMTPAuthenticationError with a German, actionable hint (e.g.
+    Gmail's 'Application-specific password required') instead of just
+    forwarding smtplib's raw, English/technical error text - raised instead
+    of the original so callers (settings.html's Test-E-Mail button) show
+    something a non-technical user can act on."""
+
+
+def _friendly_auth_error(exc):
+    detail = str(exc.smtp_error or b"", "utf-8", errors="replace")
+    if "application-specific password" in detail.lower() or "5.7.9" in detail:
+        return (
+            "Anmeldung fehlgeschlagen: Google verlangt für den SMTP-Versand ein "
+            "App-Passwort statt des normalen Kontopassworts (bei aktivierter "
+            "2-Faktor-Authentifizierung). Unter https://myaccount.google.com/apppasswords "
+            "eins erstellen und hier als Passwort eintragen."
+        )
+    return f"Anmeldung fehlgeschlagen: {exc.smtp_code} {detail}"
 
 
 def format_sale_notification(newly_synced):

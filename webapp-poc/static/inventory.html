@@ -185,6 +185,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="bulk-quantity-btn">Anwenden</button>
     <label>Zustand setzen auf <input type="text" id="bulk-condition-input" placeholder="z.B. NM"></label>
     <button type="button" id="bulk-condition-btn">Anwenden</button>
+    <button type="button" id="bulk-print-labels-btn">🖨 Etiketten drucken</button>
     <button type="button" id="bulk-delete-btn">Löschen</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-results"></span>
@@ -537,6 +538,46 @@ document.getElementById("print-location-labels-btn").addEventListener("click", (
     .sort((a, b) => a[0].localeCompare(b[0], "de"))
     .map(([name, count]) => ({ name, origin: location.origin, count }));
   printLocationLabels(locations);
+});
+
+// Text-Etiketten pro ausgewaehltem Eintrag (SKU/Lagerort/Titel) - gleiches
+// Muster wie printLabels() auf cards.html, hier aber mit Lagerort statt
+// Team/Saison, da das fuer einen physischen Inventar-Eintrag (z.B. auf
+// einer Kiste/Huelle) die relevantere Zusatzangabe ist.
+function printItemLabels(selectedItems) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const rows = selectedItems.map((item) => `
+    <div class="label">
+      <div class="sku">${escapeHtml(item.sku || "(keine SKU)")}</div>
+      <div class="meta">${escapeHtml(item.location || "")}</div>
+      <div class="title">${escapeHtml(item.card_title || "(ohne Titel)")}</div>
+    </div>
+  `).join("");
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Etiketten</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; }
+  .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+  .label { border: 1px solid #999; border-radius: 4px; padding: 0.4rem 0.5rem; page-break-inside: avoid; }
+  .label .sku { font-weight: 700; font-size: 0.85rem; }
+  .label .meta { font-size: 0.7rem; color: #555; }
+  .label .title { font-size: 0.75rem; margin-top: 0.15rem; }
+</style></head>
+<body>
+  <div class="labels">${rows}</div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+document.getElementById("bulk-print-labels-btn").addEventListener("click", () => {
+  const selected = items.filter((item) => selectedIds.has(item.id));
+  if (!selected.length) return;
+  printItemLabels(selected);
 });
 
 function filteredItems() {

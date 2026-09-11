@@ -2648,6 +2648,8 @@ async def send_test_notification():
         )
     except email_notify.EmailNotConfiguredError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except email_notify.SMTPAuthenticationHintError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"E-Mail-Versand fehlgeschlagen: {type(exc).__name__}: {exc}") from exc
     return JSONResponse({"sent": True})

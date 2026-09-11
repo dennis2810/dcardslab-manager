@@ -170,6 +170,8 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="price-bulk-btn">Anwenden</button>
     <button type="button" id="end-selected-btn">Ausgewählte beenden</button>
     <button type="button" id="end-selected-undo" hidden>↩ Rückgängig</button>
+    <button type="button" id="relist-selected-btn">Ausgewählte neu einstellen</button>
+    <button type="button" id="relist-selected-undo" hidden>↩ Rückgängig</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-results"></span>
   </div>
@@ -312,6 +314,7 @@ const body = document.getElementById("listings-body");
 const publishSelectedBtn = document.getElementById("publish-selected-btn");
 const priceBulkBtn = document.getElementById("price-bulk-btn");
 const endSelectedBtn = document.getElementById("end-selected-btn");
+const relistSelectedBtn = document.getElementById("relist-selected-btn");
 const priceBulkPercent = document.getElementById("price-bulk-percent");
 const bulkResults = document.getElementById("bulk-results");
 const bulkActionsBar = document.getElementById("bulk-actions");
@@ -932,6 +935,102 @@ async function runEndListings(eligible, skipped) {
     showToast("Fehler: " + err, true);
   } finally {
     endSelectedBtn.disabled = false;
+  }
+}
+
+// Neu einstellen beendet erst das Angebot bei eBay und veroeffentlicht es
+// direkt wieder neu (siehe main.py's _relist_listing()) - genauso wenig
+// rueckgaengig zu machen wie das Beenden oben, daher dieselbe Gnadenfrist
+// mit "Rueckgaengig" statt eines confirm()-Dialogs.
+const RELIST_GRACE_SECONDS = 6;
+const relistSelectedUndoBtn = document.getElementById("relist-selected-undo");
+let pendingRelistListings = null;
+
+relistSelectedBtn.addEventListener("click", () => {
+  const selected = currentListings.filter((l) => selectedIds.has(l.id));
+  const eligible = selected.filter((l) => l.status === "Veroeffentlicht" && l.ebay_offer_id);
+  const skipped = selected.length - eligible.length;
+  if (!eligible.length) {
+    bulkResults.textContent = "Keines der ausgewählten Angebote kann neu eingestellt werden "
+      + "(nur veröffentlichte, nicht importierte Angebote).";
+    bulkResults.className = "error";
+    showToast("Keines der ausgewählten Angebote kann neu eingestellt werden.", true);
+    return;
+  }
+  if (pendingRelistListings) return;
+
+  let remaining = RELIST_GRACE_SECONDS;
+  const updateStatus = () => {
+    bulkResults.textContent = `${eligible.length} Angebot(e) werden in ${remaining}s neu eingestellt … `;
+  };
+  bulkResults.className = "";
+  updateStatus();
+  relistSelectedUndoBtn.hidden = false;
+  relistSelectedBtn.disabled = true;
+
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  const timeout = setTimeout(() => runRelistListings(eligible, skipped), RELIST_GRACE_SECONDS * 1000);
+  pendingRelistListings = { timeout, tick };
+});
+
+relistSelectedUndoBtn.addEventListener("click", () => {
+  if (!pendingRelistListings) return;
+  clearTimeout(pendingRelistListings.timeout);
+  clearInterval(pendingRelistListings.tick);
+  pendingRelistListings = null;
+  relistSelectedUndoBtn.hidden = true;
+  relistSelectedBtn.disabled = false;
+  bulkResults.textContent = "Neu einstellen abgebrochen.";
+});
+
+async function runRelistListings(eligible, skipped) {
+  clearInterval(pendingRelistListings.tick);
+  pendingRelistListings = null;
+  relistSelectedUndoBtn.hidden = true;
+  bulkResults.textContent = "Stelle Angebote neu ein …";
+  try {
+    const results = await Promise.all(eligible.map(async (l) => {
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(l.id)}/relist`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) return { id: l.id, ok: false, error: data.detail || res.statusText };
+        return { id: l.id, ok: true };
+      } catch (err) {
+        return { id: l.id, ok: false, error: String(err) };
+      }
+    }));
+    const list = document.createElement("ul");
+    if (skipped) {
+      const li = document.createElement("li");
+      li.textContent = `${skipped} Angebot(e) übersprungen (nicht veröffentlicht oder importiert).`;
+      list.appendChild(li);
+    }
+    for (const r of results) {
+      const li = document.createElement("li");
+      li.textContent = `${r.ok ? "✓" : "✗"} ${r.id}` + (r.error ? ` — ${r.error}` : "");
+      list.appendChild(li);
+    }
+    bulkResults.innerHTML = "";
+    bulkResults.appendChild(list);
+    const okCount = results.filter((r) => r.ok).length;
+    const failedCount = results.length - okCount;
+    let toastMsg = `${okCount} Angebot(e) neu eingestellt.`;
+    if (skipped) toastMsg += ` ${skipped} übersprungen.`;
+    if (failedCount) toastMsg += ` ${failedCount} fehlgeschlagen.`;
+    showToast(toastMsg, failedCount > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadListings();
+  } catch (err) {
+    bulkResults.textContent = "Fehler: " + err;
+    bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    relistSelectedBtn.disabled = false;
   }
 }
 
