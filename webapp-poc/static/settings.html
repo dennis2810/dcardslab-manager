@@ -168,6 +168,18 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="notification-settings-status"></p>
   </section>
 
+  <section id="push-notification-section">
+    <h2>Push-Benachrichtigungen</h2>
+    <p>Zusätzlich zur E-Mail: eine Browser-Benachrichtigung auf diesem Gerät, sobald neue eBay-Verkäufe
+      gefunden werden (gleicher Schalter "Bei neuen eBay-Verkäufen benachrichtigen" oben). Auf dem Handy
+      funktioniert das auch bei geschlossener App, wenn die Seite zuvor über "Zum Startbildschirm hinzufügen"
+      installiert wurde (iOS ab Version 16.4, Android ohne Einschränkung).</p>
+    <button type="button" id="enable-push-btn">Push-Benachrichtigungen aktivieren</button>
+    <button type="button" id="disable-push-btn" hidden>Push-Benachrichtigungen deaktivieren</button>
+    <button type="button" id="send-test-push-btn" hidden>Test-Push senden</button>
+    <p class="status" id="push-notification-status"></p>
+  </section>
+
   <section id="auto-relist-section">
     <h2>Automatisches Re-Listing</h2>
     <p>Beendet ein lange unverkauftes eBay-Angebot und veröffentlicht es sofort wieder neu (frisches Listing,
@@ -607,6 +619,134 @@ document.getElementById("send-test-email-btn").addEventListener("click", async (
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+// Web-Push-Abo (siehe push_notify.py) - der VAPID-Public-Key kommt vom
+// Server (POST /api/push/vapid-public-key liefert nur den öffentlichen
+// Teil), applicationServerKey erwartet ihn aber als Uint8Array statt als
+// Base64-String.
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+const pushEnableBtn = document.getElementById("enable-push-btn");
+const pushDisableBtn = document.getElementById("disable-push-btn");
+const pushTestBtn = document.getElementById("send-test-push-btn");
+const pushStatusEl = document.getElementById("push-notification-status");
+
+function setPushButtons(subscribed) {
+  pushEnableBtn.hidden = subscribed;
+  pushDisableBtn.hidden = !subscribed;
+  pushTestBtn.hidden = !subscribed;
+}
+
+async function refreshPushUI() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    pushStatusEl.textContent = "Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.";
+    pushStatusEl.className = "error";
+    pushEnableBtn.hidden = true;
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    setPushButtons(Boolean(subscription));
+  } catch (err) {
+    // Kein harter Fehler - der "Aktivieren"-Button bleibt einfach sichtbar,
+    // ein Klick versucht es erneut.
+  }
+}
+refreshPushUI();
+
+pushEnableBtn.addEventListener("click", async () => {
+  pushStatusEl.textContent = "Aktiviere …";
+  pushStatusEl.className = "status";
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      pushStatusEl.textContent = "Berechtigung für Benachrichtigungen wurde nicht erteilt.";
+      pushStatusEl.className = "error";
+      return;
+    }
+    const keyRes = await fetch("/api/push/vapid-public-key");
+    const keyBody = await keyRes.json();
+    if (!keyBody.configured) {
+      pushStatusEl.textContent = "Push ist serverseitig nicht konfiguriert (VAPID-Schlüssel fehlen, siehe Ersteinrichtung).";
+      pushStatusEl.className = "error";
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyBody.public_key),
+    });
+    const subJson = subscription.toJSON();
+    const res = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      throw new Error(body.detail || res.statusText);
+    }
+    setPushButtons(true);
+    pushStatusEl.textContent = "Push-Benachrichtigungen aktiviert.";
+    pushStatusEl.className = "status";
+    showToast("Push-Benachrichtigungen aktiviert.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+pushDisableBtn.addEventListener("click", async () => {
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription) {
+      await fetch("/api/push/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      await subscription.unsubscribe();
+    }
+    setPushButtons(false);
+    pushStatusEl.textContent = "Push-Benachrichtigungen deaktiviert.";
+    pushStatusEl.className = "status";
+    showToast("Push-Benachrichtigungen deaktiviert.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+pushTestBtn.addEventListener("click", async () => {
+  pushStatusEl.textContent = "Sendet Test-Push …";
+  pushStatusEl.className = "status";
+  try {
+    const res = await fetch("/api/push/test", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      pushStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      pushStatusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    pushStatusEl.textContent = `Test-Push an ${body.sent} Gerät(e) gesendet.`;
+    pushStatusEl.className = "status";
+    showToast("Test-Push gesendet.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import main  # noqa: E402
 import email_notify  # noqa: E402
 import google_sheets_client  # noqa: E402
+import push_notify  # noqa: E402
 
 client = TestClient(main.app, follow_redirects=False)
 
@@ -495,6 +496,68 @@ class RestoreBackupEndpointTests(unittest.TestCase):
                 files={"file": ("backup.zip", b"not-a-zip", "application/zip")},
             )
         self.assertEqual(response.status_code, 400)
+
+
+class PushVapidPublicKeyEndpointTests(unittest.TestCase):
+    def test_returns_public_key_and_configured_flag(self):
+        with patch("main.push_notify.VAPID_PUBLIC_KEY", "pub-key"), \
+             patch("main.push_notify.is_configured", return_value=True):
+            response = client.get("/api/push/vapid-public-key")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"public_key": "pub-key", "configured": True})
+
+
+class PushSubscribeEndpointTests(unittest.TestCase):
+    def test_saves_subscription(self):
+        with patch("main.db.save_push_subscription") as mock_save:
+            response = client.post("/api/push/subscribe", json={
+                "endpoint": "https://push.example/a",
+                "keys": {"p256dh": "p1", "auth": "a1"},
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["subscribed"])
+        mock_save.assert_called_once_with("https://push.example/a", "p1", "a1")
+
+    def test_returns_400_when_endpoint_missing(self):
+        response = client.post("/api/push/subscribe", json={"keys": {"p256dh": "p1", "auth": "a1"}})
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_400_when_keys_incomplete(self):
+        response = client.post("/api/push/subscribe", json={
+            "endpoint": "https://push.example/a", "keys": {"p256dh": "p1"},
+        })
+        self.assertEqual(response.status_code, 400)
+
+
+class PushUnsubscribeEndpointTests(unittest.TestCase):
+    def test_deletes_subscription(self):
+        with patch("main.db.delete_push_subscription") as mock_delete:
+            response = client.post("/api/push/unsubscribe", json={"endpoint": "https://push.example/a"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["unsubscribed"])
+        mock_delete.assert_called_once_with("https://push.example/a")
+
+    def test_skips_delete_when_no_endpoint(self):
+        with patch("main.db.delete_push_subscription") as mock_delete:
+            response = client.post("/api/push/unsubscribe", json={})
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_not_called()
+
+
+class SendTestPushEndpointTests(unittest.TestCase):
+    def test_sends_and_returns_count(self):
+        with patch("main.push_notify.send_push_to_all", return_value=2) as mock_send:
+            response = client.post("/api/push/test")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sent"], 2)
+        mock_send.assert_called_once()
+
+    def test_returns_400_when_not_configured(self):
+        with patch("main.push_notify.send_push_to_all",
+                    side_effect=push_notify.PushNotConfiguredError("VAPID fehlt")):
+            response = client.post("/api/push/test")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "VAPID fehlt")
 
 
 class ListPortfolioSnapshotsEndpointTests(unittest.TestCase):

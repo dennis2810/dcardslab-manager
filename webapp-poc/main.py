@@ -73,6 +73,7 @@ import email_notify  # noqa: E402
 import google_sheets_client  # noqa: E402
 import image_hash  # noqa: E402
 import portfolio  # noqa: E402
+import push_notify  # noqa: E402
 import storage  # noqa: E402
 
 logger = logging.getLogger("ebay_publish")
@@ -2308,20 +2309,34 @@ async def sync_ebay_sales():
 
 def _notify_new_sales(newly_synced):
     """Callback fuer ebay_scheduler.run_forever()'s on_new_sales - schickt
-    eine zusammenfassende E-Mail ueber neu synchronisierte eBay-Verkaeufe aus
+    eine zusammenfassende E-Mail sowie (falls Geraete registriert sind) eine
+    Web-Push-Benachrichtigung ueber neu synchronisierte eBay-Verkaeufe aus
     dem periodischen Hintergrund-Sync (nicht dem manuellen Button, siehe
-    sync_ebay_sales() oben - dort waere eine E-Mail fuer eine selbst
-    ausgeloeste Aktion unnoetig). Fehler werden hier abgefangen statt an den
-    Scheduler durchgereicht, damit ein SMTP-Problem den eigentlichen Sync
-    nicht beeintraechtigt."""
+    sync_ebay_sales() oben - dort waere eine Benachrichtigung fuer eine
+    selbst ausgeloeste Aktion unnoetig). Beide Kanäle teilen sich den
+    gleichen "notify_on_sale"-Schalter (settings.html) - Push ist zusaetzlich
+    an ein bestehendes Geraete-Abo gebunden (POST /api/push/subscribe), ohne
+    eigenen zweiten An/Aus-Schalter. Fehler werden hier abgefangen statt an
+    den Scheduler durchgereicht, damit ein SMTP-/Push-Problem den
+    eigentlichen Sync nicht beeintraechtigt."""
     try:
         settings = db.get_app_status() or {}
         if not settings.get("notify_on_sale"):
             return
+    except Exception:
+        logger.exception("Benachrichtigungseinstellungen konnten nicht geladen werden")
+        return
+    try:
         subject, body = email_notify.format_sale_notification(newly_synced)
         email_notify.send_email(settings, subject, body)
     except Exception:
         logger.exception("E-Mail-Benachrichtigung fuer neue Verkaeufe fehlgeschlagen")
+    try:
+        if push_notify.is_configured():
+            subject, body = email_notify.format_sale_notification(newly_synced)
+            push_notify.send_push_to_all(subject, body, url="/ebay.html")
+    except Exception:
+        logger.exception("Push-Benachrichtigung fuer neue Verkaeufe fehlgeschlagen")
 
 
 def _sync_ebay_returns_once():
@@ -2667,6 +2682,47 @@ async def send_test_notification():
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"E-Mail-Versand fehlgeschlagen: {type(exc).__name__}: {exc}") from exc
     return JSONResponse({"sent": True})
+
+
+@app.get("/api/push/vapid-public-key")
+async def get_push_vapid_public_key():
+    # settings.html braucht den oeffentlichen Schluessel fuer
+    # PushManager.subscribe({applicationServerKey: ...}) - der private
+    # Schluessel verlaesst push_notify.py nie.
+    return JSONResponse({
+        "public_key": push_notify.VAPID_PUBLIC_KEY,
+        "configured": push_notify.is_configured(),
+    })
+
+
+@app.post("/api/push/subscribe")
+async def subscribe_push(fields: dict = Body(...)):
+    endpoint = fields.get("endpoint")
+    keys = fields.get("keys") or {}
+    if not endpoint or not keys.get("p256dh") or not keys.get("auth"):
+        raise HTTPException(status_code=400, detail="Unvollständige Push-Subscription.")
+    db.save_push_subscription(endpoint, keys["p256dh"], keys["auth"])
+    return JSONResponse({"subscribed": True})
+
+
+@app.post("/api/push/unsubscribe")
+async def unsubscribe_push(fields: dict = Body(...)):
+    endpoint = fields.get("endpoint")
+    if endpoint:
+        db.delete_push_subscription(endpoint)
+    return JSONResponse({"unsubscribed": True})
+
+
+@app.post("/api/push/test")
+async def send_test_push():
+    try:
+        sent = push_notify.send_push_to_all(
+            "DCardsLab: Test-Push",
+            "Dies ist eine Test-Benachrichtigung von DCardsLab - Web-Push funktioniert.",
+        )
+    except push_notify.PushNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse({"sent": sent})
 
 
 @app.post("/api/app-status/clear-activity")

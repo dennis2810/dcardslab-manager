@@ -1296,6 +1296,44 @@ class NotifyNewSalesTests(unittest.TestCase):
         with patch("main.db.get_app_status", side_effect=RuntimeError("db down")):
             main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])  # must not raise
 
+    def test_sends_push_when_enabled_and_configured(self):
+        settings = {"notify_on_sale": True}
+        newly_synced = [{"card_id": "c1", "listing": {"title": "Messi"}, "sale_fields": {"gross_price": 9.99}}]
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email"), \
+             patch("main.push_notify.is_configured", return_value=True), \
+             patch("main.push_notify.send_push_to_all") as mock_push:
+            main._notify_new_sales(newly_synced)
+        mock_push.assert_called_once()
+        args = mock_push.call_args[0]
+        self.assertIn("1 neuer eBay-Verkauf", args[0])
+        self.assertEqual(mock_push.call_args[1]["url"], "/ebay.html")
+
+    def test_skips_push_when_not_configured(self):
+        settings = {"notify_on_sale": True}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email"), \
+             patch("main.push_notify.is_configured", return_value=False), \
+             patch("main.push_notify.send_push_to_all") as mock_push:
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
+        mock_push.assert_not_called()
+
+    def test_push_failure_does_not_raise(self):
+        settings = {"notify_on_sale": True}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email"), \
+             patch("main.push_notify.is_configured", return_value=True), \
+             patch("main.push_notify.send_push_to_all", side_effect=RuntimeError("push down")):
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])  # must not raise
+
+    def test_push_failure_does_not_prevent_email(self):
+        settings = {"notify_on_sale": True, "smtp_host": "smtp.example.com"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email") as mock_send, \
+             patch("main.push_notify.is_configured", side_effect=RuntimeError("boom")):
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
+        mock_send.assert_called_once()
+
 
 class SyncEbayReturnsOnceTests(unittest.TestCase):
     def test_marks_sale_refunded_when_return_has_refund(self):

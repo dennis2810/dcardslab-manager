@@ -26,6 +26,11 @@ _TABLE_NAMES = (
 # Refresh-Token) und app_status (u.a. smtp_password) - beides Zugangsdaten,
 # die in einem herunterladbaren/in Supabase Storage abgelegten Backup nichts
 # verloren haben (siehe onboarding.html's "Was wird automatisch gesichert").
+# Ebenfalls bewusst NICHT dabei: push_subscriptions - geraetegebundene
+# Web-Push-Abos (siehe push_notify.py), die bei einem Restore auf einem
+# anderen/spaeteren Geraetestand ohnehin ins Leere liefen (Browser widerruft
+# sie beim Abmelden des Service Workers) und nichts mit den eigentlichen
+# Nutzdaten zu tun haben.
 
 # Woechentlich statt taeglich, um den Free-Tier-Storage (1GB) nicht unnoetig
 # zu fuellen - stuendlich geprueft (CHECK_INTERVAL_SECONDS), aber nur

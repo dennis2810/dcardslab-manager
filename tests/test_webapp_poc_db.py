@@ -2739,6 +2739,38 @@ class BulkUpsertRowsTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class PushSubscriptionTests(unittest.TestCase):
+    def test_save_push_subscription_upserts_by_endpoint(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"endpoint": "https://push.example/a", "p256dh": "p1", "auth": "a1"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.save_push_subscription("https://push.example/a", "p1", "a1")
+        self.assertEqual(result, response.data[0])
+        mock_client.table.assert_called_once_with("push_subscriptions")
+        mock_client.table.return_value.upsert.assert_called_once_with(
+            {"endpoint": "https://push.example/a", "p256dh": "p1", "auth": "a1"}, on_conflict="endpoint"
+        )
+
+    def test_all_push_subscriptions(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"endpoint": "https://push.example/a"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.all_push_subscriptions()
+        self.assertEqual(result, response.data)
+        mock_client.table.assert_called_once_with("push_subscriptions")
+
+    def test_delete_push_subscription(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.delete_push_subscription("https://push.example/a")
+        mock_client.table.assert_called_once_with("push_subscriptions")
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("endpoint", "https://push.example/a")
+
+
 class SearchSalesTests(unittest.TestCase):
     def _table(self, ebay_rows, manual_rows, card_rows):
         def table(name):

@@ -76,13 +76,15 @@ als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
   nur noch für einen Access-Token an (`GET
   /api/internal/access-token`), alle Listing-Operationen laufen direkt
   von hier aus gegen eBay.
-- `static/settings.html` bündelt zwei unabhängige Funktionen:
+- `static/settings.html` bündelt mehrere unabhängige Funktionen:
   **Backup** (`GET /api/backup`, ein Klick lädt eine ZIP-Datei mit allen
   Supabase-Tabellen als JSON plus allen Kartenbildern herunter - eine
-  Kopie außerhalb von Supabase) und **Google-Sheets-Sync**
-  (einseitig Supabase → Sheets, manuell per Button, vier Tabs: Karten/
-  Käufe/eBay/Sync_Info). Die Google-Verbindung läuft über einen
-  redirect-basierten OAuth-Flow direkt in `webapp-poc`
+  Kopie außerhalb von Supabase; `POST /api/backup/restore` spielt eine
+  solche ZIP-Datei per Upsert wieder ein, siehe `backup.py`),
+  **Google-Sheets-Sync** (einseitig Supabase → Sheets, manuell per Button,
+  vier Tabs: Karten/Käufe/eBay/Sync_Info) und **Web-Push-Benachrichtigungen**
+  (`push_notify.py`, siehe Einrichtung unten). Die Google-Verbindung läuft
+  über einen redirect-basierten OAuth-Flow direkt in `webapp-poc`
   (`google_sheets_client.py`, portiert vom bewährten
   `ebay-oauth-server`-Muster) statt der Desktop-App's lokalem
   Browser-Flow, der auf einem headless NAS-Container nicht
@@ -109,6 +111,35 @@ braucht keine Google-Konfiguration):
    URL kopieren (`https://docs.google.com/spreadsheets/d/<ID>/edit`).
 6. Auf `settings.html` auf „Mit Google verbinden" klicken (einmaliger
    Consent-Screen), danach die Tabellen-ID eintragen und speichern.
+
+### Web-Push-Benachrichtigungen einrichten
+
+Einmalige manuelle Einrichtung, optional - ohne sie funktioniert alles
+andere inkl. der bestehenden E-Mail-Benachrichtigung unverändert:
+
+1. Ein VAPID-Schlüsselpaar erzeugen, z. B. mit `vapid --gen` (Kommando von
+   `py-vapid`, einer Abhängigkeit von `pywebpush` - bereits mit
+   `requirements.txt` installiert) oder einem gleichwertigen Web-Push-
+   Schlüsselgenerator.
+2. Öffentlichen/privaten Schlüssel als `VAPID_PUBLIC_KEY`/
+   `VAPID_PRIVATE_KEY` sowie eine Kontakt-Adresse als `VAPID_SUBJECT`
+   (Format `mailto:name@example.com`, von Push-Diensten wie FCM verlangt,
+   um den Betreiber bei Problemen erreichen zu können) beim
+   `webapp-poc`-Container-Deployment setzen (s. u.).
+3. Auf `settings.html` im Abschnitt „Push-Benachrichtigungen" auf
+   „Push-Benachrichtigungen aktivieren" klicken (Browser fragt nach
+   Benachrichtigungs-Berechtigung), danach optional „Test-Push senden".
+4. Auf dem Handy funktioniert das auch bei geschlossener App, wenn die
+   Seite zuvor über „Zum Startbildschirm hinzufügen" installiert wurde
+   (Android uneingeschränkt, iOS ab Version 16.4).
+
+Das VAPID-Schlüsselpaar identifiziert nur diesen Server - es ist kein
+Zugangsdatum eines einzelnen Nutzers und landet deshalb (wie
+`SUPABASE_SERVICE_KEY` & Co.) nicht in `app_status`, sondern in
+Umgebungsvariablen. Die pro Gerät gespeicherten Push-Abos
+(`push_subscriptions`-Tabelle) sind bewusst nicht Teil des Backup-ZIPs
+(siehe `backup.py`) - nach einem Wiederherstellen auf einem neuen
+Supabase-Projekt oder Gerätewechsel einfach erneut aktivieren.
 
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
@@ -167,6 +198,9 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e GOOGLE_CLIENT_ID=deine-google-client-id \
   -e GOOGLE_CLIENT_SECRET=dein-google-client-secret \
   -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
+  -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
+  -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
+  -e VAPID_SUBJECT=mailto:du@example.com \
   -v /volume1/dein-ordner:/data/handyscan \
   dcardslab-webapp-poc
 ```
@@ -177,8 +211,11 @@ oauth-server unter einer anderen Adresse läuft oder bereits auf
 Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
 übereinstimmen, den `ebay-oauth-server` selbst gesetzt hat.
 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` sind
-nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.) - ohne
-sie funktioniert alles andere inkl. Backup-Download unverändert.
+nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.), und
+`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` nur, falls
+Web-Push-Benachrichtigungen genutzt werden sollen (s. o.) - ohne sie
+funktioniert alles andere inkl. Backup-Download/E-Mail-Benachrichtigung
+unverändert.
 
 Das Volume `/data/handyscan` ist optional und nur für den
 "📱 Handyscan"-Button (siehe Scan-Seite) relevant: dort per Handy fotografierte

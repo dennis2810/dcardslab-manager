@@ -448,3 +448,15 @@ create table if not exists portfolio_value_snapshots (
 );
 
 create index if not exists portfolio_value_snapshots_date_idx on portfolio_value_snapshots(snapshot_date);
+
+-- Web-Push-Abos (VAPID) je Geraet/Browser, siehe push_notify.py. Das
+-- VAPID-Schluesselpaar selbst liegt bewusst NICHT hier (Umgebungsvariablen,
+-- siehe README.md) - diese Tabelle haelt nur, wohin (endpoint) und womit
+-- (p256dh/auth) ein einzelnes Geraet erreichbar ist.
+create table if not exists push_subscriptions (
+    id          uuid primary key default gen_random_uuid(),
+    endpoint    text not null unique,
+    p256dh      text not null,
+    auth        text not null,
+    created_at  timestamptz not null default now()
+);

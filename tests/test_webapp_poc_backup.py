@@ -77,6 +77,18 @@ class BuildBackupZipTests(unittest.TestCase):
         self.assertNotIn("google_sheets_settings.json", names)
         self.assertNotIn("app_status.json", names)
 
+    def test_excludes_push_subscriptions(self):
+        # Geraetegebundene Web-Push-Abos (push_notify.py) haben nichts mit
+        # den eigentlichen Nutzdaten zu tun, siehe _TABLE_NAMES-Kommentar.
+        self._patch_db()
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertNotIn("push_subscriptions.json", names)
+
     def test_includes_images_for_cards_that_have_them(self):
         self._patch_db()
         mock_client = MagicMock()

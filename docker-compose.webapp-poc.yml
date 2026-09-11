@@ -26,4 +26,10 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      # Web-Push (optional): ohne diese drei bleibt alles andere inkl. der
+      # E-Mail-Benachrichtigung nutzbar, nur "Push-Benachrichtigungen
+      # aktivieren" in den Einstellungen scheitert.
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-}
     restart: unless-stopped

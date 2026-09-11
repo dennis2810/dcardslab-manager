@@ -1479,3 +1479,22 @@ def statistics_rows():
             "buyer_username": sale.get("buyer_username") if sale else None,
         })
     return rows
+
+
+def save_push_subscription(endpoint, p256dh, auth):
+    # Upsert-by-endpoint (unique(endpoint) im Schema) - ein wiederholtes
+    # Abo desselben Geraets/Browsers (z. B. nach Cache-Loeschen liefert der
+    # Browser denselben Endpoint erneut) ueberschreibt nur die Schluessel,
+    # statt einen Duplikat-Eintrag anzulegen.
+    response = get_client().table("push_subscriptions").upsert({
+        "endpoint": endpoint, "p256dh": p256dh, "auth": auth,
+    }, on_conflict="endpoint").execute()
+    return response.data[0]
+
+
+def all_push_subscriptions():
+    return get_client().table("push_subscriptions").select("*").execute().data
+
+
+def delete_push_subscription(endpoint):
+    get_client().table("push_subscriptions").delete().eq("endpoint", endpoint).execute()

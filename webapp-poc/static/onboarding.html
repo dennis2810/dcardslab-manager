@@ -145,7 +145,15 @@ if ("serviceWorker" in navigator) {
     <li data-id="email-test"><input type="checkbox"><span>„Test-E-Mail senden" in den Einstellungen klicken und Posteingang prüfen.</span></li>
   </ul>
 
-  <h2 id="weiteres">6. Weiteres nach Bedarf <span class="optional-tag">optional</span></h2>
+  <h2 id="push">6. Web-Push-Benachrichtigungen <span class="optional-tag">optional</span></h2>
+  <p>Browser-Benachrichtigung auf dem Gerät bei neuen eBay-Verkäufen, zusätzlich zur E-Mail - funktioniert auch auf
+    dem Handy bei geschlossener App, sobald die Seite über "Zum Startbildschirm hinzufügen" installiert wurde.</p>
+  <ul class="checklist" data-section="push">
+    <li data-id="push-vapid"><input type="checkbox"><span>Einmalig ein VAPID-Schlüsselpaar erzeugen (z. B. mit <code>vapid --gen</code>, Teil von <code>py-vapid</code>, einer Abhängigkeit von <code>pywebpush</code>) und als <code>VAPID_PUBLIC_KEY</code>/<code>VAPID_PRIVATE_KEY</code>/<code>VAPID_SUBJECT</code> (<code>mailto:</code>-Adresse) beim Deployment setzen.</span></li>
+    <li data-id="push-enable"><input type="checkbox"><span>„Push-Benachrichtigungen aktivieren" in den <a href="settings.html">Einstellungen</a> klicken (Browser fragt nach Berechtigung) und per „Test-Push senden" prüfen.</span></li>
+  </ul>
+
+  <h2 id="weiteres">7. Weiteres nach Bedarf <span class="optional-tag">optional</span></h2>
   <ul class="checklist" data-section="weiteres">
     <li data-id="absenderadresse"><input type="checkbox"><span>Absenderadresse für das druckbare Adress-Etikett/den Lieferschein hinterlegen (Einstellungen).</span></li>
     <li data-id="mindestbestand"><input type="checkbox"><span>Mindestbestand-Schwelle für die Bestandswarnung im Inventar setzen (0 = deaktiviert).</span></li>
@@ -180,7 +188,9 @@ if ("serviceWorker" in navigator) {
     Refresh-Token) und <code>app_status</code> (u. a. das SMTP-Passwort für die E-Mail-Benachrichtigung) – beides
     Zugangsdaten, die in einer herunterladbaren bzw. in Supabase Storage abgelegten Backup-Datei nichts verloren
     haben. Diese beiden Verbindungen müssen nach einem Wiederherstellen auf einem neuen Supabase-Projekt manuell
-    neu eingerichtet werden (siehe Abschnitte oben).
+    neu eingerichtet werden (siehe Abschnitte oben). Ebenfalls nicht enthalten: <code>push_subscriptions</code>
+    (geräteabhängige Web-Push-Abos, siehe Abschnitt 6 – nach einem Restore einfach erneut „Push-Benachrichtigungen
+    aktivieren" klicken).
   </div>
 
 <script>
