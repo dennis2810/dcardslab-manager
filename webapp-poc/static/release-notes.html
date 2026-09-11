@@ -133,8 +133,8 @@ if ("serviceWorker" in navigator) {
     <li>Beliebig viele weitere Fotos zusätzlich zu Vorder-/Rückseite hinzufügen (z. B. Detailaufnahmen bei
       Beschädigungen) – werden beim eBay-Veröffentlichen automatisch mit übertragen.</li>
     <li>Druckbutton auf der Kartendetailseite, um alle Infos zu einer Karte zu drucken.</li>
-    <li>„+ Neue Karte anlegen" sitzt in der Filterzeile rechtsbündig am Zeilenende, statt bei schmalem
-      Fenster in eine eigene Zeile umzubrechen.</li>
+    <li>„+ Neue Karte anlegen" sitzt jetzt direkt neben dem Kachel-/Listenansicht-Umschalter in der Filterzeile,
+      statt rechtsbündig am Zeilenende zu stehen.</li>
     <li>Massenaktion, um mehrere ausgewählte Karten auf einmal einem Kauf zuzuordnen.</li>
     <li>Verkaufsstatus (eBay-Status bzw. manueller Verkaufskanal, plus „Versendet") als Badge direkt oben auf der
       Kartendetailseite, neben dem Drucken-Button.</li>
@@ -156,6 +156,8 @@ if ("serviceWorker" in navigator) {
       die nächste Karte zurückgesetzt, statt zur Kartendetailseite weiterzuleiten – so lassen sich mehrere Karten
       hintereinander fotografieren. Die Fotos werden zusätzlich als Rohkopie in einem lokalen Ordner archiviert
       (sofern beim Deployment ein entsprechendes Docker-Volume eingebunden wurde).</li>
+    <li>Kleines 📥-Symbol in der Kartenübersicht (Kachel- und Listenansicht) für Karten mit einem manuell
+      importierten, extern verwalteten eBay-Angebot.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -177,6 +179,7 @@ if ("serviceWorker" in navigator) {
       Verkäufer, Gesamt, Versand, Notizen) – im gleichen Format wie der bestehende CSV-Export.</li>
     <li>Das Massenlöschen mehrerer Käufe läuft jetzt über eine kurze Gnadenfrist mit „Rückgängig" statt eines
       Bestätigungsdialogs.</li>
+    <li>Plattform-Auswahl um Cardmarket und COMC ergänzt.</li>
   </ul>
 
   <h2>eBay &amp; Verkauf <span class="date">September 2026</span></h2>
@@ -269,6 +272,28 @@ if ("serviceWorker" in navigator) {
       vorherigen Ansicht zurück, statt das Formular offen zu lassen.</li>
     <li>Bugfix: Klick auf „Bearbeiten" bei einem veröffentlichten Angebot hängte das Bearbeiten-Formular bisher
       unterhalb der schreibgeschützten Ansicht an, statt sie zu ersetzen.</li>
+    <li>Der Verkaufskanal für „Verkauf außerhalb eBay" wurde ebenfalls um Cardmarket und COMC ergänzt.</li>
+    <li>Der automatische Verkaufs-Sync läuft jetzt zusätzlich alle 15 Minuten im Hintergrund, statt nur über den
+      Button „Verkäufe synchronisieren" ausgelöst zu werden.</li>
+    <li>Neue E-Mail-Benachrichtigung bei neuen eBay-Verkäufen (Einstellungen → SMTP-Server konfigurieren) –
+      verschickt eine Zusammenfassung, sobald der Hintergrund-Sync neue Verkäufe findet.</li>
+    <li>Automatische Retouren-Erkennung: erkennt abgeschlossene eBay-Rückerstattungen zu bereits synchronisierten
+      Verkäufen im Hintergrund und setzt das bestehende „Retoure"-Kästchen automatisch – ein manuelles Nachtragen
+      ist dafür nicht mehr nötig.</li>
+    <li>Der Verkaufs-Sync erkennt einen Verkauf jetzt auch bei importierten Angeboten zuverlässiger (Abgleich
+      zusätzlich über die eBay-Artikelnummer, nicht nur über die SKU, die ein importiertes Angebot nicht hat).</li>
+    <li>Der Abschnitt „Verkauf außerhalb eBay" auf der Kartenseite ist jetzt auch bei einem importierten, noch
+      aktiven eBay-Angebot ausgegraut (nicht nur bei einem bereits über eBay verkauften) – der Sync für importierte
+      Angebote ist weniger zuverlässig, ein paralleler manueller Verkaufseintrag wäre daher widersprüchlich.</li>
+    <li>Ein kleines 📥-Symbol markiert manuell importierte Angebote jetzt auch direkt in der Kartenübersicht, nicht
+      nur auf der eBay-Seite.</li>
+    <li>Neuer Filter „Sport &amp; Non-Sport" auf Kartenübersicht, Inventar und eBay-Seite.</li>
+    <li>Neuer Button „Neu einstellen": beendet ein Angebot und veröffentlicht es sofort wieder neu (frisches
+      Listing, relevant für die Sichtbarkeit) – praktisch für ein lange unverkauftes Angebot.</li>
+    <li>Automatisches Re-Listing (optional): auf der Kartenseite lässt sich pro Angebot eine Tagesanzahl eintragen,
+      nach der es automatisch neu eingestellt wird, sobald es so lange unverkauft lief. Zusätzlich muss der globale
+      Schalter in den Einstellungen aktiviert sein. Automatisch neu eingestellte Angebote werden auf der
+      Kartenseite sichtbar markiert („🔄 Automatisch neu eingestellt am …").</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>
@@ -288,6 +313,8 @@ if ("serviceWorker" in navigator) {
       ist.</li>
     <li>Neuer Status „Privatentnahme" (Menge 0, eigener Status-Filter) für Karten, die in die private Sammlung
       überführt wurden – löst keine Bestandswarnung aus.</li>
+    <li>Neuer Button „🖨 QR-Etiketten drucken" in der Lagerort-Übersicht: ein Etikett pro Lagerort mit echtem
+      QR-Code (scannen öffnet das Inventar direkt gefiltert auf diesen Lagerort) und Kartenanzahl.</li>
   </ul>
 
   <h2>Inventur <span class="date">September 2026</span></h2>
@@ -354,6 +381,11 @@ if ("serviceWorker" in navigator) {
     <li>Selbst festlegbares Jahresziel (Umsatz oder Gewinn) mit Fortschrittsbalken auf dem Dashboard.</li>
     <li>Die Kennzahlen-Kacheln stehen jetzt nur noch auf der Statistik-Übersichtsseite – auf "Alle Verkäufe" sind sie
       entfallen, da dort dieselben Zahlen bereits in der Tabelle darunter stehen.</li>
+    <li>Neuer Abschnitt „Portfolio-Wertverlauf": geschätzter Bestandswert (eBay-Angebotspreis, ersatzweise
+      Einstandspreis) als Verlaufs-Chart, wird automatisch einmal pro Woche als Schnappschuss festgehalten
+      (zusätzlich per Button „Jetzt Snapshot erstellen" manuell möglich).</li>
+    <li>Neue Suchleiste in der Hilfe/Anleitung: filtert die Abschnitte live nach Suchbegriff und hebt Treffer
+      hervor.</li>
   </ul>
 
   <h2>Grundfunktionen <span class="date">Ausgangsversion</span></h2>

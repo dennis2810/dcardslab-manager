@@ -815,6 +815,40 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
         self.assertIsNone(cards[1]["ebay_status"])
         self.assertIsNone(cards[1]["ebay_sku"])
 
+    def test_flags_imported_listing_without_offer_id(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None},
+        ]
+        info = {
+            "card-1": {"status": "Veroeffentlicht", "sku": "", "ebay_offer_id": ""},
+            "card-2": {"status": "Veroeffentlicht", "sku": "webapp-000002", "ebay_offer_id": "offer-1"},
+        }
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value=info), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertTrue(cards[0]["ebay_imported"])
+        self.assertFalse(cards[1]["ebay_imported"])
+
+    def test_attaches_card_type_sport_vs_non_sport(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None, "category": "Fußball"},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None, "category": "Marvel"},
+        ]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertEqual(cards[0]["card_type"], "sport")
+        self.assertEqual(cards[1]["card_type"], "non_sport")
+
     def test_attaches_manual_sale_channel_when_present(self):
         rows = [
             {"id": "card-1", "front_image_path": None, "back_image_path": None},

@@ -47,6 +47,8 @@ if ("serviceWorker" in navigator) {
   }
   .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
   #monthly-chart { margin: 0.5rem 0 1rem; overflow-x: auto; }
+  #portfolio-chart { margin: 0.5rem 0 1rem; overflow-x: auto; }
+  .portfolio-status { font-size: 0.85rem; color: #777; }
   .chart-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #555; margin-top: 0.3rem; }
   .chart-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: middle; }
   .year-total-row { font-weight: 700; background: var(--hover-bg); }
@@ -162,6 +164,16 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="set-ranking-empty"></p>
 
+  <h2>Portfolio-Wertverlauf</h2>
+  <p>Geschätzter Wert des aktuellen Bestands (eBay-Angebotspreis, ersatzweise Einstandspreis) über die Zeit –
+    wird automatisch einmal pro Woche als Schnappschuss festgehalten.</p>
+  <div class="controls no-print">
+    <button type="button" id="portfolio-snapshot-now-btn">Jetzt Snapshot erstellen</button>
+    <span id="portfolio-snapshot-status" class="portfolio-status"></span>
+  </div>
+  <div id="portfolio-chart"></div>
+  <p id="portfolio-empty"></p>
+
   <div id="yearly-section">
     <h2>Jahresübersicht (Steuer)</h2>
     <div class="controls no-print">
@@ -233,6 +245,20 @@ function formatMonth(value) {
   return m && y ? `${m}.${y}` : value;
 }
 
+// TT.MM.JJJJ statt ISO - lokale Kopie, da dieses Projekt bewusst ohne
+// gemeinsame JS-Datei arbeitet (siehe formatDate() in card.html).
+function formatDate(value) {
+  if (!value) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const [, y, m, d] = dateOnly;
+    return `${d}.${m}.${y}`;
+  }
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
 // Aktueller Inventarwert - ein Momentaufnahme-Wert (was die Karten JETZT
 // im Bestand wert sind), daher unabhaengig vom Kauf-/Verkaufsdatums-Filter
 // unten immer der gleiche; separat geladen, da /api/statistics nichts
@@ -270,6 +296,7 @@ async function load() {
     renderRanking("team-ranking-table", "team-ranking-body", "team-ranking-empty", data.team_ranking);
     renderRanking("set-ranking-table", "set-ranking-body", "set-ranking-empty", data.set_ranking);
     renderYearlyOverview(data.monthly);
+    await loadPortfolioSnapshots();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
@@ -455,6 +482,96 @@ function renderMonthlyChart(monthly) {
     '<span><span class="chart-swatch" style="background:#8ab4f8"></span>Umsatz</span>' +
     '<span><span class="chart-swatch" style="background:#1e8e3e"></span>Gewinn</span>';
   container.appendChild(legend);
+}
+
+// Linienverlauf wie buildPriceSparkline() in card.html, aber als groesseres
+// primaeres Seiten-Diagramm mit Datums-Achsenbeschriftung statt Sparkline.
+function renderPortfolioChart(snapshots) {
+  const container = document.getElementById("portfolio-chart");
+  const empty = document.getElementById("portfolio-empty");
+  container.innerHTML = "";
+  if (!snapshots || snapshots.length < 2) {
+    empty.textContent = snapshots && snapshots.length
+      ? "Noch nicht genug Schnappschüsse für einen Verlauf (mindestens 2 nötig)."
+      : "Noch keine Schnappschüsse vorhanden – wird automatisch einmal pro Woche erstellt, oder oben manuell auslösen.";
+    return;
+  }
+  empty.textContent = "";
+
+  const svgNs = "http://www.w3.org/2000/svg";
+  const width = Math.max(400, snapshots.length * 60);
+  const height = 220;
+  const padding = { top: 16, right: 16, bottom: 30, left: 16 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  const values = snapshots.map((s) => Number(s.total_value) || 0);
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(1, ...values);
+  const range = maxValue - minValue || 1;
+  const xStep = chartWidth / (snapshots.length - 1);
+
+  const coords = snapshots.map((s, i) => ({
+    x: padding.left + i * xStep,
+    y: padding.top + chartHeight - ((Number(s.total_value) || 0) - minValue) / range * chartHeight,
+    snapshot: s,
+  }));
+
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", height);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Portfolio-Wertverlauf");
+
+  const polyline = document.createElementNS(svgNs, "polyline");
+  polyline.setAttribute("points", coords.map((c) => `${c.x},${c.y}`).join(" "));
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "#8ab4f8");
+  polyline.setAttribute("stroke-width", "2");
+  svg.appendChild(polyline);
+
+  // Nicht jeden Punkt beschriften - wird bei vielen Schnappschuessen unleserlich,
+  // daher wie bei renderMonthlyChart nur eine Teilmenge plus immer den letzten.
+  const labelEvery = Math.max(1, Math.ceil(snapshots.length / 8));
+  coords.forEach((c, i) => {
+    const dot = document.createElementNS(svgNs, "circle");
+    dot.setAttribute("cx", c.x);
+    dot.setAttribute("cy", c.y);
+    dot.setAttribute("r", "3");
+    dot.setAttribute("fill", "#8ab4f8");
+    const title = document.createElementNS(svgNs, "title");
+    title.textContent = `${formatDate(c.snapshot.snapshot_date)} – ${fmtEuro(c.snapshot.total_value)} (${c.snapshot.card_count} Karten)`;
+    dot.appendChild(title);
+    svg.appendChild(dot);
+
+    if (i % labelEvery === 0 || i === coords.length - 1) {
+      const label = document.createElementNS(svgNs, "text");
+      label.setAttribute("x", c.x);
+      label.setAttribute("y", height - padding.bottom + 16);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("font-size", "11");
+      label.setAttribute("fill", "#555");
+      label.textContent = formatDate(c.snapshot.snapshot_date);
+      svg.appendChild(label);
+    }
+  });
+
+  container.appendChild(svg);
+}
+
+async function loadPortfolioSnapshots() {
+  try {
+    const res = await fetch("/api/portfolio/snapshots");
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById("portfolio-empty").textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    renderPortfolioChart(data.snapshots || []);
+  } catch (err) {
+    document.getElementById("portfolio-empty").textContent = "Fehler: " + err;
+  }
 }
 
 function renderMonthly(monthly) {
@@ -649,6 +766,23 @@ document.getElementById("yearly-pdf-btn").addEventListener("click", () => {
 });
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("print-yearly-only");
+});
+
+document.getElementById("portfolio-snapshot-now-btn").addEventListener("click", async () => {
+  const status = document.getElementById("portfolio-snapshot-status");
+  status.textContent = "Wird erstellt …";
+  try {
+    const res = await fetch("/api/portfolio/snapshot-now", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      status.textContent = "Fehler: " + (data.detail || res.statusText);
+      return;
+    }
+    status.textContent = "Snapshot erstellt.";
+    await loadPortfolioSnapshots();
+  } catch (err) {
+    status.textContent = "Fehler: " + err;
+  }
 });
 
 load();

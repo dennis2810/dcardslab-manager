@@ -46,6 +46,25 @@ class ListInventoryEndpointTests(unittest.TestCase):
             response = client.get("/api/inventory")
         self.assertEqual(response.json()["inventory"][0]["sku"], "webapp-000001")
 
+    def test_attaches_card_type_sport_vs_non_sport(self):
+        rows = [
+            {"id": "inv-1", "card_id": "card-1", "quantity": 2},
+            {"id": "inv-2", "card_id": "card-2", "quantity": 1},
+        ]
+        cards = [
+            {"id": "card-1", "title": "Fußballkarte", "front_image_path": None, "category": "Fußball"},
+            {"id": "card-2", "title": "Marvel-Karte", "front_image_path": None, "category": "Marvel"},
+        ]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=cards), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}):
+            response = client.get("/api/inventory")
+        inventory = response.json()["inventory"]
+        self.assertEqual(inventory[0]["card_type"], "sport")
+        self.assertEqual(inventory[1]["card_type"], "non_sport")
+
     def test_attaches_the_ebay_status_as_sold_flag(self):
         rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 0}]
         with patch("main.db.list_inventory", return_value=rows), \

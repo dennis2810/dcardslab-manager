@@ -138,5 +138,18 @@ def price_research_links(title):
     }
 
 
-def match_sale_line_item(line_item, listings_by_sku):
-    return listings_by_sku.get(line_item.get("sku"))
+def match_sale_line_item(line_item, listings_by_sku, listings_by_item_id=None):
+    # SKU-Match zuerst (der Normalfall: jedes ueber dieses Tool erstellte
+    # Angebot hat eine, siehe put_inventory_item()). Fallback auf eBays
+    # eigene Artikelnummer (legacyItemId) fuer importierte Angebote (siehe
+    # main.py's import_ebay_listing()) - die wurden nie ueber eBays
+    # Inventory API angelegt, tragen auf eBay selbst also nie unsere
+    # generierte SKU (sku_for_card()); eBays Bestell-Zeilenposten liefert
+    # dafuer aber weiterhin die echte Artikelnummer, die wir beim Import als
+    # ebay_listing_id gespeichert haben.
+    listing = listings_by_sku.get(line_item.get("sku"))
+    if listing is not None:
+        return listing
+    if listings_by_item_id:
+        return listings_by_item_id.get(line_item.get("legacyItemId"))
+    return None

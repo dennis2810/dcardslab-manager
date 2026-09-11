@@ -106,6 +106,32 @@ class CreateEbayListingEndpointTests(unittest.TestCase):
         _, _, row = mock_create.call_args[0]
         self.assertEqual(row["description"], "Eigener Text")
 
+    def test_carries_auto_relist_after_days_through(self):
+        with patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
+            response = client.post(
+                "/api/cards/card-1/ebay-listing", json={"auto_relist_after_days": 14}
+            )
+        self.assertEqual(response.status_code, 200)
+        _, _, row = mock_create.call_args[0]
+        self.assertEqual(row["auto_relist_after_days"], 14)
+
+    def test_auto_relist_after_days_defaults_to_none(self):
+        with patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.create_ebay_listing", return_value=_listing()) as mock_create:
+            response = client.post("/api/cards/card-1/ebay-listing")
+        self.assertEqual(response.status_code, 200)
+        _, _, row = mock_create.call_args[0]
+        self.assertIsNone(row["auto_relist_after_days"])
+
 
 class ListEbayListingsEndpointTests(unittest.TestCase):
     def test_passes_filters_through(self):
@@ -613,6 +639,101 @@ class EndEbayListingEndpointTests(unittest.TestCase):
         mock_update.assert_not_called()
 
 
+class RelistEbayListingEndpointTests(unittest.TestCase):
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.post("/api/ebay/listings/does-not-exist/relist")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_409_when_not_published(self):
+        with patch("main.db.get_ebay_listing", return_value=_listing(status="Entwurf")):
+            response = client.post("/api/ebay/listings/listing-1/relist")
+        self.assertEqual(response.status_code, 409)
+
+    def test_returns_409_for_imported_listing_without_calling_ebay(self):
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.ebay_client.withdraw_offer") as mock_withdraw:
+            response = client.post("/api/ebay/listings/listing-1/relist")
+        self.assertEqual(response.status_code, 409)
+        mock_withdraw.assert_not_called()
+
+    def test_withdraws_and_republishes(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**published, **updates}), \
+             patch("main.db.get_card", return_value=_card()), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.withdraw_offer") as mock_withdraw, \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
+             patch("main.ebay_client.get_listing_policies", return_value={}), \
+             patch("main.ebay_client.put_inventory_item"), \
+             patch("main.ebay_client.update_offer") as mock_update_offer, \
+             patch("main.ebay_client.publish_offer", return_value="L2"):
+            response = client.post("/api/ebay/listings/listing-1/relist")
+        self.assertEqual(response.status_code, 200)
+        mock_withdraw.assert_called_once_with("tok", "offer-1")
+        mock_update_offer.assert_called_once()
+        self.assertEqual(response.json()["status"], "Veroeffentlicht")
+
+    def test_returns_502_when_withdraw_fails(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.withdraw_offer", side_effect=ebay_client.EbayApiError("eBay lehnt ab")):
+            response = client.post("/api/ebay/listings/listing-1/relist")
+        self.assertEqual(response.status_code, 502)
+
+    def test_returns_401_when_not_authorized(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", side_effect=ebay_client.EbayNotAuthorizedError("kein Token")):
+            response = client.post("/api/ebay/listings/listing-1/relist")
+        self.assertEqual(response.status_code, 401)
+
+
+class RunAutoRelistOnceTests(unittest.TestCase):
+    def test_does_nothing_when_globally_disabled(self):
+        with patch("main.db.get_app_status", return_value={"auto_relist_enabled": False}), \
+             patch("main.db.list_listings_due_for_auto_relist") as mock_due:
+            result = main._run_auto_relist_once()
+        self.assertEqual(result, 0)
+        mock_due.assert_not_called()
+
+    def test_relists_due_listings_and_marks_timestamp(self):
+        due = [_listing(id="a", ebay_offer_id="offer-a"), _listing(id="b", ebay_offer_id="offer-b")]
+        with patch("main.db.get_app_status", return_value={"auto_relist_enabled": True}), \
+             patch("main.db.list_listings_due_for_auto_relist", return_value=due), \
+             patch("main._relist_listing", return_value={}) as mock_relist, \
+             patch("main.db.update_ebay_listing") as mock_update:
+            result = main._run_auto_relist_once()
+        self.assertEqual(result, 2)
+        self.assertEqual(mock_relist.call_count, 2)
+        self.assertEqual(mock_update.call_count, 2)
+        for call in mock_update.call_args_list:
+            self.assertIn("last_auto_relisted_at", call.args[1])
+
+    def test_marks_timestamp_even_when_relist_fails(self):
+        due = [_listing(id="a", ebay_offer_id="offer-a")]
+        with patch("main.db.get_app_status", return_value={"auto_relist_enabled": True}), \
+             patch("main.db.list_listings_due_for_auto_relist", return_value=due), \
+             patch("main._relist_listing", side_effect=RuntimeError("eBay down")), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            result = main._run_auto_relist_once()
+        self.assertEqual(result, 0)
+        mock_update.assert_called_once()
+        self.assertIn("last_auto_relisted_at", mock_update.call_args.args[1])
+
+    def test_survives_failure_loading_due_listings(self):
+        with patch("main.db.get_app_status", return_value={"auto_relist_enabled": True}), \
+             patch("main.db.list_listings_due_for_auto_relist", side_effect=RuntimeError("db down")):
+            result = main._run_auto_relist_once()  # must not raise
+        self.assertEqual(result, 0)
+
+
 class PublishBulkEndpointTests(unittest.TestCase):
     def test_mixed_success_and_failure_does_not_abort(self):
         listing_a = _listing(id="a")
@@ -963,6 +1084,32 @@ class SyncSalesEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"synced": 1, "skipped": 0})
 
+    def test_matches_imported_listing_by_legacy_item_id_when_sku_unknown(self):
+        # Importierte Angebote (import_ebay_listing()) haben nie eine echte
+        # SKU auf eBay selbst - der Sync muss sie trotzdem per eBays eigener
+        # Artikelnummer (legacyItemId == unser ebay_listing_id) finden.
+        imported_listing = _listing(id="listing-imported", sku="webapp-card-99", ebay_listing_id="123456789012")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "lineItems": [{
+                "sku": "SOME-OTHER-SKU-NEVER-SET-BY-US", "legacyItemId": "123456789012",
+                "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"},
+            }],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[imported_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=imported_listing) as mock_update, \
+             patch("main.db.zero_inventory_for_card"):
+            response = client.post("/api/ebay/sync-sales")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"synced": 1, "skipped": 0})
+        mock_update.assert_called_once_with("listing-imported", {"status": "Verkauft"})
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["listing_id"], "listing-imported")
+
     def test_returns_502_instead_of_crashing_when_get_orders_fails(self):
         # A regression test: get_orders() raising EbayApiError (eBay
         # rejects the request, network hiccup, ...) must not escape as an
@@ -1109,6 +1256,116 @@ class SyncSalesEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         sale_fields = mock_upsert.call_args[0][0]
         self.assertNotIn("tracking_number", sale_fields)
+
+
+class NotifyNewSalesTests(unittest.TestCase):
+    def test_sends_email_when_enabled_and_configured(self):
+        settings = {
+            "notify_on_sale": True, "smtp_host": "smtp.example.com", "smtp_port": 587,
+            "smtp_from": "a@b.de", "smtp_to": "me@b.de",
+        }
+        newly_synced = [{"card_id": "c1", "listing": {"title": "Messi"}, "sale_fields": {"gross_price": 9.99}}]
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._notify_new_sales(newly_synced)
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        self.assertEqual(args[0], settings)
+        self.assertIn("1 neuer eBay-Verkauf", args[1])
+
+    def test_does_nothing_when_notifications_disabled(self):
+        settings = {"notify_on_sale": False, "smtp_host": "smtp.example.com"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
+        mock_send.assert_not_called()
+
+    def test_does_nothing_when_no_settings_row(self):
+        with patch("main.db.get_app_status", return_value=None), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
+        mock_send.assert_not_called()
+
+    def test_smtp_failure_does_not_raise(self):
+        settings = {"notify_on_sale": True, "smtp_host": "smtp.example.com"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email", side_effect=OSError("boom")):
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])  # must not raise
+
+    def test_app_status_fetch_failure_does_not_raise(self):
+        with patch("main.db.get_app_status", side_effect=RuntimeError("db down")):
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])  # must not raise
+
+
+class SyncEbayReturnsOnceTests(unittest.TestCase):
+    def test_marks_sale_refunded_when_return_has_refund(self):
+        returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}}]
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "refunded": False}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={}), \
+             patch("main.ebay_client.get_return_requests", return_value=returns), \
+             patch("main.db.get_ebay_sale_by_order_id", return_value=sale), \
+             patch("main.db.update_ebay_sale") as mock_update:
+            checked, matched = main._sync_ebay_returns_once()
+        self.assertEqual((checked, matched), (1, 1))
+        mock_update.assert_called_once_with("sale-1", {"refunded": True})
+
+    def test_skips_return_without_refund_info(self):
+        returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": []}}]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={}), \
+             patch("main.ebay_client.get_return_requests", return_value=returns), \
+             patch("main.db.get_ebay_sale_by_order_id") as mock_get_sale, \
+             patch("main.db.update_ebay_sale") as mock_update:
+            checked, matched = main._sync_ebay_returns_once()
+        self.assertEqual((checked, matched), (1, 0))
+        mock_get_sale.assert_not_called()
+        mock_update.assert_not_called()
+
+    def test_skips_return_with_no_matching_sale(self):
+        returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}}]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={}), \
+             patch("main.ebay_client.get_return_requests", return_value=returns), \
+             patch("main.db.get_ebay_sale_by_order_id", return_value=None), \
+             patch("main.db.update_ebay_sale") as mock_update:
+            checked, matched = main._sync_ebay_returns_once()
+        self.assertEqual((checked, matched), (1, 0))
+        mock_update.assert_not_called()
+
+    def test_skips_sale_already_marked_refunded(self):
+        returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}}]
+        sale = {"id": "sale-1", "ebay_order_id": "O1", "refunded": True}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={}), \
+             patch("main.ebay_client.get_return_requests", return_value=returns), \
+             patch("main.db.get_ebay_sale_by_order_id", return_value=sale), \
+             patch("main.db.update_ebay_sale") as mock_update:
+            checked, matched = main._sync_ebay_returns_once()
+        self.assertEqual((checked, matched), (1, 0))
+        mock_update.assert_not_called()
+
+    def test_a_failing_return_does_not_abort_the_batch(self):
+        returns = [
+            {"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}},
+            {"returnId": "R2", "orderId": "O2", "refundInfo": {"refunds": [{"amount": {"value": "5.00"}}]}},
+        ]
+        sale2 = {"id": "sale-2", "ebay_order_id": "O2", "refunded": False}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={}), \
+             patch("main.ebay_client.get_return_requests", return_value=returns), \
+             patch("main.db.get_ebay_sale_by_order_id", side_effect=[RuntimeError("db down"), sale2]), \
+             patch("main.db.update_ebay_sale") as mock_update:
+            checked, matched = main._sync_ebay_returns_once()  # must not raise
+        self.assertEqual((checked, matched), (2, 1))
+        mock_update.assert_called_once_with("sale-2", {"refunded": True})
+
+    def test_uses_last_returns_sync_at_as_since(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.get_app_status", return_value={"last_returns_sync_at": "2026-09-01T00:00:00+00:00"}), \
+             patch("main.ebay_client.get_return_requests", return_value=[]) as mock_get_returns:
+            main._sync_ebay_returns_once()
+        mock_get_returns.assert_called_once_with("tok", "2026-09-01T00:00:00+00:00")
 
 
 class UpdateEbaySaleEndpointTests(unittest.TestCase):

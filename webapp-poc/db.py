@@ -475,13 +475,13 @@ def ebay_info_by_card_id(card_ids):
     if not card_ids:
         return {}
     response = (
-        get_client().table("ebay_listings").select("card_id,status,sku,price,ebay_listing_id")
+        get_client().table("ebay_listings").select("card_id,status,sku,price,ebay_listing_id,ebay_offer_id")
         .in_("card_id", card_ids).execute()
     )
     return {
         row["card_id"]: {
             "status": row["status"], "sku": row["sku"], "price": row["price"],
-            "ebay_listing_id": row.get("ebay_listing_id"),
+            "ebay_listing_id": row.get("ebay_listing_id"), "ebay_offer_id": row.get("ebay_offer_id"),
         }
         for row in response.data
     }
@@ -551,13 +551,14 @@ def get_cards_by_ids(card_ids):
 EBAY_LISTING_FIELDS = [
     "title", "description", "condition", "condition_id",
     "listing_type", "category_id", "aspects", "price", "quantity",
-    "grader", "grade",
+    "grader", "grade", "auto_relist_after_days",
 ]
 EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "status", "scheduled_at", "scheduling_mode",
     "ebay_offer_id", "ebay_listing_id", "last_error", "published_at",
+    "last_auto_relisted_at",
 }
-EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity"}
+EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity", "auto_relist_after_days"}
 EBAY_LISTING_MONEY_FIELDS = {"price"}
 
 
@@ -663,6 +664,39 @@ def mark_price_research_checked(listing_id, when_iso):
     get_client().table("ebay_listings").update({"last_price_research_at": when_iso}).eq("id", listing_id).execute()
 
 
+def list_listings_due_for_auto_relist():
+    # Client-seitig gefiltert, gleiches Muster wie list_listings_due_for_price_research()
+    # oben. Nur Angebote mit gesetztem per-Angebot-Schalter (auto_relist_after_days,
+    # siehe Klaerung mit dem Nutzer: "Schalter + Markierung" statt eines globalen
+    # Alles-oder-nichts-Schalters) UND einem echten ebay_offer_id (importierte,
+    # extern verwaltete Angebote koennen nicht per Inventory API beendet/neu
+    # veroeffentlicht werden, siehe _is_externally_managed() in main.py).
+    # last_auto_relisted_at faellt auf published_at zurueck, wenn das Angebot
+    # noch nie automatisch neu eingestellt wurde.
+    from datetime import datetime, timedelta, timezone
+
+    response = (
+        get_client().table("ebay_listings").select("*")
+        .eq("status", "Veroeffentlicht").execute()
+    )
+    now = datetime.now(timezone.utc)
+    due = []
+    for row in response.data:
+        days = row.get("auto_relist_after_days")
+        if not days or days <= 0 or not row.get("ebay_offer_id"):
+            continue
+        reference = row.get("last_auto_relisted_at") or row.get("published_at")
+        if not reference:
+            continue
+        try:
+            reference_dt = datetime.fromisoformat(str(reference).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if reference_dt + timedelta(days=days) <= now:
+            due.append(row)
+    return due
+
+
 def latest_sale_sync_cursor():
     response = (
         get_client().table("ebay_sales").select("created_at")
@@ -721,6 +755,15 @@ def set_ebay_sale_buyer_username(sale_id, username):
     # fuer bereits vor diesem Feld synchronisierte Verkaeufe (siehe
     # GET /api/ebay/sales/{id}/shipping-address).
     get_client().table("ebay_sales").update({"buyer_username": username}).eq("id", sale_id).execute()
+
+
+def get_ebay_sale_by_order_id(order_id):
+    # Fuer den automatischen Retouren-Sync (ebay_scheduler.run_returns_sync_once())
+    # - eBay meldet eine Rueckerstattung je Bestellung, nicht je Angebot; der
+    # bereits synchronisierte Verkauf wird darueber gefunden, um refunded
+    # automatisch zu setzen.
+    response = get_client().table("ebay_sales").select("*").eq("ebay_order_id", order_id).execute()
+    return response.data[0] if response.data else None
 
 
 def get_sale_for_card(card_id):
@@ -830,6 +873,18 @@ def set_low_stock_threshold(threshold):
     return response.data[0]
 
 
+def set_auto_relist_enabled(enabled):
+    # Globaler An/Aus-Schalter fuer das automatische Re-Listing - zusaetzlich
+    # zum per-Angebot-Schalter (ebay_listings.auto_relist_after_days, siehe
+    # list_listings_due_for_auto_relist()). Beides muss zutreffen, damit ein
+    # Angebot tatsaechlich automatisch neu eingestellt wird (Klaerung mit dem
+    # Nutzer: "Schalter + Markierung").
+    response = get_client().table("app_status").upsert({
+        "id": True, "auto_relist_enabled": enabled,
+    }).execute()
+    return response.data[0]
+
+
 def set_sender_address(address):
     # Gleiches Singleton-Row-Muster wie set_low_stock_threshold().
     response = get_client().table("app_status").upsert({
@@ -844,6 +899,74 @@ def record_auto_backup(uploaded_at):
     # sind unterschiedliche Ereignisse, die getrennt sichtbar bleiben sollen.
     response = get_client().table("app_status").upsert({
         "id": True, "last_auto_backup_at": uploaded_at,
+    }).execute()
+    return response.data[0]
+
+
+NOTIFICATION_SETTINGS_FIELDS = {
+    "smtp_host", "smtp_port", "smtp_username", "smtp_password",
+    "smtp_from", "smtp_to", "smtp_use_tls", "notify_on_sale",
+}
+
+
+def save_notification_settings(fields):
+    # Gleiches Singleton-Row-Muster + Feld-Whitelist wie
+    # save_google_sheets_settings() - ein Frontend-Tippfehler im Feldnamen
+    # legt so keine falsche Spalte an/ueberschreibt keine falsche. smtp_password
+    # fehlt im Payload, wenn das Formular es leer laesst (siehe main.py's
+    # update_notification_settings()) - Postgres' upsert aendert dann nur die
+    # tatsaechlich mitgeschickten Spalten, das gespeicherte Passwort bleibt
+    # also erhalten statt versehentlich geloescht zu werden.
+    row = {name: value for name, value in fields.items() if name in NOTIFICATION_SETTINGS_FIELDS}
+    row["id"] = True
+    response = get_client().table("app_status").upsert(row).execute()
+    return response.data[0]
+
+
+def record_sales_sync(synced_at):
+    # Gleiches Singleton-Row-Muster wie record_backup_downloaded() -
+    # merkt sich, wann der periodische Hintergrund-Verkaufs-Sync
+    # (ebay_scheduler.run_sales_sync_once()) zuletzt gelaufen ist, damit er
+    # nur alle SALES_SYNC_INTERVAL_MINUTES statt bei jedem 5-Minuten-Takt
+    # tatsaechlich synchronisiert.
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_sales_sync_at": synced_at,
+    }).execute()
+    return response.data[0]
+
+
+def record_portfolio_snapshot(snapshot_date, total_value, card_count):
+    # Kein Singleton-Row-Muster wie die app_status-Setter oben - hier soll
+    # bewusst ein Verlauf ueber die Zeit entstehen (Portfolio-Wertverlauf,
+    # siehe statistics.html), daher insert() statt upsert().
+    response = get_client().table("portfolio_value_snapshots").insert({
+        "snapshot_date": snapshot_date, "total_value": total_value, "card_count": card_count,
+    }).execute()
+    return response.data[0]
+
+
+def list_portfolio_snapshots():
+    response = (
+        get_client().table("portfolio_value_snapshots").select("*")
+        .order("snapshot_date").execute()
+    )
+    return response.data
+
+
+def latest_portfolio_snapshot():
+    response = (
+        get_client().table("portfolio_value_snapshots").select("*")
+        .order("snapshot_date", desc=True).limit(1).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def record_returns_sync(synced_at):
+    # Gleiches Singleton-Row-Muster wie record_sales_sync() - eigenes Feld
+    # statt last_sales_sync_at, da Verkaufs- und Retouren-Sync unabhaengig
+    # voneinander laufen/fehlschlagen koennen.
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_returns_sync_at": synced_at,
     }).execute()
     return response.data[0]
 

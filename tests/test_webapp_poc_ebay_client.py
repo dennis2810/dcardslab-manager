@@ -522,5 +522,39 @@ class ListShippingFulfillmentsTests(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class GetReturnRequestsTests(unittest.TestCase):
+    def test_returns_members_list(self):
+        members = [{"returnId": "R1", "orderId": "O1"}]
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"members": members})) as mock_request:
+            result = ebay_client.get_return_requests("tok", "2026-08-01T00:00:00Z")
+        self.assertEqual(result, members)
+        args, _ = mock_request.call_args
+        self.assertEqual(args[0], "GET")
+        self.assertIn("/post-order/v2/return/search", args[1])
+
+    def test_returns_empty_list_when_no_members_key(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})):
+            result = ebay_client.get_return_requests("tok", "2026-08-01T00:00:00Z")
+        self.assertEqual(result, [])
+
+    def test_passes_since_as_params_not_hand_built_into_the_url(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"members": []})) as mock_request:
+            ebay_client.get_return_requests("tok", "2026-08-01T00:00:00Z")
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["params"]["creation_date_range_from"], "2026-08-01T00:00:00Z")
+
+    def test_normalizes_utc_offset_suffix_to_z(self):
+        # Same eBay quirk as get_orders()'s creationdate filter.
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"members": []})) as mock_request:
+            ebay_client.get_return_requests("tok", "2026-06-02T17:42:55.134065+00:00")
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["params"]["creation_date_range_from"], "2026-06-02T17:42:55.134065Z")
+
+    def test_raises_on_error_status(self):
+        with patch("ebay_client.httpx.request", return_value=_response(400, text="bad request")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_return_requests("tok", "2026-08-01T00:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

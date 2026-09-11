@@ -1079,15 +1079,15 @@ class EbayStatusByCardIdTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [
-            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1"},
-            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": ""},
+            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1", "ebay_offer_id": "offer-1"},
+            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": "", "ebay_offer_id": ""},
         ]
         mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.ebay_info_by_card_id(["card-1", "card-2", "card-3"])
         self.assertEqual(result, {
-            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1"},
-            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": ""},
+            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1", "ebay_offer_id": "offer-1"},
+            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": "", "ebay_offer_id": ""},
         })
 
     def test_empty_input_skips_query(self):
@@ -1432,6 +1432,84 @@ class MarkPriceResearchCheckedTests(unittest.TestCase):
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "listing-1")
 
 
+class ListListingsDueForAutoRelistTests(unittest.TestCase):
+    def test_skips_listings_without_the_per_listing_switch(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "ebay_offer_id": "o1",
+             "auto_relist_after_days": None, "published_at": "2020-01-01T00:00:00+00:00"},
+            {"id": "l2", "status": "Veroeffentlicht", "ebay_offer_id": "o2",
+             "auto_relist_after_days": 0, "published_at": "2020-01-01T00:00:00+00:00"},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_auto_relist()
+        self.assertEqual(result, [])
+
+    def test_skips_externally_managed_listings_without_offer_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "ebay_offer_id": "",
+             "auto_relist_after_days": 7, "published_at": "2020-01-01T00:00:00+00:00"},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_auto_relist()
+        self.assertEqual(result, [])
+
+    def test_due_when_published_long_enough_ago(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "ebay_offer_id": "o1",
+             "auto_relist_after_days": 7, "published_at": "2020-01-01T00:00:00+00:00"},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_auto_relist()
+        self.assertEqual([r["id"] for r in result], ["l1"])
+
+    def test_not_due_when_recently_published(self):
+        from datetime import datetime, timezone
+
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "ebay_offer_id": "o1",
+             "auto_relist_after_days": 7, "published_at": datetime.now(timezone.utc).isoformat()},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_auto_relist()
+        self.assertEqual(result, [])
+
+    def test_uses_last_auto_relisted_at_over_published_at_when_present(self):
+        from datetime import datetime, timezone
+
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "status": "Veroeffentlicht", "ebay_offer_id": "o1",
+             "auto_relist_after_days": 7, "published_at": "2020-01-01T00:00:00+00:00",
+             "last_auto_relisted_at": datetime.now(timezone.utc).isoformat()},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_listings_due_for_auto_relist()
+        self.assertEqual(result, [])
+
+    def test_queries_only_published_listings(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.list_listings_due_for_auto_relist()
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("status", "Veroeffentlicht")
+
+
 class LatestSaleSyncCursorTests(unittest.TestCase):
     def test_returns_none_when_no_sales_yet(self):
         mock_client = MagicMock()
@@ -1590,6 +1668,25 @@ class GetSaleForCardTests(unittest.TestCase):
             self.assertIsNone(db.get_sale_for_card("card-1"))
 
 
+class GetEbaySaleByOrderIdTests(unittest.TestCase):
+    def test_returns_matching_sale(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "ebay_order_id": "O1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_ebay_sale_by_order_id("O1")
+        self.assertEqual(result["id"], "sale-1")
+
+    def test_returns_none_when_no_match(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.get_ebay_sale_by_order_id("O1"))
+
+
 class SalesByListingIdTests(unittest.TestCase):
     def test_keeps_most_recent_sale_per_listing(self):
         mock_client = MagicMock()
@@ -1734,6 +1831,16 @@ class AppStatusTests(unittest.TestCase):
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "low_stock_threshold": 3})
 
+    def test_set_auto_relist_enabled_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "auto_relist_enabled": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_auto_relist_enabled(True)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "auto_relist_enabled": True})
+
     def test_record_auto_backup_upserts_with_singleton_id(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -1753,6 +1860,89 @@ class AppStatusTests(unittest.TestCase):
             db.set_activity_cleared("2026-09-10T12:00:00+00:00")
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "activity_cleared_at": "2026-09-10T12:00:00+00:00"})
+
+    def test_record_sales_sync_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_sales_sync_at": "2026-09-11T08:00:00+00:00"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_sales_sync("2026-09-11T08:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_sales_sync_at": "2026-09-11T08:00:00+00:00"})
+
+    def test_save_notification_settings_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "smtp_host": "smtp.example.com"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_notification_settings({"smtp_host": "smtp.example.com", "smtp_port": 587})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "smtp_host": "smtp.example.com", "smtp_port": 587})
+
+    def test_save_notification_settings_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_notification_settings({"smtp_host": "x", "unknown_field": "y"})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertNotIn("unknown_field", row)
+
+    def test_record_returns_sync_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_returns_sync_at": "2026-09-11T08:00:00+00:00"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_returns_sync("2026-09-11T08:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_returns_sync_at": "2026-09-11T08:00:00+00:00"})
+
+
+class PortfolioSnapshotTests(unittest.TestCase):
+    def test_record_snapshot_inserts_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "s1", "snapshot_date": "2026-09-11", "total_value": 1234.5, "card_count": 42}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.record_portfolio_snapshot("2026-09-11", 1234.5, 42)
+        mock_client.table.return_value.insert.assert_called_once_with({
+            "snapshot_date": "2026-09-11", "total_value": 1234.5, "card_count": 42,
+        })
+        self.assertEqual(result["id"], "s1")
+
+    def test_list_snapshots_orders_by_date(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"snapshot_date": "2026-09-01"}, {"snapshot_date": "2026-09-08"}]
+        mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_portfolio_snapshots()
+        self.assertEqual(len(result), 2)
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with("snapshot_date")
+
+    def test_latest_snapshot_returns_most_recent(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"snapshot_date": "2026-09-08", "total_value": 500}]
+        chain = mock_client.table.return_value.select.return_value.order.return_value.limit.return_value
+        chain.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.latest_portfolio_snapshot()
+        self.assertEqual(result["total_value"], 500)
+
+    def test_latest_snapshot_returns_none_when_empty(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        chain = mock_client.table.return_value.select.return_value.order.return_value.limit.return_value
+        chain.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertIsNone(db.latest_portfolio_snapshot())
 
 
 class DashboardGoalTests(unittest.TestCase):

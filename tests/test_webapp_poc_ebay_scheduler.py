@@ -2,6 +2,7 @@
 scheduler (fallback path, see design spec 'Scheduling')."""
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -317,6 +318,116 @@ class RunWishlistPriceCheckOnceTests(unittest.TestCase):
             ebay_scheduler.run_wishlist_price_check_once()
         mock_search.assert_not_called()
         mock_update.assert_called_once()
+
+
+class RunSalesSyncOnceTests(unittest.TestCase):
+    def test_runs_sync_when_never_run_before(self):
+        sync_fn = MagicMock(return_value=(1, 0, [{"card_id": "c1"}]))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_sales_sync") as mock_record:
+            result = ebay_scheduler.run_sales_sync_once(sync_fn)
+        sync_fn.assert_called_once()
+        self.assertEqual(result, [{"card_id": "c1"}])
+        mock_record.assert_called_once()
+
+    def test_skips_when_last_run_was_recent(self):
+        recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        sync_fn = MagicMock()
+        with patch("ebay_scheduler.db.get_app_status", return_value={"last_sales_sync_at": recent}), \
+             patch("ebay_scheduler.db.record_sales_sync") as mock_record:
+            result = ebay_scheduler.run_sales_sync_once(sync_fn)
+        sync_fn.assert_not_called()
+        mock_record.assert_not_called()
+        self.assertEqual(result, [])
+
+    def test_runs_again_once_interval_has_elapsed(self):
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+        sync_fn = MagicMock(return_value=(0, 0, []))
+        with patch("ebay_scheduler.db.get_app_status", return_value={"last_sales_sync_at": stale}), \
+             patch("ebay_scheduler.db.record_sales_sync") as mock_record:
+            ebay_scheduler.run_sales_sync_once(sync_fn)
+        sync_fn.assert_called_once()
+        mock_record.assert_called_once()
+
+    def test_survives_app_status_fetch_failure(self):
+        sync_fn = MagicMock()
+        with patch("ebay_scheduler.db.get_app_status", side_effect=RuntimeError("db down")):
+            result = ebay_scheduler.run_sales_sync_once(sync_fn)  # must not raise
+        sync_fn.assert_not_called()
+        self.assertEqual(result, [])
+
+    def test_records_timestamp_even_when_sync_fails(self):
+        # Gleiches Prinzip wie mark_price_research_checked() bei einer
+        # fehlschlagenden Preisrecherche - ohne das wuerde ein dauerhaft
+        # nicht verbundenes eBay-Konto bei jedem 5-Minuten-Takt erneut einen
+        # Sync-Versuch ausloesen statt erst wieder in 15 Minuten.
+        sync_fn = MagicMock(side_effect=RuntimeError("nicht verbunden"))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_sales_sync") as mock_record:
+            result = ebay_scheduler.run_sales_sync_once(sync_fn)  # must not raise
+        mock_record.assert_called_once()
+        self.assertEqual(result, [])
+
+    def test_survives_record_sales_sync_failure(self):
+        sync_fn = MagicMock(return_value=(1, 0, [{"card_id": "c1"}]))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_sales_sync", side_effect=RuntimeError("db down")):
+            result = ebay_scheduler.run_sales_sync_once(sync_fn)  # must not raise
+        self.assertEqual(result, [{"card_id": "c1"}])
+
+    def test_ignores_unparseable_timestamp_and_runs_anyway(self):
+        sync_fn = MagicMock(return_value=(0, 0, []))
+        with patch("ebay_scheduler.db.get_app_status", return_value={"last_sales_sync_at": "not-a-date"}), \
+             patch("ebay_scheduler.db.record_sales_sync"):
+            ebay_scheduler.run_sales_sync_once(sync_fn)
+        sync_fn.assert_called_once()
+
+
+class RunReturnsSyncOnceTests(unittest.TestCase):
+    def test_runs_sync_when_never_run_before(self):
+        sync_fn = MagicMock(return_value=(1, 1))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_returns_sync") as mock_record:
+            ebay_scheduler.run_returns_sync_once(sync_fn)
+        sync_fn.assert_called_once()
+        mock_record.assert_called_once()
+
+    def test_skips_when_last_run_was_recent(self):
+        recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        sync_fn = MagicMock()
+        with patch("ebay_scheduler.db.get_app_status", return_value={"last_returns_sync_at": recent}), \
+             patch("ebay_scheduler.db.record_returns_sync") as mock_record:
+            ebay_scheduler.run_returns_sync_once(sync_fn)
+        sync_fn.assert_not_called()
+        mock_record.assert_not_called()
+
+    def test_runs_again_once_interval_has_elapsed(self):
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+        sync_fn = MagicMock(return_value=(0, 0))
+        with patch("ebay_scheduler.db.get_app_status", return_value={"last_returns_sync_at": stale}), \
+             patch("ebay_scheduler.db.record_returns_sync") as mock_record:
+            ebay_scheduler.run_returns_sync_once(sync_fn)
+        sync_fn.assert_called_once()
+        mock_record.assert_called_once()
+
+    def test_survives_app_status_fetch_failure(self):
+        sync_fn = MagicMock()
+        with patch("ebay_scheduler.db.get_app_status", side_effect=RuntimeError("db down")):
+            ebay_scheduler.run_returns_sync_once(sync_fn)  # must not raise
+        sync_fn.assert_not_called()
+
+    def test_records_timestamp_even_when_sync_fails(self):
+        sync_fn = MagicMock(side_effect=RuntimeError("nicht verbunden"))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_returns_sync") as mock_record:
+            ebay_scheduler.run_returns_sync_once(sync_fn)  # must not raise
+        mock_record.assert_called_once()
+
+    def test_survives_record_returns_sync_failure(self):
+        sync_fn = MagicMock(return_value=(1, 1))
+        with patch("ebay_scheduler.db.get_app_status", return_value={}), \
+             patch("ebay_scheduler.db.record_returns_sync", side_effect=RuntimeError("db down")):
+            ebay_scheduler.run_returns_sync_once(sync_fn)  # must not raise
 
 
 if __name__ == "__main__":

@@ -39,6 +39,10 @@ if ("serviceWorker" in navigator) {
   .toc li { margin: 0.15rem 0; }
   p, li { line-height: 1.5; }
   code { background: rgba(127, 127, 127, 0.15); border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.9em; }
+  .help-search { margin: 1rem 0; }
+  .help-search input { width: 100%; max-width: 24rem; padding: 0.5rem 0.75rem; font-size: 1rem;
+    box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  .help-search-status { font-size: 0.85rem; color: #777; margin-top: 0.3rem; }
 </style>
 </head>
 <body>
@@ -71,6 +75,11 @@ if ("serviceWorker" in navigator) {
     </form>
   </nav>
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
+
+  <div class="help-search">
+    <input type="search" id="help-search-input" placeholder="In der Anleitung suchen…" aria-label="In der Anleitung suchen">
+    <p class="help-search-status" id="help-search-status"></p>
+  </div>
 
   <nav class="toc">
     <strong>Inhalt</strong>
@@ -126,9 +135,10 @@ if ("serviceWorker" in navigator) {
 
   <h2 id="karten">Kartenübersicht</h2>
   <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-
-    Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure) und Tag-Filter lassen
-    sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
-    In der Listenansicht sind die Spalten sortierbar.</p>
+    Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure), Sport-&amp;-Non-Sport-Filter
+    und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
+    In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
+    importierten, extern verwalteten eBay-Angebot.</p>
   <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
     mit folgenden Optionen:</p>
   <ul>
@@ -211,7 +221,7 @@ if ("serviceWorker" in navigator) {
     die Karte schon dort ist) neben „Löschen" entnimmt die Karte dem Verkaufsbestand – siehe Private Sammlung.</p>
 
   <h2 id="kaeufe">Käufe</h2>
-  <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Sonstiges), Verkäufer,
+  <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Cardmarket, COMC, Sonstiges), Verkäufer,
     Gesamtpreis und Versand an. Das Verkäufer-Feld schlägt dabei bereits erfasste Verkäufer zur Auswahl vor
     (Tippfehler-Vermeidung). Auf der Kauf-Detailseite werden Karten verknüpft – der Gesamtpreis wird dabei
     automatisch gleichmäßig auf alle verknüpften Karten aufgeteilt (der Anteil pro Karte lässt sich danach manuell
@@ -256,6 +266,16 @@ if ("serviceWorker" in navigator) {
     Status-Spalte markiert): Preisänderungen, weitere Massenaktionen oder das Beenden lehnt das Tool ab, da es dieses
     Angebot nicht selbst bei eBay erstellt hat und es daher auch nicht verwalten kann – entsprechende Änderungen
     bitte direkt auf eBay vornehmen.</p>
+  <p>Rückerstattungen/Retouren zu bereits synchronisierten Verkäufen werden ebenfalls automatisch im Hintergrund
+    erkannt und markiert – ein manuelles Nachtragen ist normalerweise nicht mehr nötig. Unter Einstellungen lässt
+    sich außerdem eine E-Mail-Benachrichtigung einrichten, die bei neuen eBay-Verkäufen automatisch verschickt wird.
+    Der Filter „Sport &amp; Non-Sport" grenzt die Angebotsliste nach Kartentyp ein.</p>
+  <p>Der Button „Neu einstellen" auf der Kartenseite beendet ein veröffentlichtes Angebot und veröffentlicht es
+    sofort wieder neu – praktisch, um ein lange unverkauftes Angebot nochmal nach oben zu holen. Zusätzlich lässt
+    sich beim Bearbeiten eines Angebots eine Tagesanzahl eintragen, nach der das automatisch passiert, sobald das
+    Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
+    Einstellungen aktiviert sein. Automatisch neu eingestellte Angebote sind auf der Kartenseite mit „🔄 Automatisch
+    neu eingestellt am …" markiert.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
@@ -268,7 +288,9 @@ if ("serviceWorker" in navigator) {
     wählbar) und lösen keine Bestandswarnung aus.</p>
   <p>Mehrere Einträge lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, Lagerort, Menge
     oder Zustand für alle ausgewählten Einträge auf einmal zu setzen oder mehrere Einträge auf einmal zu löschen.
-    Über „📋 Inventur starten" neben „+ Eintrag hinzufügen" geht es direkt zum Soll/Ist-Abgleich.</p>
+    Über „📋 Inventur starten" neben „+ Eintrag hinzufügen" geht es direkt zum Soll/Ist-Abgleich. Der Button
+    „🖨 QR-Etiketten drucken" in der Lagerort-Übersicht erzeugt ein druckbares Etikett je Lagerort mit echtem
+    QR-Code – scannen öffnet das Inventar direkt gefiltert auf diesen Lagerort.</p>
 
   <h2 id="inventur">Inventur</h2>
   <p>Soll/Ist-Abgleich für den physischen Bestand: die Seite zeigt alle vorrätigen Karten als Checkliste (nach
@@ -351,7 +373,10 @@ if ("serviceWorker" in navigator) {
     gespeichert), inklusive Anzahl Käufe, Summe und letztem Kauf; folgt dem aktuellen Zeit-/Kanal-/Suchfilter der
     Seite. Ein Pfeil-Button pro Käufer klappt die einzelnen Käufe auf, jeweils mit Kartentitel, Verkaufspreis,
     -datum sowie eBay-Artikelnummer und Link zum Angebot. Die Käufer-Historie hat eine eigene Sortierung
-    (Klick auf Spaltenüberschrift), Seitenblätterung, einen Druck- und einen CSV-Export-Button.</p>
+    (Klick auf Spaltenüberschrift), Seitenblätterung, einen Druck- und einen CSV-Export-Button. Der Abschnitt
+    „Portfolio-Wertverlauf" auf der Übersichtsseite zeigt den geschätzten Bestandswert (eBay-Angebotspreis,
+    ersatzweise Einstandspreis) als Verlauf – wird automatisch einmal pro Woche als Schnappschuss festgehalten,
+    zusätzlich per Button „Jetzt Snapshot erstellen" manuell möglich.</p>
 
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
@@ -379,7 +404,11 @@ if ("serviceWorker" in navigator) {
     als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Die
     Angebots-Textbausteine sind wiederverwendbare Beschreibungstexte (z. B. ein Hinweis für eine ganze
     Kartenserie), die sich beim Anlegen eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf
-    der Kartenübersicht – optional auswählen lassen, statt denselben Text immer wieder neu einzutippen. Von hier
+    der Kartenübersicht – optional auswählen lassen, statt denselben Text immer wieder neu einzutippen. Eine
+    E-Mail-Benachrichtigung (SMTP-Server konfigurieren) informiert automatisch über neue eBay-Verkäufe, sobald der
+    Hintergrund-Sync welche findet. Der Schalter „Automatisches Re-Listing" ist die globale Sicherheitsbremse für
+    das automatische Neu-Einstellen unverkaufter eBay-Angebote (siehe eBay) – zusätzlich muss pro Angebot eine
+    Tagesanzahl eingetragen sein, damit die Automation tatsächlich greift. Von hier
     aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
@@ -410,6 +439,86 @@ if ("serviceWorker" in navigator) {
   }
   nav.addEventListener("change", () => {
     if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Client-seitige Volltextsuche ueber die Anleitung, ohne die Seite in
+// echte <section>-Elemente umzubauen: gruppiert stattdessen die flachen
+// body-Kinder ab der ersten <h2> in "Abschnitte" (eine Ueberschrift + alle
+// folgenden Geschwister bis zur naechsten <h2>) und blendet Abschnitte ohne
+// Treffer per [hidden] aus, statt eine eigene Trefferliste zu bauen.
+(function initHelpSearch() {
+  const input = document.getElementById("help-search-input");
+  const status = document.getElementById("help-search-status");
+  if (!input) return;
+
+  const sections = [];
+  let current = null;
+  for (const el of document.body.children) {
+    if (el.tagName === "H2") {
+      current = [el];
+      sections.push(current);
+    } else if (current && el.tagName !== "SCRIPT") {
+      current.push(el);
+    }
+  }
+
+  function clearHighlights() {
+    for (const mark of document.querySelectorAll("mark.help-search-hit")) {
+      const parent = mark.parentNode;
+      if (!parent) continue;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    }
+  }
+
+  function highlightMatches(root, term) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+    const lowerTerm = term.toLowerCase();
+    for (const textNode of textNodes) {
+      const text = textNode.textContent;
+      const idx = text.toLowerCase().indexOf(lowerTerm);
+      if (idx === -1) continue;
+      const mark = document.createElement("mark");
+      mark.className = "help-search-hit";
+      mark.textContent = text.slice(idx, idx + term.length);
+      const fragment = document.createDocumentFragment();
+      fragment.appendChild(document.createTextNode(text.slice(0, idx)));
+      fragment.appendChild(mark);
+      fragment.appendChild(document.createTextNode(text.slice(idx + term.length)));
+      textNode.parentNode.replaceChild(fragment, textNode);
+    }
+  }
+
+  function applyHelpSearch() {
+    const term = input.value.trim();
+    clearHighlights();
+    if (!term) {
+      for (const section of sections) {
+        for (const node of section) node.hidden = false;
+      }
+      status.textContent = "";
+      return;
+    }
+    const lowerTerm = term.toLowerCase();
+    let matchCount = 0;
+    for (const section of sections) {
+      const matches = section.some((node) => node.textContent.toLowerCase().includes(lowerTerm));
+      for (const node of section) node.hidden = !matches;
+      if (matches) {
+        matchCount += 1;
+        for (const node of section) highlightMatches(node, term);
+      }
+    }
+    status.textContent = matchCount ? `${matchCount} passende(r) Abschnitt(e)` : "Keine Treffer.";
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(input._debounce);
+    input._debounce = setTimeout(applyHelpSearch, 150);
   });
 })();
 </script>

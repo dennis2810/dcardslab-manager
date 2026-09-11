@@ -143,6 +143,11 @@ if ("serviceWorker" in navigator) {
       <option value="Fehler">Fehler</option>
       <option value="Beendet">Beendet</option>
     </select>
+    <select id="card-type-filter">
+      <option value="">Sport &amp; Non-Sport</option>
+      <option value="sport">Nur Sport</option>
+      <option value="non_sport">Nur Non-Sport</option>
+    </select>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
   </div>
   <div class="controls no-print">
@@ -300,6 +305,7 @@ document.addEventListener("keydown", (ev) => {
   qInput.select();
 });
 const statusSelect = document.getElementById("status");
+const cardTypeFilterSelect = document.getElementById("card-type-filter");
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
@@ -356,9 +362,15 @@ function ebayListingUrl(listing) {
   return `https://www.${host}/itm/${encodeURIComponent(listing.ebay_listing_id)}`;
 }
 
+function filteredListings() {
+  if (!cardTypeFilterSelect.value) return currentListings;
+  return currentListings.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+}
+
 function sortedListings() {
-  if (!sortKey) return currentListings;
-  return [...currentListings].sort((a, b) => {
+  const source = filteredListings();
+  if (!sortKey) return source;
+  return [...source].sort((a, b) => {
     const av = a[sortKey] ?? "";
     const bv = b[sortKey] ?? "";
     if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
@@ -999,6 +1011,10 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(loadListings, 300);
 });
 statusSelect.addEventListener("change", loadListings);
+cardTypeFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  render(sortedListings());
+});
 
 loadOauthStatus();
 loadListings();
