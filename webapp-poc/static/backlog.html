@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Backlog</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  .back-link { font-size: 0.9rem; }
+  .note { font-size: 0.85rem; color: #777; }
+  p, li { line-height: 1.5; }
+  code { background: rgba(127, 127, 127, 0.15); border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.9em; }
+  .status-tag { font-size: 0.75rem; font-weight: 600; border-radius: 3px; padding: 0.05rem 0.5rem; margin-left: 0.4rem; white-space: nowrap; }
+  .status-open { color: #7a5c00; border: 1px solid #c99b00; }
+  .status-blocked { color: #7a1a1a; border: 1px solid #b04040; }
+  .item { border: 1px solid rgba(127, 127, 127, 0.25); border-radius: 8px; padding: 0.9rem 1.1rem; margin: 1rem 0; }
+  .item h3 { margin: 0 0 0.4rem; font-size: 1rem; display: flex; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Backlog</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+  <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
+  <p class="note">Angedachte, aber noch nicht umgesetzte Features – zum Nachverfolgen, nicht als Versprechen auf
+    einen Termin. Wird von Hand gepflegt, wenn neue Ideen entstehen oder ein Punkt umgesetzt wird.</p>
+
+  <div class="item">
+    <h3>Automatische Preisanpassung bei Preis-Alarm <span class="status-tag status-open">offen – Klärung nötig</span></h3>
+    <p>Der bestehende Preis-Alarm (eBay-Seite, Dashboard-Kachel „Preis-Alarme") zeigt heute nur an, wenn ein
+      Angebotspreis mehr als 20&nbsp;% vom Preisrecherche-Marktdurchschnitt abweicht – eine Preisanpassung passiert
+      nicht automatisch. Bevor das umgesetzt wird, muss geklärt werden:</p>
+    <ul>
+      <li>Soll der Preis wirklich automatisch geändert werden, oder nur ein Anpassungsvorschlag mit Bestätigung
+        angezeigt werden?</li>
+      <li>In welche Richtung: nur nach unten (Verkaufsförderung), nur nach oben (Marktpreis-Anstieg mitnehmen),
+        oder beides?</li>
+      <li>Ab welcher Schwelle/mit welchem Ziel-Abstand zum Marktdurchschnitt soll angepasst werden – derselbe
+        20&nbsp;%-Wert wie beim Alarm, oder ein eigener?</li>
+    </ul>
+  </div>
+
+  <div class="item">
+    <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
+    <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
+      Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
+      das <code>watchCount</code>-Feld der Browse-API ist gesperrt und erfordert ein bei eBay einzureichendes
+      „App Check"-Ticket, über das eBay nach eigenem Ermessen entscheidet (keine Zusage auf Freigabe, keine
+      garantierte Bearbeitungszeit). Die einzige Alternative wäre die veraltete Trading-API mit einer komplett
+      anderen Authentifizierung (Auth'n'Auth statt OAuth2), die in diesem Projekt nirgends genutzt wird – eine
+      eigenständige Neuintegration.</p>
+    <p>Falls gewünscht, folgender Weg für den App-Check-Antrag (extern, außerhalb dieses Tools):</p>
+    <ul>
+      <li>Im <a href="https://developer.ebay.com/my/support/api-status?index=0" target="_blank" rel="noopener">eBay
+        Developer Program</a> unter „Support" ein Ticket für „App Check" bzw. Zugriff auf <code>watchCount</code>
+        in der Browse-API eröffnen.</li>
+      <li>Begründen, wofür die Watcher-Zahl gebraucht wird (z. B. Nachfrage-Einschätzung fürs eigene
+        Verkäufer-Dashboard).</li>
+      <li>Bei Freigabe: Rückmeldung an dieses Tool, dann lässt sich die Anzeige analog zu den Aufrufen ergänzen.</li>
+    </ul>
+  </div>
+
+<script>
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+</script>
+</body>
+</html>

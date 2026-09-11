@@ -6,7 +6,10 @@ Beantwortet genau eine Frage, bevor wir Zeit in DB/Auth/Frontend stecken:
 Mittlerweile wird jeder Scan in Supabase persistiert (Postgres + Storage,
 siehe unten) - der validierte PoC-Workflow bildet damit die Basis für die
 eigentliche WebApp-Architektur. Seit Sub-Projekt 4 lassen sich Karten auch
-als eBay-Angebote veröffentlichen (siehe unten). Weiterhin kein Login.
+als eBay-Angebote veröffentlichen (siehe unten). Ein Login ist optional
+(einmaliges gemeinsames Passwort statt Nutzerkonten, siehe „Login
+einrichten" unten) - ohne gesetztes `APP_PASSWORD` bleibt das Tool wie
+bisher ohne Anmeldung erreichbar.
 
 ## Was hier passiert
 
@@ -141,6 +144,32 @@ Umgebungsvariablen. Die pro Gerät gespeicherten Push-Abos
 (siehe `backup.py`) - nach einem Wiederherstellen auf einem neuen
 Supabase-Projekt oder Gerätewechsel einfach erneut aktivieren.
 
+### Login einrichten
+
+Optional - ein gemeinsames Passwort statt Nutzerkonten (genügt für ein
+internes Ein-Team-Tool). Schützt das gesamte Tool inkl. aller `/api/*`-
+Endpunkte über eine signierte Session-Cookie
+(`starlette.middleware.sessions.SessionMiddleware`); ohne gesetztes
+`APP_PASSWORD` bleibt alles wie bisher ohne Anmeldung erreichbar.
+
+1. `APP_PASSWORD` (das gemeinsame Passwort) und `SESSION_SECRET_KEY`
+   (ein fester, geheimer Zufallswert, z. B. `openssl rand -hex 32`) beim
+   `webapp-poc`-Container-Deployment setzen (s. u.). Ohne
+   `SESSION_SECRET_KEY` funktioniert der Login zwar trotzdem, aber jeder
+   Neustart/jedes Deployment meldet alle Sitzungen automatisch ab (der
+   Schlüssel wird dann zufällig neu gewürfelt) - für den Dauerbetrieb
+   daher empfohlen.
+2. Beim nächsten Aufruf des Tools leitet `login.html` automatisch dorthin
+   weiter; „Abmelden" steht in den Einstellungen zur Verfügung.
+
+Die eBay-OAuth-Callback (`/api/sheets/oauth/callback` für Google
+entsprechend) läuft über eine normale Browser-Weiterleitung im bereits
+angemeldeten Tab und bleibt daher hinter dem Login - keine gesonderte
+Ausnahme nötig. `login.html`, `/api/login` sowie die zum Rendern der
+Login-Seite nötigen statischen Dateien (Logo/Icons/Manifest/Service-
+Worker) bleiben unabhängig vom Login-Status erreichbar, sonst gäbe es
+keine Möglichkeit, sich überhaupt anzumelden.
+
 ### Aufrufe/Beobachter einrichten
 
 Zeigt auf `ebay.html` (Button „👁 Aufrufe laden") die Aufrufzahlen der
@@ -231,6 +260,8 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
   -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
   -e VAPID_SUBJECT=mailto:du@example.com \
+  -e APP_PASSWORD=dein-gemeinsames-passwort \
+  -e SESSION_SECRET_KEY=ein-fester-geheimer-zufallswert \
   -v /volume1/dein-ordner:/data/handyscan \
   dcardslab-webapp-poc
 ```
@@ -243,9 +274,10 @@ Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` sind
 nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.), und
 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` nur, falls
-Web-Push-Benachrichtigungen genutzt werden sollen (s. o.) - ohne sie
-funktioniert alles andere inkl. Backup-Download/E-Mail-Benachrichtigung
-unverändert.
+Web-Push-Benachrichtigungen genutzt werden sollen (s. o.), und
+`APP_PASSWORD`/`SESSION_SECRET_KEY` nur, falls ein Login genutzt werden
+soll (s. o.) - ohne sie funktioniert alles andere inkl. Backup-Download/
+E-Mail-Benachrichtigung unverändert.
 
 Das Volume `/data/handyscan` ist optional und nur für den
 "📱 Handyscan"-Button (siehe Scan-Seite) relevant: dort per Handy fotografierte
