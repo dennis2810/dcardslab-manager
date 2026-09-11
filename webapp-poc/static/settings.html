@@ -82,6 +82,14 @@ if ("serviceWorker" in navigator) {
     </form>
   </nav>
 
+  <section id="login-section">
+    <h2>Login</h2>
+    <p>Schützt das gesamte Tool mit einem gemeinsamen Passwort (siehe README.md, „Login einrichten") – ohne
+      hinterlegtes <code>APP_PASSWORD</code> bleibt diese Funktion inaktiv und der Abmelden-Button ohne Wirkung.</p>
+    <button type="button" id="logout-btn">Abmelden</button>
+    <p class="status" id="logout-status"></p>
+  </section>
+
   <section id="help-section">
     <h2>Hilfe</h2>
     <p>Anleitung zu Scan, Karten, Käufen, eBay, Inventar, Statistiken und Dashboard.</p>
@@ -249,6 +257,17 @@ function showToast(message, isError) {
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
+
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("logout-status");
+  try {
+    await fetch("/api/logout", { method: "POST" });
+    location.href = "/login.html";
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "status error";
+  }
+});
 
 // Einheitliches Datumsformat (DD.MM.YYYY, HH:MM) - manuell statt ueber
 // toLocaleString("de-DE"), da dessen Default-Ausgabe Tag/Monat nicht

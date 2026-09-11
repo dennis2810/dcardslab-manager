@@ -26,9 +26,11 @@ Then open http://<nas-tailscale-name>:8000 from any device on your tailnet.
 import asyncio
 import base64
 import csv
+import hmac
 import io
 import json
 import logging
+import os
 import re
 import secrets
 import shutil
@@ -46,6 +48,7 @@ import httpx
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 # scanner_v0_8_dynamic.py imports tkinter at module level for its own
 # standalone CLI/GUI harness - process() (the only part we call) never
@@ -89,6 +92,26 @@ if not logger.handlers:
     logger.addHandler(_handler)
 
 app = FastAPI(title="DCardLabs Web PoC")
+
+# Einfacher Passwort-Login (ein gemeinsames Passwort statt Nutzerkonten,
+# genuegt fuer ein internes Ein-Team-Tool) - wie SUPABASE_SERVICE_KEY & Co.
+# bewusst eine Umgebungsvariable statt eine Datenbank-Tabelle, da es ein
+# Server-Zugangsdatum ist, kein Nutzer-Datensatz. Bleibt leer = kein Login
+# noetig (Default, damit bestehende Deployments ohne APP_PASSWORD unveraendert
+# weiterlaufen) - siehe README.md, "Login einrichten".
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
+SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "").strip()
+if APP_PASSWORD and not SESSION_SECRET_KEY:
+    # Ohne einen stabilen Schluessel signiert jeder Neustart mit einem neuen
+    # Zufallswert (secrets.token_hex() unten) - alle Sitzungen werden dann bei
+    # jedem Deploy/Neustart ungueltig. Kein hartes Fehlschlagen (der Login
+    # funktioniert trotzdem, nur eben mit dieser Einschraenkung), aber ein
+    # deutlicher Hinweis im Log.
+    logger.warning(
+        "APP_PASSWORD gesetzt, aber SESSION_SECRET_KEY fehlt - Logins werden "
+        "bei jedem Neustart ungueltig. SESSION_SECRET_KEY setzen (fester, "
+        "geheimer Zufallswert), damit Sitzungen einen Neustart ueberleben."
+    )
 
 
 @app.on_event("startup")
@@ -2778,6 +2801,44 @@ async def set_auto_relist_enabled(fields: dict = Body(...)):
     return JSONResponse(updated)
 
 
+@app.post("/api/login")
+async def login(request: Request, fields: dict = Body(...)):
+    # hmac.compare_digest statt "==" - vermeidet einen Timing-Seitenkanal
+    # (ein "==" bricht beim ersten falschen Zeichen ab, die Antwortzeit
+    # verraet dadurch minimal etwas ueber korrekte Praefixe).
+    password = str(fields.get("password") or "")
+    if not APP_PASSWORD or not hmac.compare_digest(password, APP_PASSWORD):
+        raise HTTPException(status_code=401, detail="Falsches Passwort.")
+    request.session["authenticated"] = True
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return JSONResponse({"ok": True})
+
+
+@app.middleware("http")
+async def _require_login(request: Request, call_next):
+    # Greift nur, wenn APP_PASSWORD tatsaechlich gesetzt ist - ohne
+    # Konfiguration bleibt das Tool wie bisher ohne Login nutzbar (siehe
+    # README.md, "Login einrichten"). login.html + die zum Rendern noetigen
+    # statischen Assets (Logo/Icons/Manifest/Service-Worker) sowie der
+    # Login-Endpoint selbst muessen erreichbar bleiben, sonst gaebe es keine
+    # Moeglichkeit, sich ueberhaupt anzumelden.
+    if not APP_PASSWORD:
+        return await call_next(request)
+    path = request.url.path
+    if path in ("/login.html", "/api/login", "/manifest.json", "/sw.js") or path.startswith("/assets/"):
+        return await call_next(request)
+    if request.session.get("authenticated"):
+        return await call_next(request)
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "Nicht angemeldet - bitte zuerst einloggen."}, status_code=401)
+    return RedirectResponse(f"/login.html?{urlencode({'next': path})}", status_code=303)
+
+
 @app.middleware("http")
 async def _no_cache_for_html(request: Request, call_next):
     # StaticFiles sendet standardmaessig keinen expliziten Cache-Control-
@@ -2794,6 +2855,14 @@ async def _no_cache_for_html(request: Request, call_next):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
+
+# Zuletzt hinzugefuegt = aeusserste Schicht (Starlette wickelt Middleware in
+# umgekehrter Hinzufuege-Reihenfolge) - laeuft dadurch vor _require_login/
+# _no_cache_for_html und befuellt request.session, bevor die beiden es lesen.
+# secret_key faellt ohne SESSION_SECRET_KEY auf einen zufaelligen Wert pro
+# Prozessstart zurueck (siehe Warnung oben) - ganz ohne Schluessel wuerde
+# SessionMiddleware selbst fehlschlagen.
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY or secrets.token_hex(32))
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

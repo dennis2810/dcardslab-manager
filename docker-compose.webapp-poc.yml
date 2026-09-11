@@ -32,4 +32,9 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-}
+      # Login (optional): ohne APP_PASSWORD bleibt das Tool wie bisher ohne
+      # Anmeldung erreichbar. SESSION_SECRET_KEY sollte gesetzt sein, sonst
+      # meldet jeder Neustart alle Sitzungen automatisch ab.
+      - APP_PASSWORD=${APP_PASSWORD:-}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-}
     restart: unless-stopped

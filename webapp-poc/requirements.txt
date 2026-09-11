@@ -19,3 +19,7 @@ httpx>=0.27
 
 # Web-Push-Benachrichtigungen (VAPID), siehe push_notify.py.
 pywebpush>=2.0
+
+# Session-Cookies fuer den optionalen Login (APP_PASSWORD), siehe
+# starlette.middleware.sessions.SessionMiddleware in main.py.
+itsdangerous>=2.0
