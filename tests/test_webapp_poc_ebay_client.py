@@ -165,15 +165,19 @@ class CardConditionDescriptorValueTests(unittest.TestCase):
 
 class GetListingViewsTests(unittest.TestCase):
     def test_returns_view_count_per_listing(self):
+        # eBays echte Antwort traegt Namen (LISTING / LISTING_VIEWS_TOTAL) nur
+        # einmalig in dimensionMetadata.metadataHeader, NICHT je Eintrag -
+        # die einzelnen dimensionValues/metricValues-Objekte haben nur
+        # value/applicable. Muss daher positionsbasiert funktionieren.
         report = {
             "records": [
                 {
-                    "dimensionValues": [{"dimensionKey": "LISTING", "value": "111"}],
-                    "metricValues": [{"metric": "LISTING_VIEWS_TOTAL", "value": "42"}],
+                    "dimensionValues": [{"value": "111", "applicable": True}],
+                    "metricValues": [{"value": "42", "applicable": True}],
                 },
                 {
-                    "dimensionValues": [{"dimensionKey": "LISTING", "value": "222"}],
-                    "metricValues": [{"metric": "LISTING_VIEWS_TOTAL", "value": "7"}],
+                    "dimensionValues": [{"value": "222", "applicable": True}],
+                    "metricValues": [{"value": "7", "applicable": True}],
                 },
             ]
         }
