@@ -86,6 +86,18 @@ class ConditionIdToEnumTests(unittest.TestCase):
         self.assertEqual(oauth_server.condition_id_to_enum("USED_GOOD"), "USED_GOOD")
 
 
+class HealthTests(unittest.TestCase):
+    """/health exposes the live-configured SCOPES value (not the scope of
+    the last-issued token, see /api/oauth/status) - lets a deployer verify
+    a scope change (e.g. adding sell.analytics.readonly) actually reached
+    the running container, without needing shell access to it."""
+
+    def test_reports_live_configured_scopes(self):
+        with patch.object(oauth_server, "SCOPES", "api_scope/sell.inventory api_scope/sell.analytics.readonly"):
+            result = oauth_server.health()
+        self.assertEqual(result["configured_scopes"], "api_scope/sell.inventory api_scope/sell.analytics.readonly")
+
+
 class InternalAccessTokenTests(unittest.TestCase):
     """webapp-poc's ebay_client.py calls this endpoint to get a token
     without ever seeing the refresh token itself - oauth-server stays the
