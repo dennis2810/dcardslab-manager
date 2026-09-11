@@ -2519,6 +2519,12 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     viewsBtn.textContent = "👁 Aufrufe laden";
     const viewsResult = document.createElement("span");
     viewsResult.style.marginLeft = "0.5rem";
+    // Letzter bekannter Wert bleibt sichtbar, bis erneut auf "Aufrufe laden"
+    // geklickt wird (main.py speichert last_known_views bei jedem Abruf) -
+    // kein "-" nach jedem Seiten-Neuladen mehr (Klaerung mit dem Nutzer).
+    if (listing.last_known_views !== null && listing.last_known_views !== undefined) {
+      viewsResult.textContent = `${listing.last_known_views} Aufrufe (letzte 30 Tage)`;
+    }
     viewsBtn.addEventListener("click", async () => {
       viewsResult.textContent = "Lädt …";
       viewsResult.className = "";

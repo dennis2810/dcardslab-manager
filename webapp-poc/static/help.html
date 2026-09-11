@@ -278,16 +278,19 @@ if ("serviceWorker" in navigator) {
     sich beim Bearbeiten eines Angebots eine Tagesanzahl eintragen, nach der das automatisch passiert, sobald das
     Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
     Einstellungen aktiviert sein. Ob manuell oder automatisch ausgelöst: ein Neu-Einstellen ist auf der Kartenseite
-    mit „🔄 Neu eingestellt am …" markiert, damit immer nachvollziehbar bleibt, dass (und wann) das passiert ist.
-    Dort steht außerdem „Eingestellt am … (läuft seit X Tagen)" – anders als „Zuletzt aktualisiert" (das auch eine
-    reine Preisänderung widerspiegelt) zeigt das, seit wann genau das aktuell laufende eBay-Angebot live ist, und
-    setzt sich bei jedem Neu-Einstellen zurück, weil eBay dabei ja ein komplett neues Angebot anlegt.</p>
+    und in der Status-Spalte der eBay-Seite (🔄-Symbol) mit „Neu eingestellt am …" markiert, damit immer
+    nachvollziehbar bleibt, dass (und wann) das passiert ist.
+    Kartenseite und eBay-Seite zeigen außerdem „Eingestellt am … (läuft seit X Tagen)" – anders als
+    „Zuletzt aktualisiert" (das auch eine reine Preisänderung widerspiegelt) zeigt das, seit wann genau das
+    aktuell laufende eBay-Angebot live ist, und setzt sich bei jedem Neu-Einstellen zurück, weil eBay dabei ja
+    ein komplett neues Angebot anlegt.</p>
   <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
     aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
     API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope
     braucht (siehe README.md). Eine Beobachter-/Watcher-Anzahl bietet eBay über die moderne API nicht mehr
     zuverlässig an. Auf der Kartenseite gibt es denselben Button auch einzeln im eBay-Abschnitt eines
-    veröffentlichten oder verkauften Angebots.</p>
+    veröffentlichten oder verkauften Angebots. Der zuletzt geladene Wert bleibt sichtbar (auch nach einem
+    Neuladen der Seite), bis erneut auf „Aufrufe laden" geklickt wird.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder

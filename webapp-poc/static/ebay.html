@@ -191,6 +191,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="price">Preis <span class="sort-arrow"></span></th>
             <th>Preis-Check</th>
             <th data-key="status">Status <span class="sort-arrow"></span></th>
+            <th data-key="listing_since">Eingestellt am <span class="sort-arrow"></span></th>
             <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
             <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
             <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
@@ -629,7 +630,29 @@ function render(listings) {
       flag.title = "Importiertes Angebot - wird nicht vom Tool verwaltet (Preisänderungen/Beenden nur direkt auf eBay).";
       statusTd.appendChild(flag);
     }
+    // last_auto_relisted_at wird seit main.py's _relist_listing() sowohl vom
+    // manuellen "Neu einstellen"-Button als auch von der Automatik gesetzt
+    // (Feldname blieb trotzdem, siehe card.html) - bleibt dauerhaft sichtbar,
+    // nicht nur fuer ein paar Tage nach dem Neu-Einstellen.
+    if (listing.last_auto_relisted_at) {
+      const flag = document.createElement("span");
+      flag.textContent = " 🔄";
+      flag.title = `Neu eingestellt am ${formatDateTime(listing.last_auto_relisted_at)}`;
+      statusTd.appendChild(flag);
+    }
     tr.appendChild(statusTd);
+
+    // listing_since ist anders als published_at NICHT bei jeder Bearbeitung
+    // neu gesetzt, sondern nur bei Erstveroeffentlichung/Neu-Einstellen
+    // (siehe main.py's _publish_listing()) - zeigt "seit wann laeuft
+    // GENAU DIESES eBay-Listing", card.html hat dieselbe Anzeige.
+    const listingSinceTd = document.createElement("td");
+    if (listing.listing_since) {
+      const days = Math.floor((Date.now() - new Date(listing.listing_since).getTime()) / (24 * 60 * 60 * 1000));
+      const daysLabel = days <= 0 ? "heute" : days === 1 ? "1 Tag" : `${days} Tage`;
+      listingSinceTd.textContent = `${formatDateTime(listing.listing_since)} (${daysLabel})`;
+    }
+    tr.appendChild(listingSinceTd);
 
     const scheduledTd = document.createElement("td");
     scheduledTd.textContent = formatDateTime(listing.scheduled_at);
@@ -651,7 +674,17 @@ function render(listings) {
     viewsTd.className = "views-cell";
     if (listing.ebay_listing_id) {
       viewsTd.dataset.listingId = listing.ebay_listing_id;
-      viewsTd.textContent = listing.ebay_listing_id in listingViews ? listingViews[listing.ebay_listing_id] : "–";
+      // listingViews (frisch per "Aufrufe laden" in dieser Sitzung geladen)
+      // hat Vorrang vor last_known_views (von main.py gespeicherter Wert
+      // vom letzten Abruf, ueberlebt einen Seiten-Neuladen) - beides "-",
+      // wenn noch nie geladen.
+      if (listing.ebay_listing_id in listingViews) {
+        viewsTd.textContent = listingViews[listing.ebay_listing_id];
+      } else if (listing.last_known_views !== null && listing.last_known_views !== undefined) {
+        viewsTd.textContent = listing.last_known_views;
+      } else {
+        viewsTd.textContent = "–";
+      }
     }
     tr.appendChild(viewsTd);
 
@@ -736,9 +769,9 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["SKU", "Titel", "Preis", "Status", "Geplant für", "Verkauft am", "Verkaufspreis", "Zuletzt aktualisiert"];
+  const headers = ["SKU", "Titel", "Preis", "Status", "Eingestellt am", "Geplant für", "Verkauft am", "Verkaufspreis", "Zuletzt aktualisiert"];
   const rows = sortedListings().map((l) => [
-    l.sku || "", l.title || "", l.price ?? "", STATUS_LABELS[l.status] || l.status || "",
+    l.sku || "", l.title || "", l.price ?? "", STATUS_LABELS[l.status] || l.status || "", formatDateTime(l.listing_since),
     formatDateTime(l.scheduled_at), formatDate(l.sale_date), l.sale_price ?? "", formatDateTime(l.published_at),
   ]);
   downloadCsv("ebay.csv", headers, rows);

@@ -273,6 +273,8 @@ function showToast(message, isError) {
     const body = await res.json();
     const parts = [`Gebaut am: ${body.built_at || "unbekannt"}`];
     if (body.git_commit && body.git_commit !== "unbekannt") parts.push(`Commit: ${body.git_commit}`);
+    if (body.last_pr) parts.push(`Zuletzt gemergter PR: #${body.last_pr}`);
+    else if (body.last_commit_subject && body.last_commit_subject !== "unbekannt") parts.push(`Letzter Commit: ${body.last_commit_subject}`);
     versionStatus.textContent = parts.join(" · ");
   } catch (err) {
     versionStatus.textContent = "Fehler: " + err;

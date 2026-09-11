@@ -113,23 +113,37 @@ if APP_PASSWORD and not SESSION_SECRET_KEY:
         "geheimer Zufallswert), damit Sitzungen einen Neustart ueberleben."
     )
 
-# Vom Docker-Build gesetzter Git-Commit-Kurzhash (siehe Dockerfile's
-# GIT_COMMIT-Build-Arg + README.md, "docker build") - ohne diesen bleibt
-# "unbekannt" (z.B. bei einem Build ohne --build-arg). Ueber GET /api/version
-# abrufbar, damit sich per simplem HTTP-Request pruefen laesst, ob ein
-# erwarteter PR/Commit tatsaechlich im laufenden Container steckt, ohne
-# Shell-Zugriff auf den Deployment-Host zu brauchen - gleiches Prinzip wie
-# ebay-oauth-server's /health mit configured_scopes.
-GIT_COMMIT = os.environ.get("GIT_COMMIT", "unbekannt").strip() or "unbekannt"
+def _read_build_info_file(name):
+    # Alle drei Dateien (GIT_COMMIT, LAST_COMMIT_SUBJECT, BUILD_TIME) werden
+    # vom Dockerfile automatisch erzeugt (git-info-Build-Stage bzw. RUN date)
+    # - kein --build-arg noetig, funktioniert daher auch bei einem Rebuild
+    # ueber eine NAS-Docker-App ohne eigene Kommandozeile. "unbekannt"
+    # ausserhalb eines Docker-Builds (z.B. lokaler Testlauf via uvicorn
+    # direkt). Ueber GET /api/version abrufbar, damit sich per simplem
+    # HTTP-Request pruefen laesst, ob ein erwarteter PR/Commit tatsaechlich
+    # im laufenden Container steckt, ohne Shell-Zugriff auf den
+    # Deployment-Host zu brauchen - gleiches Prinzip wie ebay-oauth-server's
+    # /health mit configured_scopes.
+    try:
+        return (Path(__file__).parent / name).read_text().strip() or "unbekannt"
+    except FileNotFoundError:
+        return "unbekannt"
 
-# Vom Dockerfile automatisch erzeugter Build-Zeitstempel (kein --build-arg
-# noetig, funktioniert daher auch bei einem Rebuild ueber eine NAS-Docker-App
-# ohne eigene Kommandozeile) - "unbekannt" ausserhalb eines Docker-Builds
-# (z.B. lokaler Testlauf via uvicorn direkt).
-try:
-    BUILD_TIME = (Path(__file__).parent / "BUILD_TIME").read_text().strip() or "unbekannt"
-except FileNotFoundError:
-    BUILD_TIME = "unbekannt"
+
+def _extract_pr_number(commit_subject):
+    # Ein Merge-Commit von GitHub traegt als Betreffzeile "Merge pull
+    # request #NN from ..." - daraus die PR-Nummer herausziehen, statt den
+    # Nutzer den ganzen (oft langen) Commit-Text lesen zu lassen. None fuer
+    # jeden anderen Commit (z.B. ein Squash-Merge oder ein direkter Commit
+    # auf main ohne PR).
+    match = re.search(r"pull request #(\d+)", commit_subject, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+GIT_COMMIT = _read_build_info_file("GIT_COMMIT")
+LAST_COMMIT_SUBJECT = _read_build_info_file("LAST_COMMIT_SUBJECT")
+BUILD_TIME = _read_build_info_file("BUILD_TIME")
+LAST_PR = _extract_pr_number(LAST_COMMIT_SUBJECT)
 
 
 @app.on_event("startup")
@@ -1807,6 +1821,19 @@ async def ebay_listing_views(listing_ids: str):
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # In ebay_listings.last_known_views mitspeichern (Klaerung mit dem
+    # Nutzer: soll bis zum naechsten Klick sichtbar bleiben, statt nach
+    # jedem Seiten-Neuladen wieder bei "-" zu starten) - dafuer erst die
+    # eBay-Listing-ID auf unsere interne ID abbilden, gleiches Muster wie
+    # sync_ebay_sales()'s listings_by_item_id oben.
+    if views:
+        listings_by_item_id = {
+            l["ebay_listing_id"]: l for l in db.list_ebay_listings() if l.get("ebay_listing_id")
+        }
+        for ebay_id, count in views.items():
+            listing = listings_by_item_id.get(ebay_id)
+            if listing:
+                db.update_ebay_listing(listing["id"], {"last_known_views": count})
     return JSONResponse({"views": views})
 
 
@@ -2860,11 +2887,13 @@ async def logout(request: Request):
 @app.get("/api/version")
 async def get_version():
     # Beantwortet "laeuft im Container wirklich der erwartete PR/Commit?"
-    # ohne Shell-Zugriff auf den Deployment-Host. built_at kommt automatisch
-    # von jedem Docker-Build (auch ueber eine NAS-Docker-App); git_commit nur,
-    # wenn beim Build zusaetzlich --build-arg GIT_COMMIT=... gesetzt wurde
-    # (siehe Dockerfile, README.md "docker build").
-    return JSONResponse({"git_commit": GIT_COMMIT, "built_at": BUILD_TIME})
+    # ohne Shell-Zugriff auf den Deployment-Host - alle drei Werte werden
+    # automatisch beim Docker-Build erzeugt (siehe Dockerfile), kein
+    # --build-arg noetig, funktioniert daher auch ueber eine NAS-Docker-App.
+    return JSONResponse({
+        "git_commit": GIT_COMMIT, "built_at": BUILD_TIME,
+        "last_commit_subject": LAST_COMMIT_SUBJECT, "last_pr": LAST_PR,
+    })
 
 
 @app.middleware("http")

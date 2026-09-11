@@ -1318,6 +1318,21 @@ class UpdateEbayListingTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             self.assertIsNone(db.update_ebay_listing("does-not-exist", {"price": 1}))
 
+    def test_listing_since_and_last_known_views_are_writable(self):
+        # Regression test: beide Felder wurden in main.py bereits geschrieben
+        # (siehe _publish_listing()/relist bzw. die Aufrufe-Persistierung),
+        # fehlten aber im Allowlist hier - db.update_ebay_listing() hat sie
+        # bis dahin still verworfen, ohne Fehler.
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_listing("listing-1", {
+                "listing_since": "2026-09-01T10:00:00Z", "last_known_views": 42,
+            })
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["listing_since"], "2026-09-01T10:00:00Z")
+        self.assertEqual(row["last_known_views"], 42)
+
     def test_rounds_price_to_two_decimals(self):
         mock_client = MagicMock()
         _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
