@@ -19,7 +19,13 @@ logger = logging.getLogger("backup_scheduler")
 _TABLE_NAMES = (
     "scan_batches", "cards", "purchases", "purchase_items",
     "ebay_listings", "ebay_sales", "inventory", "price_research",
+    "manual_sales", "wishlist_items", "wishlist_price_checks",
+    "description_templates", "portfolio_value_snapshots", "dashboard_goals",
 )
+# Bewusst NICHT dabei: google_sheets_settings (enthaelt den Google-OAuth-
+# Refresh-Token) und app_status (u.a. smtp_password) - beides Zugangsdaten,
+# die in einem herunterladbaren/in Supabase Storage abgelegten Backup nichts
+# verloren haben (siehe onboarding.html's "Was wird automatisch gesichert").
 
 # Woechentlich statt taeglich, um den Free-Tier-Storage (1GB) nicht unnoetig
 # zu fuellen - stuendlich geprueft (CHECK_INTERVAL_SECONDS), aber nur

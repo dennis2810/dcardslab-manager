@@ -87,6 +87,7 @@ if ("serviceWorker" in navigator) {
     <p>Anleitung zu Scan, Karten, Käufen, eBay, Inventar, Statistiken und Dashboard.</p>
     <a href="help.html"><button type="button">Anleitung öffnen</button></a>
     <a href="release-notes.html"><button type="button">Release-Notes öffnen</button></a>
+    <a href="onboarding.html"><button type="button">Ersteinrichtung öffnen</button></a>
   </section>
 
   <section id="sheets-section">
@@ -109,9 +110,7 @@ if ("serviceWorker" in navigator) {
 
   <section id="backup-section">
     <h2>Backup</h2>
-    <p>Lädt eine ZIP-Datei mit allen Daten (Scans, Karten, Käufe, eBay-Angebote
-      und -Verkäufe, Inventar, Preisrecherche-Verlauf) als JSON sowie allen
-      Kartenbildern herunter. Zusätzlich wird automatisch einmal pro Woche
+    <p>Lädt eine ZIP-Datei mit allen Daten als JSON sowie allen Kartenbildern herunter (<a href="onboarding.html#backup-inhalt">genaue Liste, was enthalten ist</a>). Zusätzlich wird automatisch einmal pro Woche
       ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt
       (die letzten 4 Wochen werden aufbewahrt).</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>

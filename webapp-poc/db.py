@@ -1295,6 +1295,31 @@ def all_price_research():
     return get_client().table("price_research").select("*").execute().data
 
 
+# Reine Backup-Helfer (siehe backup.py's _TABLE_NAMES/build_backup_zip(), das
+# ueber getattr(db, f"all_{table}")() dynamisch aufruft) - bewusst keine
+# Zugangsdaten-Tabellen wie google_sheets_settings (refresh_token) oder
+# app_status (u.a. smtp_password), damit ein heruntergeladenes/in Supabase
+# Storage abgelegtes Backup keine Secrets im Klartext enthaelt.
+def all_wishlist_items():
+    return get_client().table("wishlist_items").select("*").execute().data
+
+
+def all_wishlist_price_checks():
+    return get_client().table("wishlist_price_checks").select("*").execute().data
+
+
+def all_description_templates():
+    return get_client().table("description_templates").select("*").execute().data
+
+
+def all_portfolio_value_snapshots():
+    return get_client().table("portfolio_value_snapshots").select("*").execute().data
+
+
+def all_dashboard_goals():
+    return get_client().table("dashboard_goals").select("*").execute().data
+
+
 PRICE_RESEARCH_FIELDS = ["price", "note", "checked_at"]
 PRICE_RESEARCH_NUMERIC_FIELDS = {"price"}
 PRICE_RESEARCH_MONEY_FIELDS = {"price"}

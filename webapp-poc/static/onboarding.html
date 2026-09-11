@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Ersteinrichtung</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  h3 { font-size: 0.95rem; margin: 1.2rem 0 0.4rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  .back-link { font-size: 0.9rem; }
+  .note { font-size: 0.85rem; color: #777; }
+  p, li { line-height: 1.5; }
+  code { background: rgba(127, 127, 127, 0.15); border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.9em; }
+  .optional-tag { font-size: 0.75rem; font-weight: 600; color: #777; border: 1px solid #999; border-radius: 3px; padding: 0.05rem 0.4rem; margin-left: 0.4rem; }
+  .checklist { list-style: none; padding: 0; margin: 0; }
+  .checklist li { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.5rem 0; }
+  .checklist input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
+  .checklist li.checked > span { color: #888; text-decoration: line-through; }
+  .progress-bar { background: rgba(127, 127, 127, 0.2); border-radius: 4px; height: 0.6rem; overflow: hidden; margin: 0.5rem 0 1rem; }
+  .progress-bar-fill { background: #1e8e3e; height: 100%; transition: width 0.2s; }
+  .progress-text { font-size: 0.85rem; color: #777; }
+  table.backup-table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+  table.backup-table th, table.backup-table td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #e0e0e0; font-size: 0.9rem; }
+  .excluded-box { background: rgba(217, 48, 37, 0.08); border: 1px solid rgba(217, 48, 37, 0.3); border-radius: 6px; padding: 0.6rem 1rem; margin: 0.75rem 0; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Ersteinrichtung</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+  <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
+  <p class="note">Checkliste für die einmalige Ersteinrichtung des Tools (Server-/Konto-seitige Schritte außerhalb
+    dieser Web-App) – kein Ersatz für die <a href="help.html">Anleitung</a>, die die Bedienung der fertig
+    eingerichteten App beschreibt. Der Haken-Status bleibt nur lokal in diesem Browser gespeichert.</p>
+
+  <div class="progress-text" id="progress-text"></div>
+  <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div></div>
+  <button type="button" id="reset-progress-btn">Fortschritt zurücksetzen</button>
+
+  <h2 id="supabase">1. Supabase (Pflicht)</h2>
+  <p>Speichert alle Daten (Postgres) und Bilder (Storage). Ohne dies startet die App nicht.</p>
+  <ul class="checklist" data-section="supabase">
+    <li data-id="supabase-project"><input type="checkbox"><span>Projekt auf <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> anlegen (kostenloser Free-Tier reicht zum Start).</span></li>
+    <li data-id="supabase-schema"><input type="checkbox"><span>Im SQL Editor den kompletten Inhalt von <code>supabase/schema.sql</code> ausführen (legt alle Tabellen an; bei einem späteren Update einfach erneut ausführen, bestehende Tabellen werden übersprungen).</span></li>
+    <li data-id="supabase-bucket-cards"><input type="checkbox"><span>Storage-Bucket <code>card-images</code> anlegen, <strong>„Public bucket" EINGESCHALTET</strong> lassen (eBay braucht eine dauerhaft erreichbare Bild-URL).</span></li>
+    <li data-id="supabase-bucket-receipts"><input type="checkbox"><span>Storage-Bucket <code>purchase-receipts</code> anlegen, <strong>„Public bucket" AUSGESCHALTET</strong> lassen (private Kaufbelege).</span></li>
+    <li data-id="supabase-bucket-backups"><input type="checkbox"><span>Storage-Bucket <code>backups</code> anlegen, ebenfalls <strong>„Public bucket" AUSGESCHALTET</strong> lassen (Ziel des wöchentlichen automatischen Backups).</span></li>
+    <li data-id="supabase-keys"><input type="checkbox"><span>Unter Project Settings → API: <code>Project URL</code> und <code>service_role</code>-Key kopieren (nicht den <code>anon</code>-Key).</span></li>
+    <li data-id="supabase-env"><input type="checkbox"><span>Als Umgebungsvariablen beim <code>webapp-poc</code>-Container setzen: <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_KEY</code>.</span></li>
+  </ul>
+
+  <h2 id="grundeinrichtung">2. Grundeinrichtung der Web-App (Pflicht)</h2>
+  <ul class="checklist" data-section="grundeinrichtung">
+    <li data-id="anthropic-key"><input type="checkbox"><span><code>ANTHROPIC_API_KEY</code> beim <code>webapp-poc</code>-Container setzen (KI-Kartenerkennung beim Scannen).</span></li>
+    <li data-id="app-start"><input type="checkbox"><span>Container starten (Docker oder lokal, siehe <code>webapp-poc/README.md</code>) und die App im Browser öffnen.</span></li>
+  </ul>
+
+  <h2 id="ebay">3. eBay-Anbindung <span class="optional-tag">optional</span></h2>
+  <p>Nur nötig, wenn Angebote über das Tool bei eBay veröffentlicht werden sollen. Läuft über einen separaten
+    <code>ebay-oauth-server</code>-Container, der als einziger Ort das eBay-Refresh-Token sieht.</p>
+  <ul class="checklist" data-section="ebay">
+    <li data-id="ebay-devaccount"><input type="checkbox"><span>Im <a href="https://developer.ebay.com/" target="_blank" rel="noopener">eBay Developer Program</a> ein Keyset anlegen (Sandbox zum Testen, später ein separates Produktions-Keyset).</span></li>
+    <li data-id="ebay-oauth-env"><input type="checkbox"><span>Beim <code>ebay-oauth-server</code>-Container setzen: <code>EBAY_CLIENT_ID</code>, <code>EBAY_CLIENT_SECRET</code>, <code>EBAY_RUNAME</code>.</span></li>
+    <li data-id="ebay-environment"><input type="checkbox"><span><code>EBAY_ENVIRONMENT</code> (<code>sandbox</code> oder <code>production</code>) bei <strong>beiden</strong> Containern identisch setzen – <code>ebay-oauth-server</code> und <code>webapp-poc</code> (Default bei beiden: <code>sandbox</code>).</span></li>
+    <li data-id="ebay-oauth-server-url"><input type="checkbox"><span>Falls der oauth-server nicht unter der Standardadresse läuft: <code>EBAY_OAUTH_SERVER_URL</code> beim <code>webapp-poc</code>-Container setzen.</span></li>
+    <li data-id="ebay-policies"><input type="checkbox"><span>Business Policies (Fulfillment/Payment/Return) für die verwendete Marketplace-ID (Standard <code>EBAY_DE</code>) anlegen – entweder im eBay Seller Hub oder per <code>POST /api/ebay/policies/bootstrap</code> am oauth-server (siehe <code>ebay-oauth-server/README.md</code>).</span></li>
+    <li data-id="ebay-oauth-flow"><input type="checkbox"><span>Einmalig <code>GET /ebay/oauth/start</code> am oauth-server aufrufen und den Autorisierungs-Flow gegen das eBay-Konto durchlaufen.</span></li>
+    <li data-id="ebay-live-test"><input type="checkbox"><span>Ersten Test-Entwurf anlegen und veröffentlichen (eine Karte, niedriger Preis), im eBay Seller Hub prüfen, dass Titel/Bild/Beschreibung/Preis/Kategorie stimmen.</span></li>
+  </ul>
+  <p class="note">Umstellung von Sandbox auf ein echtes Produktions-Konto: eigene Entwickler-Checkliste
+    <code>webapp-poc/PRODUCTION_CHECKLIST.md</code> im Repo (neues Produktions-Keyset, Business Policies im
+    echten Verkäuferkonto, Auszahlungsmethode hinterlegt) – nicht Teil dieser Seite, da es echte Kontoschritte
+    außerhalb der App betrifft.</p>
+
+  <h2 id="google-sheets">4. Google-Sheets-Sync <span class="optional-tag">optional</span></h2>
+  <p>Einseitiger Export Supabase → Sheets (Karten/Käufe/eBay/Wunschliste/Private Sammlung). Unabhängig vom
+    Backup-Download, der keine Google-Konfiguration braucht.</p>
+  <ul class="checklist" data-section="google-sheets">
+    <li data-id="google-project"><input type="checkbox"><span>In der Google Cloud Console ein Projekt wählen/anlegen und die <strong>Google Sheets API</strong> aktivieren.</span></li>
+    <li data-id="google-oauth-client"><input type="checkbox"><span>Unter „APIs &amp; Services" → „Credentials" einen OAuth-Client vom Typ <strong>„Web application"</strong> anlegen (nicht „Desktop app").</span></li>
+    <li data-id="google-redirect"><input type="checkbox"><span>Als autorisierte Redirect-URI eintragen: <code>http://&lt;server-adresse&gt;:8000/api/sheets/oauth/callback</code>.</span></li>
+    <li data-id="google-env"><input type="checkbox"><span>Beim <code>webapp-poc</code>-Container setzen: <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, <code>GOOGLE_REDIRECT_URI</code>.</span></li>
+    <li data-id="google-sheet"><input type="checkbox"><span>In Google Sheets eine neue Tabelle anlegen, die Tabellen-ID aus der URL kopieren.</span></li>
+    <li data-id="google-connect"><input type="checkbox"><span>In den <a href="settings.html">Einstellungen</a> auf „Mit Google verbinden" klicken, danach die Tabellen-ID eintragen und speichern.</span></li>
+    <li data-id="google-testuser"><input type="checkbox"><span>Falls der OAuth-Client im Google-Cloud-Testing-Modus ist: das eigene Google-Konto unter „Test users" eintragen, sonst lehnt Google den Consent-Screen ab.</span></li>
+  </ul>
+
+  <h2 id="email">5. E-Mail-Benachrichtigung <span class="optional-tag">optional</span></h2>
+  <p>Verschickt eine Zusammenfassung, sobald der automatische Hintergrund-Sync neue eBay-Verkäufe findet.</p>
+  <ul class="checklist" data-section="email">
+    <li data-id="email-smtp"><input type="checkbox"><span>SMTP-Zugangsdaten (Server, Port, Benutzername, Passwort, Absender/Empfänger) in den <a href="settings.html">Einstellungen</a> eintragen.</span></li>
+    <li data-id="email-gmail-hint"><input type="checkbox"><span>Bei Gmail mit aktivierter 2-Faktor-Authentifizierung: ein <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App-Passwort</a> erstellen und statt des normalen Kontopassworts eintragen (Gmail lehnt sonst mit „Application-specific password required" ab).</span></li>
+    <li data-id="email-test"><input type="checkbox"><span>„Test-E-Mail senden" in den Einstellungen klicken und Posteingang prüfen.</span></li>
+  </ul>
+
+  <h2 id="weiteres">6. Weiteres nach Bedarf <span class="optional-tag">optional</span></h2>
+  <ul class="checklist" data-section="weiteres">
+    <li data-id="absenderadresse"><input type="checkbox"><span>Absenderadresse für das druckbare Adress-Etikett/den Lieferschein hinterlegen (Einstellungen).</span></li>
+    <li data-id="mindestbestand"><input type="checkbox"><span>Mindestbestand-Schwelle für die Bestandswarnung im Inventar setzen (0 = deaktiviert).</span></li>
+    <li data-id="textbausteine"><input type="checkbox"><span>Angebots-Textbausteine für wiederkehrende eBay-Beschreibungshinweise anlegen.</span></li>
+    <li data-id="handyscan-volume"><input type="checkbox"><span>Für den „📱 Handyscan"-Button optional ein Docker-Volume auf <code>/data/handyscan</code> mounten, damit Rohkopien der Fotos dauerhaft erhalten bleiben.</span></li>
+    <li data-id="auto-relist"><input type="checkbox"><span>Automatisches Re-Listing aktivieren, falls lange unverkaufte eBay-Angebote automatisch neu eingestellt werden sollen (Einstellungen; zusätzlich pro Angebot eine Tagesanzahl eintragen).</span></li>
+  </ul>
+
+  <h2 id="backup-inhalt">Was wird automatisch gesichert</h2>
+  <p>Einmal pro Woche legt die App automatisch eine Backup-ZIP im Supabase-Storage-Bucket <code>backups</code> ab
+    (die letzten 4 Wochen bleiben erhalten, ältere werden gelöscht) – zusätzlich lässt sich jederzeit manuell per
+    „Jetzt sichern" in den <a href="settings.html">Einstellungen</a> ein Backup auslösen oder als ZIP
+    herunterladen. Enthalten sind alle folgenden Tabellen als JSON sowie alle Kartenbilder (Vorder-/Rückseite):</p>
+  <table class="backup-table">
+    <thead><tr><th>Tabelle</th><th>Inhalt</th></tr></thead>
+    <tbody>
+      <tr><td><code>cards</code></td><td>Alle erfassten Karten</td></tr>
+      <tr><td><code>scan_batches</code></td><td>Scan-Vorgänge (Zuordnung Karten → Scan-Bogen)</td></tr>
+      <tr><td><code>purchases</code> / <code>purchase_items</code></td><td>Käufe inkl. verknüpfter Karten</td></tr>
+      <tr><td><code>inventory</code></td><td>Lagerbestand (Menge/Zustand/Lagerort)</td></tr>
+      <tr><td><code>ebay_listings</code> / <code>ebay_sales</code></td><td>eBay-Angebote und -Verkäufe</td></tr>
+      <tr><td><code>manual_sales</code></td><td>Verkäufe außerhalb von eBay</td></tr>
+      <tr><td><code>price_research</code></td><td>Preisrecherche-Verlauf</td></tr>
+      <tr><td><code>wishlist_items</code> / <code>wishlist_price_checks</code></td><td>Wunschliste inkl. Preisverlauf</td></tr>
+      <tr><td><code>description_templates</code></td><td>Angebots-Textbausteine</td></tr>
+      <tr><td><code>portfolio_value_snapshots</code></td><td>Portfolio-Wertverlauf</td></tr>
+      <tr><td><code>dashboard_goals</code></td><td>Umsatz-/Gewinnziel</td></tr>
+    </tbody>
+  </table>
+  <div class="excluded-box">
+    <strong>Bewusst NICHT enthalten:</strong> <code>google_sheets_settings</code> (enthält den Google-OAuth-
+    Refresh-Token) und <code>app_status</code> (u. a. das SMTP-Passwort für die E-Mail-Benachrichtigung) – beides
+    Zugangsdaten, die in einer herunterladbaren bzw. in Supabase Storage abgelegten Backup-Datei nichts verloren
+    haben. Diese beiden Verbindungen müssen nach einem Wiederherstellen auf einem neuen Supabase-Projekt manuell
+    neu eingerichtet werden (siehe Abschnitte oben).
+  </div>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Haken-Status bleibt rein lokal im Browser (kein Server-Feld) - dies ist nur
+// eine persoenliche Erledigt-Markierung fuer eine einmalige Einrichtung, kein
+// geteilter Zustand zwischen Geraeten/Nutzern.
+const STORAGE_KEY = "dcardslab_onboarding_v1";
+
+function loadChecked() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function saveChecked(checkedIds) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...checkedIds]));
+  } catch (err) {
+    // Privater Modus/voller Speicher - Fortschritt lebt dann nur fuer die
+    // aktuelle Seitenansicht, kein harter Fehler noetig.
+  }
+}
+
+const checkedIds = loadChecked();
+const items = [...document.querySelectorAll(".checklist li[data-id]")];
+
+function updateProgress() {
+  const total = items.length;
+  const done = items.filter((li) => checkedIds.has(li.dataset.id)).length;
+  const percent = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById("progress-fill").style.width = percent + "%";
+  document.getElementById("progress-text").textContent = `${done} von ${total} Punkten erledigt (${percent} %)`;
+}
+
+for (const li of items) {
+  const checkbox = li.querySelector("input[type=checkbox]");
+  const isChecked = checkedIds.has(li.dataset.id);
+  checkbox.checked = isChecked;
+  li.classList.toggle("checked", isChecked);
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) checkedIds.add(li.dataset.id);
+    else checkedIds.delete(li.dataset.id);
+    li.classList.toggle("checked", checkbox.checked);
+    saveChecked(checkedIds);
+    updateProgress();
+  });
+}
+updateProgress();
+
+document.getElementById("reset-progress-btn").addEventListener("click", () => {
+  if (!confirm("Wirklich den gesamten Haken-Fortschritt zurücksetzen?")) return;
+  checkedIds.clear();
+  saveChecked(checkedIds);
+  for (const li of items) {
+    li.querySelector("input[type=checkbox]").checked = false;
+    li.classList.remove("checked");
+  }
+  updateProgress();
+});
+</script>
+</body>
+</html>

@@ -31,6 +31,12 @@ class BuildBackupZipTests(unittest.TestCase):
             "backup.db.all_ebay_sales": MagicMock(return_value=[]),
             "backup.db.all_inventory": MagicMock(return_value=[]),
             "backup.db.all_price_research": MagicMock(return_value=[]),
+            "backup.db.all_manual_sales": MagicMock(return_value=[]),
+            "backup.db.all_wishlist_items": MagicMock(return_value=[]),
+            "backup.db.all_wishlist_price_checks": MagicMock(return_value=[]),
+            "backup.db.all_description_templates": MagicMock(return_value=[]),
+            "backup.db.all_portfolio_value_snapshots": MagicMock(return_value=[]),
+            "backup.db.all_dashboard_goals": MagicMock(return_value=[]),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
@@ -49,8 +55,23 @@ class BuildBackupZipTests(unittest.TestCase):
         for table in (
             "scan_batches", "cards", "purchases", "purchase_items",
             "ebay_listings", "ebay_sales", "inventory", "price_research",
+            "manual_sales", "wishlist_items", "wishlist_price_checks",
+            "description_templates", "portfolio_value_snapshots", "dashboard_goals",
         ):
             self.assertIn(f"{table}.json", names)
+
+    def test_excludes_tables_with_credentials(self):
+        # google_sheets_settings (refresh_token) und app_status (smtp_password)
+        # duerfen nie im Backup landen, siehe _TABLE_NAMES-Kommentar.
+        self._patch_db()
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertNotIn("google_sheets_settings.json", names)
+        self.assertNotIn("app_status.json", names)
 
     def test_includes_images_for_cards_that_have_them(self):
         self._patch_db()

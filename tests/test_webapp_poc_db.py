@@ -2695,6 +2695,35 @@ class AllManualSalesTests(unittest.TestCase):
         mock_client.table.assert_called_once_with("manual_sales")
 
 
+class AllBackupHelperTests(unittest.TestCase):
+    # Reine Backup-Helfer fuer backup.py's dynamisches getattr(db, f"all_{table}")()
+    # - je ein Smoke-Test pro Tabelle reicht, gleiches Muster wie AllManualSalesTests.
+    def _assert_returns_all_rows(self, fn, table_name):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "x1"}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = fn()
+        self.assertEqual(result, [{"id": "x1"}])
+        mock_client.table.assert_called_once_with(table_name)
+
+    def test_all_wishlist_items(self):
+        self._assert_returns_all_rows(db.all_wishlist_items, "wishlist_items")
+
+    def test_all_wishlist_price_checks(self):
+        self._assert_returns_all_rows(db.all_wishlist_price_checks, "wishlist_price_checks")
+
+    def test_all_description_templates(self):
+        self._assert_returns_all_rows(db.all_description_templates, "description_templates")
+
+    def test_all_portfolio_value_snapshots(self):
+        self._assert_returns_all_rows(db.all_portfolio_value_snapshots, "portfolio_value_snapshots")
+
+    def test_all_dashboard_goals(self):
+        self._assert_returns_all_rows(db.all_dashboard_goals, "dashboard_goals")
+
+
 class SearchSalesTests(unittest.TestCase):
     def _table(self, ebay_rows, manual_rows, card_rows):
         def table(name):
