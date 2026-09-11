@@ -269,7 +269,9 @@ Build-Kontext ist bewusst der **Repo-Root** (nicht `webapp-poc/`), weil
 
 ```bash
 # Im Hauptordner des Repos (dcardslab-manager), nicht in webapp-poc/:
-docker build -f webapp-poc/Dockerfile -t dcardslab-webapp-poc .
+docker build -f webapp-poc/Dockerfile \
+  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+  -t dcardslab-webapp-poc .
 
 docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e ANTHROPIC_API_KEY=dein-api-key \
@@ -314,6 +316,20 @@ in Supabase gespeichert).
 
 Dann von irgendeinem Gerät im Tailscale-Netz: `http://<nas-tailscale-name>:8000`
 öffnen (Port 8000, nicht 8080 - das ist der OAuth-Server).
+
+### Prüfen, ob ein Update/PR wirklich im laufenden Container angekommen ist
+
+Unter Einstellungen ("Version") oder direkt per `GET /api/version` zeigt der
+Container, wann er zuletzt gebaut wurde (`built_at`, automatisch bei jedem
+Build gesetzt - auch über eine NAS-Docker-App mit eigenem "Neu bauen"-Knopf,
+ohne dass dafür ein `--build-arg` nötig ist) und, falls beim `docker build`
+mit `--build-arg GIT_COMMIT=$(git rev-parse --short HEAD)` gebaut wurde,
+zusätzlich den Commit-Kurzhash. Zeigt `built_at` einen alten Zeitpunkt, obwohl
+gerade neu gebaut wurde, liegt es fast immer daran, dass der lokale
+Repo-Checkout auf dem Deployment-Host vor dem Build nicht aktualisiert wurde
+(`git pull`/`git fetch && git reset --hard origin/main` im Checkout-Ordner,
+je nach eigenem Workflow, dann erneut bauen) - ein reiner Docker-Rebuild ohne
+vorheriges Nachziehen des Codes baut sonst unbemerkt den alten Stand erneut.
 
 `docker logs -f dcardslab-webapp-poc` zeigt Fehler beim Verarbeiten; zum
 Stoppen `docker rm -f dcardslab-webapp-poc`. Läuft ohne das optionale
