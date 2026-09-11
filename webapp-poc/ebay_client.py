@@ -4,10 +4,13 @@ Ports the proven logic already in ebay-oauth-server/app.py
 (condition_id_to_enum, get_listing_policies) so webapp-poc can call eBay
 directly for listing operations instead of proxying every call through
 that server (see design spec, "Architektur")."""
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
 import httpx
+
+logger = logging.getLogger("ebay_client")
 
 EBAY_OAUTH_SERVER_URL = os.environ.get(
     "EBAY_OAUTH_SERVER_URL", "http://ebay-oauth-server:8080"
@@ -240,6 +243,15 @@ def _request(method, token, path, json_body=None, params=None):
     return response
 
 
+# eBay verarbeitet Traffic-Daten mit Verzoegerung (per eBay-Doku und
+# Entwickler-Forum-Berichten oft ~2 Tage) - ein Zeitraum, der bis "heute"
+# reicht, bekommt fuer die juengsten Tage haeufig noch keine Daten und die
+# eBay-Antwort nennt das explizit in einem "warnings"-Feld. Das Ende des
+# Zeitraums deshalb bewusst ein paar Tage in die Vergangenheit legen statt
+# bis "heute".
+_REPORT_LAG_DAYS = 3
+
+
 def get_listing_views(token, listing_ids, days=30):
     """Aufrufe je Angebot der letzten `days` Tage (Sell Analytics API,
     getTrafficReport, Metrik LISTING_VIEWS_TOTAL) - Beobachter-/Watcher-
@@ -249,11 +261,15 @@ def get_listing_views(token, listing_ids, days=30):
     Braucht den zusaetzlichen OAuth-Scope sell.analytics.readonly (siehe
     README.md) - ohne ihn liefert eBay 403, was main.py als freundlichen
     Hinweis durchreicht. Gibt {listing_id: view_count} zurueck; ein
-    Angebot ganz ohne Treffer im Report (z. B. noch keine Aufrufe) fehlt
-    im Ergebnis-Dict."""
+    Angebot ganz ohne Treffer im Report fehlt im Ergebnis-Dict - eBay laesst
+    Angebote ohne Treffer im Report bewusst weg (kein Fehler), u. a. wenn
+    ein noch aktives, unverkauftes Angebot laenger als ca. 30 Tage laeuft
+    (Report-Eligibility-Regel von eBay) - die Aufrufzahl im eBay-eigenen
+    Verkaeufer-Cockpit ist davon nicht betroffen und kann daher hoeher
+    liegen als hier, siehe README.md."""
     if not listing_ids:
         return {}
-    end = datetime.now(timezone.utc).date()
+    end = datetime.now(timezone.utc).date() - timedelta(days=_REPORT_LAG_DAYS)
     start = end - timedelta(days=days)
     filter_value = (
         f"marketplace_ids:{{{MARKETPLACE_ID}}},"
@@ -265,12 +281,15 @@ def get_listing_views(token, listing_ids, days=30):
         params={"filter": filter_value, "dimension": "LISTING", "metric": "LISTING_VIEWS_TOTAL"},
     )
     # eBays einzelne dimensionValues/metricValues-Eintraege tragen selbst
-    # keinen Namen (z. B. kein "dimensionKey"/"metric"-Feld) - der Name
-    # steht nur einmalig in dimensionMetadata.metadataHeader. Da hier genau
+    # keinen Namen - der Name steht nur einmalig in header.dimensionKeys/
+    # header.metrics, positionsgleich zu den angefragten dimension-/metric-
+    # Query-Parametern (per eBay-OpenAPI-Spec bestaetigt). Da hier genau
     # eine Dimension (LISTING) und eine Metrik (LISTING_VIEWS_TOTAL)
-    # angefragt wird, reicht Positions- statt Namenszuordnung.
+    # angefragt wird, reicht Index 0.
+    body = response.json()
+    records = body.get("records") or []
     views = {}
-    for record in response.json().get("records") or []:
+    for record in records:
         dimension_values = record.get("dimensionValues") or []
         metric_values = record.get("metricValues") or []
         if not dimension_values or not metric_values:
@@ -279,6 +298,18 @@ def get_listing_views(token, listing_ids, days=30):
         if not listing_id:
             continue
         views[listing_id] = int(metric_values[0].get("value") or 0)
+    warnings = body.get("warnings") or []
+    if not views or warnings:
+        # Leeres Ergebnis trotz 200 ist bei dieser API oft kein Bug, sondern
+        # bedeutet "kein Treffer im Report" (siehe Docstring) - die rohe
+        # Antwort inkl. eventueller eBay-"warnings" mitloggen, damit sich das
+        # im Zweifel ohne Rateraten an echten eBay-Daten nachvollziehen
+        # laesst (z. B. `docker logs` des webapp-poc-Containers).
+        logger.info(
+            "get_listing_views: %d/%d Angebot(e) ohne Treffer im Report, "
+            "eBay-warnings=%s - rohe Antwort: %s",
+            len(listing_ids) - len(views), len(listing_ids), warnings, response.text[:2000],
+        )
     return views
 
 

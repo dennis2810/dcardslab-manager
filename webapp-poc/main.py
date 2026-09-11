@@ -1517,11 +1517,15 @@ def _listing_with_card(listing):
     return _expand_ebay_listings([listing])[0]
 
 
-def _publish_listing(listing, scheduled_at=None):
+def _publish_listing(listing, scheduled_at=None, relist=False):
     """Shared publish flow for POST .../publish, publish-bulk, and the
     app-side scheduler (ebay_scheduler.py) - one place for "validate
     required aspects, resolve policies, create/update inventory item +
-    offer, publish" so none of the three callers can drift apart."""
+    offer, publish" so none of the three callers can drift apart.
+    relist=True (only set by _relist_listing() below) marks that eBay just
+    assigned a fresh listing_id (withdraw+republish) - resets listing_since
+    and last_auto_relisted_at, unlike a plain edit-triggered republish of an
+    already-live listing (same listing_id, both untouched)."""
     listing_type = listing["listing_type"]
     missing = ebay_listing.missing_aspects(listing.get("aspects") or {}, listing_type)
     if missing:
@@ -1621,7 +1625,16 @@ def _publish_listing(listing, scheduled_at=None):
     if scheduled_at is not None:
         updates.update({"status": "Geplant", "scheduled_at": scheduled_at, "scheduling_mode": "native"})
     else:
-        updates.update({"status": "Veroeffentlicht", "published_at": datetime.now(timezone.utc).isoformat()})
+        now = datetime.now(timezone.utc).isoformat()
+        updates.update({"status": "Veroeffentlicht", "published_at": now})
+        # Erstveroeffentlichung (bisher keine ebay_listing_id) oder ein
+        # Neu-Einstellen (relist=True) setzen "seit wann laeuft dieses
+        # Listing" neu - eine reine Bearbeitung/Preisaenderung eines schon
+        # laufenden Angebots (weder noch) laesst listing_since unangetastet.
+        if relist or not listing.get("ebay_listing_id"):
+            updates["listing_since"] = now
+        if relist:
+            updates["last_auto_relisted_at"] = now
     return db.update_ebay_listing(listing["id"], updates)
 
 
@@ -1905,7 +1918,11 @@ def _relist_listing(listing):
     Call wie end_ebay_listing() oben, gefolgt vom bestehenden _publish_listing()-
     Ablauf (der - da ebay_offer_id schon gesetzt ist - update_offer() statt
     create_offer() nimmt, also dasselbe Offer wiederverwendet statt ein
-    zweites anzulegen)."""
+    zweites anzulegen). relist=True an _publish_listing() setzt dabei sowohl
+    listing_since (neue "Laeuft seit"-Anzeige) als auch last_auto_relisted_at
+    (das "Neu eingestellt"-Badge, trotz Namens nicht mehr nur fuer die
+    Automatik) neu - unabhaengig davon, ob manuell oder automatisch
+    ausgeloest."""
     if listing.get("ebay_offer_id"):
         try:
             token = ebay_client.get_access_token()
@@ -1914,7 +1931,7 @@ def _relist_listing(listing):
             raise HTTPException(status_code=401, detail=str(exc)) from exc
         except ebay_client.EbayApiError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return _publish_listing(listing)
+    return _publish_listing(listing, relist=True)
 
 
 @app.post("/api/ebay/listings/{listing_id}/relist")
@@ -1941,11 +1958,14 @@ def _run_auto_relist_once():
     einzelnen globalen An/Aus): der globale Schalter app_status.
     auto_relist_enabled UND die Markierung je Angebot (ebay_listings.
     auto_relist_after_days > 0, geprueft in db.list_listings_due_for_auto_relist()).
-    Jedes Angebot einzeln try/except-isoliert wie bei _sync_ebay_returns_once(),
-    last_auto_relisted_at wird auch bei einem Fehlschlag gesetzt (gleiches
-    Prinzip wie ebay_scheduler.py's mark_price_research_checked), damit ein
-    dauerhaft fehlschlagendes Angebot nicht bei jedem Takt erneut versucht
-    wird, sondern erst wieder nach auto_relist_after_days Tagen."""
+    Jedes Angebot einzeln try/except-isoliert wie bei _sync_ebay_returns_once().
+    last_auto_relisted_at wird bei Erfolg schon von _relist_listing() selbst
+    gesetzt (gilt seitdem auch fuer den manuellen Button); der Update-Call
+    hier im finally-Block ist der eigentlich wichtige Teil fuer den
+    Fehlerfall (gleiches Prinzip wie ebay_scheduler.py's
+    mark_price_research_checked), damit ein dauerhaft fehlschlagendes
+    Angebot nicht bei jedem Takt erneut versucht wird, sondern erst wieder
+    nach auto_relist_after_days Tagen."""
     status = db.get_app_status() or {}
     if not status.get("auto_relist_enabled"):
         return 0

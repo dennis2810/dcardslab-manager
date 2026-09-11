@@ -200,6 +200,29 @@ Ohne diesen zusätzlichen Scope liefert „Aufrufe laden" einen Fehler mit
 eBays Meldung (`insufficient_scope` o. ä.) - alles andere im Tool bleibt
 davon unberührt.
 
+**Bekannte Einschränkung: Zahlen können niedriger sein als im eBay-
+Verkäufer-Cockpit, oder für ein Angebot ganz fehlen.** `getTrafficReport`
+ist eine separate, öffentliche Report-API mit eigenen Regeln, die vom
+internen Seller-Hub/Cockpit-Dashboard abweichen (mehrfach in eBays
+Entwickler-Forum und -Community bestätigt):
+
+- **Verarbeitungsverzögerung**: aktuelle Tage sind oft noch nicht
+  verarbeitet - `get_listing_views()` fragt deshalb bewusst bis vor
+  `_REPORT_LAG_DAYS` (3 Tage) statt bis heute ab. eBay meldet das selbst
+  über ein `warnings`-Feld in der Antwort (im Container-Log sichtbar,
+  siehe unten).
+- **Eligibility-Regel**: ein noch aktives, unverkauftes Angebot, das
+  länger als ca. 30 Tage läuft, taucht im Report u. U. gar nicht mehr auf
+  - unabhängig vom gewählten Zeitraum. Das Verkäufer-Cockpit zeigt
+  Lifetime-Zahlen ohne diese Einschränkung und kann daher höher liegen.
+
+Liefert „Aufrufe laden" für ein Angebot weiterhin nichts, obwohl im
+eBay-Cockpit Besucher zu sehen sind: `docker logs` des `webapp-poc`-
+Containers nach `get_listing_views` durchsuchen - dort steht die rohe
+eBay-Antwort inkl. `warnings`, das zeigt, ob eBay das Angebot als
+"nicht berichtsfähig" einstuft oder die Daten schlicht noch nicht
+verarbeitet hat.
+
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
 Live gegen die echte eBay-Sandbox getestet (27.08.2026): `POST .../offer/{id}/publish`

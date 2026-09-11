@@ -271,13 +271,17 @@ if ("serviceWorker" in navigator) {
     sich außerdem eine E-Mail-Benachrichtigung einrichten, die bei neuen eBay-Verkäufen automatisch verschickt wird.
     Der Filter „Sport &amp; Non-Sport" grenzt die Angebotsliste nach Kartentyp ein.</p>
   <p>Der Button „Neu einstellen" auf der Kartenseite beendet ein veröffentlichtes Angebot und veröffentlicht es
-    sofort wieder neu – praktisch, um ein lange unverkauftes Angebot nochmal nach oben zu holen. Dieselbe Aktion
+    sofort wieder neu (eBay vergibt dabei ein frisches Angebot) – praktisch, um ein lange unverkauftes Angebot
+    nochmal nach oben zu holen. Dieselbe Aktion
     gibt es auch als Massenaktion „Ausgewählte neu einstellen" auf der eBay-Seite, mit derselben Gnadenfrist samt
     „Rückgängig" wie beim Massen-Beenden. Zusätzlich lässt
     sich beim Bearbeiten eines Angebots eine Tagesanzahl eintragen, nach der das automatisch passiert, sobald das
     Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
-    Einstellungen aktiviert sein. Automatisch neu eingestellte Angebote sind auf der Kartenseite mit „🔄 Automatisch
-    neu eingestellt am …" markiert.</p>
+    Einstellungen aktiviert sein. Ob manuell oder automatisch ausgelöst: ein Neu-Einstellen ist auf der Kartenseite
+    mit „🔄 Neu eingestellt am …" markiert, damit immer nachvollziehbar bleibt, dass (und wann) das passiert ist.
+    Dort steht außerdem „Eingestellt am … (läuft seit X Tagen)" – anders als „Zuletzt aktualisiert" (das auch eine
+    reine Preisänderung widerspiegelt) zeigt das, seit wann genau das aktuell laufende eBay-Angebot live ist, und
+    setzt sich bei jedem Neu-Einstellen zurück, weil eBay dabei ja ein komplett neues Angebot anlegt.</p>
   <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
     aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
     API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope

@@ -460,3 +460,17 @@ create table if not exists push_subscriptions (
     auth        text not null,
     created_at  timestamptz not null default now()
 );
+
+-- Migration (2026-09-11): seit wann das AKTUELL laufende eBay-Listing
+-- (ebay_listing_id) live ist - anders als published_at, das bei JEDER
+-- erneuten Veroeffentlichung ueberschrieben wird (auch bei einer reinen
+-- Bearbeitung/Preisaenderung eines bereits laufenden Angebots), wird
+-- listing_since nur beim allerersten Live-Gehen gesetzt und dann bei einem
+-- Neu-Einstellen zurueckgesetzt (eBay vergibt dabei ein frisches Listing,
+-- siehe main.py's _relist_listing()) - zeigt also "seit wann laeuft genau
+-- dieses eBay-Listing" statt "wann zuletzt irgendwas geaendert wurde".
+-- last_auto_relisted_at markiert seit dieser Migration nicht mehr nur ein
+-- automatisches, sondern jedes Neu-Einstellen (auch ueber den manuellen
+-- Button) - der Spaltenname blieb bewusst, um keine bestehende Spalte
+-- umbenennen zu muessen.
+alter table ebay_listings add column if not exists listing_since timestamptz;
