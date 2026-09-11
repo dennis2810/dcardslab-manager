@@ -161,7 +161,13 @@ if ("serviceWorker" in navigator) {
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
     um mehr als 20 % ab, erscheint zusätzlich ein Preis-Alarm. Einträge lassen sich per Checkbox mehrfach auswählen
     und auf einmal löschen.</p>
-  <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots. Nach einem Verkauf lassen
+  <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots; „Abbrechen" im
+    Bearbeiten-Formular verwirft nicht gespeicherte Änderungen und kehrt zur vorherigen Ansicht zurück. Um einem
+    bereits veröffentlichten Angebot nachträglich weitere Fotos hinzuzufügen, genügt es, im Abschnitt „Weitere Fotos"
+    (oben auf der Kartenseite) ein zusätzliches Bild hochzuladen und danach im eBay-Bereich auf „Bearbeiten" →
+    „Speichern" zu klicken (auch ohne sonst etwas zu ändern) – das Speichern eines veröffentlichten Angebots sendet
+    automatisch alle aktuell verknüpften Fotos (Vorder-/Rückseite plus weitere, bis zu eBays Limit von 12) erneut an
+    eBay. Nach einem Verkauf lassen
     sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
     automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Dort lässt sich auch die Trackingnummer
     samt Versanddienstleister eintragen und „An eBay übermitteln" klicken: eBay markiert die Bestellung dann selbst
@@ -243,6 +249,13 @@ if ("serviceWorker" in navigator) {
     Filtern/Suche auflistet. Eine eigene Spalte „Ansehen ↗" verlinkt bei veröffentlichten/verkauften Angeboten
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure.</p>
+  <p>„Von eBay importieren" legt für ein bereits von Hand auf eBay eingestelltes Angebot (also nicht über dieses Tool
+    erstellt) automatisch eine passende Karte samt Angebots-Datensatz an: einfach die eBay-Artikelnummer eintragen –
+    Titel, Preis und die ersten beiden Fotos werden von eBay geladen, die Fotos anschließend genau wie beim Scannen
+    per Bilderkennung ausgewertet. Ein solches importiertes Angebot bleibt bewusst reine Nachverfolgung (📥 in der
+    Status-Spalte markiert): Preisänderungen, weitere Massenaktionen oder das Beenden lehnt das Tool ab, da es dieses
+    Angebot nicht selbst bei eBay erstellt hat und es daher auch nicht verwalten kann – entsprechende Änderungen
+    bitte direkt auf eBay vornehmen.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder

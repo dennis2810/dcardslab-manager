@@ -272,6 +272,18 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
         mock_put.assert_called_once()
         mock_update_offer.assert_called_once()
 
+    def test_returns_409_for_imported_listing(self):
+        # Importiert (siehe import_ebay_listing()): status "Veroeffentlicht",
+        # aber ohne ebay_offer_id - die Inventory API kann so ein Angebot
+        # nicht verwalten, ein PATCH darf daher weder lokal noch bei eBay
+        # etwas aendern (siehe _is_externally_managed()).
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.patch("/api/ebay/listings/listing-1", json={"price": 12.0})
+        self.assertEqual(response.status_code, 409)
+        mock_update.assert_not_called()
+
 
 class DeleteEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
@@ -331,6 +343,14 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(updates["status"], "Veroeffentlicht")
         self.assertEqual(updates["ebay_offer_id"], "offer-1")
         self.assertEqual(updates["ebay_listing_id"], "L1")
+
+    def test_returns_409_for_imported_listing(self):
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.ebay_client.put_inventory_item") as mock_put:
+            response = client.post("/api/ebay/listings/listing-1/publish")
+        self.assertEqual(response.status_code, 409)
+        mock_put.assert_not_called()
 
     def test_sends_both_front_and_back_image_urls(self):
         # Regression test: the first real production publish only sent the
@@ -563,19 +583,6 @@ class EndEbayListingEndpointTests(unittest.TestCase):
         mock_withdraw.assert_called_once_with("tok", "offer-1")
         mock_update.assert_called_once_with("listing-1", {"status": "Beendet"})
 
-    def test_skips_withdraw_when_no_offer_id(self):
-        published = _listing(status="Veroeffentlicht", ebay_offer_id="")
-        with patch("main.db.get_ebay_listing", return_value=published), \
-             patch("main.db.update_ebay_listing", return_value=_listing(status="Beendet")), \
-             patch("main.db.get_card", return_value=_card()), \
-             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
-             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
-             patch("main.db.price_research_by_card_ids", return_value={}), \
-             patch("main.ebay_client.withdraw_offer") as mock_withdraw:
-            response = client.post("/api/ebay/listings/listing-1/end")
-        self.assertEqual(response.status_code, 200)
-        mock_withdraw.assert_not_called()
-
     def test_returns_502_when_withdraw_fails(self):
         published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
         with patch("main.db.get_ebay_listing", return_value=published), \
@@ -590,6 +597,20 @@ class EndEbayListingEndpointTests(unittest.TestCase):
              patch("main.ebay_client.get_access_token", side_effect=ebay_client.EbayNotAuthorizedError("kein Token")):
             response = client.post("/api/ebay/listings/listing-1/end")
         self.assertEqual(response.status_code, 401)
+
+    def test_returns_409_for_imported_listing_without_calling_ebay(self):
+        # Ein importiertes Angebot (kein ebay_offer_id, siehe
+        # import_ebay_listing()) darf "Beenden" nicht stillschweigend nur
+        # lokal auf "Beendet" setzen, waehrend es bei eBay weiterhin live
+        # bleibt - siehe _is_externally_managed().
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.db.update_ebay_listing") as mock_update, \
+             patch("main.ebay_client.withdraw_offer") as mock_withdraw:
+            response = client.post("/api/ebay/listings/listing-1/end")
+        self.assertEqual(response.status_code, 409)
+        mock_withdraw.assert_not_called()
+        mock_update.assert_not_called()
 
 
 class PublishBulkEndpointTests(unittest.TestCase):
@@ -630,6 +651,15 @@ class PublishBulkEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/listings/publish-bulk", json={"listing_ids": ["does-not-exist"]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["status"], "Fehler")
+
+    def test_imported_listing_reports_error_without_calling_ebay(self):
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.ebay_client.put_inventory_item") as mock_put:
+            response = client.post("/api/ebay/listings/publish-bulk", json={"listing_ids": ["listing-1"]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["status"], "Fehler")
+        mock_put.assert_not_called()
 
 
 class PriceBulkEndpointTests(unittest.TestCase):
@@ -703,6 +733,18 @@ class PriceBulkEndpointTests(unittest.TestCase):
     def test_missing_percent_is_400(self):
         response = client.post("/api/ebay/listings/price-bulk", json={"listing_ids": ["listing-1"]})
         self.assertEqual(response.status_code, 400)
+
+    def test_reports_error_for_imported_listing_without_updating(self):
+        imported = _listing(price=10.0, status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.post(
+                "/api/ebay/listings/price-bulk",
+                json={"listing_ids": ["listing-1"], "percent": -10},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.json()["results"][0])
+        mock_update.assert_not_called()
 
 
 class OauthStatusEndpointTests(unittest.TestCase):
@@ -1305,6 +1347,148 @@ class EbaySaleShippingAddressEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["shipped"])
         mock_update_card.assert_called_once_with("card-1", {"shipped": True})
+
+
+class ImportEbayListingEndpointTests(unittest.TestCase):
+    def _item(self, **overrides):
+        item = {
+            "title": "Max Mustermann Rookie Card",
+            "price": 12.5,
+            "currency": "EUR",
+            "condition": "Used",
+            "item_web_url": "https://www.ebay.de/itm/110412345678",
+            "image_urls": ["https://i.ebayimg.com/front.jpg", "https://i.ebayimg.com/back.jpg"],
+        }
+        item.update(overrides)
+        return item
+
+    def _photo_response(self):
+        resp = MagicMock()
+        resp.content = b"fake-image-bytes"
+        resp.raise_for_status.side_effect = None
+        return resp
+
+    def _patch_all(self, **overrides):
+        patches = {
+            "main.ebay_client.get_application_access_token": MagicMock(return_value="app-tok"),
+            "main.ebay_client.get_item_by_legacy_id": MagicMock(return_value=self._item()),
+            "main.httpx.get": MagicMock(return_value=self._photo_response()),
+            "main.recognize_card": MagicMock(return_value={"title": "Erkannter Titel"}),
+            "main.db.find_duplicate_card": MagicMock(return_value=None),
+            "main.db.create_batch": MagicMock(return_value="batch-1"),
+            "main.storage.upload_image": MagicMock(side_effect=lambda b, p, side, path: f"{b}/{p}_{side}.jpg"),
+            "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
+            "main.db.insert_card": MagicMock(return_value={
+                "id": "card-1", "card_no": 1, "title": "Erkannter Titel",
+                "front_image_path": "batch-1/1_front.jpg", "back_image_path": "batch-1/1_back.jpg",
+            }),
+            "main.db.update_batch_status": MagicMock(),
+            "main.db.create_inventory_item": MagicMock(),
+            "main.db.create_ebay_listing": MagicMock(return_value=_listing(id="listing-1", card_id="card-1")),
+            "main.db.update_ebay_listing": MagicMock(
+                return_value=_listing(
+                    id="listing-1", card_id="card-1", status="Veroeffentlicht",
+                    ebay_listing_id="110412345678",
+                )
+            ),
+            "main.db.get_cards_by_ids": MagicMock(return_value=[{"id": "card-1", "title": "Erkannter Titel"}]),
+            "main.db.manual_sale_info_by_card_id": MagicMock(return_value={}),
+            "main.db.price_research_by_card_ids": MagicMock(return_value={}),
+        }
+        patches.update(overrides)
+        patchers = [patch(target, new) for target, new in patches.items()]
+        for p in patchers:
+            self.addCleanup(p.stop)
+        return {target: p.start() for target, p in zip(patches, patchers)}
+
+    def _post_import(self, item_id="110412345678"):
+        return client.post("/api/ebay/import", data={"item_id": item_id})
+
+    def test_returns_400_for_empty_item_id(self):
+        self._patch_all()
+        response = client.post("/api/ebay/import", data={"item_id": "  "})
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_502_when_ebay_lookup_fails(self):
+        self._patch_all(**{
+            "main.ebay_client.get_item_by_legacy_id": MagicMock(
+                side_effect=ebay_client.EbayApiError("not found")
+            ),
+        })
+        response = self._post_import()
+        self.assertEqual(response.status_code, 502)
+
+    def test_returns_422_when_fewer_than_two_photos(self):
+        self._patch_all(**{
+            "main.ebay_client.get_item_by_legacy_id": MagicMock(
+                return_value=self._item(image_urls=["https://i.ebayimg.com/only.jpg"])
+            ),
+        })
+        response = self._post_import()
+        self.assertEqual(response.status_code, 422)
+
+    def test_creates_card_and_ebay_listing_on_success(self):
+        mocks = self._patch_all()
+        response = self._post_import()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["id"], "card-1")
+        self.assertEqual(body["ebay_listing"]["status"], "Veroeffentlicht")
+        self.assertEqual(body["ebay_listing"]["ebay_listing_id"], "110412345678")
+        mocks["main.db.create_batch"].assert_called_once_with(card_count=1)
+        mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "ok")
+        self.assertEqual(mocks["main.storage.upload_image"].call_count, 2)
+
+    def test_marks_listing_published_without_offer_id(self):
+        # Kein ebay_offer_id - das ist das Signal fuer "extern verwaltet",
+        # siehe Kommentar in main.py's import_ebay_listing().
+        mocks = self._patch_all()
+        self._post_import()
+        update_call = mocks["main.db.update_ebay_listing"].call_args
+        listing_id, fields = update_call.args
+        self.assertEqual(listing_id, "listing-1")
+        self.assertEqual(fields["status"], "Veroeffentlicht")
+        self.assertEqual(fields["ebay_listing_id"], "110412345678")
+        self.assertNotIn("ebay_offer_id", fields)
+
+    def test_uses_ebay_title_when_recognition_finds_none(self):
+        mocks = self._patch_all(**{
+            "main.recognize_card": MagicMock(return_value={"title": ""}),
+        })
+        self._post_import()
+        insert_fields = mocks["main.db.insert_card"].call_args.args[2]
+        self.assertEqual(insert_fields["title"], "Max Mustermann Rookie Card")
+
+    def test_creates_default_inventory_item(self):
+        mocks = self._patch_all()
+        self._post_import()
+        mocks["main.db.create_inventory_item"].assert_called_once_with(
+            "card-1", {"quantity": 1, "location": "", "notes": ""}
+        )
+
+    def test_attaches_possible_duplicate_when_found(self):
+        mocks = self._patch_all(**{
+            "main.db.find_duplicate_card": MagicMock(
+                return_value={"id": "card-existing", "card_no": 7}
+            ),
+        })
+        response = self._post_import()
+        body = response.json()
+        self.assertEqual(body["possible_duplicate"]["id"], "card-existing")
+
+    def test_photo_download_failure_returns_502(self):
+        import httpx as httpx_module
+        self._patch_all(**{"main.httpx.get": MagicMock(side_effect=httpx_module.ConnectError("nope"))})
+        response = self._post_import()
+        self.assertEqual(response.status_code, 502)
+
+    def test_insert_failure_marks_batch_failed_and_returns_502(self):
+        mocks = self._patch_all(**{
+            "main.db.insert_card": MagicMock(side_effect=RuntimeError("insert down")),
+        })
+        response = self._post_import()
+        self.assertEqual(response.status_code, 502)
+        mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
 
 
 if __name__ == "__main__":
