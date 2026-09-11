@@ -449,6 +449,15 @@ class SendTestNotificationEndpointTests(unittest.TestCase):
             response = client.post("/api/notification-settings/test")
         self.assertEqual(response.status_code, 502)
 
+    def test_returns_502_with_plain_hint_on_auth_error(self):
+        settings = {"smtp_host": "smtp.example.com", "smtp_port": 587, "smtp_from": "a@b.de", "smtp_to": "me@b.de"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email",
+                   side_effect=email_notify.SMTPAuthenticationHintError("App-Passwort noetig, siehe ...")):
+            response = client.post("/api/notification-settings/test")
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"], "App-Passwort noetig, siehe ...")
+
 
 class RunBackupNowEndpointTests(unittest.TestCase):
     def test_triggers_backup_and_returns_timestamp(self):

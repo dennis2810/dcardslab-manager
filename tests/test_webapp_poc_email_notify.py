@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "webapp-poc"))
 
+import smtplib  # noqa: E402
+
 import email_notify  # noqa: E402
 
 
@@ -71,6 +73,32 @@ class SendEmailTests(unittest.TestCase):
         with patch("email_notify.smtplib.SMTP", side_effect=OSError("connection refused")):
             with self.assertRaises(OSError):
                 email_notify.send_email(settings, "Betreff", "Text")
+
+    def test_gmail_app_password_error_gets_friendly_hint(self):
+        settings = _complete_settings()
+        mock_server = MagicMock()
+        mock_server.login.side_effect = smtplib.SMTPAuthenticationError(
+            534, b"5.7.9 Application-specific password required. For more information, go to\n5.7.9  https://support.google.com/mail/?p=InvalidSecondFactor"
+        )
+        mock_smtp_cm = MagicMock()
+        mock_smtp_cm.__enter__.return_value = mock_server
+        with patch("email_notify.smtplib.SMTP", return_value=mock_smtp_cm):
+            with self.assertRaises(email_notify.SMTPAuthenticationHintError) as ctx:
+                email_notify.send_email(settings, "Betreff", "Text")
+        self.assertIn("App-Passwort", str(ctx.exception))
+        self.assertIn("myaccount.google.com/apppasswords", str(ctx.exception))
+
+    def test_other_auth_errors_keep_generic_message(self):
+        settings = _complete_settings()
+        mock_server = MagicMock()
+        mock_server.login.side_effect = smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+        mock_smtp_cm = MagicMock()
+        mock_smtp_cm.__enter__.return_value = mock_server
+        with patch("email_notify.smtplib.SMTP", return_value=mock_smtp_cm):
+            with self.assertRaises(email_notify.SMTPAuthenticationHintError) as ctx:
+                email_notify.send_email(settings, "Betreff", "Text")
+        self.assertIn("535", str(ctx.exception))
+        self.assertNotIn("App-Passwort", str(ctx.exception))
 
 
 class FormatSaleNotificationTests(unittest.TestCase):
