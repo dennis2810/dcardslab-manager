@@ -149,7 +149,9 @@ if ("serviceWorker" in navigator) {
       <option value="non_sport">Nur Non-Sport</option>
     </select>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
+    <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
   </div>
+  <p id="views-status" class="no-print"></p>
   <div class="controls no-print">
     <label>Verkauft von <input type="date" id="sold-from"></label>
     <label>bis <input type="date" id="sold-to"></label>
@@ -193,6 +195,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
             <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
+            <th>Aufrufe</th>
             <th>eBay</th>
           </tr>
         </thead>
@@ -343,6 +346,11 @@ function daysPending(listing) {
 const SELECTABLE_STATUSES = new Set(["Entwurf", "Fehler"]);
 
 let currentListings = [];
+// Aufrufe je eBay-Angebots-ID (ebay_listing_id -> Zahl), nur nach einem
+// Klick auf "Aufrufe laden" befuellt - siehe loadViews() unten. Bleibt
+// ueber ein render() hinweg erhalten (nicht Teil von currentListings),
+// damit ein Sortieren/Blaettern die schon geladenen Werte nicht verwirft.
+let listingViews = {};
 // Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
 // nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
 // ueber alle Seiten hinweg). Gleiches Muster wie cards.html.
@@ -638,6 +646,14 @@ function render(listings) {
     const updatedTd = document.createElement("td");
     updatedTd.textContent = formatDateTime(listing.published_at);
     tr.appendChild(updatedTd);
+
+    const viewsTd = document.createElement("td");
+    viewsTd.className = "views-cell";
+    if (listing.ebay_listing_id) {
+      viewsTd.dataset.listingId = listing.ebay_listing_id;
+      viewsTd.textContent = listing.ebay_listing_id in listingViews ? listingViews[listing.ebay_listing_id] : "–";
+    }
+    tr.appendChild(viewsTd);
 
     const ebayLinkTd = document.createElement("td");
     if (listing.ebay_listing_id) {
@@ -1053,6 +1069,46 @@ document.getElementById("sync-sales-btn").addEventListener("click", async () => 
   } catch (err) {
     syncStatus.textContent = "Fehler: " + err;
     syncStatus.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+// Aufrufe der Sell Analytics API (getTrafficReport) - eigener API-Aufruf
+// mit eigenem Tageslimit, deshalb bewusst nicht bei jedem loadListings()
+// mitgeladen, sondern nur per Klick fuer die aktuell sichtbare Seite.
+// Braucht den zusaetzlichen OAuth-Scope sell.analytics.readonly - ohne ihn
+// liefert main.py einen 502 mit der eBay-Fehlermeldung (u. a.
+// "insufficient_scope"), siehe README.md, "Web-Push-Benachrichtigungen
+// einrichten"-Nachbarabschnitt "Aufrufe/Beobachter einrichten".
+document.getElementById("load-views-btn").addEventListener("click", async () => {
+  const viewsStatus = document.getElementById("views-status");
+  const ids = [...new Set(
+    currentPageItems
+      .filter((l) => l.ebay_listing_id && (l.status === "Veroeffentlicht" || l.status === "Verkauft"))
+      .map((l) => l.ebay_listing_id)
+  )];
+  if (ids.length === 0) {
+    viewsStatus.textContent = "Keine veröffentlichten Angebote auf dieser Seite.";
+    viewsStatus.className = "";
+    return;
+  }
+  viewsStatus.textContent = "Lädt …";
+  viewsStatus.className = "";
+  try {
+    const res = await fetch("/api/ebay/listings/views?listing_ids=" + encodeURIComponent(ids.join(",")));
+    const data = await res.json();
+    if (!res.ok) {
+      viewsStatus.textContent = "Fehler: " + (data.detail || res.statusText);
+      viewsStatus.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
+      return;
+    }
+    Object.assign(listingViews, data.views);
+    viewsStatus.textContent = "";
+    render(sortedListings());
+  } catch (err) {
+    viewsStatus.textContent = "Fehler: " + err;
+    viewsStatus.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

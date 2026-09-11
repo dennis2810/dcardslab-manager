@@ -87,6 +87,7 @@ if ("serviceWorker" in navigator) {
     <p>Anleitung zu Scan, Karten, Käufen, eBay, Inventar, Statistiken und Dashboard.</p>
     <a href="help.html"><button type="button">Anleitung öffnen</button></a>
     <a href="release-notes.html"><button type="button">Release-Notes öffnen</button></a>
+    <a href="onboarding.html"><button type="button">Ersteinrichtung öffnen</button></a>
   </section>
 
   <section id="sheets-section">
@@ -109,15 +110,22 @@ if ("serviceWorker" in navigator) {
 
   <section id="backup-section">
     <h2>Backup</h2>
-    <p>Lädt eine ZIP-Datei mit allen Daten (Scans, Karten, Käufe, eBay-Angebote
-      und -Verkäufe, Inventar, Preisrecherche-Verlauf) als JSON sowie allen
-      Kartenbildern herunter. Zusätzlich wird automatisch einmal pro Woche
+    <p>Lädt eine ZIP-Datei mit allen Daten als JSON sowie allen Kartenbildern herunter (<a href="onboarding.html#backup-inhalt">genaue Liste, was enthalten ist</a>). Zusätzlich wird automatisch einmal pro Woche
       ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt
       (die letzten 4 Wochen werden aufbewahrt).</p>
     <a href="/api/backup"><button type="button">Backup herunterladen</button></a>
     <button type="button" id="run-backup-now-btn">Jetzt automatisches Backup starten</button>
     <p class="status" id="last-backup-status"></p>
     <p class="status" id="last-auto-backup-status"></p>
+
+    <h3>Backup wiederherstellen</h3>
+    <p>Spielt eine zuvor heruntergeladene Backup-ZIP wieder ein. Bestehende Zeilen werden anhand ihrer ID
+      aktualisiert, neue eingefügt – <strong>nichts wird vorher gelöscht</strong> (kein Wipe-and-Replace). Google-
+      Sheets-Verbindung und SMTP-Passwort sind nie Teil eines Backups und müssen nach einer Wiederherstellung auf
+      einem neuen Supabase-Projekt separat neu eingerichtet werden.</p>
+    <input type="file" id="restore-file-input" accept=".zip">
+    <button type="button" id="restore-backup-btn">Wiederherstellen</button>
+    <p class="status" id="restore-status"></p>
   </section>
 
   <section id="low-stock-section">
@@ -158,6 +166,18 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="save-notification-settings-btn">Speichern</button>
     <button type="button" id="send-test-email-btn">Test-E-Mail senden</button>
     <p class="status" id="notification-settings-status"></p>
+  </section>
+
+  <section id="push-notification-section">
+    <h2>Push-Benachrichtigungen</h2>
+    <p>Zusätzlich zur E-Mail: eine Browser-Benachrichtigung auf diesem Gerät, sobald neue eBay-Verkäufe
+      gefunden werden (gleicher Schalter "Bei neuen eBay-Verkäufen benachrichtigen" oben). Auf dem Handy
+      funktioniert das auch bei geschlossener App, wenn die Seite zuvor über "Zum Startbildschirm hinzufügen"
+      installiert wurde (iOS ab Version 16.4, Android ohne Einschränkung).</p>
+    <button type="button" id="enable-push-btn">Push-Benachrichtigungen aktivieren</button>
+    <button type="button" id="disable-push-btn" hidden>Push-Benachrichtigungen deaktivieren</button>
+    <button type="button" id="send-test-push-btn" hidden>Test-Push senden</button>
+    <p class="status" id="push-notification-status"></p>
   </section>
 
   <section id="auto-relist-section">
@@ -404,6 +424,52 @@ document.getElementById("run-backup-now-btn").addEventListener("click", async ()
   }
 });
 
+document.getElementById("restore-backup-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("restore-backup-btn");
+  const statusEl = document.getElementById("restore-status");
+  const fileInput = document.getElementById("restore-file-input");
+  const file = fileInput.files[0];
+  if (!file) {
+    statusEl.textContent = "Bitte zuerst eine Backup-ZIP auswählen.";
+    statusEl.className = "error";
+    return;
+  }
+  if (!confirm(
+    "Backup wirklich wiederherstellen? Vorhandene Zeilen werden mit den Werten aus der Datei überschrieben " +
+    "(anhand ihrer ID) – nichts wird gelöscht, aber das ist trotzdem nicht rückgängig zu machen."
+  )) return;
+
+  btn.disabled = true;
+  statusEl.textContent = "Stellt wieder her …";
+  statusEl.className = "status";
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/backup/restore", { method: "POST", body: formData });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    const tableCount = Object.keys(body.tables || {}).length;
+    const rowCount = Object.values(body.tables || {}).reduce((sum, n) => sum + n, 0);
+    let message = `${rowCount} Zeile(n) in ${tableCount} Tabelle(n) wiederhergestellt, ${body.images || 0} Bild(er).`;
+    if (body.errors && body.errors.length) message += ` ${body.errors.length} Fehler.`;
+    statusEl.textContent = message;
+    statusEl.className = body.errors && body.errors.length ? "error" : "status";
+    showToast(message, Boolean(body.errors && body.errors.length));
+    fileInput.value = "";
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("save-sender-address-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("sender-address-status");
   const address = document.getElementById("sender-address-input").value;
@@ -553,6 +619,134 @@ document.getElementById("send-test-email-btn").addEventListener("click", async (
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+// Web-Push-Abo (siehe push_notify.py) - der VAPID-Public-Key kommt vom
+// Server (POST /api/push/vapid-public-key liefert nur den öffentlichen
+// Teil), applicationServerKey erwartet ihn aber als Uint8Array statt als
+// Base64-String.
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+const pushEnableBtn = document.getElementById("enable-push-btn");
+const pushDisableBtn = document.getElementById("disable-push-btn");
+const pushTestBtn = document.getElementById("send-test-push-btn");
+const pushStatusEl = document.getElementById("push-notification-status");
+
+function setPushButtons(subscribed) {
+  pushEnableBtn.hidden = subscribed;
+  pushDisableBtn.hidden = !subscribed;
+  pushTestBtn.hidden = !subscribed;
+}
+
+async function refreshPushUI() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    pushStatusEl.textContent = "Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.";
+    pushStatusEl.className = "error";
+    pushEnableBtn.hidden = true;
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    setPushButtons(Boolean(subscription));
+  } catch (err) {
+    // Kein harter Fehler - der "Aktivieren"-Button bleibt einfach sichtbar,
+    // ein Klick versucht es erneut.
+  }
+}
+refreshPushUI();
+
+pushEnableBtn.addEventListener("click", async () => {
+  pushStatusEl.textContent = "Aktiviere …";
+  pushStatusEl.className = "status";
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      pushStatusEl.textContent = "Berechtigung für Benachrichtigungen wurde nicht erteilt.";
+      pushStatusEl.className = "error";
+      return;
+    }
+    const keyRes = await fetch("/api/push/vapid-public-key");
+    const keyBody = await keyRes.json();
+    if (!keyBody.configured) {
+      pushStatusEl.textContent = "Push ist serverseitig nicht konfiguriert (VAPID-Schlüssel fehlen, siehe Ersteinrichtung).";
+      pushStatusEl.className = "error";
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyBody.public_key),
+    });
+    const subJson = subscription.toJSON();
+    const res = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      throw new Error(body.detail || res.statusText);
+    }
+    setPushButtons(true);
+    pushStatusEl.textContent = "Push-Benachrichtigungen aktiviert.";
+    pushStatusEl.className = "status";
+    showToast("Push-Benachrichtigungen aktiviert.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+pushDisableBtn.addEventListener("click", async () => {
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription) {
+      await fetch("/api/push/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      await subscription.unsubscribe();
+    }
+    setPushButtons(false);
+    pushStatusEl.textContent = "Push-Benachrichtigungen deaktiviert.";
+    pushStatusEl.className = "status";
+    showToast("Push-Benachrichtigungen deaktiviert.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+pushTestBtn.addEventListener("click", async () => {
+  pushStatusEl.textContent = "Sendet Test-Push …";
+  pushStatusEl.className = "status";
+  try {
+    const res = await fetch("/api/push/test", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      pushStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      pushStatusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    pushStatusEl.textContent = `Test-Push an ${body.sent} Gerät(e) gesendet.`;
+    pushStatusEl.className = "status";
+    showToast("Test-Push gesendet.");
+  } catch (err) {
+    pushStatusEl.textContent = "Fehler: " + err;
+    pushStatusEl.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

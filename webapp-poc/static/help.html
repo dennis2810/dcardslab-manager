@@ -278,6 +278,11 @@ if ("serviceWorker" in navigator) {
     Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
     Einstellungen aktiviert sein. Automatisch neu eingestellte Angebote sind auf der Kartenseite mit „🔄 Automatisch
     neu eingestellt am …" markiert.</p>
+  <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
+    aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
+    API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope
+    braucht (siehe README.md). Eine Beobachter-/Watcher-Anzahl bietet eBay über die moderne API nicht mehr
+    zuverlässig an.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
@@ -401,7 +406,10 @@ if ("serviceWorker" in navigator) {
     einmal pro Woche ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt (die letzten 4 Wochen
     werden aufbewahrt); der Zeitpunkt des letzten automatischen Backups wird ebenfalls angezeigt. Der Button
     „Jetzt automatisches Backup starten" löst diesen Hintergrund-Lauf sofort aus, statt auf den wöchentlichen
-    Rhythmus zu warten. Ein Link
+    Rhythmus zu warten. Der Bereich „Backup wiederherstellen" spielt ein zuvor heruntergeladenes oder automatisch
+    erstelltes Backup-ZIP wieder ein – bestehende Datensätze werden anhand ihrer ID aktualisiert, neue ergänzt,
+    nichts wird dabei gelöscht (Zugangsdaten wie das SMTP-Passwort oder der Google-Sheets-Token sind nie Teil eines
+    Backups und können daher auch nicht wiederhergestellt werden). Ein Link
     „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle. Die Mindestbestand-Schwelle legt fest, ab
     welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Die Absenderadresse wird
     als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Die
@@ -409,10 +417,14 @@ if ("serviceWorker" in navigator) {
     Kartenserie), die sich beim Anlegen eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf
     der Kartenübersicht – optional auswählen lassen, statt denselben Text immer wieder neu einzutippen. Eine
     E-Mail-Benachrichtigung (SMTP-Server konfigurieren) informiert automatisch über neue eBay-Verkäufe, sobald der
-    Hintergrund-Sync welche findet. Der Schalter „Automatisches Re-Listing" ist die globale Sicherheitsbremse für
+    Hintergrund-Sync welche findet. Zusätzlich lassen sich Push-Benachrichtigungen direkt im Browser aktivieren
+    (Button „Push-Benachrichtigungen aktivieren") – nutzt denselben „Bei neuen eBay-Verkäufen benachrichtigen"-Schalter
+    wie die E-Mail und funktioniert auf dem Handy auch bei geschlossener App, sobald die Seite zum Startbildschirm
+    hinzugefügt wurde. Der Schalter „Automatisches Re-Listing" ist die globale Sicherheitsbremse für
     das automatische Neu-Einstellen unverkaufter eBay-Angebote (siehe eBay) – zusätzlich muss pro Angebot eine
     Tagesanzahl eingetragen sein, damit die Automation tatsächlich greift. Von hier
-    aus geht es auch zu dieser Anleitung und zu den Release-Notes.</p>
+    aus geht es auch zu dieser Anleitung, zu den Release-Notes und zur neuen Ersteinrichtung-Seite (Checkliste für
+    die einmalige Server-/Konto-Einrichtung: Supabase, eBay, Google Sheets, SMTP, Umgebungsvariablen).</p>
 
   <h2 id="tipps">Kürzel &amp; Tipps</h2>
   <ul>

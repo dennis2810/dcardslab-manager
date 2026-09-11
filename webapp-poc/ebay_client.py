@@ -5,6 +5,7 @@ Ports the proven logic already in ebay-oauth-server/app.py
 directly for listing operations instead of proxying every call through
 that server (see design spec, "Architektur")."""
 import os
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -237,6 +238,42 @@ def _request(method, token, path, json_body=None, params=None):
     if response.status_code >= 400:
         raise EbayApiError(response.text)
     return response
+
+
+def get_listing_views(token, listing_ids, days=30):
+    """Aufrufe je Angebot der letzten `days` Tage (Sell Analytics API,
+    getTrafficReport, Metrik LISTING_VIEWS_TOTAL) - Beobachter-/Watcher-
+    Anzahl ist bewusst NICHT enthalten: das dafuer noetige watchCount-Feld
+    der Browse API ist von eBay gesperrt und braucht ein separat zu
+    beantragendes "App Check"-Ticket, siehe Klaerung mit dem Nutzer.
+    Braucht den zusaetzlichen OAuth-Scope sell.analytics.readonly (siehe
+    README.md) - ohne ihn liefert eBay 403, was main.py als freundlichen
+    Hinweis durchreicht. Gibt {listing_id: view_count} zurueck; ein
+    Angebot ganz ohne Treffer im Report (z. B. noch keine Aufrufe) fehlt
+    im Ergebnis-Dict."""
+    if not listing_ids:
+        return {}
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=days)
+    filter_value = (
+        f"marketplace_ids:{{{MARKETPLACE_ID}}},"
+        f"date_range:[{start:%Y%m%d}..{end:%Y%m%d}],"
+        f"listing_ids:{{{'|'.join(listing_ids)}}}"
+    )
+    response = _request(
+        "GET", token, "/sell/analytics/v1/traffic_report",
+        params={"filter": filter_value, "dimension": "LISTING", "metric": "LISTING_VIEWS_TOTAL"},
+    )
+    views = {}
+    for record in response.json().get("records") or []:
+        listing_id = None
+        for dimension_value in record.get("dimensionValues") or []:
+            if dimension_value.get("dimensionKey") == "LISTING":
+                listing_id = dimension_value.get("value")
+        for metric_value in record.get("metricValues") or []:
+            if listing_id and metric_value.get("metric") == "LISTING_VIEWS_TOTAL":
+                views[listing_id] = int(metric_value.get("value") or 0)
+    return views
 
 
 def get_listing_policies(token, marketplace_id=MARKETPLACE_ID):

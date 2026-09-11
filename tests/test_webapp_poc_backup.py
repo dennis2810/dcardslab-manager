@@ -1,5 +1,6 @@
 """Tests for webapp-poc/backup.py."""
 import io
+import json
 import sys
 import zipfile
 import unittest
@@ -15,7 +16,10 @@ import backup  # noqa: E402
 
 def _cards():
     return [
-        {"id": "c1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"},
+        {
+            "id": "c1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg",
+            "extra_image_paths": "b1/1_extra_aaaa.jpg,b1/1_extra_bbbb.jpg",
+        },
         {"id": "c2", "front_image_path": None, "back_image_path": None},
     ]
 
@@ -31,6 +35,12 @@ class BuildBackupZipTests(unittest.TestCase):
             "backup.db.all_ebay_sales": MagicMock(return_value=[]),
             "backup.db.all_inventory": MagicMock(return_value=[]),
             "backup.db.all_price_research": MagicMock(return_value=[]),
+            "backup.db.all_manual_sales": MagicMock(return_value=[]),
+            "backup.db.all_wishlist_items": MagicMock(return_value=[]),
+            "backup.db.all_wishlist_price_checks": MagicMock(return_value=[]),
+            "backup.db.all_description_templates": MagicMock(return_value=[]),
+            "backup.db.all_portfolio_value_snapshots": MagicMock(return_value=[]),
+            "backup.db.all_dashboard_goals": MagicMock(return_value=[]),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
@@ -49,8 +59,35 @@ class BuildBackupZipTests(unittest.TestCase):
         for table in (
             "scan_batches", "cards", "purchases", "purchase_items",
             "ebay_listings", "ebay_sales", "inventory", "price_research",
+            "manual_sales", "wishlist_items", "wishlist_price_checks",
+            "description_templates", "portfolio_value_snapshots", "dashboard_goals",
         ):
             self.assertIn(f"{table}.json", names)
+
+    def test_excludes_tables_with_credentials(self):
+        # google_sheets_settings (refresh_token) und app_status (smtp_password)
+        # duerfen nie im Backup landen, siehe _TABLE_NAMES-Kommentar.
+        self._patch_db()
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertNotIn("google_sheets_settings.json", names)
+        self.assertNotIn("app_status.json", names)
+
+    def test_excludes_push_subscriptions(self):
+        # Geraetegebundene Web-Push-Abos (push_notify.py) haben nichts mit
+        # den eigentlichen Nutzdaten zu tun, siehe _TABLE_NAMES-Kommentar.
+        self._patch_db()
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertNotIn("push_subscriptions.json", names)
 
     def test_includes_images_for_cards_that_have_them(self):
         self._patch_db()
@@ -62,6 +99,17 @@ class BuildBackupZipTests(unittest.TestCase):
             names = zf.namelist()
         self.assertIn("images/b1/1_front.jpg", names)
         self.assertIn("images/b1/1_back.jpg", names)
+
+    def test_includes_extra_images_for_cards_that_have_them(self):
+        self._patch_db()
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
+        with patch("backup.get_client", return_value=mock_client):
+            data = backup.build_backup_zip()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+        self.assertIn("images/b1/1_extra_aaaa.jpg", names)
+        self.assertIn("images/b1/1_extra_bbbb.jpg", names)
 
     def test_skips_image_that_fails_to_download_instead_of_crashing(self):
         self._patch_db()
@@ -80,8 +128,8 @@ class BuildBackupZipTests(unittest.TestCase):
         mock_client.storage.from_.return_value.download.return_value = b"fake-image-bytes"
         with patch("backup.get_client", return_value=mock_client):
             backup.build_backup_zip()
-        # Only 2 downloads (front+back for c1) - c2 has no image paths.
-        self.assertEqual(mock_client.storage.from_.return_value.download.call_count, 2)
+        # 4 downloads for c1 (front+back+2 extras) - c2 has no image paths.
+        self.assertEqual(mock_client.storage.from_.return_value.download.call_count, 4)
 
     def test_skips_a_table_that_does_not_exist_yet_instead_of_crashing(self):
         # z.B. eine Migration (wie price_research), die in dieser Supabase-
@@ -96,6 +144,69 @@ class BuildBackupZipTests(unittest.TestCase):
             names = zf.namelist()
         self.assertIn("cards.json", names)
         self.assertNotIn("price_research.json", names)
+
+
+def _build_zip(tables=None, images=None):
+    tables = tables or {}
+    images = images or {}
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for table, rows in tables.items():
+            zf.writestr(f"{table}.json", json.dumps(rows))
+        for object_path, data in images.items():
+            zf.writestr(f"images/{object_path}", data)
+    return buf.getvalue()
+
+
+class RestoreBackupZipTests(unittest.TestCase):
+    def test_upserts_rows_per_table(self):
+        data = _build_zip(tables={"cards": [{"id": "c1"}, {"id": "c2"}]})
+        with patch("backup.db.bulk_upsert_rows") as mock_upsert:
+            summary = backup.restore_backup_zip(data)
+        mock_upsert.assert_called_once_with("cards", [{"id": "c1"}, {"id": "c2"}])
+        self.assertEqual(summary["tables"]["cards"], 2)
+
+    def test_restores_images(self):
+        data = _build_zip(images={"b1/1_front.jpg": b"fake-bytes"})
+        with patch("backup.storage.upload_raw_image") as mock_upload:
+            summary = backup.restore_backup_zip(data)
+        mock_upload.assert_called_once_with("b1/1_front.jpg", b"fake-bytes")
+        self.assertEqual(summary["images"], 1)
+
+    def test_ignores_tables_not_in_allowlist(self):
+        # z.B. ein manipuliertes/fremdes ZIP mit einer nicht erwarteten Datei -
+        # nur Dateien, die genau einem Namen aus backup._TABLE_NAMES
+        # entsprechen, werden ueberhaupt gelesen.
+        data = _build_zip(tables={"google_sheets_settings": [{"id": True, "refresh_token": "secret"}]})
+        with patch("backup.db.bulk_upsert_rows") as mock_upsert:
+            summary = backup.restore_backup_zip(data)
+        mock_upsert.assert_not_called()
+        self.assertEqual(summary["tables"], {})
+
+    def test_survives_a_single_table_failure(self):
+        data = _build_zip(tables={"cards": [{"id": "c1"}], "purchases": [{"id": "p1"}]})
+        with patch("backup.db.bulk_upsert_rows", side_effect=[RuntimeError("db down"), None]):
+            summary = backup.restore_backup_zip(data)  # must not raise
+        self.assertTrue(any("cards" in e for e in summary["errors"]))
+        self.assertEqual(summary["tables"].get("purchases"), 1)
+
+    def test_survives_a_single_image_failure(self):
+        data = _build_zip(images={"b1/1_front.jpg": b"x", "b1/1_back.jpg": b"y"})
+        with patch("backup.storage.upload_raw_image", side_effect=[RuntimeError("storage down"), None]):
+            summary = backup.restore_backup_zip(data)  # must not raise
+        self.assertEqual(summary["images"], 1)
+        self.assertEqual(len(summary["errors"]), 1)
+
+    def test_raises_on_invalid_zip(self):
+        with self.assertRaises(zipfile.BadZipFile):
+            backup.restore_backup_zip(b"not a zip file")
+
+    def test_skips_empty_table_without_calling_upsert(self):
+        data = _build_zip(tables={"cards": []})
+        with patch("backup.db.bulk_upsert_rows") as mock_upsert:
+            summary = backup.restore_backup_zip(data)
+        mock_upsert.assert_not_called()
+        self.assertEqual(summary["tables"]["cards"], 0)
 
 
 class RunScheduledBackupOnceTests(unittest.TestCase):

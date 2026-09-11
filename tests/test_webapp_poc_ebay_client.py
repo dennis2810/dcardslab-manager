@@ -163,6 +163,45 @@ class CardConditionDescriptorValueTests(unittest.TestCase):
         self.assertEqual(ebay_client.card_condition_descriptor_value(""), "")
 
 
+class GetListingViewsTests(unittest.TestCase):
+    def test_returns_view_count_per_listing(self):
+        report = {
+            "records": [
+                {
+                    "dimensionValues": [{"dimensionKey": "LISTING", "value": "111"}],
+                    "metricValues": [{"metric": "LISTING_VIEWS_TOTAL", "value": "42"}],
+                },
+                {
+                    "dimensionValues": [{"dimensionKey": "LISTING", "value": "222"}],
+                    "metricValues": [{"metric": "LISTING_VIEWS_TOTAL", "value": "7"}],
+                },
+            ]
+        }
+        with patch("ebay_client.httpx.request", return_value=_response(200, report)) as mock_request:
+            views = ebay_client.get_listing_views("tok", ["111", "222"])
+        self.assertEqual(views, {"111": 42, "222": 7})
+        params = mock_request.call_args.kwargs["params"]
+        self.assertEqual(params["dimension"], "LISTING")
+        self.assertEqual(params["metric"], "LISTING_VIEWS_TOTAL")
+        self.assertIn("listing_ids:{111|222}", params["filter"])
+
+    def test_returns_empty_dict_for_no_listing_ids(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            views = ebay_client.get_listing_views("tok", [])
+        self.assertEqual(views, {})
+        mock_request.assert_not_called()
+
+    def test_ignores_listings_with_no_records(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"records": []})):
+            views = ebay_client.get_listing_views("tok", ["111"])
+        self.assertEqual(views, {})
+
+    def test_raises_api_error_on_missing_scope(self):
+        with patch("ebay_client.httpx.request", return_value=_response(403, text="insufficient_scope")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_listing_views("tok", ["111"])
+
+
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):
         return _response(200, {list_field: [{id_field: policy_id}]})
