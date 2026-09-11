@@ -205,6 +205,17 @@ class GetListingViewsTests(unittest.TestCase):
             with self.assertRaises(ebay_client.EbayApiError):
                 ebay_client.get_listing_views("tok", ["111"])
 
+    def test_date_range_ends_before_today_to_avoid_ebays_reporting_lag(self):
+        # eBay braucht ein paar Tage, bis Traffic-Daten verarbeitet sind -
+        # ein Zeitraum bis "heute" liefert fuer die juengsten Tage haeufig
+        # noch keine Daten (siehe README.md, "Aufrufe/Beobachter einrichten").
+        import datetime as datetime_module
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"records": []})) as mock_request:
+            ebay_client.get_listing_views("tok", ["111"])
+        today = datetime_module.datetime.now(datetime_module.timezone.utc).date()
+        filter_value = mock_request.call_args.kwargs["params"]["filter"]
+        self.assertNotIn(f"..{today:%Y%m%d}]", filter_value)
+
 
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):

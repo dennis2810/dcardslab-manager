@@ -243,6 +243,15 @@ def _request(method, token, path, json_body=None, params=None):
     return response
 
 
+# eBay verarbeitet Traffic-Daten mit Verzoegerung (per eBay-Doku und
+# Entwickler-Forum-Berichten oft ~2 Tage) - ein Zeitraum, der bis "heute"
+# reicht, bekommt fuer die juengsten Tage haeufig noch keine Daten und die
+# eBay-Antwort nennt das explizit in einem "warnings"-Feld. Das Ende des
+# Zeitraums deshalb bewusst ein paar Tage in die Vergangenheit legen statt
+# bis "heute".
+_REPORT_LAG_DAYS = 3
+
+
 def get_listing_views(token, listing_ids, days=30):
     """Aufrufe je Angebot der letzten `days` Tage (Sell Analytics API,
     getTrafficReport, Metrik LISTING_VIEWS_TOTAL) - Beobachter-/Watcher-
@@ -252,12 +261,15 @@ def get_listing_views(token, listing_ids, days=30):
     Braucht den zusaetzlichen OAuth-Scope sell.analytics.readonly (siehe
     README.md) - ohne ihn liefert eBay 403, was main.py als freundlichen
     Hinweis durchreicht. Gibt {listing_id: view_count} zurueck; ein
-    Angebot ganz ohne Treffer im Report (z. B. noch keine Aufrufe im
-    gewaehlten Zeitraum) fehlt im Ergebnis-Dict - eBay laesst Angebote ohne
-    Treffer im Report bewusst weg, das ist kein Fehler."""
+    Angebot ganz ohne Treffer im Report fehlt im Ergebnis-Dict - eBay laesst
+    Angebote ohne Treffer im Report bewusst weg (kein Fehler), u. a. wenn
+    ein noch aktives, unverkauftes Angebot laenger als ca. 30 Tage laeuft
+    (Report-Eligibility-Regel von eBay) - die Aufrufzahl im eBay-eigenen
+    Verkaeufer-Cockpit ist davon nicht betroffen und kann daher hoeher
+    liegen als hier, siehe README.md."""
     if not listing_ids:
         return {}
-    end = datetime.now(timezone.utc).date()
+    end = datetime.now(timezone.utc).date() - timedelta(days=_REPORT_LAG_DAYS)
     start = end - timedelta(days=days)
     filter_value = (
         f"marketplace_ids:{{{MARKETPLACE_ID}}},"
@@ -286,14 +298,17 @@ def get_listing_views(token, listing_ids, days=30):
         if not listing_id:
             continue
         views[listing_id] = int(metric_values[0].get("value") or 0)
-    if not views:
+    warnings = body.get("warnings") or []
+    if not views or warnings:
         # Leeres Ergebnis trotz 200 ist bei dieser API oft kein Bug, sondern
-        # bedeutet "keine Aufrufe im Zeitraum" - die rohe Antwort mitloggen,
-        # damit sich das im Zweifel ohne Rateraten an echten eBay-Daten
-        # nachvollziehen laesst (z. B. `docker logs` des webapp-poc-Containers).
+        # bedeutet "kein Treffer im Report" (siehe Docstring) - die rohe
+        # Antwort inkl. eventueller eBay-"warnings" mitloggen, damit sich das
+        # im Zweifel ohne Rateraten an echten eBay-Daten nachvollziehen
+        # laesst (z. B. `docker logs` des webapp-poc-Containers).
         logger.info(
-            "get_listing_views: kein Treffer fuer %d Angebot(e) im Report - "
-            "rohe eBay-Antwort: %s", len(listing_ids), response.text[:2000],
+            "get_listing_views: %d/%d Angebot(e) ohne Treffer im Report, "
+            "eBay-warnings=%s - rohe Antwort: %s",
+            len(listing_ids) - len(views), len(listing_ids), warnings, response.text[:2000],
         )
     return views
 

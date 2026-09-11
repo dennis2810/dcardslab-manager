@@ -2517,7 +2517,9 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
           return;
         }
         const count = data.views[listing.ebay_listing_id];
-        viewsResult.textContent = count === undefined ? "Keine Aufrufe (letzte 30 Tage)." : `${count} Aufrufe (letzte 30 Tage)`;
+        viewsResult.textContent = count === undefined
+          ? "Kein Wert von eBay verfügbar (eBays Report-API lässt ältere, noch aktive Angebote teils aus - siehe README.md)."
+          : `${count} Aufrufe (letzte 30 Tage)`;
         viewsResult.className = "";
       } catch (err) {
         viewsResult.textContent = "Fehler: " + err;

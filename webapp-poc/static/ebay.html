@@ -1105,9 +1105,12 @@ document.getElementById("load-views-btn").addEventListener("click", async () => 
     }
     Object.assign(listingViews, data.views);
     const hitCount = ids.filter((id) => id in data.views).length;
+    // eBays Report-API kann fuer aeltere, noch aktive Angebote niedrigere
+    // Zahlen liefern als das eBay-eigene Verkaeufer-Cockpit, oder ein
+    // Angebot ganz auslassen - eigene API-Einschraenkung, siehe README.md.
     viewsStatus.textContent = hitCount === 0
-      ? "Für keines der Angebote auf dieser Seite liegen Aufrufe im gewählten Zeitraum vor (oder eBay hat noch keine Daten)."
-      : `Aufrufe für ${hitCount} von ${ids.length} Angebot(en) geladen.`;
+      ? "Für keines der Angebote auf dieser Seite liegen Aufrufe vor. Hinweis: eBays Report-API lässt ältere, noch aktive Angebote teils aus (siehe README.md) - das eBay-Verkäufer-Cockpit kann trotzdem Besucher zeigen."
+      : `Aufrufe für ${hitCount} von ${ids.length} Angebot(en) geladen.` + (hitCount < ids.length ? " (fehlende Angebote: siehe Hinweis zu eBays Report-API in README.md)" : "");
     viewsStatus.className = "";
     render(sortedListings());
   } catch (err) {
