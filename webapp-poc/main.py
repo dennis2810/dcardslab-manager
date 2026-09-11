@@ -68,8 +68,10 @@ import db  # noqa: E402
 import ebay_client  # noqa: E402
 import ebay_listing  # noqa: E402
 import ebay_scheduler  # noqa: E402
+import email_notify  # noqa: E402
 import google_sheets_client  # noqa: E402
 import image_hash  # noqa: E402
+import portfolio  # noqa: E402
 import storage  # noqa: E402
 
 logger = logging.getLogger("ebay_publish")
@@ -89,15 +91,27 @@ app = FastAPI(title="DCardLabs Web PoC")
 
 @app.on_event("startup")
 async def _start_ebay_scheduler():
-    # publish_fn is _publish_listing() itself, defined further down in this
-    # module - a plain lambda closure avoids importing main.py from
-    # ebay_scheduler.py (which already imports db/ebay_client, not main).
-    asyncio.create_task(ebay_scheduler.run_forever(lambda listing: _publish_listing(listing)))
+    # publish_fn/sync_sales_fn/on_new_sales are plain lambda/function
+    # closures onto functions defined further down in this module - avoids
+    # importing main.py from ebay_scheduler.py (which already imports
+    # db/ebay_client, not main).
+    asyncio.create_task(ebay_scheduler.run_forever(
+        lambda listing: _publish_listing(listing),
+        sync_sales_fn=_sync_ebay_sales_once,
+        on_new_sales=_notify_new_sales,
+        sync_returns_fn=_sync_ebay_returns_once,
+        auto_relist_fn=_run_auto_relist_once,
+    ))
 
 
 @app.on_event("startup")
 async def _start_backup_scheduler():
     asyncio.create_task(backup.run_forever())
+
+
+@app.on_event("startup")
+async def _start_portfolio_scheduler():
+    asyncio.create_task(portfolio.run_forever(_compute_portfolio_value))
 
 # Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
 JPEG_QUALITY = 97
@@ -445,6 +459,7 @@ def _expand_inventory_items(items):
         item["ebay_status"] = info.get("status")
         item["manual_sale_channel"] = (manual_sale_info.get(item["card_id"]) or {}).get("channel") or None
         item["private_collection"] = bool(card.get("private_collection"))
+        item["card_type"] = ebay_listing.derive_listing_type(card)
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -503,6 +518,20 @@ def _split_extra_image_paths(card):
     return [p for p in (card.get("extra_image_paths") or "").split(",") if p]
 
 
+def _compute_portfolio_value():
+    """Summe des geschaetzten Bestandswerts ueber alle vorraetigen Inventar-
+    Eintraege - dieselbe Bewertung wie inventory.html's "Wert"-Spalte
+    (_expand_inventory_items(): bevorzugt der aktuelle eBay-Angebotspreis,
+    sonst ersatzweise der Einstandspreis), nur hier aufsummiert statt pro
+    Zeile angezeigt. Verwendet vom woechentlichen Portfolio-Wertverlauf-
+    Schnappschuss (portfolio.py) und vom manuellen "Jetzt Snapshot
+    erstellen"-Button. Gibt (total_value, card_count) zurueck."""
+    items = _expand_inventory_items(db.list_inventory())
+    in_stock = [item for item in items if (item.get("quantity") or 0) > 0]
+    total_value = sum(item["value"] for item in in_stock if item.get("value") is not None)
+    return round(total_value, 2), len(in_stock)
+
+
 @app.get("/api/cards")
 async def list_cards(q: str | None = None, status: str | None = None):
     matched = db.list_cards(q=q, status=status)
@@ -522,6 +551,15 @@ async def list_cards(q: str | None = None, status: str | None = None):
         info = ebay_info.get(c["id"]) or {}
         c["ebay_status"] = info.get("status")
         c["ebay_sku"] = info.get("sku")
+        # Importiertes, extern verwaltetes Angebot (siehe _is_externally_managed()
+        # weiter unten) - eigenes Feld statt das Frontend die Kombination aus
+        # ebay_status/ebay_offer_id nachrechnen zu lassen.
+        c["ebay_imported"] = info.get("status") == "Veroeffentlicht" and not info.get("ebay_offer_id")
+        # Gleiche Sport/Non-Sport-Heuristik wie beim Anlegen eines eBay-
+        # Angebots (ebay_listing.derive_listing_type() - card.category gegen
+        # die bekannte Sportarten-Liste) - hier als Filter-Grundlage, nicht
+        # nur fuers eBay-Kategorie-Mapping.
+        c["card_type"] = ebay_listing.derive_listing_type(c)
         c["manual_sale_channel"] = (manual_sale_info.get(c["id"]) or {}).get("channel") or None
         flags = sale_flags.get(c["id"]) or {}
         c["delivered"] = flags.get("delivered", False)
@@ -1585,6 +1623,7 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
         "aspects": fields.get("aspects") or ebay_listing.build_aspects(card, listing_type),
         "price": fields.get("price", 0),
         "quantity": fields.get("quantity", 1),
+        "auto_relist_after_days": fields.get("auto_relist_after_days") or None,
     }
     sku = ebay_listing.sku_for_card(card["card_no"])
     listing = db.create_ebay_listing(card_id, sku, row)
@@ -1812,6 +1851,82 @@ async def end_ebay_listing(listing_id: str):
             raise HTTPException(status_code=502, detail=str(exc)) from exc
     updated = db.update_ebay_listing(listing_id, {"status": "Beendet"})
     return JSONResponse(_listing_with_card(updated))
+
+
+def _relist_listing(listing):
+    """Beendet ein aktuell laufendes Angebot und veroeffentlicht es sofort
+    neu (eBay vergibt dabei ein frisches Listing, was fuer die Sichtbarkeit/
+    Suchranking relevant sein kann) - gemeinsame Basis fuer den manuellen
+    "Neu einstellen"-Button (relist_ebay_listing()) und das automatische
+    Re-Listing (_run_auto_relist_once()). Nutzt denselben withdraw_offer()-
+    Call wie end_ebay_listing() oben, gefolgt vom bestehenden _publish_listing()-
+    Ablauf (der - da ebay_offer_id schon gesetzt ist - update_offer() statt
+    create_offer() nimmt, also dasselbe Offer wiederverwendet statt ein
+    zweites anzulegen)."""
+    if listing.get("ebay_offer_id"):
+        try:
+            token = ebay_client.get_access_token()
+            ebay_client.withdraw_offer(token, listing["ebay_offer_id"])
+        except ebay_client.EbayNotAuthorizedError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except ebay_client.EbayApiError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return _publish_listing(listing)
+
+
+@app.post("/api/ebay/listings/{listing_id}/relist")
+async def relist_ebay_listing(listing_id: str):
+    # Manueller Button (siehe Klaerung mit dem Nutzer: neben der Automation
+    # explizit auch ein manueller Button gewuenscht) fuer ein unverkauftes,
+    # laenger laufendes Angebot - z.B. um es nochmal "nach oben zu holen",
+    # ohne auf den automatischen Re-Listing-Takt zu warten.
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if listing["status"] != "Veroeffentlicht":
+        raise HTTPException(status_code=409, detail="Nur veröffentlichte Angebote können neu eingestellt werden.")
+    if _is_externally_managed(listing):
+        raise HTTPException(status_code=409, detail=_EXTERNALLY_MANAGED_DETAIL)
+    updated = _relist_listing(listing)
+    return JSONResponse(_listing_with_card(updated))
+
+
+def _run_auto_relist_once():
+    """Ein Durchlauf des automatischen Re-Listings, periodisch aus
+    ebay_scheduler.run_forever() aufgerufen. Zwei Bedingungen muessen
+    zutreffen (Klaerung mit dem Nutzer: "Schalter + Markierung" statt eines
+    einzelnen globalen An/Aus): der globale Schalter app_status.
+    auto_relist_enabled UND die Markierung je Angebot (ebay_listings.
+    auto_relist_after_days > 0, geprueft in db.list_listings_due_for_auto_relist()).
+    Jedes Angebot einzeln try/except-isoliert wie bei _sync_ebay_returns_once(),
+    last_auto_relisted_at wird auch bei einem Fehlschlag gesetzt (gleiches
+    Prinzip wie ebay_scheduler.py's mark_price_research_checked), damit ein
+    dauerhaft fehlschlagendes Angebot nicht bei jedem Takt erneut versucht
+    wird, sondern erst wieder nach auto_relist_after_days Tagen."""
+    status = db.get_app_status() or {}
+    if not status.get("auto_relist_enabled"):
+        return 0
+    try:
+        due = db.list_listings_due_for_auto_relist()
+    except Exception:
+        logger.exception("Konnte faellige Angebote fuer automatisches Re-Listing nicht laden")
+        return 0
+
+    relisted = 0
+    for listing in due:
+        try:
+            _relist_listing(listing)
+            relisted += 1
+        except Exception:
+            logger.exception("Automatisches Re-Listing fehlgeschlagen fuer Angebot %s", listing.get("id"))
+        finally:
+            try:
+                db.update_ebay_listing(listing["id"], {
+                    "last_auto_relisted_at": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception:
+                logger.exception("Konnte last_auto_relisted_at nicht speichern fuer Angebot %s", listing.get("id"))
+    return relisted
 
 
 @app.post("/api/ebay/listings/publish-bulk")
@@ -2080,21 +2195,30 @@ async def ebay_sale_shipping_address(sale_id: str):
     })
 
 
-@app.post("/api/ebay/sync-sales")
-async def sync_ebay_sales():
-    try:
-        token = ebay_client.get_access_token()
-        cursor = db.latest_sale_sync_cursor()
-        since = cursor or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-        orders = ebay_client.get_orders(token, since)
-    except ebay_client.EbayNotAuthorizedError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ebay_client.EbayApiError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+def _sync_ebay_sales_once():
+    """Shared sync logic for POST /api/ebay/sync-sales and the periodic
+    background sync (see ebay_scheduler.run_sales_sync_once()) - kept as one
+    function so the two callers can't drift apart, same pattern as
+    _publish_listing() above. Raises ebay_client.EbayNotAuthorizedError/
+    EbayApiError on failure (callers translate those to HTTP status codes or
+    just log+skip, see the two call sites). Returns (synced, skipped,
+    newly_synced) where newly_synced is the list of {"card_id", "listing",
+    "sale_fields"} dicts for sales upserted during this run - used by the
+    email-notification background job to know what to mail about."""
+    token = ebay_client.get_access_token()
+    cursor = db.latest_sale_sync_cursor()
+    since = cursor or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    orders = ebay_client.get_orders(token, since)
 
-    listings_by_sku = {l["sku"]: l for l in db.list_ebay_listings()}
+    all_listings = db.list_ebay_listings()
+    listings_by_sku = {l["sku"]: l for l in all_listings}
+    # Fallback fuer importierte Angebote (main.py's import_ebay_listing()) -
+    # die haben nie eine echte SKU auf eBay selbst, siehe
+    # ebay_listing.match_sale_line_item()'s Kommentar.
+    listings_by_item_id = {l["ebay_listing_id"]: l for l in all_listings if l.get("ebay_listing_id")}
 
     synced = skipped = 0
+    newly_synced = []
     for order in orders:
         order_id = order.get("orderId", "")
         # Lazily geladen und pro Bestellung gecacht (nicht pro Line Item) -
@@ -2103,7 +2227,7 @@ async def sync_ebay_sales():
         # gefunden bzw. Ladefehler (siehe except unten).
         fulfillments = None
         for line_item in order.get("lineItems", []):
-            listing = ebay_listing.match_sale_line_item(line_item, listings_by_sku)
+            listing = ebay_listing.match_sale_line_item(line_item, listings_by_sku, listings_by_item_id)
             if listing is None:
                 skipped += 1
                 continue
@@ -2166,7 +2290,78 @@ async def sync_ebay_sales():
                 # just leaves the inventory row(s) to be zeroed manually.
                 logger.exception("Inventar-Nullung für Karte %s fehlgeschlagen", listing["card_id"])
             synced += 1
+            newly_synced.append({"card_id": listing["card_id"], "listing": listing, "sale_fields": sale_fields})
+    return synced, skipped, newly_synced
+
+
+@app.post("/api/ebay/sync-sales")
+async def sync_ebay_sales():
+    try:
+        synced, skipped, _ = _sync_ebay_sales_once()
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return JSONResponse({"synced": synced, "skipped": skipped})
+
+
+def _notify_new_sales(newly_synced):
+    """Callback fuer ebay_scheduler.run_forever()'s on_new_sales - schickt
+    eine zusammenfassende E-Mail ueber neu synchronisierte eBay-Verkaeufe aus
+    dem periodischen Hintergrund-Sync (nicht dem manuellen Button, siehe
+    sync_ebay_sales() oben - dort waere eine E-Mail fuer eine selbst
+    ausgeloeste Aktion unnoetig). Fehler werden hier abgefangen statt an den
+    Scheduler durchgereicht, damit ein SMTP-Problem den eigentlichen Sync
+    nicht beeintraechtigt."""
+    try:
+        settings = db.get_app_status() or {}
+        if not settings.get("notify_on_sale"):
+            return
+        subject, body = email_notify.format_sale_notification(newly_synced)
+        email_notify.send_email(settings, subject, body)
+    except Exception:
+        logger.exception("E-Mail-Benachrichtigung fuer neue Verkaeufe fehlgeschlagen")
+
+
+def _sync_ebay_returns_once():
+    """Automatische Retouren-Erkennung: setzt das bestehende manuelle
+    "Als Rückerstattung/Retoure markieren"-Kästchen (ebay_sales.refunded)
+    automatisch, sobald eBay eine abgeschlossene Rückerstattung zu einem
+    bereits synchronisierten Verkauf meldet - rein lesend/erkennend, kein
+    Rückgabe-Management (annehmen/ablehnen) im Tool (siehe Klärung mit dem
+    Nutzer). Nur von ebay_scheduler.run_returns_sync_once() aufgerufen (kein
+    manueller Button wie beim Verkaufs-Sync) - dessen try/except fängt
+    Fehler hier auf, ein Fehler beim einzelnen Retouren-Eintrag wird
+    trotzdem schon hier isoliert abgefangen, damit ein defekter Eintrag
+    nicht den ganzen Batch abbricht."""
+    token = ebay_client.get_access_token()
+    status = db.get_app_status() or {}
+    since = status.get("last_returns_sync_at") or (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    returns = ebay_client.get_return_requests(token, since)
+
+    checked = matched = 0
+    for return_record in returns:
+        checked += 1
+        try:
+            order_id = return_record.get("orderId") or ""
+            if not order_id:
+                continue
+            # Nur als abgeschlossene Rueckerstattung gewertet, wenn eBay
+            # tatsaechlich mindestens einen Refund-Eintrag meldet - robuster
+            # als sich auf einen bestimmten state-String zu verlassen, dessen
+            # genaue Werte in eBays Post-Order API unverifiziert sind (siehe
+            # ebay_client.get_return_requests()).
+            refunds = ((return_record.get("refundInfo") or {}).get("refunds")) or []
+            if not refunds:
+                continue
+            sale = db.get_ebay_sale_by_order_id(order_id)
+            if sale is None or sale.get("refunded"):
+                continue
+            db.update_ebay_sale(sale["id"], {"refunded": True})
+            matched += 1
+        except Exception:
+            logger.exception("Retouren-Abgleich fehlgeschlagen für Return %s", return_record.get("returnId"))
+    return checked, matched
 
 
 # In-memory CSRF state for the Google OAuth redirect flow - same pattern
@@ -2388,6 +2583,23 @@ async def run_backup_now():
     return JSONResponse({"last_auto_backup_at": status.get("last_auto_backup_at")})
 
 
+@app.get("/api/portfolio/snapshots")
+async def list_portfolio_snapshots():
+    return JSONResponse({"snapshots": db.list_portfolio_snapshots()})
+
+
+@app.post("/api/portfolio/snapshot-now")
+async def create_portfolio_snapshot_now():
+    # Manueller Trigger, gleiches Muster wie run_backup_now() oben - nutzt
+    # dieselbe record_snapshot_now() wie der woechentliche Hintergrund-Loop,
+    # nur ohne dessen _is_snapshot_due()-Gate.
+    try:
+        snapshot = portfolio.record_snapshot_now(_compute_portfolio_value)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return JSONResponse(snapshot)
+
+
 @app.get("/api/app-status")
 async def app_status():
     status = db.get_app_status() or {}
@@ -2395,9 +2607,50 @@ async def app_status():
         "last_backup_at": status.get("last_backup_at"),
         "last_auto_backup_at": status.get("last_auto_backup_at"),
         "low_stock_threshold": status.get("low_stock_threshold") or 0,
+        "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
         "activity_cleared_at": status.get("activity_cleared_at"),
+        "notify_on_sale": bool(status.get("notify_on_sale")),
+        "smtp_host": status.get("smtp_host") or "",
+        "smtp_port": status.get("smtp_port"),
+        "smtp_username": status.get("smtp_username") or "",
+        "smtp_from": status.get("smtp_from") or "",
+        "smtp_to": status.get("smtp_to") or "",
+        "smtp_use_tls": status.get("smtp_use_tls", True),
+        # Das gespeicherte Passwort wird nie im Klartext zurueckgegeben -
+        # settings.html zeigt stattdessen nur, ob eins hinterlegt ist, damit
+        # das Eingabefeld beim Speichern leer bleiben kann, ohne ein
+        # vorhandenes Passwort zu loeschen (siehe update_notification_settings()).
+        "smtp_password_set": bool(status.get("smtp_password")),
     })
+
+
+@app.put("/api/notification-settings")
+async def update_notification_settings(fields: dict = Body(...)):
+    # smtp_password fehlt im Payload, wenn settings.html es leer laesst
+    # (Frontend-Konvention: "leer = unveraendert", da das echte Passwort nie
+    # zurueckgegeben wird, siehe smtp_password_set oben) - db.save_notification_
+    # settings() aendert dann diese Spalte nicht.
+    row = dict(fields)
+    if not row.get("smtp_password"):
+        row.pop("smtp_password", None)
+    updated = db.save_notification_settings(row)
+    return JSONResponse(updated)
+
+
+@app.post("/api/notification-settings/test")
+async def send_test_notification():
+    settings = db.get_app_status() or {}
+    try:
+        email_notify.send_email(
+            settings, "DCardsLab: Test-E-Mail",
+            "Dies ist eine Test-E-Mail von DCardsLab - die SMTP-Einstellungen funktionieren.",
+        )
+    except email_notify.EmailNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"E-Mail-Versand fehlgeschlagen: {type(exc).__name__}: {exc}") from exc
+    return JSONResponse({"sent": True})
 
 
 @app.post("/api/app-status/clear-activity")
@@ -2423,6 +2676,15 @@ async def set_low_stock_threshold(fields: dict = Body(...)):
     if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 0:
         raise HTTPException(status_code=400, detail="threshold muss eine Ganzzahl >= 0 sein.")
     updated = db.set_low_stock_threshold(threshold)
+    return JSONResponse(updated)
+
+
+@app.put("/api/auto-relist-enabled")
+async def set_auto_relist_enabled(fields: dict = Body(...)):
+    # Globaler Schalter fuer das automatische Re-Listing (settings.html) -
+    # wirkt nur zusammen mit dem per-Angebot-Schalter auto_relist_after_days
+    # (siehe _run_auto_relist_once() und db.list_listings_due_for_auto_relist()).
+    updated = db.set_auto_relist_enabled(bool(fields.get("enabled")))
     return JSONResponse(updated)
 
 

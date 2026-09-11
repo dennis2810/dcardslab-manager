@@ -129,6 +129,9 @@ if ("serviceWorker" in navigator) {
   <div id="inventory-warnings"></div>
 
   <h2>Lagerort-Übersicht</h2>
+  <div class="controls no-print">
+    <button type="button" id="print-location-labels-btn">🖨 QR-Etiketten drucken</button>
+  </div>
   <div class="table-scroll">
     <table id="location-overview-table" style="display: none;">
         <thead><tr><th>Lagerort</th><th>Karten (vorrätig)</th><th>Wert</th><th>Verkauft</th></tr></thead>
@@ -149,6 +152,11 @@ if ("serviceWorker" in navigator) {
         <option value="Nicht vorrätig">Nicht vorrätig</option>
       </select>
     </label>
+    <select id="card-type-filter">
+      <option value="">Sport &amp; Non-Sport</option>
+      <option value="sport">Nur Sport</option>
+      <option value="non_sport">Nur Non-Sport</option>
+    </select>
     <button type="button" id="toggle-add-item">+ Eintrag hinzufügen</button>
     <a class="no-print" href="inventur.html"><button type="button">📋 Inventur starten</button></a>
   </div>
@@ -207,6 +215,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
   </div>
 
+<script src="vendor/qrcode.js"></script>
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
 // von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
@@ -462,11 +471,81 @@ function renderLocationOverview() {
   }
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// Ein Etikett pro Lagerort (aus der Uebersicht oben, ohne die "(kein
+// Lagerort)"-Sammelgruppe - dafuer gibt es ja gerade keinen Ort zum
+// Beschriften). Echter QR-Code statt nur Text (anders als printLabels() auf
+// cards.html) - qrcode.js ist bereits lokal vendort (siehe dashboard.html).
+// Kodiert einen Deep-Link zurueck auf diese Seite mit vorausgefuelltem
+// Suchfeld, damit ein Scan mit dem Handy direkt die Karten dieses Lagerorts
+// zeigt (das Suchfeld durchsucht ohnehin schon Titel/SKU/Lagerort).
+function printLocationLabels(locations) {
+  // locations: [{ name, origin, count }]
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const rows = locations.map(({ name, origin, count }) => {
+    const url = `${origin}/inventory.html?q=${encodeURIComponent(name)}`;
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    return `
+    <div class="label">
+      ${qr.createSvgTag(3)}
+      <div class="location-name">${escapeHtml(name)}</div>
+      <div class="meta">${count} ${count === 1 ? "Karte" : "Karten"}</div>
+    </div>
+  `;
+  }).join("");
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Lagerort-Etiketten</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; }
+  .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+  .label { border: 1px solid #999; border-radius: 4px; padding: 0.5rem; text-align: center; page-break-inside: avoid; }
+  .label svg { width: 100%; height: auto; max-width: 120px; }
+  .label .location-name { font-weight: 700; font-size: 0.9rem; margin-top: 0.25rem; }
+  .label .meta { font-size: 0.7rem; color: #555; }
+</style></head>
+<body>
+  <div class="labels">${rows}</div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+document.getElementById("print-location-labels-btn").addEventListener("click", () => {
+  const inStock = items.filter((item) => (item.quantity ?? 0) > 0);
+  const counts = new Map();
+  for (const item of inStock) {
+    const name = (item.location || "").trim();
+    if (!name) continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  if (!counts.size) {
+    alert("Keine vorrätigen Karten mit erfasstem Lagerort gefunden.");
+    return;
+  }
+  const locations = [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "de"))
+    .map(([name, count]) => ({ name, origin: location.origin, count }));
+  printLocationLabels(locations);
+});
+
 function filteredItems() {
   const status = document.getElementById("status-filter").value;
+  const cardType = document.getElementById("card-type-filter").value;
   const q = qInput.value.trim().toLowerCase();
   return items.filter((item) => {
     if (status && statusInfo(item)[0] !== status) return false;
+    if (cardType && item.card_type !== cardType) return false;
     if (q) {
       const haystack = `${item.card_title || ""} ${item.sku || ""} ${item.location || ""}`.toLowerCase();
       if (!haystack.includes(q)) return false;
@@ -604,6 +683,10 @@ document.getElementById("next-page").addEventListener("click", () => {
 });
 document.getElementById("print-btn").addEventListener("click", () => window.print());
 document.getElementById("status-filter").addEventListener("change", () => {
+  currentPage = 0;
+  render();
+});
+document.getElementById("card-type-filter").addEventListener("change", () => {
   currentPage = 0;
   render();
 });
@@ -815,6 +898,12 @@ addItemForm.addEventListener("submit", async (ev) => {
     showToast("Fehler: " + err, true);
   }
 });
+
+// Deep-Link von den QR-Etiketten (printLocationLabels()): ?q=<Lagerort>
+// fuellt das Suchfeld vor, damit ein Scan direkt gefiltert auf diesen Ort
+// landet - filteredItems() durchsucht ohnehin schon Titel/SKU/Lagerort.
+const deepLinkQuery = new URLSearchParams(location.search).get("q");
+if (deepLinkQuery) qInput.value = deepLinkQuery;
 
 searchCards();
 loadInventory();

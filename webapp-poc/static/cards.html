@@ -48,10 +48,6 @@ if ("serviceWorker" in navigator) {
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-  /* Steht direkt ueber der Kartentabelle (statt oben im page-header), siehe
-     .controls: rechtsbuendig ans Ende der Zeile gedrueckt statt nach dem
-     letzten Filter in eine eigene Zeile umzubrechen. */
-  .controls .new-card-link { margin-left: auto; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
@@ -162,6 +158,11 @@ if ("serviceWorker" in navigator) {
     </select>
     <select id="tag-filter">
       <option value="">Alle Tags</option>
+    </select>
+    <select id="card-type-filter">
+      <option value="">Sport &amp; Non-Sport</option>
+      <option value="sport">Nur Sport</option>
+      <option value="non_sport">Nur Non-Sport</option>
     </select>
     <button type="button" id="view-toggle">Listenansicht</button>
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
@@ -300,6 +301,7 @@ const statusSelect = document.getElementById("status");
 const ebayFilterSelect = document.getElementById("ebay-filter");
 const shippingFilterSelect = document.getElementById("shipping-filter");
 const tagFilterSelect = document.getElementById("tag-filter");
+const cardTypeFilterSelect = document.getElementById("card-type-filter");
 const statusMsg = document.getElementById("status-msg");
 const grid = document.getElementById("grid");
 const list = document.getElementById("list");
@@ -389,6 +391,15 @@ function privateCollectionBadge(privateCollection) {
   const badge = document.createElement("span");
   badge.className = "manual-sale-badge";
   badge.textContent = "Private Sammlung";
+  return badge;
+}
+
+function importedBadge(imported) {
+  if (!imported) return null;
+  const badge = document.createElement("span");
+  badge.className = "manual-sale-badge";
+  badge.textContent = "📥 Importiert";
+  badge.title = "Importiertes eBay-Angebot - wird nicht vom Tool verwaltet.";
   return badge;
 }
 
@@ -489,6 +500,9 @@ function visibleCards() {
   }
   if (tagFilterSelect.value) {
     filtered = filtered.filter((c) => cardTags(c).includes(tagFilterSelect.value));
+  }
+  if (cardTypeFilterSelect.value) {
+    filtered = filtered.filter((c) => c.card_type === cardTypeFilterSelect.value);
   }
   return filtered;
 }
@@ -612,6 +626,9 @@ function render(cards) {
     const privateBadge = privateCollectionBadge(card.private_collection);
     if (privateBadge) a.appendChild(privateBadge);
 
+    const importedBadgeEl = importedBadge(card.ebay_imported);
+    if (importedBadgeEl) a.appendChild(importedBadgeEl);
+
     if (card.ebay_sku) {
       const skuEl = document.createElement("div");
       skuEl.className = "sku";
@@ -696,6 +713,8 @@ function renderList(cards) {
     if (refunded) shippedTd.appendChild(refunded);
     const privateBadge = privateCollectionBadge(card.private_collection);
     if (privateBadge) shippedTd.appendChild(privateBadge);
+    const importedBadgeEl = importedBadge(card.ebay_imported);
+    if (importedBadgeEl) shippedTd.appendChild(importedBadgeEl);
     tr.appendChild(shippedTd);
 
     const tagsTd = document.createElement("td");
@@ -726,6 +745,10 @@ shippingFilterSelect.addEventListener("change", () => {
   renderCurrentView();
 });
 tagFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
+cardTypeFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });

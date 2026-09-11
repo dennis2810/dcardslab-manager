@@ -141,6 +141,36 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="sender-address-status"></p>
   </section>
 
+  <section id="notification-section">
+    <h2>E-Mail-Benachrichtigungen</h2>
+    <p>Verschickt eine zusammenfassende E-Mail, sobald der automatische Hintergrund-Sync (alle 15 Minuten)
+      neue eBay-Verkäufe findet. Das gespeicherte Passwort wird aus Sicherheitsgründen nie angezeigt – das
+      Feld leer lassen, um ein bereits gespeichertes Passwort beizubehalten.</p>
+    <label><input type="checkbox" id="notify-on-sale-input"> Bei neuen eBay-Verkäufen benachrichtigen</label>
+    <label>SMTP-Server <input type="text" id="smtp-host-input" placeholder="smtp.example.com"></label>
+    <label>Port <input type="number" id="smtp-port-input" min="1" step="1" placeholder="587"></label>
+    <label><input type="checkbox" id="smtp-use-tls-input"> STARTTLS verwenden</label>
+    <label>Benutzername <input type="text" id="smtp-username-input" autocomplete="off"></label>
+    <label>Passwort <input type="password" id="smtp-password-input" autocomplete="new-password"></label>
+    <p class="status" id="smtp-password-hint"></p>
+    <label>Absender-E-Mail <input type="email" id="smtp-from-input" placeholder="dcardslab@example.com"></label>
+    <label>Empfänger-E-Mail <input type="email" id="smtp-to-input" placeholder="ich@example.com"></label>
+    <button type="button" id="save-notification-settings-btn">Speichern</button>
+    <button type="button" id="send-test-email-btn">Test-E-Mail senden</button>
+    <p class="status" id="notification-settings-status"></p>
+  </section>
+
+  <section id="auto-relist-section">
+    <h2>Automatisches Re-Listing</h2>
+    <p>Beendet ein lange unverkauftes eBay-Angebot und veröffentlicht es sofort wieder neu (frisches Listing,
+      relevant für die Sichtbarkeit). Wirkt nur für Angebote, bei denen zusätzlich auf der Kartenseite
+      ("Automatisch neu einstellen nach") eine Tagesanzahl eingetragen ist – dieser globale Schalter ist die
+      zusätzliche Sicherheitsbremse, damit die Automation nicht unbemerkt aktiv wird.</p>
+    <label><input type="checkbox" id="auto-relist-enabled-input"> Automatisches Re-Listing aktivieren</label>
+    <button type="button" id="save-auto-relist-enabled-btn">Speichern</button>
+    <p class="status" id="auto-relist-enabled-status"></p>
+  </section>
+
   <section id="description-templates-section">
     <h2>Angebots-Textbausteine</h2>
     <p>Wiederverwendbare Textbausteine für eBay-Beschreibungen (z. B. ein Hinweis für eine ganze Kartenserie) –
@@ -227,6 +257,17 @@ async function loadBackupStatus() {
       "Letztes automatisches Backup: " + (body.last_auto_backup_at ? formatDateTime(body.last_auto_backup_at) : "noch keins");
     document.getElementById("low-stock-threshold-input").value = body.low_stock_threshold || 0;
     document.getElementById("sender-address-input").value = body.sender_address || "";
+    document.getElementById("notify-on-sale-input").checked = Boolean(body.notify_on_sale);
+    document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
+    document.getElementById("smtp-host-input").value = body.smtp_host || "";
+    document.getElementById("smtp-port-input").value = body.smtp_port || "";
+    document.getElementById("smtp-use-tls-input").checked = body.smtp_use_tls !== false;
+    document.getElementById("smtp-username-input").value = body.smtp_username || "";
+    document.getElementById("smtp-from-input").value = body.smtp_from || "";
+    document.getElementById("smtp-to-input").value = body.smtp_to || "";
+    document.getElementById("smtp-password-hint").textContent = body.smtp_password_set
+      ? "Ein Passwort ist gespeichert (Feld leer lassen, um es beizubehalten)."
+      : "Noch kein Passwort gespeichert.";
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";
@@ -413,6 +454,102 @@ document.getElementById("save-low-stock-threshold-btn").addEventListener("click"
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Mindestbestand-Schwelle gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-auto-relist-enabled-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("auto-relist-enabled-status");
+  const enabled = document.getElementById("auto-relist-enabled-input").checked;
+  try {
+    const res = await fetch("/api/auto-relist-enabled", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Automatisches Re-Listing " + (enabled ? "aktiviert." : "deaktiviert."));
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+function collectNotificationSettings() {
+  const fields = {
+    notify_on_sale: document.getElementById("notify-on-sale-input").checked,
+    smtp_host: document.getElementById("smtp-host-input").value.trim(),
+    smtp_username: document.getElementById("smtp-username-input").value.trim(),
+    smtp_from: document.getElementById("smtp-from-input").value.trim(),
+    smtp_to: document.getElementById("smtp-to-input").value.trim(),
+    smtp_use_tls: document.getElementById("smtp-use-tls-input").checked,
+  };
+  const portValue = document.getElementById("smtp-port-input").value;
+  fields.smtp_port = portValue ? parseInt(portValue, 10) : null;
+  // Leer gelassen = vorhandenes Passwort beibehalten (siehe smtp-password-hint
+  // oben) - main.py's update_notification_settings() laesst ein fehlendes
+  // smtp_password-Feld unangetastet, ein leerer String wuerde es dagegen
+  // versehentlich loeschen.
+  const password = document.getElementById("smtp-password-input").value;
+  if (password) fields.smtp_password = password;
+  return fields;
+}
+
+document.getElementById("save-notification-settings-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("notification-settings-status");
+  try {
+    const res = await fetch("/api/notification-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectNotificationSettings()),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    document.getElementById("smtp-password-input").value = "";
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("E-Mail-Einstellungen gespeichert.");
+    loadBackupStatus();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("send-test-email-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("notification-settings-status");
+  statusEl.textContent = "Sendet Test-E-Mail …";
+  statusEl.className = "status";
+  try {
+    const res = await fetch("/api/notification-settings/test", { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Test-E-Mail gesendet.";
+    statusEl.className = "status";
+    showToast("Test-E-Mail gesendet - bitte Posteingang prüfen.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

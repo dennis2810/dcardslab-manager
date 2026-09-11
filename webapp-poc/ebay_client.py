@@ -445,3 +445,25 @@ def submit_shipping_fulfillment(token, order_id, line_item_id, quantity, trackin
     }
     response = _request("POST", token, f"/sell/fulfillment/v1/order/{order_id}/shipping_fulfillment", payload)
     return response.json()
+
+
+def get_return_requests(token, created_since_iso):
+    """Retouren/Rueckgabeanfragen seit einem Zeitpunkt, fuer die
+    automatische Retouren-Erkennung (main.py's _sync_ebay_returns_once()) -
+    setzt dort automatisch das bestehende manuelle 'refunded'-Kaestchen,
+    sobald eBay eine abgeschlossene Rueckerstattung meldet.
+
+    Nutzt eBays aeltere Post-Order API statt der Sell-REST-API wie die
+    uebrigen Funktionen hier, da nur die Post-Order API Retouren-Status
+    liefert. UNVERIFIZIERT gegen eine echte eBay-Sandbox (anders als die
+    bereits produktiv getesteten Funktionen oben, z.B. get_orders() - kein
+    Post-Order-Sandbox-Zugriff beim Bau dieser Funktion verfuegbar). Vor dem
+    Verlassen auf dieses Feature in der Praxis gegen eine echte Retoure
+    verifizieren (gleiches Vorgehen wie bei NATIVE_SCHEDULING_SUPPORTED oben:
+    ein einzelner falsch benannter Rueckgabewert liesse die automatische
+    Erkennung nur schweigend nichts finden statt etwas falsch zu machen -
+    _sync_ebay_returns_once() faengt Fehler pro Eintrag ohnehin ab)."""
+    since = created_since_iso.replace("+00:00", "Z")
+    params = {"creation_date_range_from": since, "limit": "50"}
+    response = _request("GET", token, "/post-order/v2/return/search", params=params)
+    return response.json().get("members") or []

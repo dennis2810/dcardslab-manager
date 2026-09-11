@@ -1284,23 +1284,36 @@ function renderInventoryRow(item) {
 // nachtraeglich anpassbaren Gebuehren.
 function renderManualSaleSection(manualSale, purchase, ebayListing) {
   const section = document.getElementById("manual-sale-section");
+  const importedAndActive = ebayListing && ebayListing.status === "Veroeffentlicht" && !ebayListing.ebay_offer_id;
   if (manualSale) {
     renderManualSaleReadonly(section, manualSale, purchase);
   } else if (ebayListing && ebayListing.status === "Verkauft") {
     // Schon ueber eBay verkauft - ein zusaetzlicher manueller Verkauf fuer
     // dieselbe Karte waere widerspruechlich, daher hier ausgegraut statt
     // des editierbaren Formulars.
-    renderManualSaleDisabled(section);
+    renderManualSaleDisabled(
+      section, "Diese Karte wurde bereits über eBay verkauft – ein zusätzlicher manueller Verkauf ist hier nicht möglich.",
+    );
+  } else if (importedAndActive) {
+    // Importiertes, extern verwaltetes Angebot (siehe _is_externally_managed()
+    // in main.py) - laeuft noch aktiv auf eBay, das Tool kann es aber weder
+    // verwalten noch verlaesslich per Sync erkennen, wann es verkauft wird.
+    // Ein paralleler manueller Verkaufseintrag waere daher ebenso
+    // widerspruechlich wie bei einem bereits ueber eBay verkauften Angebot.
+    renderManualSaleDisabled(
+      section,
+      "Diese Karte hat ein importiertes, aktives eBay-Angebot – ein manueller Verkauf ist hier erst nach dessen Ende möglich.",
+    );
   } else {
     renderManualSaleForm(section, null);
   }
 }
 
-function renderManualSaleDisabled(section) {
+function renderManualSaleDisabled(section, message) {
   section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
   const hint = document.createElement("p");
   hint.className = "workflow-hint";
-  hint.textContent = "Diese Karte wurde bereits über eBay verkauft – ein zusätzlicher manueller Verkauf ist hier nicht möglich.";
+  hint.textContent = message;
   section.appendChild(hint);
 }
 
@@ -1403,7 +1416,7 @@ function renderManualSaleForm(section, existingSale) {
   channelWrapper.textContent = "Kanal";
   const channelSelect = document.createElement("select");
   channelSelect.name = "channel";
-  for (const value of ["Kleinanzeigen", "Vinted", "Sonstiges"]) {
+  for (const value of ["Kleinanzeigen", "Vinted", "Cardmarket", "COMC", "Sonstiges"]) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = value;
@@ -2053,6 +2066,14 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
   const priceInputEl = field("Preis (€)", "price", listing.price, "number", "0.01");
   field("Menge", "quantity", listing.quantity ?? 1, "number");
+  // Leer = kein automatisches Re-Listing fuer dieses Angebot (Klaerung mit
+  // dem Nutzer: pro Angebot einstellbar, da Angebote aktuell unbegrenzt
+  // laufen - siehe auch den globalen An/Aus-Schalter in settings.html, der
+  // zusaetzlich zutreffen muss, damit die Automation tatsaechlich greift).
+  field(
+    "Automatisch neu einstellen nach (Tage, leer = aus)",
+    "auto_relist_after_days", listing.auto_relist_after_days, "number"
+  );
 
   // Einfacher Preisrechner: Zielmarge -> Preisvorschlag aus dem
   // Einstandspreis, nur anzeigbar wenn die Karte ueberhaupt einen
@@ -2271,6 +2292,7 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
       description: form.elements.description.value,
       price: form.elements.price.value,
       quantity: form.elements.quantity.value,
+      auto_relist_after_days: form.elements.auto_relist_after_days.value,
       listing_type: form.elements.listing_type.value,
       condition: form.elements.condition.value,
       condition_id: isGraded ? "2750" : "4000",
@@ -2456,6 +2478,17 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     readonly.appendChild(updatedP);
   }
 
+  // Sichtbare "Markierung" fuer automatisch neu eingestellte Angebote
+  // (Klaerung mit dem Nutzer: "Schalter + Markierung" statt eines rein
+  // stillen Hintergrund-Vorgangs) - last_auto_relisted_at wird nur von
+  // _run_auto_relist_once() gesetzt, nie vom manuellen "Neu einstellen"-Button.
+  if (listing.last_auto_relisted_at) {
+    const autoRelistP = document.createElement("p");
+    autoRelistP.className = "workflow-hint";
+    autoRelistP.textContent = `🔄 Automatisch neu eingestellt am ${formatDateTime(listing.last_auto_relisted_at)}`;
+    readonly.appendChild(autoRelistP);
+  }
+
   if (listing.ebay_listing_id) {
     const a = document.createElement("a");
     a.href = ebayListingUrl(listing, environment);
@@ -2496,6 +2529,28 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
       });
     });
     section.appendChild(editBtn);
+
+    const relistBtn = document.createElement("button");
+    relistBtn.type = "button";
+    relistBtn.textContent = "Neu einstellen";
+    relistBtn.style.marginRight = "0.75rem";
+    relistBtn.title = "Beendet das Angebot und veröffentlicht es sofort wieder neu (z.B. um ein lange unverkauftes Angebot nochmal nach oben zu holen).";
+    relistBtn.addEventListener("click", async () => {
+      if (!confirm("Angebot beenden und sofort neu veröffentlichen?")) return;
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/relist`, { method: "POST" });
+        const body = await res.json();
+        if (!res.ok) {
+          alert("Fehler: " + (body.detail || res.statusText));
+          return;
+        }
+        showToast("eBay-Angebot neu eingestellt.");
+        loadCard();
+      } catch (err) {
+        alert("Fehler: " + err);
+      }
+    });
+    section.appendChild(relistBtn);
 
     const endBtn = document.createElement("button");
     endBtn.type = "button";

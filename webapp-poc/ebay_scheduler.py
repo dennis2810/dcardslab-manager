@@ -4,7 +4,7 @@ instead of importing main here - main.py already imports this module, so
 importing main back would create a circular import."""
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import db
 import ebay_client
@@ -179,9 +179,116 @@ def run_wishlist_price_check_once():
                 logger.exception("Konnte Preispruefungs-Ergebnis nicht speichern für Wunschlisten-Eintrag %s", item.get("id"))
 
 
-async def run_forever(publish_fn):
+# Wie lange zwischen zwei periodischen Verkaufs-Sync-Laeufen mindestens
+# liegen muss - deutlich seltener als der 5-Minuten-INTERVAL_SECONDS-Takt
+# der anderen Jobs oben, da ein Sync eine echte eBay-Orders-API-Abfrage
+# ist. Der Zeitpunkt des letzten Laufs steht in app_status.last_sales_sync_at
+# statt in einer In-Memory-Variable, damit ein Neustart des Prozesses den
+# Takt nicht einfach zuruecksetzt (gleiches Prinzip wie last_price_research_at
+# je Angebot oben, nur global statt pro Angebot).
+SALES_SYNC_INTERVAL_MINUTES = 15
+
+
+def run_sales_sync_once(sync_sales_fn):
+    """Periodischer Verkaufs-Sync - macht die bisher nur ueber den Button
+    "Verkaeufe synchronisieren" ausgeloeste Synchronisierung zusaetzlich
+    automatisch (alle SALES_SYNC_INTERVAL_MINUTES Minuten). sync_sales_fn ist
+    main.py's _sync_ebay_sales_once() (per Dependency Injection wie
+    publish_fn oben, um main.py nicht hier importieren zu muessen). Gibt die
+    Liste neu synchronisierter Verkaeufe zurueck (leer, wenn noch nicht
+    faellig oder der Sync fehlschlaegt) - der Aufrufer nutzt sie fuer die
+    E-Mail-Benachrichtigung bei neuen Verkaeufen."""
+    try:
+        status = db.get_app_status() or {}
+    except Exception:
+        logger.exception("Konnte App-Status fuer den Verkaufs-Sync nicht laden")
+        return []
+
+    last = status.get("last_sales_sync_at")
+    if last:
+        try:
+            last_dt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) - last_dt < timedelta(minutes=SALES_SYNC_INTERVAL_MINUTES):
+                return []
+        except ValueError:
+            pass
+
+    newly_synced = []
+    try:
+        _, _, newly_synced = sync_sales_fn()
+    except Exception:
+        logger.exception("Automatischer Verkaufs-Sync fehlgeschlagen")
+    finally:
+        # Auch bei einem Fehlschlag gesetzt (gleiches Prinzip wie
+        # mark_price_research_checked() oben) - sonst wuerde ein dauerhaft
+        # fehlschlagender Sync (z.B. eBay nicht verbunden) bei jedem
+        # 5-Minuten-Takt erneut versucht statt erst wieder in 15 Minuten.
+        try:
+            db.record_sales_sync(datetime.now(timezone.utc).isoformat())
+        except Exception:
+            logger.exception("Konnte Verkaufs-Sync-Zeitpunkt nicht speichern")
+    return newly_synced
+
+
+# Eigenes app_status-Feld (last_returns_sync_at statt last_sales_sync_at) und
+# eigener Fehlerpfad als beim Verkaufs-Sync oben - Verkaufs- und Retouren-
+# Sync sollen unabhaengig voneinander laufen/fehlschlagen koennen.
+RETURNS_SYNC_INTERVAL_MINUTES = 15
+
+
+def run_returns_sync_once(sync_returns_fn):
+    """Periodischer Retouren-Sync - analog zu run_sales_sync_once() oben.
+    sync_returns_fn ist main.py's _sync_ebay_returns_once() (Dependency
+    Injection wie publish_fn/sync_sales_fn)."""
+    try:
+        status = db.get_app_status() or {}
+    except Exception:
+        logger.exception("Konnte App-Status fuer den Retouren-Sync nicht laden")
+        return
+
+    last = status.get("last_returns_sync_at")
+    if last:
+        try:
+            last_dt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) - last_dt < timedelta(minutes=RETURNS_SYNC_INTERVAL_MINUTES):
+                return
+        except ValueError:
+            pass
+
+    try:
+        sync_returns_fn()
+    except Exception:
+        logger.exception("Automatischer Retouren-Sync fehlgeschlagen")
+    finally:
+        # Auch bei einem Fehlschlag gesetzt - gleiches Prinzip wie
+        # run_sales_sync_once() oben.
+        try:
+            db.record_returns_sync(datetime.now(timezone.utc).isoformat())
+        except Exception:
+            logger.exception("Konnte Retouren-Sync-Zeitpunkt nicht speichern")
+
+
+async def run_forever(publish_fn, sync_sales_fn=None, on_new_sales=None, sync_returns_fn=None, auto_relist_fn=None):
     while True:
         run_once(publish_fn)
         run_price_research_once()
         run_wishlist_price_check_once()
+        if sync_sales_fn is not None:
+            newly_synced = run_sales_sync_once(sync_sales_fn)
+            if newly_synced and on_new_sales is not None:
+                try:
+                    on_new_sales(newly_synced)
+                except Exception:
+                    logger.exception("on_new_sales-Callback fehlgeschlagen")
+        if sync_returns_fn is not None:
+            run_returns_sync_once(sync_returns_fn)
+        if auto_relist_fn is not None:
+            # auto_relist_fn (main.py's _run_auto_relist_once()) traegt bereits
+            # eigene try/except-Absicherung je Angebot - dieser Wrapper faengt
+            # nur einen unerwarteten Fehler in der Funktion selbst ab (gleiches
+            # Prinzip wie on_new_sales oben), damit der Hintergrund-Loop nicht stirbt.
+            try:
+                auto_relist_fn()
+            except Exception:
+                logger.exception("auto_relist_fn-Callback fehlgeschlagen")
         await asyncio.sleep(INTERVAL_SECONDS)

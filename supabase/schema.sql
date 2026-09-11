@@ -386,3 +386,65 @@ create index if not exists wishlist_price_checks_item_id_idx on wishlist_price_c
 -- Angebot bleibt aber bestehen und wird nur mit einem Hinweis versehen
 -- (gleiche Mechanik wie ein anderweitiger Verkauf).
 alter table cards add column if not exists private_collection boolean not null default false;
+
+-- Migration (2026-09-11): Zeitpunkt des letzten periodischen Hintergrund-
+-- Verkaufs-Syncs (ebay_scheduler.run_sales_sync_once()) - macht den bisher
+-- nur manuell per Button ausloesbaren Sync ("Verkaeufe synchronisieren")
+-- zusaetzlich automatisch (alle 15 Minuten), gleiches Singleton-Row-Muster
+-- wie app_status.last_backup_at.
+alter table app_status add column if not exists last_sales_sync_at timestamptz;
+
+-- Migration (2026-09-11): SMTP-Einstellungen fuer die E-Mail-Benachrichtigung
+-- bei neuen eBay-Verkaeufen (siehe main.py's _notify_new_sales()) - bewusst
+-- im Tool unter "Einstellungen" eintragbar statt per Umgebungsvariable,
+-- damit sie ohne Neu-Deployment aenderbar sind. smtp_password liegt damit
+-- in der Datenbank statt nur beim Deployment - bewusste Abwaegung fuer
+-- einfachere Bedienbarkeit.
+alter table app_status add column if not exists smtp_host text default '';
+alter table app_status add column if not exists smtp_port int;
+alter table app_status add column if not exists smtp_username text default '';
+alter table app_status add column if not exists smtp_password text default '';
+alter table app_status add column if not exists smtp_from text default '';
+alter table app_status add column if not exists smtp_to text default '';
+alter table app_status add column if not exists smtp_use_tls boolean not null default true;
+alter table app_status add column if not exists notify_on_sale boolean not null default false;
+
+-- Migration (2026-09-11): Zeitpunkt des letzten periodischen Retouren-Syncs
+-- (ebay_scheduler.run_returns_sync_once()) - gleiches Muster wie
+-- last_sales_sync_at oben, eigenes Feld da unabhaengig voneinander
+-- fehlschlagen/laufen koennend.
+alter table app_status add column if not exists last_returns_sync_at timestamptz;
+
+-- Migration (2026-09-11): globaler Ein/Aus-Schalter fuer die automatische
+-- Neuveroeffentlichung unverkaufter eBay-Angebote (siehe
+-- ebay_scheduler.run_auto_relist_once()) - zusaetzliche Sicherheitsbremse
+-- neben der Pro-Angebot-Einstellung ebay_listings.auto_relist_after_days:
+-- ein echter eBay-Aufruf (Beenden + Neueinstellen), der sich nicht
+-- rueckgaengig machen laesst, soll sich global abschalten lassen, ohne jedes
+-- Angebot einzeln bearbeiten zu muessen.
+alter table app_status add column if not exists auto_relist_enabled boolean not null default false;
+
+-- Migration (2026-09-11): pro Angebot einstellbare automatische
+-- Neuveroeffentlichung nach X Tagen ohne Verkauf - nullable, da die
+-- Automatik standardmaessig aus ist (kein Wert = nie automatisch neu
+-- einstellen). last_auto_relisted_at markiert automatisch neu eingestellte
+-- Angebote sichtbar in der Oberflaeche (siehe card.html/ebay.html), damit
+-- transparent bleibt, dass das Tool und nicht der Nutzer selbst gehandelt hat.
+alter table ebay_listings add column if not exists auto_relist_after_days int;
+alter table ebay_listings add column if not exists last_auto_relisted_at timestamptz;
+
+-- Migration (2026-09-11): woechentliche Schnappschuesse des geschaetzten
+-- Bestandswerts (Preisrecherche-Durchschnitt x Menge je Karte, siehe
+-- backup.run_forever()-aehnlicher Hintergrund-Job in main.py) fuer den
+-- Portfolio-Wertverlauf auf der Statistik-Uebersichtsseite - eigene Tabelle
+-- statt eines Felds auf app_status, da hier (anders als die Singleton-Row-
+-- Einstellungen oben) ein Verlauf ueber die Zeit gespeichert wird.
+create table if not exists portfolio_value_snapshots (
+    id            uuid primary key default gen_random_uuid(),
+    snapshot_date date not null,
+    total_value   numeric not null default 0,
+    card_count    int not null default 0,
+    created_at    timestamptz not null default now()
+);
+
+create index if not exists portfolio_value_snapshots_date_idx on portfolio_value_snapshots(snapshot_date);

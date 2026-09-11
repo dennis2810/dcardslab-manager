@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "webapp-poc"))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import main  # noqa: E402
+import email_notify  # noqa: E402
 import google_sheets_client  # noqa: E402
 
 client = TestClient(main.app, follow_redirects=False)
@@ -268,6 +269,18 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["low_stock_threshold"], 0)
 
+    def test_returns_auto_relist_enabled(self):
+        with patch("main.db.get_app_status", return_value={"auto_relist_enabled": True}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["auto_relist_enabled"])
+
+    def test_auto_relist_enabled_defaults_to_false(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["auto_relist_enabled"])
+
     def test_returns_last_auto_backup_at(self):
         with patch("main.db.get_app_status", return_value={"last_auto_backup_at": "2026-09-10T03:00:00+00:00"}):
             response = client.get("/api/app-status")
@@ -298,6 +311,35 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()["activity_cleared_at"])
 
+    def test_returns_notification_settings(self):
+        status = {
+            "notify_on_sale": True, "smtp_host": "smtp.example.com", "smtp_port": 587,
+            "smtp_username": "user@example.com", "smtp_from": "dcardslab@example.com",
+            "smtp_to": "me@example.com", "smtp_use_tls": False, "smtp_password": "secret",
+        }
+        with patch("main.db.get_app_status", return_value=status):
+            response = client.get("/api/app-status")
+        body = response.json()
+        self.assertTrue(body["notify_on_sale"])
+        self.assertEqual(body["smtp_host"], "smtp.example.com")
+        self.assertEqual(body["smtp_port"], 587)
+        self.assertEqual(body["smtp_username"], "user@example.com")
+        self.assertEqual(body["smtp_from"], "dcardslab@example.com")
+        self.assertEqual(body["smtp_to"], "me@example.com")
+        self.assertFalse(body["smtp_use_tls"])
+        self.assertTrue(body["smtp_password_set"])
+        self.assertNotIn("smtp_password", body)
+
+    def test_notification_settings_default_when_no_row(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        body = response.json()
+        self.assertFalse(body["notify_on_sale"])
+        self.assertEqual(body["smtp_host"], "")
+        self.assertIsNone(body["smtp_port"])
+        self.assertTrue(body["smtp_use_tls"])
+        self.assertFalse(body["smtp_password_set"])
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):
@@ -326,6 +368,21 @@ class LowStockThresholdEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class AutoRelistEnabledEndpointTests(unittest.TestCase):
+    def test_enables_switch(self):
+        with patch("main.db.set_auto_relist_enabled", return_value={"id": True, "auto_relist_enabled": True}) as mock_set:
+            response = client.put("/api/auto-relist-enabled", json={"enabled": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["auto_relist_enabled"])
+        mock_set.assert_called_once_with(True)
+
+    def test_disables_switch(self):
+        with patch("main.db.set_auto_relist_enabled", return_value={"id": True, "auto_relist_enabled": False}) as mock_set:
+            response = client.put("/api/auto-relist-enabled", json={"enabled": False})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(False)
+
+
 class SenderAddressEndpointTests(unittest.TestCase):
     def test_sets_address(self):
         with patch("main.db.set_sender_address", return_value={"id": True, "sender_address": "DCardsLab\nMusterstr. 1"}) as mock_set:
@@ -339,6 +396,58 @@ class SenderAddressEndpointTests(unittest.TestCase):
             response = client.put("/api/sender-address", json={"address": ""})
         self.assertEqual(response.status_code, 200)
         mock_set.assert_called_once_with("")
+
+
+class NotificationSettingsEndpointTests(unittest.TestCase):
+    def test_saves_settings_including_password(self):
+        fields = {
+            "smtp_host": "smtp.example.com", "smtp_port": 587, "smtp_from": "a@b.de",
+            "smtp_to": "me@b.de", "smtp_password": "secret", "notify_on_sale": True,
+        }
+        with patch("main.db.save_notification_settings", return_value={"id": True}) as mock_save:
+            response = client.put("/api/notification-settings", json=fields)
+        self.assertEqual(response.status_code, 200)
+        mock_save.assert_called_once_with(fields)
+
+    def test_leaving_password_blank_does_not_forward_it(self):
+        fields = {"smtp_host": "smtp.example.com", "smtp_password": ""}
+        with patch("main.db.save_notification_settings", return_value={"id": True}) as mock_save:
+            client.put("/api/notification-settings", json=fields)
+        saved = mock_save.call_args[0][0]
+        self.assertNotIn("smtp_password", saved)
+
+    def test_omitting_password_entirely_still_saves_other_fields(self):
+        fields = {"smtp_host": "smtp.example.com"}
+        with patch("main.db.save_notification_settings", return_value={"id": True}) as mock_save:
+            client.put("/api/notification-settings", json=fields)
+        saved = mock_save.call_args[0][0]
+        self.assertEqual(saved["smtp_host"], "smtp.example.com")
+        self.assertNotIn("smtp_password", saved)
+
+
+class SendTestNotificationEndpointTests(unittest.TestCase):
+    def test_sends_test_email_with_current_settings(self):
+        settings = {"smtp_host": "smtp.example.com", "smtp_port": 587, "smtp_from": "a@b.de", "smtp_to": "me@b.de"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email") as mock_send:
+            response = client.post("/api/notification-settings/test")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["sent"])
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args[0][0], settings)
+
+    def test_returns_400_when_not_configured(self):
+        with patch("main.db.get_app_status", return_value={}), \
+             patch("main.email_notify.send_email", side_effect=email_notify.EmailNotConfiguredError("x")):
+            response = client.post("/api/notification-settings/test")
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_502_on_smtp_failure(self):
+        settings = {"smtp_host": "smtp.example.com", "smtp_port": 587, "smtp_from": "a@b.de", "smtp_to": "me@b.de"}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email", side_effect=OSError("connection refused")):
+            response = client.post("/api/notification-settings/test")
+        self.assertEqual(response.status_code, 502)
 
 
 class RunBackupNowEndpointTests(unittest.TestCase):
@@ -355,6 +464,53 @@ class RunBackupNowEndpointTests(unittest.TestCase):
             response = client.post("/api/backup/run-now")
         self.assertEqual(response.status_code, 502)
         self.assertIn("bucket down", response.json()["detail"])
+
+
+class ListPortfolioSnapshotsEndpointTests(unittest.TestCase):
+    def test_returns_snapshots(self):
+        snapshots = [{"snapshot_date": "2026-09-01", "total_value": 500, "card_count": 10}]
+        with patch("main.db.list_portfolio_snapshots", return_value=snapshots):
+            response = client.get("/api/portfolio/snapshots")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["snapshots"], snapshots)
+
+
+class CreatePortfolioSnapshotNowEndpointTests(unittest.TestCase):
+    def test_triggers_snapshot_and_returns_it(self):
+        snapshot = {"id": "s1", "snapshot_date": "2026-09-11", "total_value": 1234.5, "card_count": 42}
+        with patch("main.portfolio.record_snapshot_now", return_value=snapshot) as mock_record:
+            response = client.post("/api/portfolio/snapshot-now")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), snapshot)
+        mock_record.assert_called_once_with(main._compute_portfolio_value)
+
+    def test_returns_502_on_failure(self):
+        with patch("main.portfolio.record_snapshot_now", side_effect=RuntimeError("db down")):
+            response = client.post("/api/portfolio/snapshot-now")
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("db down", response.json()["detail"])
+
+
+class ComputePortfolioValueTests(unittest.TestCase):
+    def test_sums_value_of_in_stock_items_only(self):
+        items = [
+            {"quantity": 2, "value": 20.0},
+            {"quantity": 0, "value": 100.0},
+            {"quantity": 1, "value": 9.99},
+        ]
+        with patch("main.db.list_inventory", return_value=[{"id": "i1"}, {"id": "i2"}, {"id": "i3"}]), \
+             patch("main._expand_inventory_items", return_value=items):
+            total_value, card_count = main._compute_portfolio_value()
+        self.assertEqual(total_value, 29.99)
+        self.assertEqual(card_count, 2)
+
+    def test_ignores_items_with_unknown_value(self):
+        items = [{"quantity": 1, "value": None}, {"quantity": 1, "value": 5.0}]
+        with patch("main.db.list_inventory", return_value=[{"id": "i1"}, {"id": "i2"}]), \
+             patch("main._expand_inventory_items", return_value=items):
+            total_value, card_count = main._compute_portfolio_value()
+        self.assertEqual(total_value, 5.0)
+        self.assertEqual(card_count, 2)
 
 
 if __name__ == "__main__":

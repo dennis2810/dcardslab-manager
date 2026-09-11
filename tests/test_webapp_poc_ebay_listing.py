@@ -186,6 +186,32 @@ class MatchSaleLineItemTests(unittest.TestCase):
         result = ebay_listing.match_sale_line_item({"sku": "unknown"}, {})
         self.assertIsNone(result)
 
+    def test_falls_back_to_legacy_item_id_when_sku_unknown(self):
+        # Importierte Angebote (siehe import_ebay_listing() in main.py) haben
+        # nie eine echte SKU auf eBay selbst - der SKU-Match schlaegt fuer
+        # sie immer fehl, daher der Fallback auf eBays eigene Artikelnummer.
+        listings_by_item_id = {"123456789012": {"id": "listing-imported"}}
+        result = ebay_listing.match_sale_line_item(
+            {"sku": "", "legacyItemId": "123456789012"}, {}, listings_by_item_id,
+        )
+        self.assertEqual(result, {"id": "listing-imported"})
+
+    def test_sku_match_takes_priority_over_item_id_fallback(self):
+        listings_by_sku = {"webapp-card-1": {"id": "listing-sku-match"}}
+        listings_by_item_id = {"123456789012": {"id": "listing-item-id-match"}}
+        result = ebay_listing.match_sale_line_item(
+            {"sku": "webapp-card-1", "legacyItemId": "123456789012"}, listings_by_sku, listings_by_item_id,
+        )
+        self.assertEqual(result, {"id": "listing-sku-match"})
+
+    def test_returns_none_when_neither_sku_nor_item_id_match(self):
+        result = ebay_listing.match_sale_line_item({"sku": "unknown", "legacyItemId": "unknown"}, {}, {})
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_item_id_lookup_given(self):
+        result = ebay_listing.match_sale_line_item({"sku": "unknown", "legacyItemId": "123"}, {})
+        self.assertIsNone(result)
+
 
 if __name__ == "__main__":
     unittest.main()
