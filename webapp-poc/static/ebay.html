@@ -1104,7 +1104,11 @@ document.getElementById("load-views-btn").addEventListener("click", async () => 
       return;
     }
     Object.assign(listingViews, data.views);
-    viewsStatus.textContent = "";
+    const hitCount = ids.filter((id) => id in data.views).length;
+    viewsStatus.textContent = hitCount === 0
+      ? "Für keines der Angebote auf dieser Seite liegen Aufrufe im gewählten Zeitraum vor (oder eBay hat noch keine Daten)."
+      : `Aufrufe für ${hitCount} von ${ids.length} Angebot(en) geladen.`;
+    viewsStatus.className = "";
     render(sortedListings());
   } catch (err) {
     viewsStatus.textContent = "Fehler: " + err;
