@@ -117,6 +117,15 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="run-backup-now-btn">Jetzt automatisches Backup starten</button>
     <p class="status" id="last-backup-status"></p>
     <p class="status" id="last-auto-backup-status"></p>
+
+    <h3>Backup wiederherstellen</h3>
+    <p>Spielt eine zuvor heruntergeladene Backup-ZIP wieder ein. Bestehende Zeilen werden anhand ihrer ID
+      aktualisiert, neue eingefügt – <strong>nichts wird vorher gelöscht</strong> (kein Wipe-and-Replace). Google-
+      Sheets-Verbindung und SMTP-Passwort sind nie Teil eines Backups und müssen nach einer Wiederherstellung auf
+      einem neuen Supabase-Projekt separat neu eingerichtet werden.</p>
+    <input type="file" id="restore-file-input" accept=".zip">
+    <button type="button" id="restore-backup-btn">Wiederherstellen</button>
+    <p class="status" id="restore-status"></p>
   </section>
 
   <section id="low-stock-section">
@@ -394,6 +403,52 @@ document.getElementById("run-backup-now-btn").addEventListener("click", async ()
     }
     showToast("Automatisches Backup erstellt.");
     loadBackupStatus();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("restore-backup-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("restore-backup-btn");
+  const statusEl = document.getElementById("restore-status");
+  const fileInput = document.getElementById("restore-file-input");
+  const file = fileInput.files[0];
+  if (!file) {
+    statusEl.textContent = "Bitte zuerst eine Backup-ZIP auswählen.";
+    statusEl.className = "error";
+    return;
+  }
+  if (!confirm(
+    "Backup wirklich wiederherstellen? Vorhandene Zeilen werden mit den Werten aus der Datei überschrieben " +
+    "(anhand ihrer ID) – nichts wird gelöscht, aber das ist trotzdem nicht rückgängig zu machen."
+  )) return;
+
+  btn.disabled = true;
+  statusEl.textContent = "Stellt wieder her …";
+  statusEl.className = "status";
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/backup/restore", { method: "POST", body: formData });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    const tableCount = Object.keys(body.tables || {}).length;
+    const rowCount = Object.values(body.tables || {}).reduce((sum, n) => sum + n, 0);
+    let message = `${rowCount} Zeile(n) in ${tableCount} Tabelle(n) wiederhergestellt, ${body.images || 0} Bild(er).`;
+    if (body.errors && body.errors.length) message += ` ${body.errors.length} Fehler.`;
+    statusEl.textContent = message;
+    statusEl.className = body.errors && body.errors.length ? "error" : "status";
+    showToast(message, Boolean(body.errors && body.errors.length));
+    fileInput.value = "";
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

@@ -475,6 +475,28 @@ class RunBackupNowEndpointTests(unittest.TestCase):
         self.assertIn("bucket down", response.json()["detail"])
 
 
+class RestoreBackupEndpointTests(unittest.TestCase):
+    def test_restores_and_returns_summary(self):
+        summary = {"tables": {"cards": 2}, "images": 1, "errors": []}
+        with patch("main.backup.restore_backup_zip", return_value=summary) as mock_restore:
+            response = client.post(
+                "/api/backup/restore",
+                files={"file": ("backup.zip", b"fake-zip-bytes", "application/zip")},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), summary)
+        mock_restore.assert_called_once_with(b"fake-zip-bytes")
+
+    def test_returns_400_for_invalid_zip(self):
+        import zipfile
+        with patch("main.backup.restore_backup_zip", side_effect=zipfile.BadZipFile("not a zip")):
+            response = client.post(
+                "/api/backup/restore",
+                files={"file": ("backup.zip", b"not-a-zip", "application/zip")},
+            )
+        self.assertEqual(response.status_code, 400)
+
+
 class ListPortfolioSnapshotsEndpointTests(unittest.TestCase):
     def test_returns_snapshots(self):
         snapshots = [{"snapshot_date": "2026-09-01", "total_value": 500, "card_count": 10}]

@@ -36,6 +36,7 @@ import sys
 import tempfile
 import time
 import types
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2581,6 +2582,19 @@ async def run_backup_now():
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     status = db.get_app_status() or {}
     return JSONResponse({"last_auto_backup_at": status.get("last_auto_backup_at")})
+
+
+@app.post("/api/backup/restore")
+async def restore_backup(file: UploadFile = File(...)):
+    # Spielt ein zuvor per GET /api/backup (oder das automatische
+    # Hintergrund-Backup) erzeugtes ZIP wieder ein - siehe
+    # backup.restore_backup_zip() fuer das Merge-statt-Wipe-Verhalten.
+    data = await file.read()
+    try:
+        summary = backup.restore_backup_zip(data)
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Keine gültige ZIP-Datei.") from exc
+    return JSONResponse(summary)
 
 
 @app.get("/api/portfolio/snapshots")

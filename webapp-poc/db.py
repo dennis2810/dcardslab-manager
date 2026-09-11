@@ -1320,6 +1320,19 @@ def all_dashboard_goals():
     return get_client().table("dashboard_goals").select("*").execute().data
 
 
+def bulk_upsert_rows(table_name, rows):
+    """Fuer backup.py's restore_backup_zip(): schreibt eine Liste bereits
+    vollstaendiger Zeilen (aus einem frueheren build_backup_zip()-Export,
+    jede mit eigener id) in einer PostgREST-Anfrage zurueck - vorhandene
+    IDs werden aktualisiert, neue eingefuegt, nichts wird geloescht
+    (bewusster Merge statt Wipe-and-Replace, siehe Klaerung mit dem Nutzer).
+    table_name kommt ausschliesslich aus backup.py's fester _TABLE_NAMES-
+    Liste, nie aus Nutzereingabe."""
+    if not rows:
+        return
+    get_client().table(table_name).upsert(rows).execute()
+
+
 PRICE_RESEARCH_FIELDS = ["price", "note", "checked_at"]
 PRICE_RESEARCH_NUMERIC_FIELDS = {"price"}
 PRICE_RESEARCH_MONEY_FIELDS = {"price"}

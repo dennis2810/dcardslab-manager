@@ -83,6 +83,16 @@ def rotate_image(object_path, degrees):
     return rotated_bytes
 
 
+def upload_raw_image(object_path, data):
+    """Fuer backup.py's restore_backup_zip(): schreibt Bild-Bytes aus einem
+    frueheren build_backup_zip()-Export unveraendert zurueck - anders als
+    upload_image() keine erneute Kompression, die Daten wurden beim
+    urspruenglichen Upload schon komprimiert."""
+    get_client().storage.from_(BUCKET).upload(
+        object_path, data, file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
+
+
 def delete_images(paths):
     """Removes zero or more objects from BUCKET in one call. None entries
     (a card missing one side's image) are skipped, not passed to the

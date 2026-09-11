@@ -112,6 +112,11 @@ if ("serviceWorker" in navigator) {
     <li>Bugfix: Mehrere seit ihrer Einführung nie ins automatische Backup aufgenommene Tabellen (Verkäufe
       außerhalb eBay, Wunschliste inkl. Preisverlauf, Angebots-Textbausteine, Portfolio-Wertverlauf) werden jetzt
       ebenfalls gesichert.</li>
+    <li>Bugfix: Zusätzliche Kartenbilder (z. B. Beschädigungs-Nahaufnahmen, über Vorder-/Rückseite hinaus) fehlten
+      bisher im automatischen und manuellen Backup und werden jetzt ebenfalls gesichert.</li>
+    <li>Neuer Bereich „Backup wiederherstellen" in den Einstellungen: spielt ein zuvor erstelltes Backup-ZIP wieder
+      ein. Bestehende Datensätze werden anhand ihrer ID aktualisiert, neue ergänzt – nichts wird gelöscht.
+      Zugangsdaten (SMTP-Passwort, Google-Sheets-Token) sind nie Teil eines Backups.</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>

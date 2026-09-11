@@ -57,8 +57,14 @@ def build_backup_zip():
             zf.writestr(f"{table}.json", json.dumps(rows, ensure_ascii=False, indent=2, default=str))
 
         for card in cards:
-            for path_key in ("front_image_path", "back_image_path"):
-                object_path = card.get(path_key)
+            # extra_image_paths (main.py's _split_extra_image_paths()) faellt
+            # eigenstaendig neben front_/back_image_path an, hier direkt
+            # inline nachgebaut statt main.py zu importieren (backup.py wird
+            # umgekehrt von main.py importiert, ein Rueckimport waere ein
+            # Zirkelbezug).
+            extra_paths = [p for p in (card.get("extra_image_paths") or "").split(",") if p]
+            object_paths = [card.get("front_image_path"), card.get("back_image_path"), *extra_paths]
+            for object_path in object_paths:
                 if not object_path:
                     continue
                 try:
@@ -70,6 +76,52 @@ def build_backup_zip():
                     continue
                 zf.writestr(f"images/{object_path}", data)
     return buf.getvalue()
+
+
+def restore_backup_zip(data):
+    """Liest ein zuvor per build_backup_zip() erzeugtes ZIP wieder ein - pro
+    Tabelle ein Upsert (vorhandene IDs werden aktualisiert, neue eingefuegt),
+    nichts wird vorher geloescht (bewusster Merge statt destruktivem
+    Wipe-and-Replace - Klaerung mit dem Nutzer: der dokumentierte
+    Haupt-Anwendungsfall ist ein frisches Supabase-Projekt, wo Upsert einem
+    reinen Insert entspricht; auf der laufenden DB soll ein versehentliches
+    Einspielen eines alten Backups keine neueren Daten loeschen koennen).
+    Bilder aus images/ werden unveraendert (kein erneutes Komprimieren) in
+    den card-images-Bucket zurueckgeschrieben. Ein Fehler bei einer
+    Tabelle/einem Bild bricht den Rest des Restores nicht ab - gleiches
+    Resilienz-Prinzip wie build_backup_zip() oben. Gibt eine Zusammenfassung
+    zurueck (Zeilen je Tabelle, Anzahl Bilder, aufgetretene Fehler)."""
+    summary = {"tables": {}, "images": 0, "errors": []}
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        names = set(zf.namelist())
+        for table in _TABLE_NAMES:
+            filename = f"{table}.json"
+            if filename not in names:
+                continue
+            try:
+                rows = json.loads(zf.read(filename))
+            except Exception as exc:
+                summary["errors"].append(f"{filename}: {exc}")
+                continue
+            if not rows:
+                summary["tables"][table] = 0
+                continue
+            try:
+                db.bulk_upsert_rows(table, rows)
+                summary["tables"][table] = len(rows)
+            except Exception as exc:
+                summary["errors"].append(f"{table}: {exc}")
+
+        for name in sorted(names):
+            if not name.startswith("images/"):
+                continue
+            object_path = name[len("images/"):]
+            try:
+                storage.upload_raw_image(object_path, zf.read(name))
+                summary["images"] += 1
+            except Exception as exc:
+                summary["errors"].append(f"{name}: {exc}")
+    return summary
 
 
 def _is_backup_due():

@@ -2724,6 +2724,21 @@ class AllBackupHelperTests(unittest.TestCase):
         self._assert_returns_all_rows(db.all_dashboard_goals, "dashboard_goals")
 
 
+class BulkUpsertRowsTests(unittest.TestCase):
+    def test_upserts_given_rows(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.bulk_upsert_rows("cards", [{"id": "c1"}, {"id": "c2"}])
+        mock_client.table.assert_called_once_with("cards")
+        mock_client.table.return_value.upsert.assert_called_once_with([{"id": "c1"}, {"id": "c2"}])
+
+    def test_skips_call_for_empty_rows(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.bulk_upsert_rows("cards", [])
+        mock_client.table.assert_not_called()
+
+
 class SearchSalesTests(unittest.TestCase):
     def _table(self, ebay_rows, manual_rows, card_rows):
         def table(name):

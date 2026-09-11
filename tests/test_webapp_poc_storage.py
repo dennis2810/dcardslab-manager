@@ -106,6 +106,26 @@ class UploadExtraImageTests(unittest.TestCase):
                     storage.upload_extra_image("batch-123", 3, fixture)
 
 
+class UploadRawImageTests(unittest.TestCase):
+    def test_uploads_bytes_unchanged_to_given_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.upload_raw_image("b1/1_front.jpg", b"already-compressed-bytes")
+        mock_client.storage.from_.assert_called_once_with(storage.BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        upload_call.assert_called_once_with(
+            "b1/1_front.jpg", b"already-compressed-bytes",
+            file_options={"content-type": "image/jpeg", "upsert": "true"},
+        )
+
+    def test_propagates_upload_errors_to_caller(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.upload.side_effect = RuntimeError("bucket down")
+        with patch("storage.get_client", return_value=mock_client):
+            with self.assertRaises(RuntimeError):
+                storage.upload_raw_image("b1/1_front.jpg", b"x")
+
+
 class SignedUrlTests(unittest.TestCase):
     def test_returns_signed_url_from_client_response(self):
         mock_client = MagicMock()
