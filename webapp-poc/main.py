@@ -1738,6 +1738,24 @@ async def list_ebay_listings(status: str | None = None, q: str | None = None):
     return JSONResponse({"listings": listings})
 
 
+@app.get("/api/ebay/listings/views")
+async def ebay_listing_views(listing_ids: str):
+    # Auf Abruf statt bei jedem GET /api/ebay/listings mitgeladen - die Sell
+    # Analytics API ist ein eigener API-Aufruf mit eigenem Tageslimit, und
+    # braucht den zusaetzlichen OAuth-Scope sell.analytics.readonly (siehe
+    # README.md); ohne ihn soll ein einzelner fehlgeschlagener Aufruf nicht
+    # die normale Angebotsliste (list_ebay_listings() oben) mitreissen.
+    ids = [value for value in listing_ids.split(",") if value]
+    try:
+        token = ebay_client.get_access_token()
+        views = ebay_client.get_listing_views(token, ids)
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return JSONResponse({"views": views})
+
+
 @app.get("/api/ebay/listings/{listing_id}")
 async def get_ebay_listing(listing_id: str):
     listing = db.get_ebay_listing(listing_id)

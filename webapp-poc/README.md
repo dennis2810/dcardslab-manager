@@ -141,6 +141,36 @@ Umgebungsvariablen. Die pro Gerät gespeicherten Push-Abos
 (siehe `backup.py`) - nach einem Wiederherstellen auf einem neuen
 Supabase-Projekt oder Gerätewechsel einfach erneut aktivieren.
 
+### Aufrufe/Beobachter einrichten
+
+Zeigt auf `ebay.html` (Button „👁 Aufrufe laden") die Aufrufzahlen der
+letzten 30 Tage je veröffentlichtem Angebot, über die eBay Sell Analytics
+API (`getTrafficReport`, Metrik `LISTING_VIEWS_TOTAL`, siehe
+`ebay_client.get_listing_views()`). **Beobachter/Watcher-Zahlen sind
+NICHT enthalten** - das dafür nötige `watchCount`-Feld ist in eBays
+REST-APIs gesperrt und erfordert ein separat bei eBay zu stellendes „App
+Check"-Ticket (Freigabe nicht garantiert); die einzige zuverlässige
+Alternative wäre die veraltete Trading-API mit einer komplett anderen,
+in diesem Projekt nirgends genutzten Authentifizierung (Auth'n'Auth statt
+OAuth2) - deshalb bewusst nicht umgesetzt.
+
+Einmalige manuelle Einrichtung, optional:
+
+1. In `ebay-oauth-server`s Umgebungsvariable `EBAY_OAUTH_SCOPES` den
+   Scope `https://api.ebay.com/oauth/api_scope/sell.analytics.readonly`
+   ergänzen (Default ohne ihn: `api_scope/sell.inventory
+   api_scope/sell.account api_scope/sell.fulfillment`) und den Container
+   neu starten.
+2. Den eBay-Account einmalig erneut über `/ebay/oauth/start` autorisieren
+   (derselbe Connect-Flow wie bei der Ersteinrichtung) - der neue Token
+   deckt danach zusätzlich Analytics ab, bestehende Funktionen (Listings,
+   Sync, Verkäufe) laufen mit dem alten Token bis dahin unverändert
+   weiter.
+
+Ohne diesen zusätzlichen Scope liefert „Aufrufe laden" einen Fehler mit
+eBays Meldung (`insufficient_scope` o. ä.) - alles andere im Tool bleibt
+davon unberührt.
+
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
 Live gegen die echte eBay-Sandbox getestet (27.08.2026): `POST .../offer/{id}/publish`

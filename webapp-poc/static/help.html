@@ -278,6 +278,11 @@ if ("serviceWorker" in navigator) {
     Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
     Einstellungen aktiviert sein. Automatisch neu eingestellte Angebote sind auf der Kartenseite mit „🔄 Automatisch
     neu eingestellt am …" markiert.</p>
+  <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
+    aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
+    API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope
+    braucht (siehe README.md). Eine Beobachter-/Watcher-Anzahl bietet eBay über die moderne API nicht mehr
+    zuverlässig an.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder

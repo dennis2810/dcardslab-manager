@@ -160,6 +160,7 @@ if ("serviceWorker" in navigator) {
     <li data-id="textbausteine"><input type="checkbox"><span>Angebots-Textbausteine für wiederkehrende eBay-Beschreibungshinweise anlegen.</span></li>
     <li data-id="handyscan-volume"><input type="checkbox"><span>Für den „📱 Handyscan"-Button optional ein Docker-Volume auf <code>/data/handyscan</code> mounten, damit Rohkopien der Fotos dauerhaft erhalten bleiben.</span></li>
     <li data-id="auto-relist"><input type="checkbox"><span>Automatisches Re-Listing aktivieren, falls lange unverkaufte eBay-Angebote automatisch neu eingestellt werden sollen (Einstellungen; zusätzlich pro Angebot eine Tagesanzahl eintragen).</span></li>
+    <li data-id="ebay-views"><input type="checkbox"><span>Aufrufe je eBay-Angebot: <code>EBAY_OAUTH_SCOPES</code> am <code>ebay-oauth-server</code> um <code>sell.analytics.readonly</code> ergänzen und den eBay-Account einmalig erneut über <code>/ebay/oauth/start</code> autorisieren (siehe README.md) – danach zeigt der Button „👁 Aufrufe laden" auf der eBay-Seite die Aufrufzahlen. Beobachter/Watcher sind über die moderne eBay-API bewusst nicht umgesetzt (siehe README.md).</span></li>
   </ul>
 
   <h2 id="backup-inhalt">Was wird automatisch gesichert</h2>

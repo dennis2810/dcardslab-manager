@@ -243,6 +243,35 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         self.assertEqual(listing["price_research_count"], 0)
 
 
+class ListEbayListingViewsEndpointTests(unittest.TestCase):
+    def test_returns_views_per_listing_id(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_views", return_value={"111": 42, "222": 7}) as mock_views:
+            response = client.get("/api/ebay/listings/views?listing_ids=111,222")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["views"], {"111": 42, "222": 7})
+        mock_views.assert_called_once_with("tok", ["111", "222"])
+
+    def test_ignores_empty_ids_entries(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_views", return_value={}) as mock_views:
+            client.get("/api/ebay/listings/views?listing_ids=111,,222,")
+        mock_views.assert_called_once_with("tok", ["111", "222"])
+
+    def test_returns_401_when_not_authorized(self):
+        with patch("main.ebay_client.get_access_token",
+                    side_effect=ebay_client.EbayNotAuthorizedError("nicht verbunden")):
+            response = client.get("/api/ebay/listings/views?listing_ids=111")
+        self.assertEqual(response.status_code, 401)
+
+    def test_returns_502_on_api_error(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_views",
+                   side_effect=ebay_client.EbayApiError("insufficient_scope")):
+            response = client.get("/api/ebay/listings/views?listing_ids=111")
+        self.assertEqual(response.status_code, 502)
+
+
 class GetEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_ebay_listing", return_value=None):
