@@ -327,6 +327,32 @@ class UpdateEbayListingEndpointTests(unittest.TestCase):
         mock_put.assert_called_once()
         mock_update_offer.assert_called_once()
 
+    def test_republish_does_not_reset_listing_since(self):
+        # Eine reine Bearbeitung (z.B. Preisaenderung) eines bereits
+        # laufenden Angebots ist kein Neu-Einstellen - listing_since (seit
+        # wann laeuft GENAU DIESES eBay-Listing) darf dabei nicht angefasst
+        # werden, nur published_at ("zuletzt aktualisiert").
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1", ebay_listing_id="L0")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.db.update_ebay_listing", return_value=published) as mock_update, \
+             patch("main.db.get_card", return_value=_card(front_image_path="b1/1_front.jpg")), \
+             patch("main.db.get_cards_by_ids", return_value=[_card(front_image_path="b1/1_front.jpg")]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.storage.public_url", return_value="https://img/x.jpg"), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.ensure_merchant_location", return_value="DCARDSLAB-DE"), \
+             patch("main.ebay_client.get_listing_policies", return_value={}), \
+             patch("main.ebay_client.put_inventory_item"), \
+             patch("main.ebay_client.update_offer"), \
+             patch("main.ebay_client.publish_offer", return_value="L0"):
+            response = client.patch("/api/ebay/listings/listing-1", json={"price": 12.0})
+        self.assertEqual(response.status_code, 200)
+        final_updates = mock_update.call_args_list[-1].args[1]
+        self.assertNotIn("listing_since", final_updates)
+        self.assertNotIn("last_auto_relisted_at", final_updates)
+        self.assertIn("published_at", final_updates)
+
     def test_returns_409_for_imported_listing(self):
         # Importiert (siehe import_ebay_listing()): status "Veroeffentlicht",
         # aber ohne ebay_offer_id - die Inventory API kann so ein Angebot
@@ -398,6 +424,9 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(updates["status"], "Veroeffentlicht")
         self.assertEqual(updates["ebay_offer_id"], "offer-1")
         self.assertEqual(updates["ebay_listing_id"], "L1")
+        # Erstveroeffentlichung (Fixture-Default ebay_listing_id="") setzt
+        # "seit wann laeuft dieses Listing" (listing_since) neu.
+        self.assertIn("listing_since", updates)
 
     def test_returns_409_for_imported_listing(self):
         imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
@@ -688,9 +717,9 @@ class RelistEbayListingEndpointTests(unittest.TestCase):
         mock_withdraw.assert_not_called()
 
     def test_withdraws_and_republishes(self):
-        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1", ebay_listing_id="L1")
         with patch("main.db.get_ebay_listing", return_value=published), \
-             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**published, **updates}), \
+             patch("main.db.update_ebay_listing", side_effect=lambda lid, updates: {**published, **updates}) as mock_update, \
              patch("main.db.get_card", return_value=_card()), \
              patch("main.db.get_cards_by_ids", return_value=[_card()]), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
@@ -707,6 +736,12 @@ class RelistEbayListingEndpointTests(unittest.TestCase):
         mock_withdraw.assert_called_once_with("tok", "offer-1")
         mock_update_offer.assert_called_once()
         self.assertEqual(response.json()["status"], "Veroeffentlicht")
+        # Neu-Einstellen setzt sowohl die "laeuft seit"-Anzeige (listing_since)
+        # als auch das "Neu eingestellt"-Badge (last_auto_relisted_at, trotz
+        # Namens auch fuer den manuellen Button) neu.
+        updates = mock_update.call_args[0][1]
+        self.assertIn("listing_since", updates)
+        self.assertIn("last_auto_relisted_at", updates)
 
     def test_returns_502_when_withdraw_fails(self):
         published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")

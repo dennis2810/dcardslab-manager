@@ -2470,6 +2470,19 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
   }
   readonly.appendChild(dl);
 
+  // listing_since ist anders als published_at NICHT bei jeder Bearbeitung
+  // neu gesetzt, sondern nur bei der Erstveroeffentlichung und bei einem
+  // Neu-Einstellen (siehe main.py's _publish_listing()) - zeigt also "seit
+  // wann laeuft genau dieses eBay-Listing" statt "wann zuletzt irgendetwas
+  // geaendert wurde".
+  if (listing.listing_since) {
+    const sinceP = document.createElement("p");
+    const days = Math.floor((Date.now() - new Date(listing.listing_since).getTime()) / (24 * 60 * 60 * 1000));
+    const daysLabel = days <= 0 ? "seit heute" : days === 1 ? "seit 1 Tag" : `seit ${days} Tagen`;
+    sinceP.textContent = `Eingestellt am ${formatDateTime(listing.listing_since)} (läuft ${daysLabel})`;
+    readonly.appendChild(sinceP);
+  }
+
   if (listing.published_at) {
     const updatedP = document.createElement("p");
     const isRecent = Date.now() - new Date(listing.published_at).getTime() <= RECENTLY_UPDATED_WINDOW_MS;
@@ -2478,15 +2491,16 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     readonly.appendChild(updatedP);
   }
 
-  // Sichtbare "Markierung" fuer automatisch neu eingestellte Angebote
-  // (Klaerung mit dem Nutzer: "Schalter + Markierung" statt eines rein
-  // stillen Hintergrund-Vorgangs) - last_auto_relisted_at wird nur von
-  // _run_auto_relist_once() gesetzt, nie vom manuellen "Neu einstellen"-Button.
+  // Sichtbare "Markierung" fuer ein Neu-Einstellen (Klaerung mit dem Nutzer:
+  // "Schalter + Markierung" statt eines rein stillen Hintergrund-Vorgangs)
+  // - last_auto_relisted_at wird seit main.py's _relist_listing() sowohl vom
+  // manuellen "Neu einstellen"-Button als auch von der Automatik gesetzt,
+  // der Feldname blieb trotzdem (keine Spalten-Umbenennung noetig).
   if (listing.last_auto_relisted_at) {
-    const autoRelistP = document.createElement("p");
-    autoRelistP.className = "workflow-hint";
-    autoRelistP.textContent = `🔄 Automatisch neu eingestellt am ${formatDateTime(listing.last_auto_relisted_at)}`;
-    readonly.appendChild(autoRelistP);
+    const relistP = document.createElement("p");
+    relistP.className = "workflow-hint";
+    relistP.textContent = `🔄 Neu eingestellt am ${formatDateTime(listing.last_auto_relisted_at)}`;
+    readonly.appendChild(relistP);
   }
 
   if (listing.ebay_listing_id) {
