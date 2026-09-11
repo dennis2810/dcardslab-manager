@@ -1592,6 +1592,105 @@ async def create_ebay_listing(card_id: str, fields: dict = Body(default={})):
     return JSONResponse(_listing_with_card(listing))
 
 
+@app.post("/api/ebay/import")
+async def import_ebay_listing(item_id: str = Form(...)):
+    # Umgekehrte Richtung zu create_ebay_listing() oben: nicht eine im Tool
+    # bereits vorhandene Karte auf eBay veroeffentlichen, sondern ein von
+    # Hand (oder mit einem anderen Tool) direkt auf eBay erstelltes Angebot
+    # per Artikelnummer nachtraeglich ins Tool holen - Karte, Fotos (per KI
+    # erkannt wie beim Scan) und Angebots-Datensatz entstehen dabei neu.
+    # Bewusst OHNE ebay_offer_id: die Inventory API (die dieses Tool fuer
+    # Preisaenderung/Beenden nutzt) kann nur Angebote verwalten, die sie
+    # selbst erstellt hat - ein fehlendes ebay_offer_id bei Status
+    # "Veroeffentlicht" ist daher das Signal "extern verwaltet, im Tool nur
+    # Nachverfolgung" (siehe _reject_if_externally_managed() unten).
+    item_id = item_id.strip()
+    if not item_id:
+        raise HTTPException(status_code=400, detail="eBay-Artikelnummer darf nicht leer sein.")
+
+    try:
+        app_token = ebay_client.get_application_access_token()
+        item = ebay_client.get_item_by_legacy_id(app_token, item_id)
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"eBay-Angebot konnte nicht geladen werden: {exc}"
+        ) from exc
+
+    image_urls = item.get("image_urls") or []
+    if len(image_urls) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="Das eBay-Angebot hat weniger als 2 Fotos - Vorder-/Rückseite können nicht "
+                   "automatisch übernommen werden.",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_ebay_import_") as tmp_str:
+        tmp = Path(tmp_str)
+        front_path = tmp / "front.jpg"
+        back_path = tmp / "back.jpg"
+        try:
+            for url, dest in ((image_urls[0], front_path), (image_urls[1], back_path)):
+                photo_response = httpx.get(url, timeout=30)
+                photo_response.raise_for_status()
+                dest.write_bytes(photo_response.content)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502, detail=f"eBay-Fotos konnten nicht heruntergeladen werden: {exc}"
+            ) from exc
+
+        fields = recognize_card(front_path=front_path, back_path=back_path)
+        if not fields.get("title"):
+            fields["title"] = item.get("title", "")
+
+        duplicate = _find_duplicate_card_safe(fields)
+        front_hash = _compute_image_hash_safe(front_path)
+        if duplicate is None and front_hash:
+            photo_duplicate = _find_duplicate_card_by_hash_safe(front_hash)
+            if photo_duplicate:
+                duplicate = {**photo_duplicate, "matched_by": "photo"}
+
+        batch_id = db.create_batch(card_count=1)
+        try:
+            front_image_path = storage.upload_image(batch_id, 1, "front", front_path)
+            back_image_path = storage.upload_image(batch_id, 1, "back", back_path)
+            card_row = db.insert_card(
+                batch_id, 1, fields, front_image_path, back_image_path, front_image_hash=front_hash,
+            )
+        except Exception as exc:
+            db.update_batch_status(batch_id, "failed")
+            raise HTTPException(
+                status_code=502, detail=f"Karte anlegen fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    db.update_batch_status(batch_id, "ok")
+    _create_default_inventory_item(card_row["id"], "", "")
+
+    listing_type = ebay_listing.derive_listing_type(card_row)
+    row = {
+        "title": item.get("title") or ebay_listing.generate_title(card_row),
+        "description": ebay_listing.generate_description(card_row),
+        "condition": "NM",
+        "condition_id": "4000",
+        "listing_type": listing_type,
+        "category_id": ebay_listing.CATEGORY_IDS[listing_type],
+        "aspects": ebay_listing.build_aspects(card_row, listing_type),
+        "price": item.get("price") or 0,
+        "quantity": 1,
+    }
+    sku = ebay_listing.sku_for_card(card_row["card_no"])
+    listing = db.create_ebay_listing(card_row["id"], sku, row)
+    listing = db.update_ebay_listing(listing["id"], {
+        "status": "Veroeffentlicht", "ebay_listing_id": item_id,
+        "published_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    result = _attach_signed_urls(card_row)
+    result["ebay_listing"] = _listing_with_card(listing)
+    if duplicate:
+        result["possible_duplicate"] = duplicate
+    return JSONResponse(result)
+
+
 @app.get("/api/ebay/listings")
 async def list_ebay_listings(status: str | None = None, q: str | None = None):
     listings = _expand_ebay_listings(db.list_ebay_listings(status=status, q=q))
@@ -1606,10 +1705,30 @@ async def get_ebay_listing(listing_id: str):
     return JSONResponse(_listing_with_card(listing))
 
 
+def _is_externally_managed(listing):
+    # Importierte Angebote (siehe import_ebay_listing()) haben nie ein
+    # ebay_offer_id, weil sie nicht ueber die Inventory API erstellt wurden -
+    # die kann daher auch keine Preisaenderung/Beendigung fuer sie ausfuehren
+    # (ein update_offer/create_offer- bzw. withdraw_offer-Aufruf liefe ins
+    # Leere oder legte faelschlich ein zweites Angebot an). Status
+    # "Veroeffentlicht" + fehlendes ebay_offer_id ist das eindeutige Signal
+    # dafuer - kein anderer Codepfad erzeugt diese Kombination.
+    return listing.get("status") == "Veroeffentlicht" and not listing.get("ebay_offer_id")
+
+
+_EXTERNALLY_MANAGED_DETAIL = (
+    "Dieses Angebot wurde importiert und wird nicht vom Tool verwaltet - "
+    "Änderungen bitte direkt auf eBay vornehmen."
+)
+
+
 def _update_ebay_listing_and_republish(listing_id, fields):
     # Shared by the single-listing PATCH and the bulk-price endpoint: a
     # change to an already-live listing (e.g. price) must be pushed back to
     # eBay, not just saved in our own DB.
+    current = db.get_ebay_listing(listing_id)
+    if current and _is_externally_managed(current):
+        raise HTTPException(status_code=409, detail=_EXTERNALLY_MANAGED_DETAIL)
     updated = db.update_ebay_listing(listing_id, fields)
     if updated["status"] == "Veroeffentlicht":
         updated = _publish_listing(updated)
@@ -1643,6 +1762,8 @@ async def publish_ebay_listing(listing_id: str, body: dict = Body(default={})):
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if _is_externally_managed(listing):
+        raise HTTPException(status_code=409, detail=_EXTERNALLY_MANAGED_DETAIL)
     scheduled_at = body.get("scheduled_at")
     if scheduled_at and scheduled_at <= datetime.now(timezone.utc).isoformat():
         scheduled_at = None
@@ -1679,6 +1800,8 @@ async def end_ebay_listing(listing_id: str):
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
     if listing["status"] != "Veroeffentlicht":
         raise HTTPException(status_code=409, detail="Nur veröffentlichte Angebote können beendet werden.")
+    if _is_externally_managed(listing):
+        raise HTTPException(status_code=409, detail=_EXTERNALLY_MANAGED_DETAIL)
     if listing.get("ebay_offer_id"):
         try:
             token = ebay_client.get_access_token()
@@ -1698,6 +1821,9 @@ async def publish_ebay_listings_bulk(body: dict = Body(...)):
         listing = db.get_ebay_listing(listing_id)
         if listing is None:
             results.append({"listing_id": listing_id, "status": "Fehler", "error": "Nicht gefunden."})
+            continue
+        if _is_externally_managed(listing):
+            results.append({"listing_id": listing_id, "status": "Fehler", "error": _EXTERNALLY_MANAGED_DETAIL})
             continue
         try:
             updated = _publish_listing(listing)

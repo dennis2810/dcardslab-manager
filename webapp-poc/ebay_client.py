@@ -152,6 +152,45 @@ def search_active_listings(token, query, limit=5):
     return results
 
 
+def get_item_by_legacy_id(token, legacy_item_id):
+    """Ein einzelnes, bereits bestehendes eBay-Angebot per klassischer
+    Artikelnummer abrufen (Buy/Browse API) - funktioniert unabhaengig davon,
+    wie das Angebot urspruenglich erstellt wurde (auch direkt auf eBay, nicht
+    nur ueber diese App), da die Browse API rein lesend/oeffentlich ist.
+    Genutzt zum Importieren eines von Hand erstellten Angebots (siehe
+    import_ebay_listing() in main.py)."""
+    try:
+        response = httpx.get(
+            f"{EBAY_API_BASE}/buy/browse/v1/item/get_item_by_legacy_id",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": MARKETPLACE_ID,
+            },
+            params={"legacy_item_id": legacy_item_id},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise EbayApiError(f"eBay nicht erreichbar: {exc}") from exc
+    if response.status_code >= 400:
+        raise EbayApiError(response.text)
+    item = response.json()
+    image_urls = []
+    if (item.get("image") or {}).get("imageUrl"):
+        image_urls.append(item["image"]["imageUrl"])
+    for extra in item.get("additionalImages") or []:
+        if extra.get("imageUrl"):
+            image_urls.append(extra["imageUrl"])
+    price = item.get("price") or {}
+    return {
+        "title": item.get("title", ""),
+        "price": float(price["value"]) if price.get("value") else None,
+        "currency": price.get("currency"),
+        "condition": item.get("condition", ""),
+        "item_web_url": item.get("itemWebUrl", ""),
+        "image_urls": image_urls,
+    }
+
+
 def condition_id_to_enum(condition):
     return _CONDITION_ID_TO_ENUM.get(str(condition or "").strip(), condition)
 

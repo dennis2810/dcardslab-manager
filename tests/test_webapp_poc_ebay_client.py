@@ -93,6 +93,51 @@ class SearchActiveListingsTests(unittest.TestCase):
                 ebay_client.search_active_listings("app-tok", "q")
 
 
+class GetItemByLegacyIdTests(unittest.TestCase):
+    def test_returns_title_price_condition_url_and_image_urls(self):
+        payload = {
+            "title": "Max Mustermann Rookie Card",
+            "price": {"value": "12.50", "currency": "EUR"},
+            "condition": "Used",
+            "itemWebUrl": "https://www.ebay.de/itm/110412345678",
+            "image": {"imageUrl": "https://i.ebayimg.com/front.jpg"},
+            "additionalImages": [{"imageUrl": "https://i.ebayimg.com/back.jpg"}],
+        }
+        with patch("ebay_client.httpx.get", return_value=_response(200, payload)) as mock_get:
+            result = ebay_client.get_item_by_legacy_id("app-tok", "110412345678")
+        self.assertEqual(result["title"], "Max Mustermann Rookie Card")
+        self.assertEqual(result["price"], 12.5)
+        self.assertEqual(result["currency"], "EUR")
+        self.assertEqual(result["condition"], "Used")
+        self.assertEqual(result["item_web_url"], "https://www.ebay.de/itm/110412345678")
+        self.assertEqual(
+            result["image_urls"], ["https://i.ebayimg.com/front.jpg", "https://i.ebayimg.com/back.jpg"]
+        )
+        params = mock_get.call_args.kwargs["params"]
+        self.assertEqual(params["legacy_item_id"], "110412345678")
+
+    def test_price_is_none_when_missing(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {"title": "Ohne Preis"})):
+            result = ebay_client.get_item_by_legacy_id("app-tok", "1")
+        self.assertIsNone(result["price"])
+
+    def test_image_urls_empty_when_no_images(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {"title": "Ohne Foto"})):
+            result = ebay_client.get_item_by_legacy_id("app-tok", "1")
+        self.assertEqual(result["image_urls"], [])
+
+    def test_raises_api_error_on_failure_status(self):
+        with patch("ebay_client.httpx.get", return_value=_response(404, {}, text="not found")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_item_by_legacy_id("app-tok", "does-not-exist")
+
+    def test_raises_api_error_when_ebay_unreachable(self):
+        import httpx
+        with patch("ebay_client.httpx.get", side_effect=httpx.ConnectError("nope")):
+            with self.assertRaises(ebay_client.EbayApiError):
+                ebay_client.get_item_by_legacy_id("app-tok", "1")
+
+
 class ConditionIdToEnumTests(unittest.TestCase):
     def test_maps_known_ids(self):
         self.assertEqual(ebay_client.condition_id_to_enum("4000"), "USED_VERY_GOOD")

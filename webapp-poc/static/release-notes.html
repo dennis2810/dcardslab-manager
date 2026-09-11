@@ -260,6 +260,15 @@ if ("serviceWorker" in navigator) {
     <li>Ein ⚠️-Hinweis (Angebotsübersicht und Kartenseite) erscheint jetzt auch, wenn eine Karte per
       Privatentnahme in die private Sammlung überführt wurde, während das eBay-Angebot noch aktiv ist – analog
       zum bestehenden Hinweis bei einem anderweitigen Verkauf.</li>
+    <li>Neuer Button „Von eBay importieren" auf der eBay-Seite: legt aus der Artikelnummer eines bereits von Hand
+      auf eBay eingestellten Angebots automatisch eine passende Karte samt Angebots-Datensatz an (Titel, Preis und
+      die ersten beiden Fotos werden von eBay geladen, die Fotos wie beim Scannen per Bilderkennung ausgewertet).
+      Ein so importiertes Angebot bleibt reine Nachverfolgung (📥 in der Status-Spalte) – Preisänderungen,
+      Massenaktionen und das Beenden bleiben tabu, da das Tool dieses Angebot nicht selbst erstellt hat.</li>
+    <li>Neuer Button „Abbrechen" im eBay-Bearbeiten-Formular verwirft nicht gespeicherte Änderungen und kehrt zur
+      vorherigen Ansicht zurück, statt das Formular offen zu lassen.</li>
+    <li>Bugfix: Klick auf „Bearbeiten" bei einem veröffentlichten Angebot hängte das Bearbeiten-Formular bisher
+      unterhalb der schreibgeschützten Ansicht an, statt sie zu ersetzen.</li>
   </ul>
 
   <h2>Inventar <span class="date">September 2026</span></h2>

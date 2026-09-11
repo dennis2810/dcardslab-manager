@@ -2024,7 +2024,7 @@ function renderEbayCreateForm(section) {
   });
 }
 
-function renderEbayEditForm(section, listing, purchase) {
+function renderEbayEditForm(section, listing, purchase, onCancel) {
   const form = document.createElement("form");
   form.className = "ebay-form";
 
@@ -2216,6 +2216,21 @@ function renderEbayEditForm(section, listing, purchase) {
     publishBtn.textContent = scheduleInput.value ? "Planen" : "Veröffentlichen";
   });
   actions.appendChild(publishBtn);
+
+  // onCancel fehlt nur, wenn das Formular direkt aus renderEbaySection() fuer
+  // einen Entwurf/Fehler-Status gerendert wurde (also die einzige Ansicht
+  // ist) - dort faellt Abbrechen auf ein simples Neuladen zurueck, das
+  // ungespeicherte Eingaben verwirft. Beim Bearbeiten eines bereits
+  // veroeffentlichten Angebots (siehe renderEbayPublishedView()) fuehrt
+  // onCancel stattdessen zurueck zur schreibgeschuetzten Ansicht.
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "Abbrechen";
+  cancelBtn.addEventListener("click", () => {
+    if (onCancel) onCancel();
+    else loadCard();
+  });
+  actions.appendChild(cancelBtn);
 
   if (listing.id) {
     const deleteBtn = document.createElement("button");
@@ -2454,12 +2469,32 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     section.appendChild(renderSaleStats(purchase, sale));
   }
 
-  if (listing.status === "Veroeffentlicht") {
+  if (listing.status === "Veroeffentlicht" && !listing.ebay_offer_id) {
+    // Importiert (siehe private-collection... nein: import_ebay_listing() in
+    // main.py) - kein ebay_offer_id, da nicht ueber die Inventory API
+    // erstellt. Die kann so ein Angebot nicht verwalten, daher bleiben
+    // Bearbeiten/Beenden hier bewusst aus (Backend lehnt das ohnehin mit 409
+    // ab, siehe _is_externally_managed()).
+    const note = document.createElement("p");
+    note.className = "workflow-hint";
+    note.textContent = "Dieses Angebot wurde importiert und wird nicht vom Tool verwaltet - Preisänderungen "
+      + "oder das Beenden bitte direkt auf eBay vornehmen.";
+    section.appendChild(note);
+  } else if (listing.status === "Veroeffentlicht") {
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.textContent = "Bearbeiten";
     editBtn.style.marginRight = "0.75rem";
-    editBtn.addEventListener("click", () => renderEbayEditForm(section, listing));
+    editBtn.addEventListener("click", () => {
+      // Ohne das Leeren wuerde das Formular unterhalb der schreibgeschuetzten
+      // Ansicht (inkl. Bearbeiten/Beenden-Buttons) angehaengt statt sie zu
+      // ersetzen.
+      section.innerHTML = "";
+      renderEbayEditForm(section, listing, purchase, () => {
+        section.innerHTML = "";
+        renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale, privateCollection);
+      });
+    });
     section.appendChild(editBtn);
 
     const endBtn = document.createElement("button");

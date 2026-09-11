@@ -152,6 +152,12 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="sync-status"></p>
 
+  <div class="controls no-print">
+    <input type="text" id="import-item-id" placeholder="eBay-Artikelnummer (z. B. 123456789012)">
+    <button type="button" id="import-btn">Von eBay importieren</button>
+    <span id="import-status"></span>
+  </div>
+
   <div id="bulk-actions" class="controls no-print" hidden>
     <span id="bulk-count"></span>
     <button type="button" id="publish-selected-btn">Ausgewählte veröffentlichen</button>
@@ -589,6 +595,17 @@ function render(listings) {
       flag.title = "Als Rückerstattung/Retoure markiert";
       statusTd.appendChild(flag);
     }
+    // Importiert (siehe import_ebay_listing() in main.py) - kein
+    // ebay_offer_id, da nicht ueber die Inventory API erstellt. Bulk-
+    // Aktionen (Veroeffentlichen/Preis/Beenden) lehnt das Backend dafuer mit
+    // 409 ab (_is_externally_managed()); der Hinweis hier erklaert vorab,
+    // warum eine Massenaktion fuer diese Zeile fehlschlagen wird.
+    if (listing.status === "Veroeffentlicht" && !listing.ebay_offer_id) {
+      const flag = document.createElement("span");
+      flag.textContent = " 📥";
+      flag.title = "Importiertes Angebot - wird nicht vom Tool verwaltet (Preisänderungen/Beenden nur direkt auf eBay).";
+      statusTd.appendChild(flag);
+    }
     tr.appendChild(statusTd);
 
     const scheduledTd = document.createElement("td");
@@ -926,6 +943,54 @@ document.getElementById("sync-sales-btn").addEventListener("click", async () => 
     syncStatus.textContent = "Fehler: " + err;
     syncStatus.className = "error";
     showToast("Fehler: " + err, true);
+  }
+});
+
+// Legt aus einer bereits auf eBay laufenden, von Hand erstellten Karteikarte
+// (nicht ueber dieses Tool eingestellt) automatisch eine neue Karte mit
+// eBay-Angebot an - Fotos werden von eBay heruntergeladen und wie beim Scan
+// per Claude Vision erkannt (siehe import_ebay_listing() in main.py). Das
+// entstehende Angebot bleibt "importiert" (kein ebay_offer_id, siehe
+// Statusspalte oben) und wird bewusst nicht vom Tool verwaltet.
+const importBtn = document.getElementById("import-btn");
+const importItemIdInput = document.getElementById("import-item-id");
+const importStatus = document.getElementById("import-status");
+
+importBtn.addEventListener("click", async () => {
+  const itemId = importItemIdInput.value.trim();
+  if (!itemId) {
+    showToast("Bitte eine eBay-Artikelnummer eingeben.", true);
+    return;
+  }
+  importBtn.disabled = true;
+  importStatus.textContent = "Importiert …";
+  importStatus.className = "";
+  try {
+    const formData = new FormData();
+    formData.set("item_id", itemId);
+    const res = await fetch("/api/ebay/import", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) {
+      importStatus.textContent = "Fehler: " + (data.detail || res.statusText);
+      importStatus.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
+      return;
+    }
+    if (data.possible_duplicate) {
+      showToast(
+        `Angebot importiert, aber möglicherweise bereits vorhanden (Karte #${data.possible_duplicate.card_no ?? "?"}) - bitte prüfen.`,
+        true
+      );
+    } else {
+      showToast("eBay-Angebot importiert.");
+    }
+    window.location.href = `card.html?id=${encodeURIComponent(data.id)}`;
+  } catch (err) {
+    importStatus.textContent = "Fehler: " + err;
+    importStatus.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    importBtn.disabled = false;
   }
 });
 
