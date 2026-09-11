@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 
 from flask import Flask, jsonify, redirect, request, Response
 
-APP_VERSION = "1.3.6-EBAY-LOCATION-CREATE-UPDATE"
+APP_VERSION = "1.3.7-HEALTH-CONFIGURED-SCOPES"
 ENVIRONMENT = os.getenv("EBAY_ENVIRONMENT", "sandbox").strip().lower()
 if ENVIRONMENT not in {"sandbox", "production"}:
     raise RuntimeError("EBAY_ENVIRONMENT must be 'sandbox' or 'production'")
@@ -395,6 +395,16 @@ def health():
         "environment": ENVIRONMENT,
         "configured": bool(CLIENT_ID and CLIENT_SECRET and RUNAME),
         "token_present": TOKEN_FILE.exists(),
+        # Live aus dem SCOPES-Modulwert gelesen (Env-Var EBAY_OAUTH_SCOPES
+        # oder der Code-Fallback) - zum Abgleich, ob ein Deployment/Neustart
+        # eine Scope-Aenderung tatsaechlich uebernommen hat, ohne Shell-
+        # Zugriff auf den Container zu brauchen. Zeigt die live konfigurierten
+        # Scopes, NICHT die des zuletzt ausgestellten Tokens (die stehen in
+        # /api/oauth/status) - ein neuer Scope hier wird erst nach einem
+        # erneuten kompletten Login-Flow (/ebay/oauth/start) tatsaechlich
+        # gewaehrt, da ein Refresh Token keine zusaetzlichen Scopes erhalten
+        # kann.
+        "configured_scopes": SCOPES,
     })
 
 
