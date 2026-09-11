@@ -264,15 +264,21 @@ def get_listing_views(token, listing_ids, days=30):
         "GET", token, "/sell/analytics/v1/traffic_report",
         params={"filter": filter_value, "dimension": "LISTING", "metric": "LISTING_VIEWS_TOTAL"},
     )
+    # eBays einzelne dimensionValues/metricValues-Eintraege tragen selbst
+    # keinen Namen (z. B. kein "dimensionKey"/"metric"-Feld) - der Name
+    # steht nur einmalig in dimensionMetadata.metadataHeader. Da hier genau
+    # eine Dimension (LISTING) und eine Metrik (LISTING_VIEWS_TOTAL)
+    # angefragt wird, reicht Positions- statt Namenszuordnung.
     views = {}
     for record in response.json().get("records") or []:
-        listing_id = None
-        for dimension_value in record.get("dimensionValues") or []:
-            if dimension_value.get("dimensionKey") == "LISTING":
-                listing_id = dimension_value.get("value")
-        for metric_value in record.get("metricValues") or []:
-            if listing_id and metric_value.get("metric") == "LISTING_VIEWS_TOTAL":
-                views[listing_id] = int(metric_value.get("value") or 0)
+        dimension_values = record.get("dimensionValues") or []
+        metric_values = record.get("metricValues") or []
+        if not dimension_values or not metric_values:
+            continue
+        listing_id = dimension_values[0].get("value")
+        if not listing_id:
+            continue
+        views[listing_id] = int(metric_values[0].get("value") or 0)
     return views
 
 

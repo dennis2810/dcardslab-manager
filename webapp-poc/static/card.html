@@ -2495,6 +2495,38 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     a.target = "_blank"; a.rel = "noopener";
     a.textContent = "Auf eBay ansehen";
     readonly.appendChild(a);
+
+    // Eigener API-Aufruf mit eigenem eBay-Tageslimit (Sell Analytics API,
+    // siehe ebay.html) - deshalb bewusst nicht automatisch mitgeladen,
+    // sondern nur per Klick fuer genau dieses eine Angebot.
+    const viewsP = document.createElement("p");
+    const viewsBtn = document.createElement("button");
+    viewsBtn.type = "button";
+    viewsBtn.textContent = "👁 Aufrufe laden";
+    const viewsResult = document.createElement("span");
+    viewsResult.style.marginLeft = "0.5rem";
+    viewsBtn.addEventListener("click", async () => {
+      viewsResult.textContent = "Lädt …";
+      viewsResult.className = "";
+      try {
+        const res = await fetch("/api/ebay/listings/views?listing_ids=" + encodeURIComponent(listing.ebay_listing_id));
+        const data = await res.json();
+        if (!res.ok) {
+          viewsResult.textContent = "Fehler: " + (data.detail || res.statusText);
+          viewsResult.className = "error";
+          return;
+        }
+        const count = data.views[listing.ebay_listing_id];
+        viewsResult.textContent = count === undefined ? "Keine Aufrufe (letzte 30 Tage)." : `${count} Aufrufe (letzte 30 Tage)`;
+        viewsResult.className = "";
+      } catch (err) {
+        viewsResult.textContent = "Fehler: " + err;
+        viewsResult.className = "error";
+      }
+    });
+    viewsP.appendChild(viewsBtn);
+    viewsP.appendChild(viewsResult);
+    readonly.appendChild(viewsP);
   }
   section.appendChild(readonly);
 
