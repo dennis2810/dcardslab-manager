@@ -3072,7 +3072,6 @@ function renderSaleStats(purchase, sale) {
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
     ["Käufer (eBay)", sale.buyer_username || "–", "sale-buyer-dd"],
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
-    ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
   if (refunded) rows.push(["Status", "↩ Rückerstattet"]);
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
@@ -3176,6 +3175,25 @@ function renderSaleStats(purchase, sale) {
   buyerInfoBlock.appendChild(buyerInfoStatus);
   wrapper.appendChild(buyerInfoBlock);
 
+  // Vom Kaeufer gezahlter Versand - normalerweise automatisch aus der eBay-
+  // Bestellung uebernommen (sync_ebay_sales()), landet dort aber manchmal
+  // bei 0, obwohl tatsaechlich Versand gewaehlt/bezahlt wurde (z.B. wenn
+  // eBay die Versandkosten nur auf Bestellungs- statt Artikelebene meldet,
+  // bei einer Sammelbestellung mit mehreren Karten) - daher hier korrigierbar,
+  // analog zu Versand-Kosten/eBay-Gebuehren unten.
+  const shippingChargedP = document.createElement("p");
+  shippingChargedP.className = "fee-input-row";
+  const shippingChargedLabel = document.createElement("label");
+  shippingChargedLabel.textContent = "Versand erhalten ";
+  const shippingChargedInput = document.createElement("input");
+  shippingChargedInput.type = "number";
+  shippingChargedInput.step = "0.01";
+  shippingChargedInput.value = sale.shipping_charged ?? 0;
+  shippingChargedLabel.appendChild(shippingChargedInput);
+  shippingChargedP.appendChild(shippingChargedLabel);
+  shippingChargedP.appendChild(document.createTextNode(" €"));
+  wrapper.appendChild(shippingChargedP);
+
   const shippingCostP = document.createElement("p");
   shippingCostP.className = "fee-input-row";
   const shippingCostLabel = document.createElement("label");
@@ -3241,6 +3259,7 @@ function renderSaleStats(purchase, sale) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          shipping_charged: shippingChargedInput.value,
           shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value,
           refunded: refundedCheckbox.checked, delivered: deliveredCheckbox.checked,
         }),

@@ -1584,6 +1584,17 @@ class UpdateEbaySaleTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row["shipping_cost"], 3.5)
 
+    def test_updates_shipping_charged_rounded(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "shipping_charged": 2.5}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"shipping_charged": "2.499"})
+        self.assertEqual(result["shipping_charged"], 2.5)
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["shipping_charged"], 2.5)
+
     def test_updates_ebay_fees_rounded(self):
         mock_client = MagicMock()
         response = MagicMock()

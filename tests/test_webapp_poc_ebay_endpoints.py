@@ -1214,6 +1214,56 @@ class SyncSalesEndpointTests(unittest.TestCase):
         sale_fields = mock_upsert.call_args[0][0]
         self.assertEqual(sale_fields["shipping_charged"], 0.0)
 
+    def test_falls_back_to_order_level_delivery_cost_for_single_item_orders(self):
+        # eBay meldet den gezahlten Versand manchmal nur auf Bestellungs-,
+        # nicht auf Artikelebene - bei genau einer Position in der Bestellung
+        # ist die Zuordnung trotzdem eindeutig (main.py's _sync_ebay_sales_once()).
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "pricingSummary": {"deliveryCost": {"value": "2.50", "currency": "EUR"}},
+            "lineItems": [{
+                "sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1,
+                "total": {"value": "2.94"},
+                "deliveryCost": {"shippingCost": {"value": "0.00", "currency": "EUR"}},
+            }],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["shipping_charged"], 2.5)
+
+    def test_no_order_level_fallback_for_multi_item_orders(self):
+        # Bei mehreren Positionen in einer Bestellung ist nicht eindeutig,
+        # welcher Artikel den (kombinierten) Versand "verursacht" hat - der
+        # Fallback bleibt daher auf Einzelposition-Bestellungen beschraenkt.
+        listing_a = _listing(id="listing-1", sku="webapp-card-1")
+        listing_b = _listing(id="listing-2", sku="webapp-card-2")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-08-27T10:00:00Z",
+            "pricingSummary": {"deliveryCost": {"value": "2.50", "currency": "EUR"}},
+            "lineItems": [
+                {"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "2.94"}},
+                {"sku": "webapp-card-2", "lineItemId": "LI2", "quantity": 1, "total": {"value": "1.99"}},
+            ],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[listing_a, listing_b]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=listing_a), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        for call in mock_upsert.call_args_list:
+            self.assertEqual(call[0][0]["shipping_charged"], 0.0)
+
     def test_inventory_zeroing_failure_does_not_fail_the_sync(self):
         matched_listing = _listing(id="listing-1", sku="webapp-card-1")
         orders = [{
