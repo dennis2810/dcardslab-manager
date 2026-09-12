@@ -236,6 +236,11 @@ const LONG_HOLDING_DAYS = 90;
 // gelten als "lange gelistet" - gleicher Schwellwert wie auf cards.html/
 // ebay.html (dupliziert, kein Shared-JS-Modul).
 const LONG_LISTED_DAYS = 14;
+// Gleiche Schwellwerte wie main.py's STALE_LISTING_MIN_DAYS/STALE_WISHLIST_MIN_DAYS
+// (dupliziert, kein Shared-JS-Modul) - nur fuer die Beschriftung der Hinweise hier,
+// die eigentliche Filterung passiert serverseitig in /api/dashboard/reminders.
+const STALE_LISTING_MIN_DAYS = 90;
+const STALE_WISHLIST_MIN_DAYS = 60;
 
 function fmtEuro(v) {
   return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "–";
@@ -312,10 +317,11 @@ let lastStats = null;
 
 async function load() {
   try {
-    const [statsRes, invRes, cardsRes, geplantRes, publishedRes, sheetsRes, appStatusRes, wishlistRes] = await Promise.all([
+    const [statsRes, invRes, cardsRes, geplantRes, publishedRes, sheetsRes, appStatusRes, wishlistRes, remindersRes] = await Promise.all([
       fetch("/api/statistics"), fetch("/api/inventory"), fetch("/api/cards"),
       fetch("/api/ebay/listings?status=Geplant"), fetch("/api/ebay/listings?status=Veroeffentlicht"),
       fetch("/api/sheets/status"), fetch("/api/app-status"), fetch("/api/wishlist"),
+      fetch("/api/dashboard/reminders"),
     ]);
     const stats = await statsRes.json();
     const inventory = await invRes.json();
@@ -325,6 +331,7 @@ async function load() {
     const sheets = await sheetsRes.json();
     const appStatus = await appStatusRes.json();
     const wishlist = await wishlistRes.json();
+    const reminders = await remindersRes.json();
     priceAlertThresholdPct = appStatus.price_alert_threshold_pct || 20;
     const ebayStatus = await loadEbayStatus();
     dashboardGoal = await loadGoal();
@@ -335,7 +342,7 @@ async function load() {
     renderLastUpdates(sheets, appStatus);
     renderGoal();
     renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
-    renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus);
+    renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus, reminders);
     activityClearedAt = appStatus.activity_cleared_at || null;
     lastActivityCards = cardsBody.cards || [];
     renderActivity(stats, lastActivityCards);
@@ -523,7 +530,7 @@ function renderLastUpdates(sheets, appStatus) {
   el.textContent = parts.join(" · ");
 }
 
-function renderActions(stats, cards, geplantListings, publishedListings, sheets, ebayStatus) {
+function renderActions(stats, cards, geplantListings, publishedListings, sheets, ebayStatus, reminders) {
   const list = document.getElementById("action-list");
   list.innerHTML = "";
   let count = 0;
@@ -586,6 +593,24 @@ function renderActions(stats, cards, geplantListings, publishedListings, sheets,
   if (ebayStatus && !ebayStatus.authorized) {
     count++;
     addAction(list, `🔌 eBay ist nicht verbunden – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
+  }
+
+  const dueReminders = (reminders && reminders.due_reminders) || [];
+  if (dueReminders.length) {
+    count++;
+    addAction(list, `🔔 ${dueReminders.length} fällige Erinnerung(en) – <a href="cards.html">zu den Karten &rarr;</a>`);
+  }
+
+  const staleListings = (reminders && reminders.stale_listings) || [];
+  if (staleListings.length) {
+    count++;
+    addAction(list, `📉 ${staleListings.length} eBay-Angebot(e) seit über ${STALE_LISTING_MIN_DAYS} Tagen unverkauft ohne aktuelle Preisrecherche – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
+  }
+
+  const staleWishlist = (reminders && reminders.stale_wishlist) || [];
+  if (staleWishlist.length) {
+    count++;
+    addAction(list, `🔍 ${staleWishlist.length} Wunschliste-Eintrag/-Einträge seit über ${STALE_WISHLIST_MIN_DAYS} Tagen ohne erreichten Zielpreis – <a href="wishlist.html">zur Wunschliste &rarr;</a>`);
   }
 
   if (!count) {

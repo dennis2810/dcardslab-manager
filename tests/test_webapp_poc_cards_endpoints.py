@@ -86,6 +86,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]), \
              patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
             response = client.get("/api/cards/card-1")
 
@@ -107,6 +108,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]), \
              patch("main.storage.signed_url", side_effect=RuntimeError("Supabase Storage hiccup")):
             response = client.get("/api/cards/card-1")
 
@@ -504,7 +506,8 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["purchase"], purchase_info)
 
@@ -516,7 +519,8 @@ class GetCardPurchaseFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["purchase"])
 
@@ -531,7 +535,8 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["ebay_listing"], listing)
 
@@ -543,7 +548,8 @@ class GetCardEbayListingFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["ebay_listing"])
 
@@ -558,7 +564,8 @@ class GetCardInventoryFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=items), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["inventory"], items)
 
@@ -570,7 +577,8 @@ class GetCardInventoryFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["inventory"], [])
 
@@ -585,7 +593,8 @@ class GetCardEbaySaleFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=sale), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["ebay_sale"], sale)
 
@@ -597,7 +606,8 @@ class GetCardEbaySaleFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["ebay_sale"])
 
@@ -612,7 +622,8 @@ class GetCardManualSaleFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=manual_sale), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["manual_sale"], manual_sale)
 
@@ -624,7 +635,8 @@ class GetCardManualSaleFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["manual_sale"])
 
@@ -718,7 +730,8 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=entries):
+             patch("main.db.list_price_research_for_card", return_value=entries), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["price_research"], entries)
 
@@ -730,7 +743,8 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", return_value=[]):
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["price_research"], [])
 
@@ -745,7 +759,8 @@ class GetCardPriceResearchFieldTests(unittest.TestCase):
              patch("main.db.get_inventory_for_card", return_value=[]), \
              patch("main.db.get_sale_for_card", return_value=None), \
              patch("main.db.get_manual_sale_for_card", return_value=None), \
-             patch("main.db.list_price_research_for_card", side_effect=RuntimeError('relation "price_research" does not exist')):
+             patch("main.db.list_price_research_for_card", side_effect=RuntimeError('relation "price_research" does not exist')), \
+             patch("main.db.list_reminders_for_card", return_value=[]):
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["price_research"], [])
@@ -1151,6 +1166,82 @@ class CreateCardManualEndpointTests(unittest.TestCase):
             response = self._post_create(archive_photos=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["id"], "card-1")
+
+
+class CreateReminderEndpointTests(unittest.TestCase):
+    def test_creates_reminder_for_existing_card(self):
+        card = {"id": "card-1"}
+        reminder = {"id": "r1", "card_id": "card-1", "note": "Preis prüfen", "due_date": "2026-10-01"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.db.create_reminder", return_value=reminder) as mock_create:
+            response = client.post(
+                "/api/cards/card-1/reminders", json={"note": "Preis prüfen", "due_date": "2026-10-01"}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), reminder)
+        mock_create.assert_called_once_with("card-1", "Preis prüfen", "2026-10-01")
+
+    def test_returns_404_when_card_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = client.post(
+                "/api/cards/does-not-exist/reminders", json={"note": "x", "due_date": "2026-10-01"}
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_400_when_due_date_missing(self):
+        with patch("main.db.get_card", return_value={"id": "card-1"}):
+            response = client.post("/api/cards/card-1/reminders", json={"note": "x"})
+        self.assertEqual(response.status_code, 400)
+
+
+class ResolveReminderEndpointTests(unittest.TestCase):
+    def test_marks_reminder_resolved(self):
+        reminder = {"id": "r1", "resolved_at": "2026-09-12T00:00:00+00:00"}
+        with patch("main.db.resolve_reminder", return_value=reminder):
+            response = client.post("/api/reminders/r1/resolve")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), reminder)
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.resolve_reminder", return_value=None):
+            response = client.post("/api/reminders/does-not-exist/resolve")
+        self.assertEqual(response.status_code, 404)
+
+
+class DeleteReminderEndpointTests(unittest.TestCase):
+    def test_deletes_reminder(self):
+        with patch("main.db.delete_reminder") as mock_delete:
+            response = client.delete("/api/reminders/r1")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("r1")
+
+
+class DashboardRemindersEndpointTests(unittest.TestCase):
+    def test_combines_all_three_reminder_sources(self):
+        due = [{"id": "r1", "card_id": "card-1", "note": "x", "due_date": "2026-09-01"}]
+        stale_listings = [{"id": "l1", "card_id": "card-2", "listing_since": "2026-01-01"}]
+        stale_wishlist = [{"id": "w1", "title": "Wunsch A", "target_price": 5}]
+        cards = [{"id": "card-1", "title": "Karte 1"}, {"id": "card-2", "title": "Karte 2"}]
+        with patch("main.db.list_due_reminders", return_value=due), \
+             patch("main.db.list_stale_unsold_listings", return_value=stale_listings), \
+             patch("main.db.list_stale_wishlist_items", return_value=stale_wishlist), \
+             patch("main.db.get_cards_by_ids", return_value=cards):
+            response = client.get("/api/dashboard/reminders")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["due_reminders"][0]["title"], "Karte 1")
+        self.assertEqual(body["stale_listings"][0]["title"], "Karte 2")
+        self.assertEqual(body["stale_wishlist"], stale_wishlist)
+
+    def test_returns_empty_lists_when_nothing_due(self):
+        with patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.get_cards_by_ids", return_value=[]):
+            response = client.get("/api/dashboard/reminders")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body, {"due_reminders": [], "stale_listings": [], "stale_wishlist": []})
 
 
 if __name__ == "__main__":

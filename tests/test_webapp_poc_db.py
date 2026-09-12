@@ -1997,6 +1997,16 @@ class AppStatusTests(unittest.TestCase):
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertNotIn("unknown_field", row)
 
+    def test_save_notification_settings_accepts_notify_on_reminders(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "notify_on_reminders": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_notification_settings({"notify_on_reminders": True})
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "notify_on_reminders": True})
+
     def test_record_returns_sync_upserts_with_singleton_id(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -3051,6 +3061,181 @@ class StatisticsRowsTests(unittest.TestCase):
         mock_client.table.return_value.select.return_value.eq.assert_called_once_with(
             "private_collection", False
         )
+
+
+class CreateReminderTests(unittest.TestCase):
+    def test_inserts_reminder_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "r1", "card_id": "c1", "note": "Preis prüfen", "due_date": "2026-10-01"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_reminder("c1", "Preis prüfen", "2026-10-01")
+        self.assertEqual(result["id"], "r1")
+        mock_client.table.return_value.insert.assert_called_once_with({
+            "card_id": "c1", "note": "Preis prüfen", "due_date": "2026-10-01",
+        })
+
+
+class ListRemindersForCardTests(unittest.TestCase):
+    def test_returns_reminders_for_card(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "r1", "card_id": "c1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_reminders_for_card("c1")
+        self.assertEqual(result, [{"id": "r1", "card_id": "c1"}])
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("card_id", "c1")
+
+
+class ListDueRemindersTests(unittest.TestCase):
+    def test_filters_unresolved_and_due(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "r1", "due_date": "2026-01-01"}]
+        chain = mock_client.table.return_value.select.return_value.is_.return_value.lte.return_value.order.return_value
+        chain.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_due_reminders()
+        self.assertEqual(result, [{"id": "r1", "due_date": "2026-01-01"}])
+        mock_client.table.return_value.select.return_value.is_.assert_called_once_with("resolved_at", "null")
+
+
+class ResolveReminderTests(unittest.TestCase):
+    def test_sets_resolved_at_timestamp(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "r1", "resolved_at": "now"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.resolve_reminder("r1")
+        self.assertEqual(result["id"], "r1")
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "r1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.resolve_reminder("missing")
+        self.assertIsNone(result)
+
+
+class DeleteReminderTests(unittest.TestCase):
+    def test_deletes_by_id(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.delete_reminder("r1")
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "r1")
+
+
+class ListStaleUnsoldListingsTests(unittest.TestCase):
+    def test_includes_long_listed_without_recent_price_check(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_listing_since = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "card_id": "c1", "status": "Veroeffentlicht", "listing_since": old_listing_since, "last_price_research_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_unsold_listings()
+        self.assertEqual([r["id"] for r in result], ["l1"])
+
+    def test_excludes_recently_listed(self):
+        from datetime import datetime, timedelta, timezone
+
+        recent = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "card_id": "c1", "status": "Veroeffentlicht", "listing_since": recent, "last_price_research_at": None},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_unsold_listings()
+        self.assertEqual(result, [])
+
+    def test_excludes_recently_checked(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_listing_since = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+        recent_check = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "l1", "card_id": "c1", "status": "Veroeffentlicht", "listing_since": old_listing_since, "last_price_research_at": recent_check},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_unsold_listings()
+        self.assertEqual(result, [])
+
+
+class ListStaleWishlistItemsTests(unittest.TestCase):
+    def test_includes_old_item_never_matched(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_created = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "created_at": old_created, "target_price": 10, "last_match_price": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual([r["id"] for r in result], ["w1"])
+
+    def test_excludes_item_with_match_at_or_below_target(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_created = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "created_at": old_created, "target_price": 10, "last_match_price": 9}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual(result, [])
+
+    def test_excludes_recently_created_item(self):
+        from datetime import datetime, timedelta, timezone
+
+        recent = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "created_at": recent, "target_price": 10, "last_match_price": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual(result, [])
+
+    def test_excludes_item_without_target_price(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_created = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "created_at": old_created, "target_price": None, "last_match_price": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual(result, [])
+
+
+class RecordReminderEmailSentTests(unittest.TestCase):
+    def test_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_reminder_email_sent_at": "now"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_reminder_email_sent("now")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_reminder_email_sent_at": "now"})
 
 
 if __name__ == "__main__":

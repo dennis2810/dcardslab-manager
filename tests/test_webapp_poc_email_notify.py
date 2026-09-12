@@ -131,5 +131,37 @@ class FormatSaleNotificationTests(unittest.TestCase):
         self.assertIn("Käufer: -", body)
 
 
+class FormatReminderDigestTests(unittest.TestCase):
+    def test_singular_subject_for_one_item_total(self):
+        subject, body = email_notify.format_reminder_digest(
+            [{"title": "Messi Panini", "note": "Preis prüfen", "due_date": "2026-09-12"}], [], []
+        )
+        self.assertEqual(subject, "1 fällige Wiedervorlage")
+        self.assertIn("Messi Panini", body)
+        self.assertIn("Preis prüfen", body)
+        self.assertIn("2026-09-12", body)
+
+    def test_plural_subject_sums_all_three_lists(self):
+        due_reminders = [{"title": "A", "note": "", "due_date": "2026-09-12"}]
+        stale_listings = [{"title": "B"}]
+        stale_wishlist = [{"title": "C", "target_price": 5.0}]
+        subject, body = email_notify.format_reminder_digest(due_reminders, stale_listings, stale_wishlist)
+        self.assertEqual(subject, "3 fällige Wiedervorlagen")
+        self.assertIn("A", body)
+        self.assertIn("B", body)
+        self.assertIn("C", body)
+
+    def test_empty_lists_produce_empty_body(self):
+        subject, body = email_notify.format_reminder_digest([], [], [])
+        self.assertEqual(subject, "0 fällige Wiedervorlagen")
+        self.assertEqual(body.strip(), subject + ":")
+
+    def test_handles_missing_titles(self):
+        _, body = email_notify.format_reminder_digest(
+            [{"note": "x", "due_date": "2026-09-12"}], [{}], [{"target_price": 3}]
+        )
+        self.assertIn("(ohne Titel)", body)
+
+
 if __name__ == "__main__":
     unittest.main()

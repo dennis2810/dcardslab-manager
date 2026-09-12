@@ -162,6 +162,13 @@ if ("serviceWorker" in navigator) {
   .price-research-form input { font-weight: normal; padding: 0.3rem; margin-top: 0.15rem; }
   .price-research-form .note-field { flex: 1 1 200px; }
   .price-research-search { margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .reminders-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .reminders-section h2 { font-size: 1.1rem; }
+  .reminders-list { list-style: none; padding: 0; margin: 0 0 0.75rem; }
+  .reminders-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid #eee; }
+  .reminders-list li span { flex: 1 1 200px; }
+  .reminder-add-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .reminder-add-form input[type="text"] { flex: 1 1 200px; padding: 0.3rem; }
   .price-research-search input[type="text"] { font-weight: normal; padding: 0.3rem; flex: 1 1 220px; }
   .price-research-results { list-style: none; padding: 0; margin: 0.5rem 0 0; width: 100%; }
   .price-research-results li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
@@ -250,6 +257,7 @@ if ("serviceWorker" in navigator) {
   <div class="ebay-section" id="ebay-section"></div>
   <div class="manual-sale-section" id="manual-sale-section"></div>
   <div class="price-research-section" id="price-research-section"></div>
+  <div class="reminders-section" id="reminders-section"></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -677,6 +685,7 @@ async function loadCard() {
       card.ebay_listing?.ebay_listing_id, card.ebay_listing
     );
     renderSaleStatusBadges(card);
+    renderRemindersSection(card.reminders);
   } catch (err) {
     showError(form, "Fehler: " + err);
   }
@@ -2003,6 +2012,111 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
 
   searchWrapper.append(searchInput, searchBtn, searchStatus, resultsList, adoptSelectedBtn);
   section.appendChild(searchWrapper);
+  section.appendChild(form);
+}
+
+function renderRemindersSection(reminders) {
+  const section = document.getElementById("reminders-section");
+  section.innerHTML = "<h2>Erinnerungen</h2>";
+
+  const open = (reminders || []).filter((r) => !r.resolved_at).sort((a, b) => a.due_date.localeCompare(b.due_date));
+  if (open.length) {
+    const list = document.createElement("ul");
+    list.className = "reminders-list";
+    for (const reminder of open) {
+      const li = document.createElement("li");
+      const overdue = reminder.due_date <= new Date().toISOString().slice(0, 10);
+      const text = document.createElement("span");
+      text.textContent = `${formatDate(reminder.due_date)}${overdue ? " ⚠" : ""} – ${reminder.note || "(ohne Notiz)"}`;
+      li.appendChild(text);
+
+      const resolveBtn = document.createElement("button");
+      resolveBtn.type = "button";
+      resolveBtn.textContent = "Erledigt";
+      resolveBtn.addEventListener("click", async () => {
+        resolveBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/reminders/${encodeURIComponent(reminder.id)}/resolve`, { method: "POST" });
+          if (!res.ok) {
+            const body = await res.json();
+            showToast("Fehler: " + (body.detail || res.statusText), true);
+            resolveBtn.disabled = false;
+            return;
+          }
+          loadCard();
+        } catch (err) {
+          showToast("Fehler: " + err, true);
+          resolveBtn.disabled = false;
+        }
+      });
+      li.appendChild(resolveBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = "Löschen";
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm("Diese Erinnerung wirklich löschen?")) return;
+        deleteBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/reminders/${encodeURIComponent(reminder.id)}`, { method: "DELETE" });
+          if (!res.ok && res.status !== 204) {
+            const body = await res.json();
+            showToast("Fehler: " + (body.detail || res.statusText), true);
+            deleteBtn.disabled = false;
+            return;
+          }
+          loadCard();
+        } catch (err) {
+          showToast("Fehler: " + err, true);
+          deleteBtn.disabled = false;
+        }
+      });
+      li.appendChild(deleteBtn);
+
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Keine offenen Erinnerungen.";
+    section.appendChild(empty);
+  }
+
+  const form = document.createElement("form");
+  form.className = "reminder-add-form";
+  const dateInput = document.createElement("input");
+  dateInput.type = "date";
+  dateInput.required = true;
+  const noteInput = document.createElement("input");
+  noteInput.type = "text";
+  noteInput.placeholder = "Notiz (optional)";
+  const addBtn = document.createElement("button");
+  addBtn.type = "submit";
+  addBtn.textContent = "Erinnerung hinzufügen";
+  form.append(dateInput, noteInput, addBtn);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    addBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/reminders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ due_date: dateInput.value, note: noteInput.value }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        addBtn.disabled = false;
+        return;
+      }
+      showToast("Erinnerung angelegt.");
+      loadCard();
+    } catch (err) {
+      showToast("Fehler: " + err, true);
+      addBtn.disabled = false;
+    }
+  });
   section.appendChild(form);
 }
 

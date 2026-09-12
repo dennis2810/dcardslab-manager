@@ -948,6 +948,7 @@ def record_auto_backup(uploaded_at):
 NOTIFICATION_SETTINGS_FIELDS = {
     "smtp_host", "smtp_port", "smtp_username", "smtp_password",
     "smtp_from", "smtp_to", "smtp_use_tls", "notify_on_sale",
+    "notify_on_reminders",
 }
 
 
@@ -1540,3 +1541,107 @@ def all_push_subscriptions():
 
 def delete_push_subscription(endpoint):
     get_client().table("push_subscriptions").delete().eq("endpoint", endpoint).execute()
+
+
+def create_reminder(card_id, note, due_date):
+    response = get_client().table("reminders").insert({
+        "card_id": card_id, "note": note, "due_date": due_date,
+    }).execute()
+    return response.data[0]
+
+
+def list_reminders_for_card(card_id):
+    response = (
+        get_client().table("reminders").select("*")
+        .eq("card_id", card_id).order("due_date").execute()
+    )
+    return response.data
+
+
+def list_due_reminders():
+    # Faellige, noch offene Erinnerungen (Dashboard "Was jetzt tun?" +
+    # E-Mail-Digest, siehe main.py's _send_reminder_digest_if_due()) -
+    # due_date <= heute (reine Datums-, keine Zeitstempel-Spalte).
+    from datetime import date
+
+    today_iso = date.today().isoformat()
+    response = (
+        get_client().table("reminders").select("*")
+        .is_("resolved_at", "null").lte("due_date", today_iso)
+        .order("due_date").execute()
+    )
+    return response.data
+
+
+def resolve_reminder(reminder_id):
+    from datetime import datetime, timezone
+
+    response = (
+        get_client().table("reminders")
+        .update({"resolved_at": datetime.now(timezone.utc).isoformat()})
+        .eq("id", reminder_id).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def delete_reminder(reminder_id):
+    get_client().table("reminders").delete().eq("id", reminder_id).execute()
+
+
+def list_stale_unsold_listings(min_days_listed=90, stale_check_days=30):
+    # Wiedervorlage-Regel 1 (Klaerung mit dem Nutzer): "Karte seit N Tagen
+    # unverkauft, aber keine aktuelle Preisrecherche vorhanden oder
+    # veraltet" - client-seitig gefiltert, gleiches Prinzip wie
+    # list_listings_due_for_price_research().
+    from datetime import datetime, timedelta, timezone
+
+    response = (
+        get_client().table("ebay_listings").select("*")
+        .eq("status", "Veroeffentlicht").execute()
+    )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    listed_cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=min_days_listed)).isoformat()
+    check_cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=stale_check_days)).isoformat()
+    stale = []
+    for row in response.data:
+        since = row.get("listing_since")
+        if not since or since > listed_cutoff_iso:
+            continue
+        last_check = row.get("last_price_research_at")
+        if last_check and last_check > check_cutoff_iso:
+            continue
+        stale.append(row)
+    return stale
+
+
+def list_stale_wishlist_items(min_days=60):
+    # Wiedervorlage-Regel 2: Wunschlisten-Eintrag lange angelegt, ohne dass
+    # der Zielpreis je erreicht wurde. Kein voller Preisverlauf gespeichert -
+    # Annaeherung ueber den zuletzt gefundenen Treffer (last_match_price):
+    # noch nie einer gefunden, oder der zuletzt gefundene liegt ueber dem
+    # Zielpreis.
+    from datetime import datetime, timedelta, timezone
+
+    response = get_client().table("wishlist_items").select("*").execute()
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=min_days)).isoformat()
+    stale = []
+    for row in response.data:
+        if row.get("created_at", "") > cutoff_iso:
+            continue
+        target = row.get("target_price")
+        if target is None:
+            continue
+        match = row.get("last_match_price")
+        if match is not None and match <= target:
+            continue
+        stale.append(row)
+    return stale
+
+
+def record_reminder_email_sent(sent_at):
+    # Gleiches Singleton-Row-Muster wie record_auto_backup() - drosselt den
+    # E-Mail-Digest auf einmal pro Tag (main.py's _is_reminder_digest_due()).
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_reminder_email_sent_at": sent_at,
+    }).execute()
+    return response.data[0]

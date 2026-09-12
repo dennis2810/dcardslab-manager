@@ -382,6 +382,16 @@ class AppStatusEndpointTests(unittest.TestCase):
             response = client.get("/api/app-status")
         self.assertEqual(response.json()["view_density"], "comfort")
 
+    def test_returns_notify_on_reminders(self):
+        with patch("main.db.get_app_status", return_value={"notify_on_reminders": True}):
+            response = client.get("/api/app-status")
+        self.assertTrue(response.json()["notify_on_reminders"])
+
+    def test_notify_on_reminders_defaults_to_false(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertFalse(response.json()["notify_on_reminders"])
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):

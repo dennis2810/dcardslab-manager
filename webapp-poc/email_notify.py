@@ -96,3 +96,35 @@ def format_sale_notification(newly_synced):
 
     body = subject + ":\n\n" + "\n".join(lines) + "\n"
     return subject, body
+
+
+def format_reminder_digest(due_reminders, stale_listings, stale_wishlist):
+    """Baut (subject, body) fuer den taeglichen Wiedervorlage-Digest
+    (main.py's _send_reminder_digest_if_due()). Jede der drei Listen ist
+    bereits mit einem "title" angereichert (due_reminders/stale_listings:
+    Kartentitel, stale_wishlist: eigener Wunschlisten-Titel), damit diese
+    Funktion selbst keine DB-Zugriffe braucht."""
+    total = len(due_reminders) + len(stale_listings) + len(stale_wishlist)
+    subject = "1 fällige Wiedervorlage" if total == 1 else f"{total} fällige Wiedervorlagen"
+
+    lines = []
+    if due_reminders:
+        lines.append("Eigene Erinnerungen:")
+        for reminder in due_reminders:
+            title = reminder.get("title") or "(ohne Titel)"
+            note = reminder.get("note") or ""
+            lines.append(f"- {title}: {note} (fällig {reminder.get('due_date')})")
+        lines.append("")
+    if stale_listings:
+        lines.append("Lange unverkauft, ohne aktuelle Preisrecherche:")
+        for listing in stale_listings:
+            lines.append(f"- {listing.get('title') or '(ohne Titel)'}")
+        lines.append("")
+    if stale_wishlist:
+        lines.append("Wunschliste, Zielpreis lange nicht erreicht:")
+        for item in stale_wishlist:
+            lines.append(f"- {item.get('title') or '(ohne Titel)'} (Zielpreis {item.get('target_price')} €)")
+        lines.append("")
+
+    body = subject + ":\n\n" + "\n".join(lines).strip() + "\n"
+    return subject, body
