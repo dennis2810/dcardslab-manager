@@ -245,18 +245,41 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
 
 class ListEbayListingViewsEndpointTests(unittest.TestCase):
     def test_returns_views_per_listing_id(self):
+        listings = [_listing(id="listing-1", ebay_listing_id="111"), _listing(id="listing-2", ebay_listing_id="222")]
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
-             patch("main.ebay_client.get_listing_views", return_value={"111": 42, "222": 7}) as mock_views:
+             patch("main.ebay_client.get_listing_views", return_value={"111": 42, "222": 7}) as mock_views, \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.update_ebay_listing") as mock_update:
             response = client.get("/api/ebay/listings/views?listing_ids=111,222")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["views"], {"111": 42, "222": 7})
         mock_views.assert_called_once_with("tok", ["111", "222"])
+        # Bleibt in der Karten-/eBay-Uebersicht sichtbar, bis das naechste
+        # Mal auf "Aufrufe laden" geklickt wird (Klaerung mit dem Nutzer),
+        # statt bei jedem Seiten-Neuladen wieder bei "-" zu starten.
+        mock_update.assert_any_call("listing-1", {"last_known_views": 42})
+        mock_update.assert_any_call("listing-2", {"last_known_views": 7})
 
     def test_ignores_empty_ids_entries(self):
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
-             patch("main.ebay_client.get_listing_views", return_value={}) as mock_views:
+             patch("main.ebay_client.get_listing_views", return_value={}) as mock_views, \
+             patch("main.db.list_ebay_listings") as mock_list, \
+             patch("main.db.update_ebay_listing") as mock_update:
             client.get("/api/ebay/listings/views?listing_ids=111,,222,")
         mock_views.assert_called_once_with("tok", ["111", "222"])
+        mock_list.assert_not_called()
+        mock_update.assert_not_called()
+
+    def test_skips_persisting_for_a_listing_id_with_no_local_match(self):
+        # z.B. ein Angebot, das inzwischen lokal geloescht wurde, aber bei
+        # eBay noch existiert - darf den Aufrufe-laden-Aufruf nicht crashen.
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_views", return_value={"999": 3}), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.get("/api/ebay/listings/views?listing_ids=999")
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_not_called()
 
     def test_returns_401_when_not_authorized(self):
         with patch("main.ebay_client.get_access_token",

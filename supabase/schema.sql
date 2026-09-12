@@ -474,3 +474,32 @@ create table if not exists push_subscriptions (
 -- Button) - der Spaltenname blieb bewusst, um keine bestehende Spalte
 -- umbenennen zu muessen.
 alter table ebay_listings add column if not exists listing_since timestamptz;
+
+-- Bugfix-Nachtrag zur obigen Migration: listing_since fehlte in db.py's
+-- EBAY_LISTING_WRITABLE_STATUS_FIELDS-Allowlist und wurde von
+-- update_ebay_listing() dadurch fuer JEDEN Aufruf (Erstveroeffentlichung
+-- wie Neu-Einstellen) still verworfen, ohne Fehler - dieser Backfill holt
+-- fuer bereits bestehende Zeilen mit published_at das nach, sonst bliebe
+-- "Eingestellt am" auf der Kartenseite fuer alle vor diesem Fix
+-- veroeffentlichten Angebote leer. Kein exaktes Ersteinstellungsdatum (da
+-- published_at auch bei reinen Bearbeitungen ueberschrieben wurde), aber
+-- die bestmoegliche Annaeherung ohne Blick in eBays eigene Historie.
+update ebay_listings set listing_since = published_at
+  where listing_since is null and published_at is not null;
+
+-- Migration (2026-09-12): letzte bekannte Aufrufzahl (siehe
+-- ebay_client.get_listing_views(), main.py's ebay_listing_views()) bleibt
+-- jetzt in der Karten-/eBay-Uebersicht sichtbar, bis das naechste Mal auf
+-- "Aufrufe laden" geklickt wird, statt nach jedem Seiten-Neuladen wieder
+-- bei "-" zu starten (Klaerung mit dem Nutzer).
+alter table ebay_listings add column if not exists last_known_views int;
+
+-- Migration (2026-09-12): konfigurierbare Preis-Alarm-Schwelle (Einstellungen)
+-- statt der zuvor fest verdrahteten 20% in card.html/dashboard.html/ebay.html.
+alter table app_status add column if not exists price_alert_threshold_pct numeric not null default 20;
+
+-- Migration (2026-09-12): rein informatives Protokoll fehlgeschlagener
+-- Login-Versuche (main.py's db.record_failed_login(), Anzeige in
+-- settings.html) - die eigentliche Bruteforce-Drossel in main.py's
+-- /api/login laeuft komplett in-memory und ist davon unabhaengig.
+alter table app_status add column if not exists failed_login_log jsonb not null default '[]'::jsonb;

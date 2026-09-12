@@ -1318,6 +1318,21 @@ class UpdateEbayListingTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             self.assertIsNone(db.update_ebay_listing("does-not-exist", {"price": 1}))
 
+    def test_listing_since_and_last_known_views_are_writable(self):
+        # Regression test: beide Felder wurden in main.py bereits geschrieben
+        # (siehe _publish_listing()/relist bzw. die Aufrufe-Persistierung),
+        # fehlten aber im Allowlist hier - db.update_ebay_listing() hat sie
+        # bis dahin still verworfen, ohne Fehler.
+        mock_client = MagicMock()
+        _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.update_ebay_listing("listing-1", {
+                "listing_since": "2026-09-01T10:00:00Z", "last_known_views": 42,
+            })
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["listing_since"], "2026-09-01T10:00:00Z")
+        self.assertEqual(row["last_known_views"], 42)
+
     def test_rounds_price_to_two_decimals(self):
         mock_client = MagicMock()
         _mock_table(mock_client, "ebay_listings", [{"id": "listing-1"}])
@@ -1880,6 +1895,63 @@ class AppStatusTests(unittest.TestCase):
             db.save_notification_settings({"smtp_host": "smtp.example.com", "smtp_port": 587})
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "smtp_host": "smtp.example.com", "smtp_port": 587})
+
+    def test_set_price_alert_threshold_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "price_alert_threshold_pct": 15}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_price_alert_threshold(15)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "price_alert_threshold_pct": 15})
+
+    def test_record_failed_login_prepends_to_existing_log(self):
+        mock_client = MagicMock()
+        select_response = MagicMock()
+        select_response.data = [{
+            "id": True,
+            "failed_login_log": [{"at": "2026-09-01T00:00:00+00:00", "ip": "1.1.1.1"}],
+        }]
+        mock_client.table.return_value.select.return_value.execute.return_value = select_response
+        upsert_response = MagicMock()
+        upsert_response.data = [{"id": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = upsert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_failed_login("2.2.2.2", "2026-09-12T08:00:00+00:00")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(
+            row["failed_login_log"][0], {"at": "2026-09-12T08:00:00+00:00", "ip": "2.2.2.2"}
+        )
+        self.assertEqual(len(row["failed_login_log"]), 2)
+
+    def test_record_failed_login_caps_at_20_entries(self):
+        mock_client = MagicMock()
+        select_response = MagicMock()
+        existing = [{"at": f"t{i}", "ip": "x"} for i in range(20)]
+        select_response.data = [{"id": True, "failed_login_log": existing}]
+        mock_client.table.return_value.select.return_value.execute.return_value = select_response
+        upsert_response = MagicMock()
+        upsert_response.data = [{"id": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = upsert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_failed_login("2.2.2.2", "new")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(len(row["failed_login_log"]), 20)
+        self.assertEqual(row["failed_login_log"][0]["at"], "new")
+
+    def test_record_failed_login_handles_no_existing_row(self):
+        mock_client = MagicMock()
+        select_response = MagicMock()
+        select_response.data = []
+        mock_client.table.return_value.select.return_value.execute.return_value = select_response
+        upsert_response = MagicMock()
+        upsert_response.data = [{"id": True}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = upsert_response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_failed_login("2.2.2.2", "new")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row["failed_login_log"], [{"at": "new", "ip": "2.2.2.2"}])
 
     def test_save_notification_settings_ignores_unknown_fields(self):
         mock_client = MagicMock()

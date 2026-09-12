@@ -266,6 +266,15 @@ if ("serviceWorker" in navigator) {
   });
 })();
 
+// Konfigurierbare Preis-Alarm-Schwelle (Einstellungen, Abschnitt "Preis-
+// Alarm") - Default 20% bleibt bestehen, falls /api/app-status (noch) nicht
+// geantwortet hat. Einmal beim Laden der Seite abgerufen, nicht bei jedem
+// loadCard() erneut (spart einen Request pro Speichern-Klick).
+let priceAlertThresholdPct = 20;
+fetch("/api/app-status").then((r) => r.json()).then((body) => {
+  priceAlertThresholdPct = body.price_alert_threshold_pct || 20;
+}).catch(() => {});
+
 // Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
 // Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
 // Button bleibt sie sichtbar, auch wenn man inzwischen weitergescrollt hat.
@@ -1614,12 +1623,13 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
   }
 
   // Preis-Alarm: warnt in beide Richtungen, wenn der eigene Angebotspreis um
-  // mindestens 20% vom Durchschnitt der erfassten Preisrecherche-Einträge
-  // abweicht - sowohl "zu teuer" (verkauft sich schlecht) als auch "zu
-  // billig" (Geld liegen gelassen) sind für den Verkäufer relevant.
+  // mindestens priceAlertThresholdPct% (Einstellungen, Standard 20%) vom
+  // Durchschnitt der erfassten Preisrecherche-Einträge abweicht - sowohl
+  // "zu teuer" (verkauft sich schlecht) als auch "zu billig" (Geld liegen
+  // gelassen) sind für den Verkäufer relevant.
   if (listingPrice != null && avg != null) {
     const diffPct = ((Number(listingPrice) - avg) / avg) * 100;
-    if (avg > 0 && Math.abs(diffPct) >= 20) {
+    if (avg > 0 && Math.abs(diffPct) >= priceAlertThresholdPct) {
       const alertP = document.createElement("p");
       alertP.className = "price-alert";
       const direction = diffPct > 0 ? "über" : "unter";
@@ -2519,6 +2529,12 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     viewsBtn.textContent = "👁 Aufrufe laden";
     const viewsResult = document.createElement("span");
     viewsResult.style.marginLeft = "0.5rem";
+    // Letzter bekannter Wert bleibt sichtbar, bis erneut auf "Aufrufe laden"
+    // geklickt wird (main.py speichert last_known_views bei jedem Abruf) -
+    // kein "-" nach jedem Seiten-Neuladen mehr (Klaerung mit dem Nutzer).
+    if (listing.last_known_views !== null && listing.last_known_views !== undefined) {
+      viewsResult.textContent = `${listing.last_known_views} Aufrufe (letzte 30 Tage)`;
+    }
     viewsBtn.addEventListener("click", async () => {
       viewsResult.textContent = "Lädt …";
       viewsResult.className = "";

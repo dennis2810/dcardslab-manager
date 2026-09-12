@@ -162,6 +162,24 @@ Endpunkte über eine signierte Session-Cookie
 2. Beim nächsten Aufruf des Tools leitet `login.html` automatisch dorthin
    weiter; „Abmelden" steht in den Einstellungen zur Verfügung.
 
+Optional zusätzlich, beide ebenfalls beim Container-Deployment gesetzt:
+
+- `SESSION_COOKIE_SECURE` (`true`/`1`/`yes`, Standard aus): setzt das
+  `secure`-Flag auf der Session-Cookie. Auf `true` setzen, sobald das Tool
+  nur noch über HTTPS erreichbar ist (Standard bleibt `false`, damit ein
+  reines-LAN-Deployment ohne Reverse-Proxy-TLS nicht ausgesperrt wird - ein
+  Browser sendet ein `secure`-Cookie sonst nie über eine unverschlüsselte
+  Verbindung).
+- `SESSION_TIMEOUT_MINUTES` (Standard `20160` = 14 Tage): wie lange eine
+  Sitzung nach der letzten Nutzung gültig bleibt - ein gleitendes
+  Inaktivitäts-Fenster, jede Nutzung verlängert es erneut um denselben
+  Zeitraum, statt fest ab dem Login abzulaufen.
+
+Nach 5 falschen Passwörtern von derselben Quelle sperrt `/api/login`
+weitere Versuche für 60 Sekunden (In-Memory, überlebt keinen Neustart);
+fehlgeschlagene Versuche werden zusätzlich (Zeitpunkt + IP) in den
+Einstellungen unter „Login" angezeigt.
+
 Die eBay-OAuth-Callback (`/api/sheets/oauth/callback` für Google
 entsprechend) läuft über eine normale Browser-Weiterleitung im bereits
 angemeldeten Tab und bleibt daher hinter dem Login - keine gesonderte
@@ -269,9 +287,7 @@ Build-Kontext ist bewusst der **Repo-Root** (nicht `webapp-poc/`), weil
 
 ```bash
 # Im Hauptordner des Repos (dcardslab-manager), nicht in webapp-poc/:
-docker build -f webapp-poc/Dockerfile \
-  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-  -t dcardslab-webapp-poc .
+docker build -f webapp-poc/Dockerfile -t dcardslab-webapp-poc .
 
 docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e ANTHROPIC_API_KEY=dein-api-key \
@@ -320,16 +336,41 @@ Dann von irgendeinem Gerät im Tailscale-Netz: `http://<nas-tailscale-name>:8000
 ### Prüfen, ob ein Update/PR wirklich im laufenden Container angekommen ist
 
 Unter Einstellungen ("Version") oder direkt per `GET /api/version` zeigt der
-Container, wann er zuletzt gebaut wurde (`built_at`, automatisch bei jedem
-Build gesetzt - auch über eine NAS-Docker-App mit eigenem "Neu bauen"-Knopf,
-ohne dass dafür ein `--build-arg` nötig ist) und, falls beim `docker build`
-mit `--build-arg GIT_COMMIT=$(git rev-parse --short HEAD)` gebaut wurde,
-zusätzlich den Commit-Kurzhash. Zeigt `built_at` einen alten Zeitpunkt, obwohl
-gerade neu gebaut wurde, liegt es fast immer daran, dass der lokale
-Repo-Checkout auf dem Deployment-Host vor dem Build nicht aktualisiert wurde
-(`git pull`/`git fetch && git reset --hard origin/main` im Checkout-Ordner,
-je nach eigenem Workflow, dann erneut bauen) - ein reiner Docker-Rebuild ohne
-vorheriges Nachziehen des Codes baut sonst unbemerkt den alten Stand erneut.
+Container:
+
+- `built_at` - wann er zuletzt tatsächlich neu gebaut wurde (nicht nur, wann
+  der Build-Befehl lief - bei unverändertem Code wird die Layer aus dem
+  Docker-Cache bedient und der Zeitstempel bleibt stehen).
+- `git_commit`/`last_pr`/`last_commit_subject` - Commit-Kurzhash bzw. Nummer
+  des zuletzt gemergten Pull Requests, direkt aus dem `.git`-Ordner im
+  Build-Kontext gelesen (eigene Build-Stage im Dockerfile mit git nur
+  während des Builds).
+
+Alle vier Werte werden **automatisch bei jedem Build** gesetzt - kein
+`--build-arg`, kein git auf dem Docker-Host selbst nötig (der hat oft gar
+keins installiert), funktioniert also auch über eine NAS-Docker-App mit
+eigenem "Neu bauen"-Knopf. Voraussetzung ist nur ein echter `git clone`-
+Checkout als Build-Kontext (mit intaktem `.git`-Ordner), kein `.dockerignore`,
+das `.git` ausschließt.
+
+Zeigt `built_at` einen alten Zeitpunkt, obwohl gerade neu gebaut wurde, liegt
+es fast immer daran, dass der lokale Repo-Checkout auf dem Deployment-Host vor
+dem Build nicht aktualisiert wurde. Falls auf dem Host kein `git` installiert
+ist (z. B. auf manchen NAS-Systemen), lässt sich das trotzdem ohne
+Host-Installation nachholen, indem `git` selbst aus einem Container heraus
+läuft:
+
+```bash
+# Im Checkout-Ordner: Aktuellen Stand pruefen
+docker run --rm -v "$(pwd)":/git -w /git alpine/git log --oneline -5
+
+# Neuesten Code holen (schlaegt fehl, falls lokale Aenderungen im Weg stehen -
+# dann erst "git diff <datei>" pruefen, ob die verworfen werden koennen)
+docker run --rm -v "$(pwd)":/git -w /git alpine/git pull origin main
+
+# Danach neu bauen
+docker compose -f docker-compose.webapp-poc.yml up -d --build
+```
 
 `docker logs -f dcardslab-webapp-poc` zeigt Fehler beim Verarbeiten; zum
 Stoppen `docker rm -f dcardslab-webapp-poc`. Läuft ohne das optionale

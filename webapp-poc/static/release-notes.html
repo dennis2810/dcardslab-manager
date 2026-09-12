@@ -125,9 +125,16 @@ if ("serviceWorker" in navigator) {
       Anmeldung erreichbar. „Abmelden" steht in den Einstellungen bereit.</li>
     <li>Neue Seite „Backlog" (verlinkt unter Einstellungen → Hilfe): angedachte, aber noch nicht umgesetzte
       Features samt offenen Fragen dazu, z. B. eine automatische Preisanpassung bei Preis-Alarm.</li>
-    <li>Neuer Abschnitt „Version" in den Einstellungen: zeigt, wann der laufende Container zuletzt gebaut wurde –
-      praktisch, um nach einem Update zu prüfen, ob eine erwartete Änderung wirklich angekommen ist, statt nur zu
-      vermuten (siehe README.md).</li>
+    <li>Neuer Abschnitt „Version" in den Einstellungen: zeigt, wann der laufende Container zuletzt gebaut wurde und
+      – automatisch aus dem Build-Kontext ausgelesen, ohne zusätzliche Einrichtung – Commit-Kurzhash und Nummer des
+      zuletzt gemergten Pull Requests. Praktisch, um nach einem Update zu prüfen, ob eine erwartete Änderung
+      wirklich angekommen ist, statt nur zu vermuten (siehe README.md).</li>
+    <li>Login-Härtung: nach 5 falschen Passwörtern von derselben Quelle sperrt das Tool weitere Versuche für
+      60 Sekunden; fehlgeschlagene Anmeldeversuche (Zeitpunkt + IP) werden zusätzlich in den Einstellungen unter
+      „Login" angezeigt. Die Session-Cookie-Sicherheitsoptionen (<code>SESSION_COOKIE_SECURE</code>,
+      <code>SESSION_TIMEOUT_MINUTES</code>) lassen sich jetzt explizit konfigurieren, siehe README.md.</li>
+    <li>Preis-Alarm-Schwelle (Kartenseite, eBay-Übersicht, Dashboard-Kachel „Preis-Alarme") ist jetzt in den
+      Einstellungen konfigurierbar, statt fest bei 20&nbsp;% zu liegen.</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
@@ -181,6 +188,8 @@ if ("serviceWorker" in navigator) {
       (sofern beim Deployment ein entsprechendes Docker-Volume eingebunden wurde).</li>
     <li>Kleines 📥-Symbol in der Kartenübersicht (Kachel- und Listenansicht) für Karten mit einem manuell
       importierten, extern verwalteten eBay-Angebot.</li>
+    <li>Filter, Sortierung, Seite und Scrollposition der Kartenübersicht bleiben jetzt beim Besuch einer
+      Kartendetailseite und der Rückkehr erhalten, statt bei jedem Neuladen zurückgesetzt zu werden.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>
@@ -319,9 +328,12 @@ if ("serviceWorker" in navigator) {
       Button – wird auf der Kartenseite sichtbar markiert („🔄 Neu eingestellt am …"). Dort steht jetzt außerdem
       „Eingestellt am … (läuft seit X Tagen)" – zeigt, seit wann genau das aktuell laufende eBay-Angebot live ist
       (anders als „Zuletzt aktualisiert", das auch eine reine Bearbeitung widerspiegelt), und setzt sich bei jedem
-      Neu-Einstellen zurück.</li>
+      Neu-Einstellen zurück. Beides gibt es jetzt auch auf der eBay-Seite: 🔄-Symbol in der Status-Spalte und neue
+      Spalte „Eingestellt am".</li>
     <li>„Neu einstellen" gibt es jetzt auch als Massenaktion „Ausgewählte neu einstellen" auf der eBay-Seite,
       mit derselben Gnadenfrist samt „Rückgängig" wie beim Massen-Beenden.</li>
+    <li>Die zuletzt geladenen Aufrufzahlen („👁 Aufrufe laden") bleiben jetzt gespeichert und sichtbar, auch nach
+      einem Neuladen der Seite – vorher standen nach jedem Neuladen wieder „–", bis erneut geklickt wurde.</li>
     <li>Das 📥-Symbol für importierte Angebote in der Kartenübersicht zeigt jetzt nur noch das Icon statt eines
       vollen Text-Badges, damit es neben anderen Status-Kennzeichen (Versendet, Zugestellt, Retoure, …) nicht zu
       eng wird.</li>

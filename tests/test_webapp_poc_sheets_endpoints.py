@@ -341,6 +341,27 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertTrue(body["smtp_use_tls"])
         self.assertFalse(body["smtp_password_set"])
 
+    def test_returns_price_alert_threshold_pct(self):
+        with patch("main.db.get_app_status", return_value={"price_alert_threshold_pct": 15}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["price_alert_threshold_pct"], 15)
+
+    def test_price_alert_threshold_pct_defaults_to_20(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["price_alert_threshold_pct"], 20)
+
+    def test_returns_failed_login_log(self):
+        log = [{"at": "2026-09-12T08:00:00+00:00", "ip": "1.2.3.4"}]
+        with patch("main.db.get_app_status", return_value={"failed_login_log": log}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["failed_login_log"], log)
+
+    def test_failed_login_log_defaults_to_empty_list(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["failed_login_log"], [])
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):
@@ -366,6 +387,39 @@ class LowStockThresholdEndpointTests(unittest.TestCase):
 
     def test_rejects_non_integer_threshold(self):
         response = client.put("/api/low-stock-threshold", json={"threshold": "abc"})
+        self.assertEqual(response.status_code, 400)
+
+
+class PriceAlertThresholdEndpointTests(unittest.TestCase):
+    def test_sets_threshold(self):
+        with patch(
+            "main.db.set_price_alert_threshold",
+            return_value={"id": True, "price_alert_threshold_pct": 15},
+        ) as mock_set:
+            response = client.put("/api/price-alert-threshold", json={"threshold": 15})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["price_alert_threshold_pct"], 15)
+        mock_set.assert_called_once_with(15)
+
+    def test_accepts_decimal_threshold(self):
+        with patch(
+            "main.db.set_price_alert_threshold",
+            return_value={"id": True, "price_alert_threshold_pct": 12.5},
+        ) as mock_set:
+            response = client.put("/api/price-alert-threshold", json={"threshold": 12.5})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(12.5)
+
+    def test_rejects_zero_threshold(self):
+        response = client.put("/api/price-alert-threshold", json={"threshold": 0})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_negative_threshold(self):
+        response = client.put("/api/price-alert-threshold", json={"threshold": -5})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_numeric_threshold(self):
+        response = client.put("/api/price-alert-threshold", json={"threshold": "abc"})
         self.assertEqual(response.status_code, 400)
 
 

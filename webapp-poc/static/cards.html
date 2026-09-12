@@ -1126,7 +1126,61 @@ document.getElementById("csv-btn").addEventListener("click", () => {
   downloadCsv("karten.csv", headers, rows);
 });
 
-loadCards();
+// Letzte Ansicht merken: Filter/Sortierung/Seite/Scrollposition ueberleben
+// einen Kartenbesuch (card.html) und die Rueckkehr per Zurueck-Button oder
+// Browser-"Zurueck" - sessionStorage statt localStorage, damit ein neuer Tab
+// wieder mit den Standardwerten startet. pagehide statt eines Klick-Handlers
+// an jeder einzelnen Kartenzeile, damit JEDE Art des Verlassens der Seite
+// erfasst wird (Klick, Browser-Zurueck, Tab schliessen).
+function saveViewState() {
+  try {
+    sessionStorage.setItem("cardsViewState", JSON.stringify({
+      q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
+      shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
+      cardTypeFilter: cardTypeFilterSelect.value, sortKey, sortAsc, currentPage,
+      scrollY: window.scrollY,
+    }));
+  } catch (err) {
+    // sessionStorage kann in eingeschraenkten Browser-Kontexten werfen - die
+    // Ansicht wird dann einfach nicht gemerkt, kein harter Fehler.
+  }
+}
+window.addEventListener("pagehide", saveViewState);
+
+function readSavedViewState() {
+  try {
+    const raw = sessionStorage.getItem("cardsViewState");
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+const savedViewState = readSavedViewState();
+if (savedViewState) {
+  qInput.value = savedViewState.q || "";
+  statusSelect.value = savedViewState.status || "";
+  sortKey = savedViewState.sortKey || sortKey;
+  sortAsc = savedViewState.sortAsc !== false;
+  setSortIndicator(sortKey);
+}
+
+loadCards().then(() => {
+  if (!savedViewState) return;
+  ebayFilterSelect.value = savedViewState.ebayFilter || "";
+  shippingFilterSelect.value = savedViewState.shippingFilter || "";
+  cardTypeFilterSelect.value = savedViewState.cardTypeFilter || "";
+  // tagFilterSelect-Optionen werden erst in loadCards() -> populateTagFilter()
+  // aus den geladenen Karten aufgebaut - der gespeicherte Tag kann daher erst
+  // jetzt (nicht vorher) gesetzt werden, sonst wuerde er beim Fehlen der
+  // Option stillschweigend verworfen.
+  if (savedViewState.tagFilter && [...tagFilterSelect.options].some((o) => o.value === savedViewState.tagFilter)) {
+    tagFilterSelect.value = savedViewState.tagFilter;
+  }
+  currentPage = savedViewState.currentPage || 0;
+  renderCurrentView();
+  if (savedViewState.scrollY) window.scrollTo(0, savedViewState.scrollY);
+});
 </script>
 </body>
 </html>

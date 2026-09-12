@@ -556,7 +556,7 @@ EBAY_LISTING_FIELDS = [
 EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "status", "scheduled_at", "scheduling_mode",
     "ebay_offer_id", "ebay_listing_id", "last_error", "published_at",
-    "last_auto_relisted_at",
+    "last_auto_relisted_at", "listing_since", "last_known_views",
 }
 EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity", "auto_relist_after_days"}
 EBAY_LISTING_MONEY_FIELDS = {"price"}
@@ -869,6 +869,28 @@ def set_low_stock_threshold(threshold):
     # Gleiches Singleton-Row-Muster wie record_backup_downloaded().
     response = get_client().table("app_status").upsert({
         "id": True, "low_stock_threshold": threshold,
+    }).execute()
+    return response.data[0]
+
+
+def set_price_alert_threshold(pct):
+    # Gleiches Singleton-Row-Muster wie set_low_stock_threshold() - ersetzt
+    # die zuvor fest verdrahteten 20% in card.html/dashboard.html/ebay.html.
+    response = get_client().table("app_status").upsert({
+        "id": True, "price_alert_threshold_pct": pct,
+    }).execute()
+    return response.data[0]
+
+
+def record_failed_login(ip, at):
+    # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
+    # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory
+    # und ist davon unabhaengig. Liste auf die letzten 20 Eintraege gedeckelt,
+    # neueste zuerst, gleiches Singleton-Row-Muster wie set_low_stock_threshold().
+    status = get_app_status() or {}
+    log = [{"at": at, "ip": ip}] + list(status.get("failed_login_log") or [])[:19]
+    response = get_client().table("app_status").upsert({
+        "id": True, "failed_login_log": log,
     }).execute()
     return response.data[0]
 
