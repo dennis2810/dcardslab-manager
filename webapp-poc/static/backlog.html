@@ -33,6 +33,15 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   .back-link { font-size: 0.9rem; }
   .note { font-size: 0.85rem; color: #777; }
   p, li { line-height: 1.5; }
@@ -92,48 +101,6 @@ if ("serviceWorker" in navigator) {
         wäre ein guter Anlass, zuerst eine gemeinsame CSS-Datei einzuführen.</li>
       <li>Wer liefert die Canva-Entwürfe (Screenshots/Export) als Vorlage?</li>
     </ul>
-  </div>
-
-  <div class="item">
-    <h3>Bessere Lesbarkeit auf Smartphones <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
-    <p>Mobile-freundliche Tabellen (Karten-Layout statt Scroll-Tabelle) sind bereits umgesetzt, aber Schriftgrößen,
-      Zeilenabstände und Touch-Ziele (Buttons, Checkboxen, das Seiten-Auswahlfeld in der Navigation) sind bisher
-      nicht gezielt für kleine Bildschirme geprüft/optimiert – die Seiten sind primär Desktop-first gestaltet.
-      Umfasst z. B.:</p>
-    <ul>
-      <li>Schriftgrößen und Abstände auf Handy-Breite (~360–400px) einzeln durchgehen, nicht nur "schrumpfen
-        lassen".</li>
-      <li>Größere Touch-Flächen für Buttons/Checkboxen/Links in Tabellenzeilen.</li>
-      <li>Sticky-Elemente (Massenaktionen-Leiste, Navigation) auf kleinen Bildschirmen gegenprüfen, ob sie zu viel
-        vertikalen Platz wegnehmen.</li>
-    </ul>
-  </div>
-
-  <div class="item">
-    <h3>CSV-Trennzeichen umschaltbar <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: klein–mittel</span></h3>
-    <p>CSV-Exporte (Karten, Käufe, Inventar, eBay, Wunschliste, Inventur, Alle Verkäufe, Versand-Checkliste,
-      Käufer-Historie …) verwenden aktuell Komma als Trennzeichen. Excel in deutscher Spracheinstellung erwartet
-      standardmäßig Semikolon, sonst landet beim Öffnen alles in einer Spalte. Eine Einstellung (Komma/Semikolon)
-      müsste in jede der bestehenden, pro Seite eigenständigen Export-Funktionen einfließen – daher „klein" pro
-      Stelle, aber auf mehrere Seiten verteilt.</p>
-  </div>
-
-  <div class="item">
-    <h3>Dashboard-KPI-Kacheln selbst wählen/sortieren <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
-    <p>Aktuell zeigt das Dashboard eine feste Auswahl an Kennzahlen-Kacheln. Eine Auswahl-/Sortier-UI (welche
-      Kacheln, in welcher Reihenfolge) plus deren Speicherung wäre ein neues UI-Konzept, betrifft aber nur eine
-      Seite.</p>
-  </div>
-
-  <div class="item">
-    <h3>Gespeicherte Filter-Ansichten/Presets <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
-    <p>Über die einfache „letzte Ansicht merken" (bereits umgesetzt auf der Kartenübersicht) hinaus: mehrere
-      benannte Filter-/Sortier-Kombinationen speichern und später wieder anwenden können, je Seite mit Filtern.
-      Neues Konzept (Speichern, Benennen, Verwalten, Anwenden) statt nur eines einzigen gemerkten Zustands.</p>
   </div>
 
   <div class="item">

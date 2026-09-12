@@ -1940,6 +1940,16 @@ class AppStatusTests(unittest.TestCase):
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "view_density": "compact"})
 
+    def test_set_csv_delimiter_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "csv_delimiter": ","}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_csv_delimiter(",")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "csv_delimiter": ","})
+
     def test_set_reminder_thresholds_upserts_with_singleton_id(self):
         mock_client = MagicMock()
         response = MagicMock()

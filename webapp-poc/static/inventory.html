@@ -50,6 +50,15 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
@@ -287,6 +296,7 @@ function makeRowKeyboardNavigable(row) {
 }
 
 let PAGE_SIZE = 40;
+let CSV_DELIMITER = ";";
 let currentPage = 0;
 const statusMsg = document.getElementById("status-msg");
 const totalValueEl = document.getElementById("total-value");
@@ -420,6 +430,7 @@ async function loadInventory() {
       lowStockThreshold = statusBody.low_stock_threshold || 0;
       PAGE_SIZE = statusBody.page_size || 40;
       document.body.classList.toggle("compact", statusBody.view_density === "compact");
+      CSV_DELIMITER = statusBody.csv_delimiter || ";";
     }
     items = data.inventory.map((item) => ({ ...item, card_title: item.card?.title || "" }));
     totalValueEl.textContent = `Gesamtwert: ${fmtEuro(data.total_value ?? 0)}`;
@@ -805,9 +816,9 @@ qInput.addEventListener("input", () => {
 function downloadCsv(filename, headers, rows) {
   const escape = (v) => {
     const s = v == null ? "" : String(v);
-    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    return /["\n,;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(CSV_DELIMITER));
   const csv = "\uFEFF" + lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

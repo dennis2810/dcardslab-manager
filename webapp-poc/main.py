@@ -2951,6 +2951,7 @@ async def app_status():
         "stale_listing_min_days": status.get("stale_listing_min_days") or STALE_LISTING_MIN_DAYS,
         "stale_listing_check_days": status.get("stale_listing_check_days") or STALE_LISTING_CHECK_MAX_AGE_DAYS,
         "stale_wishlist_min_days": status.get("stale_wishlist_min_days") or STALE_WISHLIST_MIN_DAYS,
+        "csv_delimiter": status.get("csv_delimiter") or ";",
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
@@ -3107,6 +3108,15 @@ async def set_view_density(fields: dict = Body(...)):
     if density not in ("comfort", "compact"):
         raise HTTPException(status_code=400, detail="density muss 'comfort' oder 'compact' sein.")
     updated = db.set_view_density(density)
+    return JSONResponse(updated)
+
+
+@app.put("/api/csv-delimiter")
+async def set_csv_delimiter(fields: dict = Body(...)):
+    delimiter = fields.get("delimiter")
+    if delimiter not in (",", ";"):
+        raise HTTPException(status_code=400, detail="delimiter muss ',' oder ';' sein.")
+    updated = db.set_csv_delimiter(delimiter)
     return JSONResponse(updated)
 
 

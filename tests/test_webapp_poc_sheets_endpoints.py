@@ -409,6 +409,16 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(body["stale_listing_check_days"], 30)
         self.assertEqual(body["stale_wishlist_min_days"], 60)
 
+    def test_returns_csv_delimiter(self):
+        with patch("main.db.get_app_status", return_value={"csv_delimiter": ","}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["csv_delimiter"], ",")
+
+    def test_csv_delimiter_defaults_to_semicolon(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["csv_delimiter"], ";")
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):
@@ -511,6 +521,25 @@ class ViewDensityEndpointTests(unittest.TestCase):
 
     def test_rejects_invalid_density(self):
         response = client.put("/api/view-density", json={"density": "tiny"})
+        self.assertEqual(response.status_code, 400)
+
+
+class CsvDelimiterEndpointTests(unittest.TestCase):
+    def test_sets_comma(self):
+        with patch("main.db.set_csv_delimiter", return_value={"id": True, "csv_delimiter": ","}) as mock_set:
+            response = client.put("/api/csv-delimiter", json={"delimiter": ","})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["csv_delimiter"], ",")
+        mock_set.assert_called_once_with(",")
+
+    def test_sets_semicolon(self):
+        with patch("main.db.set_csv_delimiter", return_value={"id": True, "csv_delimiter": ";"}) as mock_set:
+            response = client.put("/api/csv-delimiter", json={"delimiter": ";"})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(";")
+
+    def test_rejects_invalid_delimiter(self):
+        response = client.put("/api/csv-delimiter", json={"delimiter": "|"})
         self.assertEqual(response.status_code, 400)
 
 

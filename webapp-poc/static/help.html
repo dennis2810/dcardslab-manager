@@ -34,6 +34,15 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   .back-link { font-size: 0.9rem; }
   .toc { background: rgba(127, 127, 127, 0.1); border-radius: 6px; padding: 0.75rem 1.25rem; }
   .toc li { margin: 0.15rem 0; }
@@ -142,7 +151,10 @@ if ("serviceWorker" in navigator) {
     ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Über den Button „⚙
     Spalten" lassen sich einzelne, weniger zentrale Spalten (Team, Saison, Erkennung, Tags) aus-/einblenden – die
     Auswahl wird je Browser gemerkt. Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch einer
-    Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird).</p>
+    Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird). Zusätzlich lässt sich
+    die aktuelle Kombination aus Filtern und Sortierung unter einem frei wählbaren Namen dauerhaft speichern
+    („Aktuelle Filter/Sortierung speichern") und über die Auswahlliste jederzeit wieder anwenden oder löschen – die
+    gespeicherten Ansichten werden ebenfalls je Browser gemerkt.</p>
   <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
     mit folgenden Optionen:</p>
   <ul>
@@ -425,6 +437,9 @@ if ("serviceWorker" in navigator) {
     zusätzlich per Button „Jetzt Snapshot erstellen" manuell möglich.</p>
 
   <h2 id="dashboard">Dashboard</h2>
+  <p>Über den Button „⚙ Kacheln" lässt sich festlegen, welche der Kennzahlen-Kacheln angezeigt werden und in
+    welcher Reihenfolge (Checkbox zum Ein-/Ausblenden, Pfeile zum Verschieben) – die Auswahl wird je Browser
+    gemerkt.</p>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
     Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer. Die
     Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als die in den Einstellungen
@@ -454,7 +469,8 @@ if ("serviceWorker" in navigator) {
     welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Unter „Anzeige" lässt sich
     die Seitengröße (Zeilen pro Seite, Standard 40) für alle Tabellenseiten (Karten, Käufe, Inventar, eBay,
     Inventur, Wunschliste, Statistik-Listen) global festlegen, sowie zwischen „Komfort" (Standard) und „Kompakt"
-    (dichtere Zeilen, mehr Einträge sichtbar) umschalten. Die Absenderadresse wird
+    (dichtere Zeilen, mehr Einträge sichtbar) umschalten sowie das CSV-Trennzeichen für alle CSV-Exporte zwischen
+    „Semikolon" (Standard, passend für deutsches Excel) und „Komma" wählen. Die Absenderadresse wird
     als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Die
     Angebots-Textbausteine sind wiederverwendbare Beschreibungstexte (z. B. ein Hinweis für eine ganze
     Kartenserie), die sich beim Anlegen eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf

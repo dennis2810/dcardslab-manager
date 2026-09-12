@@ -54,6 +54,15 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
      Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-
@@ -180,6 +189,16 @@ if ("serviceWorker" in navigator) {
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
+  <div class="controls no-print filter-presets">
+    <select id="preset-select">
+      <option value="">Gespeicherte Ansicht wählen…</option>
+    </select>
+    <button type="button" id="apply-preset-btn">Anwenden</button>
+    <button type="button" id="delete-preset-btn">Löschen</button>
+    <input type="text" id="preset-name-input" placeholder="Name für neue Ansicht" maxlength="40">
+    <button type="button" id="save-preset-btn">Aktuelle Filter/Sortierung speichern</button>
+  </div>
+
   <div id="bulk-actions" class="controls no-print" hidden>
     <span id="bulk-count"></span>
     <button type="button" id="bulk-mark-shipped">Als versendet markieren</button>
@@ -301,6 +320,7 @@ function makeRowKeyboardNavigable(row) {
 const LONG_LISTED_DAYS = 14;
 
 let PAGE_SIZE = 40;
+let CSV_DELIMITER = ";";
 let currentPage = 0;
 
 // Globale, in den Einstellungen konfigurierbare Seitengroesse/Ansicht
@@ -309,6 +329,7 @@ let currentPage = 0;
 fetch("/api/app-status").then((r) => r.json()).then((body) => {
   PAGE_SIZE = body.page_size || 40;
   document.body.classList.toggle("compact", body.view_density === "compact");
+  CSV_DELIMITER = body.csv_delimiter || ";";
   renderCurrentView();
 }).catch(() => {});
 
@@ -1231,9 +1252,9 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 function downloadCsv(filename, headers, rows) {
   const escape = (v) => {
     const s = v == null ? "" : String(v);
-    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    return /["\n,;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(CSV_DELIMITER));
   const csv = "\uFEFF" + lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -1259,6 +1280,102 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     c.private_collection ? "Ja" : "Nein", c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
+});
+
+// Gespeicherte Filter-Ansichten/Presets: im Unterschied zum "letzte Ansicht
+// merken" unten (ein einziger, automatisch ueberschriebener Zustand) hier
+// mehrere benannte, dauerhaft in localStorage gespeicherte Kombinationen aus
+// Filtern und Sortierung, die gezielt wieder angewendet werden koennen.
+const FILTER_PRESETS_STORAGE_KEY = "cards_filter_presets";
+
+function loadFilterPresets() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FILTER_PRESETS_STORAGE_KEY) || "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch (err) {
+    return [];
+  }
+}
+function saveFilterPresets(presets) {
+  try {
+    localStorage.setItem(FILTER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch (err) {}
+}
+function currentFilterState() {
+  return {
+    q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
+    shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
+    cardTypeFilter: cardTypeFilterSelect.value, sortKey, sortAsc,
+  };
+}
+function applyFilterState(state) {
+  qInput.value = state.q || "";
+  statusSelect.value = state.status || "";
+  ebayFilterSelect.value = state.ebayFilter || "";
+  shippingFilterSelect.value = state.shippingFilter || "";
+  cardTypeFilterSelect.value = state.cardTypeFilter || "";
+  // Gleiche Vorsicht wie beim Laden der "letzten Ansicht" unten - ein
+  // gespeicherter Tag, der inzwischen an keiner Karte mehr haengt, faellt
+  // sonst stillschweigend auf die erste Option zurueck statt auf "Alle Tags".
+  tagFilterSelect.value =
+    state.tagFilter && [...tagFilterSelect.options].some((o) => o.value === state.tagFilter) ? state.tagFilter : "";
+  sortKey = state.sortKey || sortKey;
+  sortAsc = state.sortAsc !== false;
+  setSortIndicator(sortKey);
+  currentPage = 0;
+  renderCurrentView();
+}
+
+function renderPresetSelect() {
+  const select = document.getElementById("preset-select");
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">Gespeicherte Ansicht wählen…</option>';
+  for (const preset of loadFilterPresets()) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    select.appendChild(option);
+  }
+  select.value = currentValue;
+}
+renderPresetSelect();
+
+document.getElementById("save-preset-btn").addEventListener("click", () => {
+  const nameInput = document.getElementById("preset-name-input");
+  const name = nameInput.value.trim();
+  if (!name) {
+    showToast("Bitte einen Namen für die Ansicht eingeben.", true);
+    return;
+  }
+  const presets = loadFilterPresets();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  presets.push({ id, name, state: currentFilterState() });
+  saveFilterPresets(presets);
+  nameInput.value = "";
+  renderPresetSelect();
+  document.getElementById("preset-select").value = id;
+  showToast(`Ansicht „${name}" gespeichert.`);
+});
+
+document.getElementById("apply-preset-btn").addEventListener("click", () => {
+  const select = document.getElementById("preset-select");
+  if (!select.value) return;
+  const preset = loadFilterPresets().find((p) => p.id === select.value);
+  if (!preset) return;
+  applyFilterState(preset.state);
+  showToast(`Ansicht „${preset.name}" angewendet.`);
+});
+
+document.getElementById("delete-preset-btn").addEventListener("click", () => {
+  const select = document.getElementById("preset-select");
+  if (!select.value) return;
+  const presets = loadFilterPresets();
+  const preset = presets.find((p) => p.id === select.value);
+  if (!preset) return;
+  if (!confirm(`Ansicht „${preset.name}" wirklich löschen?`)) return;
+  saveFilterPresets(presets.filter((p) => p.id !== select.value));
+  renderPresetSelect();
+  showToast("Ansicht gelöscht.");
 });
 
 // Letzte Ansicht merken: Filter/Sortierung/Seite/Scrollposition ueberleben
