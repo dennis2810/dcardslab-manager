@@ -1094,6 +1094,23 @@ function renderSaleStatusBadges(card) {
     badge.textContent = "eBay: " + (EBAY_STATUS_LABELS[card.ebay_listing.status] || card.ebay_listing.status);
     container.appendChild(badge);
   }
+  // Gleiche Kennzeichen wie in der Kartenuebersicht (cards.html) - hier
+  // zusaetzlich direkt oben auf der Detailseite sichtbar, ohne erst zum
+  // eBay-Abschnitt weiter unten scrollen zu muessen.
+  if (card.ebay_listing?.status === "Veroeffentlicht" && !card.ebay_listing.ebay_offer_id) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-neutral";
+    badge.textContent = "📥 Importiert";
+    badge.title = "Importiertes, extern verwaltetes eBay-Angebot.";
+    container.appendChild(badge);
+  }
+  if (card.ebay_listing?.last_auto_relisted_at) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "🔄 Neu eingestellt";
+    badge.title = `Neu eingestellt am ${formatDateTime(card.ebay_listing.last_auto_relisted_at)}`;
+    container.appendChild(badge);
+  }
   if (card.shipped) {
     const badge = document.createElement("span");
     badge.className = "badge badge-info";
@@ -2577,6 +2594,40 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     note.textContent = "Dieses Angebot wurde importiert und wird nicht vom Tool verwaltet - Preisänderungen "
       + "oder das Beenden bitte direkt auf eBay vornehmen.";
     section.appendChild(note);
+
+    // "Eingestellt am" bekam beim Import frueher immer den Import-Zeitpunkt
+    // statt eBays echtem Startdatum (siehe main.py's import_ebay_listing()) -
+    // dieser Button holt das nachtraeglich per Browse-API nach, fuer bereits
+    // vor diesem Fix importierte Angebote.
+    const refreshBtn = document.createElement("button");
+    refreshBtn.type = "button";
+    refreshBtn.textContent = "Startdatum von eBay neu laden";
+    const refreshStatus = document.createElement("span");
+    refreshStatus.style.marginLeft = "0.5rem";
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.disabled = true;
+      refreshStatus.textContent = "Lädt …";
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/refresh-listing-since`, {
+          method: "POST",
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          refreshStatus.textContent = "";
+          showToast("Fehler: " + (body.detail || res.statusText), true);
+          refreshBtn.disabled = false;
+          return;
+        }
+        showToast("Startdatum aktualisiert.");
+        loadCard();
+      } catch (err) {
+        refreshStatus.textContent = "";
+        showToast("Fehler: " + err, true);
+        refreshBtn.disabled = false;
+      }
+    });
+    section.appendChild(refreshBtn);
+    section.appendChild(refreshStatus);
   } else if (listing.status === "Veroeffentlicht") {
     const editBtn = document.createElement("button");
     editBtn.type = "button";

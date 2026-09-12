@@ -192,6 +192,12 @@ def get_item_by_legacy_id(token, legacy_item_id):
         "condition": item.get("condition", ""),
         "item_web_url": item.get("itemWebUrl", ""),
         "image_urls": image_urls,
+        # Wann das Angebot urspruenglich auf eBay erstellt wurde (nicht wann
+        # es in dieses Tool importiert wurde) - main.py's import_ebay_listing()
+        # nutzt das fuer listing_since statt des Import-Zeitpunkts, damit
+        # "Eingestellt am" bei importierten Angeboten das echte Startdatum
+        # zeigt. None, falls eBay das Feld fuer dieses Angebot nicht liefert.
+        "listing_since": item.get("itemCreationDate"),
     }
 
 

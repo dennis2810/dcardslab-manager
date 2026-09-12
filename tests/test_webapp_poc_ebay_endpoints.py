@@ -311,6 +311,55 @@ class GetEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["card"]["title"], "Musterkarte")
 
 
+class RefreshEbayListingSinceEndpointTests(unittest.TestCase):
+    def _imported(self, **overrides):
+        defaults = {"status": "Veroeffentlicht", "ebay_offer_id": "", "ebay_listing_id": "110412345678"}
+        defaults.update(overrides)
+        return _listing(**defaults)
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.post("/api/ebay/listings/does-not-exist/refresh-listing-since")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_400_for_non_imported_listing(self):
+        with patch("main.db.get_ebay_listing", return_value=_listing(status="Veroeffentlicht", ebay_offer_id="offer-1")):
+            response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_400_when_no_ebay_listing_id(self):
+        with patch("main.db.get_ebay_listing", return_value=self._imported(ebay_listing_id="")):
+            response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_502_when_ebay_lookup_fails(self):
+        with patch("main.db.get_ebay_listing", return_value=self._imported()), \
+             patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.get_item_by_legacy_id", side_effect=ebay_client.EbayApiError("nope")):
+            response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
+        self.assertEqual(response.status_code, 502)
+
+    def test_returns_422_when_ebay_has_no_creation_date(self):
+        with patch("main.db.get_ebay_listing", return_value=self._imported()), \
+             patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.get_item_by_legacy_id", return_value={"listing_since": None}):
+            response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
+        self.assertEqual(response.status_code, 422)
+
+    def test_updates_listing_since_on_success(self):
+        with patch("main.db.get_ebay_listing", return_value=self._imported()), \
+             patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.get_item_by_legacy_id", return_value={"listing_since": "2026-01-15T10:00:00.000Z"}), \
+             patch("main.db.update_ebay_listing", return_value=self._imported(listing_since="2026-01-15T10:00:00.000Z")) as mock_update, \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
+            response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["listing_since"], "2026-01-15T10:00:00.000Z")
+        mock_update.assert_called_once_with("listing-1", {"listing_since": "2026-01-15T10:00:00.000Z"})
+
+
 class UpdateEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_ebay_listing", return_value=None):
@@ -1832,6 +1881,32 @@ class ImportEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(fields["status"], "Veroeffentlicht")
         self.assertEqual(fields["ebay_listing_id"], "110412345678")
         self.assertNotIn("ebay_offer_id", fields)
+
+    def test_uses_ebays_listing_creation_date_as_listing_since(self):
+        # Ohne das wuerde "Eingestellt am" faelschlich den Import-Zeitpunkt
+        # statt eBays echtem Startdatum zeigen (Klaerung mit dem Nutzer,
+        # anhand eines konkreten importierten Angebots aufgefallen).
+        mocks = self._patch_all(**{
+            "main.ebay_client.get_item_by_legacy_id": MagicMock(
+                return_value=self._item(listing_since="2026-01-15T10:00:00.000Z")
+            ),
+        })
+        self._post_import()
+        update_call = mocks["main.db.update_ebay_listing"].call_args
+        _, fields = update_call.args
+        self.assertEqual(fields["listing_since"], "2026-01-15T10:00:00.000Z")
+
+    def test_falls_back_to_import_time_when_ebay_has_no_listing_since(self):
+        mocks = self._patch_all(**{
+            "main.ebay_client.get_item_by_legacy_id": MagicMock(
+                return_value=self._item(listing_since=None)
+            ),
+        })
+        self._post_import()
+        update_call = mocks["main.db.update_ebay_listing"].call_args
+        _, fields = update_call.args
+        self.assertEqual(fields["listing_since"], fields["published_at"])
+        self.assertTrue(fields["listing_since"])
 
     def test_uses_ebay_title_when_recognition_finds_none(self):
         mocks = self._patch_all(**{
