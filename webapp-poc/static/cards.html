@@ -283,6 +283,10 @@ function makeRowKeyboardNavigable(row) {
   });
 }
 
+// Gleicher Schwellwert wie im Dashboard unter "Was jetzt tun?"/ebay.html
+// (dupliziert, kein Shared-JS-Modul).
+const LONG_LISTED_DAYS = 14;
+
 const PAGE_SIZE = 40;
 let currentPage = 0;
 
@@ -392,6 +396,34 @@ function privateCollectionBadge(privateCollection) {
   const badge = document.createElement("span");
   badge.className = "manual-sale-badge";
   badge.textContent = "Private Sammlung";
+  return badge;
+}
+
+function longListedBadge(card) {
+  // Nur fuer aktuell laufende Angebote relevant - bei "Verkauft"/"Beendet"
+  // sagt "seit wann laeuft es" nichts mehr ueber Handlungsbedarf aus.
+  // Gleicher Schwellwert wie im Dashboard unter "Was jetzt tun?"/ebay.html.
+  if (card.ebay_status !== "Veroeffentlicht" || !card.listing_since) return null;
+  const days = Math.floor((Date.now() - new Date(card.listing_since).getTime()) / (24 * 60 * 60 * 1000));
+  if (days <= LONG_LISTED_DAYS) return null;
+  const badge = document.createElement("span");
+  badge.className = "imported-badge";
+  badge.textContent = "⏳";
+  badge.title = `Seit ${days} Tagen auf eBay gelistet, ohne Verkauf.`;
+  return badge;
+}
+
+function relistedBadge(lastAutoRelistedAt) {
+  // Icon-only wie importedBadge() unten - ein voller Text-Badge wuerde neben
+  // den anderen Badges in derselben Zelle die Spaltenbreite sprengen.
+  // last_auto_relisted_at wird seit main.py's _relist_listing() sowohl vom
+  // manuellen "Neu einstellen"-Button als auch von der Automatik gesetzt
+  // (Feldname blieb trotzdem) - gleiches Icon wie auf card.html/ebay.html.
+  if (!lastAutoRelistedAt) return null;
+  const badge = document.createElement("span");
+  badge.className = "imported-badge";
+  badge.textContent = "🔄";
+  badge.title = `Neu eingestellt am ${formatDateTime(lastAutoRelistedAt)}`;
   return badge;
 }
 
@@ -613,6 +645,12 @@ function render(cards) {
     const badge = ebayBadge(card.ebay_status);
     if (badge) a.appendChild(badge);
 
+    const relisted = relistedBadge(card.last_auto_relisted_at);
+    if (relisted) a.appendChild(relisted);
+
+    const longListed = longListedBadge(card);
+    if (longListed) a.appendChild(longListed);
+
     const manualBadge = manualSaleBadge(card.manual_sale_channel);
     if (manualBadge) a.appendChild(manualBadge);
 
@@ -703,6 +741,10 @@ function renderList(cards) {
     const ebayTd = document.createElement("td");
     const badge = ebayBadge(card.ebay_status);
     if (badge) ebayTd.appendChild(badge);
+    const relisted = relistedBadge(card.last_auto_relisted_at);
+    if (relisted) ebayTd.appendChild(relisted);
+    const longListed = longListedBadge(card);
+    if (longListed) ebayTd.appendChild(longListed);
     const manualBadge = manualSaleBadge(card.manual_sale_channel);
     if (manualBadge) ebayTd.appendChild(manualBadge);
     tr.appendChild(ebayTd);
@@ -944,6 +986,18 @@ function formatDate(value) {
   if (!value) return "";
   const [y, m, d] = value.split("-");
   return d && m && y ? `${d}.${m}.${y}` : value;
+}
+
+// Fuer last_auto_relisted_at (ein echter Zeitstempel, kein reines Datum wie
+// oben) - formatDate() wuerde beim String-Split auf einem ISO-Zeitstempel
+// falsche Werte liefern, daher hier ueber new Date() wie in settings.html.
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
 }
 
 const bulkAddPurchaseSelect = document.getElementById("bulk-add-purchase-select");

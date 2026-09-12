@@ -1079,15 +1079,29 @@ class EbayStatusByCardIdTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [
-            {"card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1", "ebay_offer_id": "offer-1"},
-            {"card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": "", "ebay_offer_id": ""},
+            {
+                "card_id": "card-1", "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99,
+                "ebay_listing_id": "L1", "ebay_offer_id": "offer-1",
+                "last_auto_relisted_at": "2026-09-10T08:00:00+00:00", "listing_since": "2026-08-01T08:00:00+00:00",
+            },
+            {
+                "card_id": "card-2", "status": "Entwurf", "sku": "webapp-000002", "price": 0,
+                "ebay_listing_id": "", "ebay_offer_id": "", "last_auto_relisted_at": None, "listing_since": None,
+            },
         ]
         mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.ebay_info_by_card_id(["card-1", "card-2", "card-3"])
         self.assertEqual(result, {
-            "card-1": {"status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99, "ebay_listing_id": "L1", "ebay_offer_id": "offer-1"},
-            "card-2": {"status": "Entwurf", "sku": "webapp-000002", "price": 0, "ebay_listing_id": "", "ebay_offer_id": ""},
+            "card-1": {
+                "status": "Veroeffentlicht", "sku": "webapp-000001", "price": 9.99,
+                "ebay_listing_id": "L1", "ebay_offer_id": "offer-1",
+                "last_auto_relisted_at": "2026-09-10T08:00:00+00:00", "listing_since": "2026-08-01T08:00:00+00:00",
+            },
+            "card-2": {
+                "status": "Entwurf", "sku": "webapp-000002", "price": 0,
+                "ebay_listing_id": "", "ebay_offer_id": "", "last_auto_relisted_at": None, "listing_since": None,
+            },
         })
 
     def test_empty_input_skips_query(self):

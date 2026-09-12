@@ -232,6 +232,10 @@ const STALE_GEPLANT_DAYS = 3;
 // Karten, die laenger als das ohne Verkauf im Bestand liegen, werden als
 // "lange Liegedauer" markiert - willkuerlicher, aber sinnvoller Richtwert.
 const LONG_HOLDING_DAYS = 90;
+// Veroeffentlichte eBay-Angebote, die laenger als das ohne Verkauf laufen,
+// gelten als "lange gelistet" - gleicher Schwellwert wie auf cards.html/
+// ebay.html (dupliziert, kein Shared-JS-Modul).
+const LONG_LISTED_DAYS = 14;
 
 function fmtEuro(v) {
   return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "–";
@@ -331,7 +335,7 @@ async function load() {
     renderLastUpdates(sheets, appStatus);
     renderGoal();
     renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
-    renderActions(stats, cardsBody.cards || [], geplant.listings || [], sheets, ebayStatus);
+    renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus);
     activityClearedAt = appStatus.activity_cleared_at || null;
     lastActivityCards = cardsBody.cards || [];
     renderActivity(stats, lastActivityCards);
@@ -519,7 +523,7 @@ function renderLastUpdates(sheets, appStatus) {
   el.textContent = parts.join(" · ");
 }
 
-function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
+function renderActions(stats, cards, geplantListings, publishedListings, sheets, ebayStatus) {
   const list = document.getElementById("action-list");
   list.innerHTML = "";
   let count = 0;
@@ -560,6 +564,15 @@ function renderActions(stats, cards, geplantListings, sheets, ebayStatus) {
   if (staleGeplant.length) {
     count++;
     addAction(list, `⚠️ ${staleGeplant.length} eBay-Angebot(e) seit über ${STALE_GEPLANT_DAYS} Tagen "Geplant", aber nicht veröffentlicht – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
+  }
+
+  const longListed = publishedListings.filter((l) => {
+    const days = daysSince(l.listing_since);
+    return days != null && days > LONG_LISTED_DAYS;
+  });
+  if (longListed.length) {
+    count++;
+    addAction(list, `⏳ ${longListed.length} eBay-Angebot(e) seit über ${LONG_LISTED_DAYS} Tagen gelistet, ohne Verkauf – <a href="ebay.html">zu den eBay-Angeboten &rarr;</a>`);
   }
 
   if (!sheets.connected) {

@@ -626,6 +626,11 @@ async def list_cards(q: str | None = None, status: str | None = None):
         # weiter unten) - eigenes Feld statt das Frontend die Kombination aus
         # ebay_status/ebay_offer_id nachrechnen zu lassen.
         c["ebay_imported"] = info.get("status") == "Veroeffentlicht" and not info.get("ebay_offer_id")
+        # Fuer das 🔄-/⏳-Badge in der Kartenuebersicht (siehe cards.html) -
+        # gleiche Felder wie auf card.html/ebay.html, siehe _relist_listing()
+        # bzw. _publish_listing().
+        c["last_auto_relisted_at"] = info.get("last_auto_relisted_at")
+        c["listing_since"] = info.get("listing_since")
         # Gleiche Sport/Non-Sport-Heuristik wie beim Anlegen eines eBay-
         # Angebots (ebay_listing.derive_listing_type() - card.category gegen
         # die bekannte Sportarten-Liste) - hier als Filter-Grundlage, nicht

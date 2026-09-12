@@ -138,8 +138,10 @@ if ("serviceWorker" in navigator) {
     Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure), Sport-&amp;-Non-Sport-Filter
     und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
     In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
-    importierten, extern verwalteten eBay-Angebot. Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch
-    einer Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird).</p>
+    importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
+    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Filter, Sortierung, Seite
+    und Scrollposition bleiben beim Besuch einer Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der
+    Tab geschlossen wird).</p>
   <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
     mit folgenden Optionen:</p>
   <ul>
@@ -278,13 +280,15 @@ if ("serviceWorker" in navigator) {
     „Rückgängig" wie beim Massen-Beenden. Zusätzlich lässt
     sich beim Bearbeiten eines Angebots eine Tagesanzahl eintragen, nach der das automatisch passiert, sobald das
     Angebot so lange unverkauft lief – dafür muss zusätzlich der globale Schalter „Automatisches Re-Listing" unter
-    Einstellungen aktiviert sein. Ob manuell oder automatisch ausgelöst: ein Neu-Einstellen ist auf der Kartenseite
-    und in der Status-Spalte der eBay-Seite (🔄-Symbol) mit „Neu eingestellt am …" markiert, damit immer
-    nachvollziehbar bleibt, dass (und wann) das passiert ist.
+    Einstellungen aktiviert sein. Ob manuell oder automatisch ausgelöst: ein Neu-Einstellen ist auf der Kartenseite,
+    in der Kartenübersicht und in der Status-Spalte der eBay-Seite (jeweils 🔄-Symbol) mit „Neu eingestellt am …"
+    markiert, damit immer nachvollziehbar bleibt, dass (und wann) das passiert ist.
     Kartenseite und eBay-Seite zeigen außerdem „Eingestellt am … (läuft seit X Tagen)" – anders als
     „Zuletzt aktualisiert" (das auch eine reine Preisänderung widerspiegelt) zeigt das, seit wann genau das
     aktuell laufende eBay-Angebot live ist, und setzt sich bei jedem Neu-Einstellen zurück, weil eBay dabei ja
-    ein komplett neues Angebot anlegt.</p>
+    ein komplett neues Angebot anlegt. Läuft ein veröffentlichtes Angebot seit mehr als 14 Tagen ohne Verkauf,
+    wird das auf der eBay-Seite (Spalte „Eingestellt am"), in der Kartenübersicht (⏳-Symbol) und im Dashboard
+    unter „Was jetzt tun?" hervorgehoben.</p>
   <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
     aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
     API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope

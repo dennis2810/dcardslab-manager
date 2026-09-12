@@ -87,6 +87,7 @@ if ("serviceWorker" in navigator) {
   .price-flag { cursor: help; font-weight: 600; }
   .price-flag-ok { color: var(--success-fg); }
   .price-flag-high, .price-flag-low { color: var(--warn-fg); }
+  .long-listed { color: var(--warn-fg); font-weight: 600; cursor: help; }
   #status-msg { font-style: italic; color: #555; }
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
@@ -271,6 +272,9 @@ function makeRowKeyboardNavigable(row) {
 
 const PAGE_SIZE = 40;
 let currentPage = 0;
+// Gleicher Schwellwert wie im Dashboard unter "Was jetzt tun?" (dupliziert,
+// kein Shared-JS-Modul).
+const LONG_LISTED_DAYS = 14;
 
 // Einheitliches Datumsformat (DD.MM.YYYY[, HH:MM]) - manuell statt ueber
 // toLocaleDateString/toLocaleString("de-DE"), da deren Default-Ausgabe
@@ -656,7 +660,15 @@ function render(listings) {
     if (listing.listing_since) {
       const days = Math.floor((Date.now() - new Date(listing.listing_since).getTime()) / (24 * 60 * 60 * 1000));
       const daysLabel = days <= 0 ? "heute" : days === 1 ? "1 Tag" : `${days} Tage`;
-      listingSinceTd.textContent = `${formatDateTime(listing.listing_since)} (${daysLabel})`;
+      // Markiert veroeffentlichte Angebote, die laenger als LONG_LISTED_DAYS
+      // ohne Verkauf laufen - gleicher Schwellwert wie im Dashboard unter
+      // "Was jetzt tun?" (dupliziert, kein Shared-JS-Modul).
+      const longListed = listing.status === "Veroeffentlicht" && days > LONG_LISTED_DAYS;
+      listingSinceTd.textContent = `${longListed ? "⏳ " : ""}${formatDateTime(listing.listing_since)} (${daysLabel})`;
+      if (longListed) {
+        listingSinceTd.className = "long-listed";
+        listingSinceTd.title = `Seit über ${LONG_LISTED_DAYS} Tagen gelistet, ohne Verkauf.`;
+      }
     }
     tr.appendChild(listingSinceTd);
 

@@ -475,13 +475,15 @@ def ebay_info_by_card_id(card_ids):
     if not card_ids:
         return {}
     response = (
-        get_client().table("ebay_listings").select("card_id,status,sku,price,ebay_listing_id,ebay_offer_id")
+        get_client().table("ebay_listings")
+        .select("card_id,status,sku,price,ebay_listing_id,ebay_offer_id,last_auto_relisted_at,listing_since")
         .in_("card_id", card_ids).execute()
     )
     return {
         row["card_id"]: {
             "status": row["status"], "sku": row["sku"], "price": row["price"],
             "ebay_listing_id": row.get("ebay_listing_id"), "ebay_offer_id": row.get("ebay_offer_id"),
+            "last_auto_relisted_at": row.get("last_auto_relisted_at"), "listing_since": row.get("listing_since"),
         }
         for row in response.data
     }
