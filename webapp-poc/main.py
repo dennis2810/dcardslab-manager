@@ -1872,20 +1872,22 @@ async def get_ebay_listing(listing_id: str):
 
 @app.post("/api/ebay/listings/{listing_id}/refresh-listing-since")
 async def refresh_ebay_listing_since(listing_id: str):
-    # Importierte Angebote (import_ebay_listing()) bekamen listing_since vor
-    # diesem Fix immer den Import-Zeitpunkt statt eBays echtem Startdatum -
-    # dieser Endpoint holt das fuer ein bereits importiertes Angebot
-    # nachtraeglich per Browse-API nach (Klaerung mit dem Nutzer, konkretes
-    # Beispiel: eine Karte, deren "Eingestellt am" nicht zur tatsaechlichen
-    # eBay-Startzeit passte).
+    # Urspruenglich nur fuer importierte Angebote gedacht (die bekamen bei
+    # import_ebay_listing() frueher immer den Import-Zeitpunkt statt eBays
+    # echtem Startdatum). Betrifft aber genauso normale, ueber die API
+    # eingestellte Angebote: die Migration, die listing_since eingefuehrt hat
+    # (siehe supabase/schema.sql), fuellte die Spalte fuer bereits vor dieser
+    # Migration veroeffentlichte Angebote mit published_at - das wird aber bei
+    # JEDER Bearbeitung (z.B. Preisaenderung) neu gesetzt und ist daher nur
+    # eine Naeherung, kein echtes Startdatum (Klaerung mit dem Nutzer, konkretes
+    # Beispiel: eine per API eingestellte Karte, deren "Eingestellt am" nicht
+    # zur tatsaechlichen eBay-Startzeit passte). Daher hier bewusst nicht auf
+    # importierte/extern verwaltete Angebote eingeschraenkt - jedes Angebot mit
+    # einer eBay-Artikelnummer kann sein echtes Startdatum per Browse-API
+    # nachladen.
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
-    if not _is_externally_managed(listing):
-        raise HTTPException(
-            status_code=400,
-            detail="Nur fuer importierte, extern verwaltete Angebote verfuegbar.",
-        )
     if not listing.get("ebay_listing_id"):
         raise HTTPException(status_code=400, detail="Angebot hat keine eBay-Artikelnummer.")
     try:
