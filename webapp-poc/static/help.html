@@ -258,6 +258,12 @@ if ("serviceWorker" in navigator) {
     (Aufbewahrungspflicht)" ein eigener Beleg (z. B. eine Zahlungsbestätigung) als PDF oder Foto hochladen und
     später wieder ansehen/löschen – dieselbe Aufbewahrungspflicht wie bei Kaufbelegen (siehe Käufe unten) gilt
     auch für Verkäufe.</p>
+  <p>Zusätzlich zum Beleg lässt sich über „🧾 Rechnung erstellen" eine formale Rechnung mit fortlaufender,
+    eindeutiger Rechnungsnummer (§14 UStG) ausstellen – die Nummer wird einmalig vergeben und bleibt dem
+    Verkauf dauerhaft zugeordnet; ein erneuter Klick druckt dieselbe Rechnung mit derselben Nummer nochmals.
+    Die Rechnungsnummern laufen fortlaufend über alle Jahre hinweg, ohne Jahresreset. Für eBay-Verkäufe bietet
+    eBay selbst keine über die API abrufbare Rechnung an – hierfür bleibt nur die Bestellübersicht im eBay-
+    Verkäufer-Cockpit.</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
     ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
     zurückziehen. Derselbe Warnhinweis erscheint auch, wenn die Karte per Privatentnahme in die private Sammlung
@@ -499,8 +505,9 @@ if ("serviceWorker" in navigator) {
     Betriebsausgaben ohne Bezug zu einem einzelnen Kauf/Verkauf erfassen (z.B. Verpackungsmaterial, Bürobedarf,
     Software-Abos, Fahrtkosten, Porto) – Datum, Kategorie, Betrag, Notiz je Eintrag, mit Lösch-Möglichkeit. Ein
     Button „Als CSV exportieren" lädt die Jahresaufstellung im gleichen Stil wie der DATEV/Lexoffice-Export auf
-    „Alle Verkäufe" herunter. Der Abschnitt „Rechnungstool" ist als Platzhalter für eine spätere Erweiterung
-    vorbereitet, aber noch nicht umgesetzt. Diese Seite ist eine reine Orientierungshilfe/Vorbereitung – die
+    „Alle Verkäufe" herunter. Das Rechnungstool selbst liegt auf der jeweiligen Kartenseite (Button „🧾 Rechnung
+    erstellen" im Abschnitt „Verkauf außerhalb eBay", siehe oben) – dieser Abschnitt hier fasst nur zusammen,
+    wie es funktioniert. Diese Seite ist eine reine Orientierungshilfe/Vorbereitung – die
     endgültige EÜR sowie eine eventuell nötige Ummeldung beim Finanzamt bleiben Aufgabe des
     Steuerberaters/Finanzamts.</p>
 
