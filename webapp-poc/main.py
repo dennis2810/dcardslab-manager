@@ -1373,6 +1373,33 @@ async def delete_description_template(template_id: str):
     return Response(status_code=204)
 
 
+@app.get("/api/business-expenses")
+async def list_business_expenses():
+    return JSONResponse({"expenses": db.list_business_expenses()})
+
+
+@app.post("/api/business-expenses")
+async def create_business_expense(fields: dict = Body(default={})):
+    created = db.create_business_expense(fields)
+    return JSONResponse(created)
+
+
+@app.patch("/api/business-expenses/{expense_id}")
+async def update_business_expense(expense_id: str, fields: dict = Body(...)):
+    updated = db.update_business_expense(expense_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
+    return JSONResponse(updated)
+
+
+@app.delete("/api/business-expenses/{expense_id}", status_code=204)
+async def delete_business_expense(expense_id: str):
+    deleted = db.delete_business_expense(expense_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
+    return Response(status_code=204)
+
+
 @app.post("/api/cards/{card_id}/price-research")
 async def create_price_research_entry(card_id: str, fields: dict = Body(default={})):
     if db.get_card(card_id) is None:
@@ -1707,6 +1734,68 @@ def _rank_channels(enriched_rows):
 @app.get("/api/statistics")
 async def get_statistics():
     return JSONResponse(_compute_statistics())
+
+
+def _compute_euer(year):
+    # EUER-Vorbereitung (Einnahmen-Ueberschuss-Rechnung, Paragraph 4 Abs. 3
+    # EStG): Cash-Basis (Zufluss-Abfluss-Prinzip) statt der Realisations-
+    # Zuordnung aus _compute_statistics()'s monthly-Bucket - jede Position
+    # zaehlt im Jahr ihres eigenen Datums, genau wie beim bestehenden DATEV/
+    # Lexoffice-Export auf statistics-sales.html (Wareneinkauf nach
+    # purchase_date, Verkaufserloese/Versand/Gebuehren nach sale_date).
+    # Versand/Gebuehren zaehlen unabhaengig von einer Retoure (siehe
+    # _compute_statistics(), gleiche Begruendung: einmal gezahltes Porto/
+    # eine einmal abgefuehrte Verkaufsgebuehr bekommt man idR nicht zurueck).
+    year_str = str(year)
+    sales_revenue = shipping_received = 0.0
+    purchases_cost = shipping_paid = fees = 0.0
+    for row in db.statistics_rows():
+        purchase_date = row.get("purchase_date")
+        cost = row.get("cost")
+        if purchase_date and str(purchase_date)[:4] == year_str and cost is not None:
+            purchases_cost += float(cost)
+
+        sale_date = row.get("sale_date")
+        sale_price = row.get("sale_price")
+        if sale_date and str(sale_date)[:4] == year_str and sale_price is not None:
+            if not row.get("refunded"):
+                sales_revenue += float(sale_price)
+                shipping_received += float(row.get("shipping_charged") or 0)
+            shipping_paid += float(row.get("shipping_cost") or 0)
+            fees += float(row.get("ebay_fees") or 0)
+
+    other_expenses = sum(
+        float(expense.get("amount") or 0)
+        for expense in db.list_business_expenses()
+        if expense.get("expense_date") and str(expense["expense_date"])[:4] == year_str
+    )
+
+    income = [
+        {"label": "Verkaufserlöse", "amount": round(sales_revenue, 2)},
+        {"label": "Erhaltene Versandkosten", "amount": round(shipping_received, 2)},
+    ]
+    expenses = [
+        {"label": "Wareneinkauf", "amount": round(purchases_cost, 2)},
+        {"label": "Versandkosten", "amount": round(shipping_paid, 2)},
+        {"label": "Verkaufsgebühren", "amount": round(fees, 2)},
+        {"label": "Sonstige Betriebsausgaben", "amount": round(other_expenses, 2)},
+    ]
+    income_total = round(sum(item["amount"] for item in income), 2)
+    expense_total = round(sum(item["amount"] for item in expenses), 2)
+    return {
+        "year": year,
+        "income": income,
+        "income_total": income_total,
+        "expenses": expenses,
+        "expense_total": expense_total,
+        "profit": round(income_total - expense_total, 2),
+    }
+
+
+@app.get("/api/euer")
+async def get_euer(year: int | None = None):
+    year = year or datetime.now(timezone.utc).year
+    return JSONResponse(_compute_euer(year))
 
 
 DASHBOARD_GOAL_METRICS = {"revenue", "profit"}

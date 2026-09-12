@@ -562,3 +562,18 @@ alter table app_status add column if not exists kleinunternehmer_hint_enabled bo
 -- gleiches Muster wie purchases.receipt_path, aber fuer die Verkaufsseite:
 -- Aufbewahrungspflicht betrifft auch Verkaufsbelege, nicht nur Kaufbelege.
 alter table manual_sales add column if not exists receipt_path text default '';
+
+-- Sonstige Betriebsausgaben (Verpackungsmaterial, Buerobedarf, Software-
+-- Abos, Fahrtkosten, Porto ohne Verkaufsbezug, ...) - eigenstaendige,
+-- schlanke Erfassung statt eine bestehende Tabelle (purchases/manual_sales)
+-- zweckzuentfremden, da diese Ausgaben weder an einen Kauf noch an einen
+-- Verkauf einer Karte gebunden sind. Fliesst in die EUER-Jahresaufstellung
+-- auf kleinunternehmer.html ein (siehe main.py's _compute_euer()).
+create table if not exists business_expenses (
+    id            uuid primary key default gen_random_uuid(),
+    expense_date  date not null,
+    category      text not null default '',
+    amount        numeric not null default 0,
+    note          text not null default '',
+    created_at    timestamptz not null default now()
+);

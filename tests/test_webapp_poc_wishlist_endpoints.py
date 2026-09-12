@@ -134,6 +134,54 @@ class DeleteDescriptionTemplateEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ListBusinessExpensesEndpointTests(unittest.TestCase):
+    def test_returns_expenses(self):
+        expenses = [{"id": "e1", "expense_date": "2026-03-01", "category": "Porto", "amount": 5.0}]
+        with patch("main.db.list_business_expenses", return_value=expenses):
+            response = client.get("/api/business-expenses")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["expenses"], expenses)
+
+
+class CreateBusinessExpenseEndpointTests(unittest.TestCase):
+    def test_creates_expense(self):
+        created = {"id": "e1", "expense_date": "2026-03-01", "category": "Porto", "amount": 5.0, "note": ""}
+        fields = {"expense_date": "2026-03-01", "category": "Porto", "amount": 5.0, "note": ""}
+        with patch("main.db.create_business_expense", return_value=created) as mock_create:
+            response = client.post("/api/business-expenses", json=fields)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), created)
+        mock_create.assert_called_once_with(fields)
+
+
+class UpdateBusinessExpenseEndpointTests(unittest.TestCase):
+    def test_updates_expense(self):
+        updated = {"id": "e1", "category": "Bürobedarf"}
+        with patch("main.db.update_business_expense", return_value=updated) as mock_update:
+            response = client.patch("/api/business-expenses/e1", json={"category": "Bürobedarf"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), updated)
+        mock_update.assert_called_once_with("e1", {"category": "Bürobedarf"})
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.update_business_expense", return_value=None):
+            response = client.patch("/api/business-expenses/does-not-exist", json={"category": "x"})
+        self.assertEqual(response.status_code, 404)
+
+
+class DeleteBusinessExpenseEndpointTests(unittest.TestCase):
+    def test_deletes_expense(self):
+        with patch("main.db.delete_business_expense", return_value={"id": "e1"}) as mock_delete:
+            response = client.delete("/api/business-expenses/e1")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("e1")
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.delete_business_expense", return_value=None):
+            response = client.delete("/api/business-expenses/does-not-exist")
+        self.assertEqual(response.status_code, 404)
+
+
 class ImportWishlistCsvEndpointTests(unittest.TestCase):
     def _upload(self, csv_text):
         return client.post(

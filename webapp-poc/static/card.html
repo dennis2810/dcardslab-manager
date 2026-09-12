@@ -2332,7 +2332,7 @@ async function renderEbaySection(listing, purchase, sale, manualSale, privateCol
     renderEbayEditForm(section, listing, purchase);
   } else if (listing.status === "Geplant") {
     const environment = await getEbayEnvironment();
-    renderEbayScheduledView(section, listing, environment);
+    renderEbayScheduledView(section, listing, environment, manualSale, privateCollection);
   } else {
     const environment = await getEbayEnvironment();
     renderEbayPublishedView(section, listing, environment, purchase, sale, manualSale, privateCollection);
@@ -2727,7 +2727,25 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   });
 }
 
-function renderEbayScheduledView(section, listing, environment) {
+function renderEbayScheduledView(section, listing, environment, manualSale, privateCollection) {
+  // Gleiche Warnung wie renderEbayPublishedView() weiter unten - ein
+  // geplantes Angebot geht genauso live wie ein bereits veroeffentlichtes,
+  // daher muss auch hier vor dem drohenden Doppelverkauf gewarnt werden
+  // (siehe manual-sale-warning auf ebay.html, das "Geplant" ebenfalls
+  // einschliesst).
+  if (manualSale) {
+    const warn = document.createElement("p");
+    warn.className = "workflow-hint";
+    warn.textContent = `⚠️ Diese Karte wurde bereits anderweitig verkauft (${manualSale.channel}) - das geplante eBay-Angebot sollte schnellstmöglich storniert werden.`;
+    section.appendChild(warn);
+  }
+  if (privateCollection) {
+    const warn = document.createElement("p");
+    warn.className = "workflow-hint";
+    warn.textContent = "⚠️ Diese Karte wurde in die private Sammlung überführt (Privatentnahme) - das geplante eBay-Angebot sollte schnellstmöglich storniert werden.";
+    section.appendChild(warn);
+  }
+
   const readonly = document.createElement("div");
   readonly.className = "ebay-readonly";
   const scheduledDate = formatDateTime(listing.scheduled_at);

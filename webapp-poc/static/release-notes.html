@@ -87,8 +87,14 @@ if ("serviceWorker" in navigator) {
     <li>Neue Seite „Kleinunternehmer": zeigt Vorjahresumsatz und laufenden Jahresumsatz im Verhältnis zu den
       beiden Umsatzgrenzen der Kleinunternehmerregelung (§19 UStG), mit Fortschrittsbalken und farbigem
       Statushinweis. Umsatzbasis ist die Summe aller Verkäufe (eBay und manuelle Kanäle), Retouren bereits
-      abgezogen. Die Abschnitte „Einnahmen-Überschuss-Rechnung (EÜR)" und „Rechnungstool" sind als Platzhalter für
-      spätere Erweiterungen vorbereitet.</li>
+      abgezogen. Der Abschnitt „Rechnungstool" ist als Platzhalter für eine spätere Erweiterung vorbereitet.</li>
+    <li>Neuer Abschnitt „Einnahmen-Überschuss-Rechnung (EÜR)" auf der Kleinunternehmer-Seite: fasst Einnahmen und
+      Ausgaben eines wählbaren Jahres nach dem Zufluss-Abfluss-Prinzip zusammen (Wareneinkauf im Kaufjahr,
+      Verkaufserlöse/erhaltener Versand/Verkaufsgebühren im Verkaufsjahr, sonstige Betriebsausgaben im Jahr der
+      Ausgabe), als Tabelle sowie per CSV-Export im Stil des bestehenden DATEV/Lexoffice-Exports.</li>
+    <li>Neue, schlanke Erfassung „Sonstige Betriebsausgaben" (Verpackungsmaterial, Bürobedarf, Software-Abos,
+      Fahrtkosten, Porto, ...) auf der Kleinunternehmer-Seite – Datum, Kategorie, Betrag, Notiz je Eintrag, fließt
+      direkt in die EÜR-Aufstellung ein.</li>
     <li>Dashboard: kurze Statuszeile mit Fortschrittsbalken unter dem Jahresziel, Link zu den Details auf der
       neuen Seite.</li>
     <li>Die beiden Schwellenwerte (Standard 22.000&nbsp;€ Vorjahr / 50.000&nbsp;€ laufendes Jahr) sind in den
@@ -295,6 +301,8 @@ if ("serviceWorker" in navigator) {
       von eBay runter muss.</li>
     <li>Die eBay-Seite warnt jetzt direkt in der Tabelle, wenn eine noch aktive Karte bereits anderweitig
       verkauft wurde.</li>
+    <li>Fix: die gleiche Warnung fehlte auf der Kartenseite, solange das eBay-Angebot noch „Geplant" statt
+      „Veröffentlicht" war – erscheint jetzt in beiden Fällen.</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert

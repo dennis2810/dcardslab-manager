@@ -41,6 +41,7 @@ class BuildBackupZipTests(unittest.TestCase):
             "backup.db.all_description_templates": MagicMock(return_value=[]),
             "backup.db.all_portfolio_value_snapshots": MagicMock(return_value=[]),
             "backup.db.all_dashboard_goals": MagicMock(return_value=[]),
+            "backup.db.all_business_expenses": MagicMock(return_value=[]),
         }
         patches.update(overrides)
         patchers = [patch(target, new) for target, new in patches.items()]
@@ -61,6 +62,7 @@ class BuildBackupZipTests(unittest.TestCase):
             "ebay_listings", "ebay_sales", "inventory", "price_research",
             "manual_sales", "wishlist_items", "wishlist_price_checks",
             "description_templates", "portfolio_value_snapshots", "dashboard_goals",
+            "business_expenses",
         ):
             self.assertIn(f"{table}.json", names)
 

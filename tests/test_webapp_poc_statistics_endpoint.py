@@ -370,5 +370,74 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertIsNone(body["summary"]["roi_pct"])
 
 
+class EuerEndpointTests(unittest.TestCase):
+    # EUER-Vorbereitung: Cash-Basis (jede Position im Jahr ihres eigenen
+    # Datums), analog zum bestehenden DATEV-Export auf statistics-sales.html
+    # - siehe main.py's _compute_euer().
+    def test_purchase_booked_in_purchase_year_sale_in_sale_year(self):
+        rows = [{
+            "card_id": "card-1", "purchase_date": "2025-12-20", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows), \
+                patch("main.db.list_business_expenses", return_value=[]):
+            response_2025 = client.get("/api/euer", params={"year": 2025})
+            response_2026 = client.get("/api/euer", params={"year": 2026})
+        body_2025 = response_2025.json()
+        body_2026 = response_2026.json()
+        self.assertEqual(next(i["amount"] for i in body_2025["expenses"] if i["label"] == "Wareneinkauf"), 10.0)
+        self.assertEqual(body_2025["income_total"], 0.0)
+        self.assertEqual(next(i["amount"] for i in body_2026["income"] if i["label"] == "Verkaufserlöse"), 15.0)
+        self.assertEqual(next(i["amount"] for i in body_2026["expenses"] if i["label"] == "Wareneinkauf"), 0.0)
+
+    def test_refund_excludes_revenue_but_keeps_shipping_and_fees_as_expense(self):
+        rows = [{
+            "card_id": "card-1", "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 15.0,
+            "shipping_charged": 4.0, "shipping_cost": 3.0, "ebay_fees": 1.0, "refunded": True,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows), \
+                patch("main.db.list_business_expenses", return_value=[]):
+            response = client.get("/api/euer", params={"year": 2026})
+        body = response.json()
+        self.assertEqual(next(i["amount"] for i in body["income"] if i["label"] == "Verkaufserlöse"), 0.0)
+        self.assertEqual(next(i["amount"] for i in body["income"] if i["label"] == "Erhaltene Versandkosten"), 0.0)
+        self.assertEqual(next(i["amount"] for i in body["expenses"] if i["label"] == "Versandkosten"), 3.0)
+        self.assertEqual(next(i["amount"] for i in body["expenses"] if i["label"] == "Verkaufsgebühren"), 1.0)
+
+    def test_other_business_expenses_counted_by_expense_date_year(self):
+        expenses = [
+            {"id": "e1", "expense_date": "2026-03-01", "category": "Porto", "amount": 12.5, "note": ""},
+            {"id": "e2", "expense_date": "2025-12-01", "category": "Porto", "amount": 99.0, "note": ""},
+        ]
+        with patch("main.db.statistics_rows", return_value=[]), \
+                patch("main.db.list_business_expenses", return_value=expenses):
+            response = client.get("/api/euer", params={"year": 2026})
+        body = response.json()
+        self.assertEqual(
+            next(i["amount"] for i in body["expenses"] if i["label"] == "Sonstige Betriebsausgaben"), 12.5
+        )
+
+    def test_profit_is_income_total_minus_expense_total(self):
+        rows = [{
+            "card_id": "card-1", "purchase_date": "2026-01-01", "cost": 10.0,
+            "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows), \
+                patch("main.db.list_business_expenses", return_value=[]):
+            response = client.get("/api/euer", params={"year": 2026})
+        body = response.json()
+        self.assertEqual(body["income_total"], 15.0)
+        self.assertEqual(body["expense_total"], 10.0)
+        self.assertEqual(body["profit"], 5.0)
+
+    def test_defaults_to_current_year_when_year_omitted(self):
+        with patch("main.db.statistics_rows", return_value=[]), \
+                patch("main.db.list_business_expenses", return_value=[]):
+            response = client.get("/api/euer")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("year", response.json())
+
+
 if __name__ == "__main__":
     unittest.main()

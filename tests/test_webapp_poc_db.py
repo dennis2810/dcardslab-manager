@@ -2678,6 +2678,104 @@ class DeleteDescriptionTemplateTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class ListBusinessExpensesTests(unittest.TestCase):
+    def test_returns_all_expenses_ordered_by_expense_date_desc(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "e1", "expense_date": "2026-03-01", "category": "Porto", "amount": 5.0}]
+        mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_business_expenses()
+        self.assertEqual(result, [{"id": "e1", "expense_date": "2026-03-01", "category": "Porto", "amount": 5.0}])
+        mock_client.table.return_value.select.return_value.order.assert_called_once_with(
+            "expense_date", desc=True
+        )
+
+
+class CreateBusinessExpenseTests(unittest.TestCase):
+    def test_inserts_row(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "business_expenses", [{"id": "e1"}])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.create_business_expense(
+                {"expense_date": "2026-03-01", "category": "Porto", "amount": 5.5, "note": "Retourenlabel"}
+            )
+        self.assertEqual(result["id"], "e1")
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["expense_date"], "2026-03-01")
+        self.assertEqual(row["category"], "Porto")
+        self.assertEqual(row["amount"], 5.5)
+        self.assertEqual(row["note"], "Retourenlabel")
+
+    def test_ignores_unknown_fields(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "business_expenses", [{"id": "e1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_business_expense({"expense_date": "2026-03-01", "not_a_column": "y"})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertNotIn("not_a_column", row)
+
+    def test_rounds_amount_to_two_decimals(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "business_expenses", [{"id": "e1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_business_expense({"expense_date": "2026-03-01", "amount": 5.5555})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertEqual(row["amount"], 5.56)
+
+    def test_blank_amount_becomes_none(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "business_expenses", [{"id": "e1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_business_expense({"expense_date": "2026-03-01", "amount": ""})
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIsNone(row["amount"])
+
+
+class UpdateBusinessExpenseTests(unittest.TestCase):
+    def test_updates_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "e1", "category": "Bürobedarf"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_business_expense("e1", {"category": "Bürobedarf"})
+        self.assertEqual(result["category"], "Bürobedarf")
+        mock_client.table.return_value.update.assert_called_once_with({"category": "Bürobedarf"})
+        mock_client.table.return_value.update.return_value.eq.assert_called_once_with("id", "e1")
+
+    def test_returns_current_row_when_no_fields_given(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "e1", "category": "Porto"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_business_expense("e1", {})
+        self.assertEqual(result["category"], "Porto")
+        mock_client.table.return_value.update.assert_not_called()
+
+
+class DeleteBusinessExpenseTests(unittest.TestCase):
+    def test_deletes_and_returns_entry(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "e1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_business_expense("e1")
+        self.assertEqual(result, {"id": "e1"})
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "e1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_business_expense("does-not-exist")
+        self.assertIsNone(result)
+
+
 class CreatePriceResearchEntryTests(unittest.TestCase):
     def test_inserts_row_with_card_id_and_rounded_price(self):
         mock_client = MagicMock()
