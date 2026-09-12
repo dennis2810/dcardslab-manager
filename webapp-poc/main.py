@@ -2803,6 +2803,8 @@ async def app_status():
         "last_auto_backup_at": status.get("last_auto_backup_at"),
         "low_stock_threshold": status.get("low_stock_threshold") or 0,
         "price_alert_threshold_pct": status.get("price_alert_threshold_pct") or 20,
+        "page_size": status.get("page_size") or 40,
+        "view_density": status.get("view_density") or "comfort",
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
@@ -2936,6 +2938,28 @@ async def set_price_alert_threshold(fields: dict = Body(...)):
     if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or threshold <= 0:
         raise HTTPException(status_code=400, detail="threshold muss eine Zahl > 0 sein.")
     updated = db.set_price_alert_threshold(threshold)
+    return JSONResponse(updated)
+
+
+@app.put("/api/page-size")
+async def set_page_size(fields: dict = Body(...)):
+    # Globale Seitengroesse (Einstellungen) statt der zuvor pro Seite fest
+    # verdrahteten 40 Zeilen (Karten, Kaeufe, Inventar, eBay, Inventur,
+    # Wunschliste, Statistik-Listen - jede Seite liest sie sich selbst ueber
+    # GET /api/app-status).
+    size = fields.get("size")
+    if not isinstance(size, int) or isinstance(size, bool) or not (5 <= size <= 500):
+        raise HTTPException(status_code=400, detail="size muss eine Ganzzahl zwischen 5 und 500 sein.")
+    updated = db.set_page_size(size)
+    return JSONResponse(updated)
+
+
+@app.put("/api/view-density")
+async def set_view_density(fields: dict = Body(...)):
+    density = fields.get("density")
+    if density not in ("comfort", "compact"):
+        raise HTTPException(status_code=400, detail="density muss 'comfort' oder 'compact' sein.")
+    updated = db.set_view_density(density)
     return JSONResponse(updated)
 
 

@@ -674,7 +674,7 @@ async function loadCard() {
     renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
-      card.ebay_listing?.ebay_listing_id
+      card.ebay_listing?.ebay_listing_id, card.ebay_listing
     );
     renderSaleStatusBadges(card);
   } catch (err) {
@@ -1613,7 +1613,7 @@ function buildPriceSparkline(entries) {
   return svg;
 }
 
-function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId) {
+function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId, listing) {
   const section = document.getElementById("price-research-section");
   section.innerHTML = "<h2>Preisrecherche-Verlauf</h2>";
 
@@ -1654,6 +1654,45 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
         `⚠ Angebotspreis (${fmtEuro(listingPrice)}) liegt ${Math.abs(diffPct).toFixed(0)}% ${direction} ` +
         `dem Marktdurchschnitt (${fmtEuro(avg)}).`;
       section.appendChild(alertP);
+
+      // Anpassungsvorschlag statt automatischer Preisaenderung (Klaerung mit
+      // dem Nutzer): schlaegt den Marktdurchschnitt als neuen Preis vor,
+      // aendert ihn aber nur nach Bestaetigung per Klick. Nur fuer selbst per
+      // API verwaltete Angebote moeglich - ein importiertes Angebot
+      // (ebay_offer_id fehlt) kann das Tool nicht bearbeiten (siehe
+      // _is_externally_managed() in main.py, dort auch der 409 falls
+      // trotzdem versucht).
+      if (listing?.id && listing.ebay_offer_id && listing.status === "Veroeffentlicht") {
+        const suggestedPrice = Math.round(avg * 100) / 100;
+        const suggestP = document.createElement("p");
+        const adjustBtn = document.createElement("button");
+        adjustBtn.type = "button";
+        adjustBtn.textContent = `Preis auf ${fmtEuro(suggestedPrice)} anpassen`;
+        adjustBtn.addEventListener("click", async () => {
+          if (!confirm(`Angebotspreis wirklich auf ${fmtEuro(suggestedPrice)} (Marktdurchschnitt) ändern?`)) return;
+          adjustBtn.disabled = true;
+          try {
+            const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ price: suggestedPrice }),
+            });
+            const body = await res.json();
+            if (!res.ok) {
+              showToast("Fehler: " + (body.detail || res.statusText), true);
+              adjustBtn.disabled = false;
+              return;
+            }
+            showToast("Preis angepasst.");
+            loadCard();
+          } catch (err) {
+            showToast("Fehler: " + err, true);
+            adjustBtn.disabled = false;
+          }
+        });
+        suggestP.appendChild(adjustBtn);
+        section.appendChild(suggestP);
+      }
     }
   }
 
@@ -1674,7 +1713,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
     selectAllCheckbox.checked = entries.every((entry) => selectedPriceResearchIds.has(entry.id));
     selectAllCheckbox.addEventListener("change", () => {
       selectedPriceResearchIds = selectAllCheckbox.checked ? new Set(entries.map((entry) => entry.id)) : new Set();
-      renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId);
+      renderPriceResearchSection(entries, cardTitle, listingPrice, ownListingId, listing);
     });
     selectAllTh.appendChild(selectAllCheckbox);
     thead.appendChild(selectAllTh);

@@ -884,6 +884,24 @@ def set_price_alert_threshold(pct):
     return response.data[0]
 
 
+def set_page_size(size):
+    # Gleiches Singleton-Row-Muster wie set_low_stock_threshold() - ersetzt
+    # die zuvor pro Seite fest verdrahteten 40 Zeilen.
+    response = get_client().table("app_status").upsert({
+        "id": True, "page_size": size,
+    }).execute()
+    return response.data[0]
+
+
+def set_view_density(density):
+    # Gleiches Singleton-Row-Muster wie set_page_size() - "comfort" (Standard)
+    # oder "compact" fuer dichtere Tabellenzeilen.
+    response = get_client().table("app_status").upsert({
+        "id": True, "view_density": density,
+    }).execute()
+    return response.data[0]
+
+
 def record_failed_login(ip, at):
     # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
     # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory

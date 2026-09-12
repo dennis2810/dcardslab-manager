@@ -139,9 +139,10 @@ if ("serviceWorker" in navigator) {
     und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
     In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
     importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
-    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Filter, Sortierung, Seite
-    und Scrollposition bleiben beim Besuch einer Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der
-    Tab geschlossen wird).</p>
+    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Über den Button „⚙
+    Spalten" lassen sich einzelne, weniger zentrale Spalten (Team, Saison, Erkennung, Tags) aus-/einblenden – die
+    Auswahl wird je Browser gemerkt. Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch einer
+    Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird).</p>
   <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
     mit folgenden Optionen:</p>
   <ul>
@@ -153,10 +154,10 @@ if ("serviceWorker" in navigator) {
     <li>In private Sammlung überführen (Privatentnahme)</li>
   </ul>
   <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe, Privatentnahme) lassen sich per „Rückgängig"
-    zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung. Die Spalte „Verkauf" zeigt sowohl den
-    eBay-Status als auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B. „Verkauft: Kleinanzeigen").
-    Direkt daneben erscheinen bei Bedarf die Kennzeichen „Abgeholt", „Zugestellt", „Retoure" und „Private
-    Sammlung".</p>
+    zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung. In der Listenansicht zeigt die Spalte
+    „Verkauf" sowohl den eBay-Status als auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B.
+    „Verkauft: Kleinanzeigen"), dazu bei Bedarf „📥 Importiert" und „Private Sammlung". Die Spalte „Versand" zeigt
+    ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
@@ -174,7 +175,10 @@ if ("serviceWorker" in navigator) {
     Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
     um mehr als die in den Einstellungen festgelegte Schwelle ab (Abschnitt „Preis-Alarm", Standard 20 %), erscheint
-    zusätzlich ein Preis-Alarm. Einträge lassen sich per Checkbox mehrfach auswählen und auf einmal löschen.</p>
+    zusätzlich ein Preis-Alarm – bei einem selbst über die eBay-API verwalteten Angebot direkt mit einem Button
+    „Preis auf … anpassen", der den Angebotspreis nach Bestätigung auf den Marktdurchschnitt setzt (nur ein
+    Vorschlag, keine automatische Änderung ohne Klick; für ein importiertes Angebot nicht verfügbar, da das Tool es
+    nicht selbst verwalten kann). Einträge lassen sich per Checkbox mehrfach auswählen und auf einmal löschen.</p>
   <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots; „Abbrechen" im
     Bearbeiten-Formular verwirft nicht gespeicherte Änderungen und kehrt zur vorherigen Ansicht zurück. Um einem
     bereits veröffentlichten Angebot nachträglich weitere Fotos hinzuzufügen, genügt es, im Abschnitt „Weitere Fotos"
@@ -188,8 +192,8 @@ if ("serviceWorker" in navigator) {
     als versendet und benachrichtigt den Käufer automatisch, gleichzeitig wird das „Versendet"-Kästchen der Karte
     mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
     Verfügung, siehe unten). Der Versand über das Tool ist dabei komplett optional – wird stattdessen direkt im
-    eBay Seller Hub versendet, übernimmt der automatische Hintergrund-Sync Trackingnummer und Versanddienstleister
-    trotzdem von dort und markiert die Karte ebenfalls als versendet – auch ohne Trackingnummer (z. B. bei einer
+    eBay Seller Hub versendet, übernimmt der automatische Hintergrund-Sync (läuft alle 15 Minuten) Trackingnummer
+    und Versanddienstleister trotzdem von dort und markiert die Karte ebenfalls als versendet – auch ohne Trackingnummer (z. B. bei einer
     Sendung per Warenpost/Brief), solange eBay die Bestellung als versendet führt. Nach einem eBay-Verkauf wird auch
     der (pseudonyme) eBay-Käufer-Benutzername angezeigt – ist er bei einem schon vor dieser Funktion synchronisierten
     Verkauf noch leer, holt der Button „Käufer-/Versanddaten von eBay laden" ihn zusammen mit der aktuellen
@@ -200,8 +204,9 @@ if ("serviceWorker" in navigator) {
     Verkaufspreis und erhaltener Versand zählen dann nicht mehr als Umsatz, Einstandspreis/Porto/Gebühren bleiben
     als Verlust stehen. Ein weiteres Kästchen „Als zugestellt markieren" hält manuell fest, wann das Paket
     angekommen ist – eBay liefert dafür über die API keine automatische Zustellbestätigung, daher von Hand.
-    Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (ca. einmal pro
-    Woche je Angebot, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich,
+    Der Preisrecherche-Verlauf füllt sich für veröffentlichte Angebote automatisch im Hintergrund (der Scheduler
+    prüft alle 5 Minuten, nimmt sich davon aber gedrosselt nur wenige Angebote pro Durchlauf vor – jedes Angebot
+    kommt dadurch ca. einmal pro Woche dran, als „Automatisch erfasst" markiert) – manuelles Suchen/Übernehmen bleibt weiterhin möglich,
     auch mehrere Suchtreffer auf einmal per Checkbox und „Ausgewählte übernehmen". Die Suche blendet dabei
     Auto(gramm)- und nummerierte Angebote (z. B. „/50") aus, sofern der Suchbegriff selbst nicht danach fragt – bei
     einer gesuchten Auflage werden zusätzlich nur Angebote mit exakt derselben Auflage berücksichtigt, damit die
@@ -262,7 +267,9 @@ if ("serviceWorker" in navigator) {
     führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit
     Filtern/Suche auflistet. Eine eigene Spalte „Ansehen ↗" verlinkt bei veröffentlichten/verkauften Angeboten
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
-    zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure.</p>
+    zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
+    einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
+    Zuletzt aktualisiert, Aufrufe) aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
   <p>„Von eBay importieren" legt für ein bereits von Hand auf eBay eingestelltes Angebot (also nicht über dieses Tool
     erstellt) automatisch eine passende Karte samt Angebots-Datensatz an: einfach die eBay-Artikelnummer eintragen –
     Titel, Preis und die ersten beiden Fotos werden von eBay geladen, die Fotos anschließend genau wie beim Scannen
@@ -276,7 +283,7 @@ if ("serviceWorker" in navigator) {
     bei eBay erstellt hat und es daher auch nicht verwalten kann – entsprechende Änderungen bitte direkt auf eBay
     vornehmen.</p>
   <p>Rückerstattungen/Retouren zu bereits synchronisierten Verkäufen werden ebenfalls automatisch im Hintergrund
-    erkannt und markiert – ein manuelles Nachtragen ist normalerweise nicht mehr nötig. Unter Einstellungen lässt
+    (alle 15 Minuten) erkannt und markiert – ein manuelles Nachtragen ist normalerweise nicht mehr nötig. Unter Einstellungen lässt
     sich außerdem eine E-Mail-Benachrichtigung einrichten, die bei neuen eBay-Verkäufen automatisch verschickt wird.
     Der Filter „Sport &amp; Non-Sport" grenzt die Angebotsliste nach Kartentyp ein.</p>
   <p>Der Button „Neu einstellen" auf der Kartenseite beendet ein veröffentlichtes Angebot und veröffentlicht es
@@ -317,7 +324,9 @@ if ("serviceWorker" in navigator) {
     Auswahl zu drucken oder mehrere Einträge auf einmal zu löschen.
     Über „📋 Inventur starten" neben „+ Eintrag hinzufügen" geht es direkt zum Soll/Ist-Abgleich. Der Button
     „🖨 QR-Etiketten drucken" in der Lagerort-Übersicht erzeugt zusätzlich ein druckbares Etikett je Lagerort mit
-    echtem QR-Code – scannen öffnet das Inventar direkt gefiltert auf diesen Lagerort.</p>
+    echtem QR-Code – scannen öffnet das Inventar direkt gefiltert auf diesen Lagerort. Über den Button „⚙ Spalten"
+    lassen sich einzelne, weniger zentrale Spalten (Zustand, Lagerort, Notizen, Wert) aus-/einblenden – die Auswahl
+    wird je Browser gemerkt.</p>
 
   <h2 id="inventur">Inventur</h2>
   <p>Soll/Ist-Abgleich für den physischen Bestand: die Seite zeigt alle vorrätigen Karten als Checkliste (nach
@@ -423,7 +432,8 @@ if ("serviceWorker" in navigator) {
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport, inklusive
     Wunschliste als eigener Reiter) und ein vollständiges Backup (ZIP mit allen Daten als JSON sowie allen
     Kartenbildern) herunterladen; der Zeitpunkt des letzten Downloads wird angezeigt. Zusätzlich wird automatisch
-    einmal pro Woche ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt (die letzten 4 Wochen
+    einmal pro Woche ein Backup im Hintergrund erstellt und in Supabase Storage abgelegt (stündlich geprüft, ob seit
+    dem letzten automatischen Backup 7 Tage vergangen sind; die letzten 4 Wochen
     werden aufbewahrt); der Zeitpunkt des letzten automatischen Backups wird ebenfalls angezeigt. Der Button
     „Jetzt automatisches Backup starten" löst diesen Hintergrund-Lauf sofort aus, statt auf den wöchentlichen
     Rhythmus zu warten. Der Bereich „Backup wiederherstellen" spielt ein zuvor heruntergeladenes oder automatisch
@@ -431,7 +441,10 @@ if ("serviceWorker" in navigator) {
     nichts wird dabei gelöscht (Zugangsdaten wie das SMTP-Passwort oder der Google-Sheets-Token sind nie Teil eines
     Backups und können daher auch nicht wiederhergestellt werden). Ein Link
     „📊 Tabelle öffnen" führt direkt zur verknüpften Google-Sheets-Tabelle. Die Mindestbestand-Schwelle legt fest, ab
-    welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Die Absenderadresse wird
+    welcher Menge das Inventar eine Karte als „niedriger Bestand" warnt (0 = deaktiviert). Unter „Anzeige" lässt sich
+    die Seitengröße (Zeilen pro Seite, Standard 40) für alle Tabellenseiten (Karten, Käufe, Inventar, eBay,
+    Inventur, Wunschliste, Statistik-Listen) global festlegen, sowie zwischen „Komfort" (Standard) und „Kompakt"
+    (dichtere Zeilen, mehr Einträge sichtbar) umschalten. Die Absenderadresse wird
     als Absender auf dem druckbaren Adress-Etikett/Lieferschein der Versand-Seite verwendet. Die
     Angebots-Textbausteine sind wiederverwendbare Beschreibungstexte (z. B. ein Hinweis für eine ganze
     Kartenserie), die sich beim Anlegen eines eBay-Angebots – einzeln auf der Kartenseite oder per Massenaktion auf

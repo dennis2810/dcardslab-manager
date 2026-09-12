@@ -498,6 +498,14 @@ alter table ebay_listings add column if not exists last_known_views int;
 -- statt der zuvor fest verdrahteten 20% in card.html/dashboard.html/ebay.html.
 alter table app_status add column if not exists price_alert_threshold_pct numeric not null default 20;
 
+-- Migration (2026-09-12): globale Pagination-Seitengroesse und Kompakt-/
+-- Komfort-Ansicht (Einstellungen) statt der zuvor pro Seite fest
+-- verdrahteten 40 Zeilen (jede der betroffenen Seiten - Karten, Kaeufe,
+-- Inventar, eBay, Inventur, Wunschliste, Statistik-Listen - hat ihr eigenes
+-- PAGE_SIZE, siehe main.py's GET /api/app-status).
+alter table app_status add column if not exists page_size int not null default 40;
+alter table app_status add column if not exists view_density text not null default 'comfort';
+
 -- Migration (2026-09-12): rein informatives Protokoll fehlgeschlagener
 -- Login-Versuche (main.py's db.record_failed_login(), Anzeige in
 -- settings.html) - die eigentliche Bruteforce-Drossel in main.py's
