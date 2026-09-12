@@ -873,6 +873,28 @@ def set_low_stock_threshold(threshold):
     return response.data[0]
 
 
+def set_price_alert_threshold(pct):
+    # Gleiches Singleton-Row-Muster wie set_low_stock_threshold() - ersetzt
+    # die zuvor fest verdrahteten 20% in card.html/dashboard.html/ebay.html.
+    response = get_client().table("app_status").upsert({
+        "id": True, "price_alert_threshold_pct": pct,
+    }).execute()
+    return response.data[0]
+
+
+def record_failed_login(ip, at):
+    # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
+    # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory
+    # und ist davon unabhaengig. Liste auf die letzten 20 Eintraege gedeckelt,
+    # neueste zuerst, gleiches Singleton-Row-Muster wie set_low_stock_threshold().
+    status = get_app_status() or {}
+    log = [{"at": at, "ip": ip}] + list(status.get("failed_login_log") or [])[:19]
+    response = get_client().table("app_status").upsert({
+        "id": True, "failed_login_log": log,
+    }).execute()
+    return response.data[0]
+
+
 def set_auto_relist_enabled(enabled):
     # Globaler An/Aus-Schalter fuer das automatische Re-Listing - zusaetzlich
     # zum per-Angebot-Schalter (ebay_listings.auto_relist_after_days, siehe

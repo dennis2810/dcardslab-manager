@@ -138,7 +138,8 @@ if ("serviceWorker" in navigator) {
     Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure), Sport-&amp;-Non-Sport-Filter
     und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
     In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
-    importierten, extern verwalteten eBay-Angebot.</p>
+    importierten, extern verwalteten eBay-Angebot. Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch
+    einer Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird).</p>
   <p>Mehrere Karten lassen sich per Checkbox auswählen (Listenansicht) – die Massenaktionen-Leiste erscheint dann
     mit folgenden Optionen:</p>
   <ul>
@@ -169,8 +170,8 @@ if ("serviceWorker" in navigator) {
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
     Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
-    um mehr als 20 % ab, erscheint zusätzlich ein Preis-Alarm. Einträge lassen sich per Checkbox mehrfach auswählen
-    und auf einmal löschen.</p>
+    um mehr als die in den Einstellungen festgelegte Schwelle ab (Abschnitt „Preis-Alarm", Standard 20 %), erscheint
+    zusätzlich ein Preis-Alarm. Einträge lassen sich per Checkbox mehrfach auswählen und auf einmal löschen.</p>
   <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots; „Abbrechen" im
     Bearbeiten-Formular verwirft nicht gespeicherte Änderungen und kehrt zur vorherigen Ansicht zurück. Um einem
     bereits veröffentlichten Angebot nachträglich weitere Fotos hinzuzufügen, genügt es, im Abschnitt „Weitere Fotos"
@@ -252,8 +253,8 @@ if ("serviceWorker" in navigator) {
     zurücknehmen lässt, läuft die Massenauswahl über eine kurze Gnadenfrist mit „Rückgängig", bevor die Angebote
     tatsächlich beendet werden. Ein ⚠️-Hinweis in der Tabelle markiert Angebote, deren Karte bereits
     anderweitig verkauft oder per Privatentnahme in die private Sammlung überführt wurde. Die Spalte „Preis-Check" zeigt auf einen Blick, ob der Angebotspreis zum
-    Marktdurchschnitt der Preisrecherche passt (✅) oder deutlich darüber (🔺) bzw. darunter (🔻) liegt – gleicher
-    ±20&nbsp;%-Schwellwert wie der Preis-Alarm auf der Kartenseite. Ist eBay verbunden, führt oben ein Link direkt
+    Marktdurchschnitt der Preisrecherche passt (✅) oder deutlich darüber (🔺) bzw. darunter (🔻) liegt – gleiche,
+    in den Einstellungen konfigurierbare Schwelle wie der Preis-Alarm auf der Kartenseite. Ist eBay verbunden, führt oben ein Link direkt
     zum eigenen eBay-Verkäufer-Cockpit. Verkaufte Artikel werden automatisch im Hintergrund synchronisiert. Ein Link
     führt direkt zu „Alle Verkäufe" (siehe Statistiken), die eBay- und andere Verkaufskanäle gemeinsam mit
     Filtern/Suche auflistet. Eine eigene Spalte „Ansehen ↗" verlinkt bei veröffentlichten/verkauften Angeboten
@@ -397,8 +398,9 @@ if ("serviceWorker" in navigator) {
   <h2 id="dashboard">Dashboard</h2>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
     Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer. Die
-    Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als 20&nbsp;% vom
-    Preisrecherche-Marktdurchschnitt abweicht, und verlinkt zur eBay-Übersicht. Ein
+    Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als die in den Einstellungen
+    festgelegte Schwelle (Standard 20&nbsp;%) vom Preisrecherche-Marktdurchschnitt abweicht, und verlinkt zur
+    eBay-Übersicht. Ein
     QR-Code verlinkt direkt zum Dashboard, um das Tool schnell auf dem Handy zu öffnen. Zeitpunkt der letzten
     Google-Sheets-Synchronisierung, des letzten manuell heruntergeladenen Backups sowie des letzten automatischen
     Backups werden oben angezeigt. „Letzte Aktivität" listet die 5 jüngsten Ereignisse (Verkäufe, Käufe sowie neu
@@ -430,9 +432,13 @@ if ("serviceWorker" in navigator) {
     wie die E-Mail und funktioniert auf dem Handy auch bei geschlossener App, sobald die Seite zum Startbildschirm
     hinzugefügt wurde. Der Schalter „Automatisches Re-Listing" ist die globale Sicherheitsbremse für
     das automatische Neu-Einstellen unverkaufter eBay-Angebote (siehe eBay) – zusätzlich muss pro Angebot eine
-    Tagesanzahl eingetragen sein, damit die Automation tatsächlich greift. Der Bereich „Login" bietet einen
+    Tagesanzahl eingetragen sein, damit die Automation tatsächlich greift. Die Preis-Alarm-Schwelle legt fest, ab
+    welcher prozentualen Abweichung vom Preisrecherche-Marktdurchschnitt ein Preis-Alarm ausgelöst wird (Standard
+    20&nbsp;%, siehe Kartenseite/eBay-Übersicht/Dashboard). Der Bereich „Login" bietet einen
     „Abmelden"-Button – nur relevant, wenn ein Login eingerichtet wurde (optionales gemeinsames Passwort, siehe
-    README.md), ansonsten bleibt das Tool wie bisher ohne Anmeldung erreichbar. Von hier
+    README.md), ansonsten bleibt das Tool wie bisher ohne Anmeldung erreichbar. Nach 5 falschen Passwörtern von
+    derselben Quelle sperrt das Tool weitere Versuche für 60 Sekunden; die letzten fehlgeschlagenen
+    Anmeldeversuche (Zeitpunkt + IP) werden hier ebenfalls angezeigt. Von hier
     aus geht es auch zu dieser Anleitung, zu den Release-Notes, zur Ersteinrichtung-Seite (Checkliste für
     die einmalige Server-/Konto-Einrichtung: Supabase, eBay, Google Sheets, SMTP, Umgebungsvariablen) sowie zum
     Backlog (angedachte, aber noch nicht umgesetzte Features samt offenen Fragen dazu).</p>

@@ -112,6 +112,20 @@ if APP_PASSWORD and not SESSION_SECRET_KEY:
         "bei jedem Neustart ungueltig. SESSION_SECRET_KEY setzen (fester, "
         "geheimer Zufallswert), damit Sitzungen einen Neustart ueberleben."
     )
+# Standard False, damit bestehende Deployments ohne HTTPS (z.B. reines LAN
+# ohne Reverse-Proxy-TLS) nicht ploetzlich ausgesperrt werden - ein Browser
+# sendet ein "secure"-Cookie sonst nie ueber eine unverschluesselte
+# Verbindung. Auf true setzen, sobald das Tool nur noch ueber HTTPS erreichbar
+# ist (siehe README.md, "Login einrichten").
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+try:
+    # 20160 Minuten = 14 Tage, bisheriger SessionMiddleware-Default - jetzt
+    # explizit statt implizit, und als gleitendes Inaktivitaets-Fenster
+    # (siehe _require_login() unten) statt einer festen Ablaufzeit ab dem
+    # Login: jede Nutzung verlaengert die Sitzung um denselben Zeitraum.
+    SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "").strip() or 20160)
+except ValueError:
+    SESSION_TIMEOUT_MINUTES = 20160
 
 def _read_build_info_file(name):
     # Alle drei Dateien (GIT_COMMIT, LAST_COMMIT_SUBJECT, BUILD_TIME) werden
@@ -2742,6 +2756,8 @@ async def app_status():
         "last_backup_at": status.get("last_backup_at"),
         "last_auto_backup_at": status.get("last_auto_backup_at"),
         "low_stock_threshold": status.get("low_stock_threshold") or 0,
+        "price_alert_threshold_pct": status.get("price_alert_threshold_pct") or 20,
+        "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
         "activity_cleared_at": status.get("activity_cleared_at"),
@@ -2866,14 +2882,59 @@ async def set_auto_relist_enabled(fields: dict = Body(...)):
     return JSONResponse(updated)
 
 
+@app.put("/api/price-alert-threshold")
+async def set_price_alert_threshold(fields: dict = Body(...)):
+    # Ersetzt die zuvor fest verdrahteten +-20% in card.html/dashboard.html/
+    # ebay.html (siehe deren priceAlertThresholdPct).
+    threshold = fields.get("threshold")
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or threshold <= 0:
+        raise HTTPException(status_code=400, detail="threshold muss eine Zahl > 0 sein.")
+    updated = db.set_price_alert_threshold(threshold)
+    return JSONResponse(updated)
+
+
+# IP -> {"count": int, "locked_until": float (time.monotonic())} - reine
+# In-Memory-Drossel gegen Passwort-Bruteforce auf /api/login; ueberlebt
+# keinen Neustart und wirkt nur pro Prozess (kein Redis o.ae. noetig fuer
+# dieses Ein-Nutzer-Tool). Absichtlich pro Quell-IP statt global, damit ein
+# Angreifer nicht durch wiederholte Fehlversuche den echten Nutzer aussperren
+# kann.
+_LOGIN_ATTEMPT_LIMIT = 5
+_LOGIN_LOCKOUT_SECONDS = 60
+_failed_login_attempts = {}
+
+
 @app.post("/api/login")
 async def login(request: Request, fields: dict = Body(...)):
+    if not APP_PASSWORD:
+        raise HTTPException(status_code=401, detail="Falsches Passwort.")
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    entry = _failed_login_attempts.get(client_ip)
+    if entry and entry["count"] >= _LOGIN_ATTEMPT_LIMIT and now < entry["locked_until"]:
+        retry_after = int(entry["locked_until"] - now) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Zu viele Fehlversuche - bitte in {retry_after} Sekunde(n) erneut versuchen.",
+        )
     # hmac.compare_digest statt "==" - vermeidet einen Timing-Seitenkanal
     # (ein "==" bricht beim ersten falschen Zeichen ab, die Antwortzeit
     # verraet dadurch minimal etwas ueber korrekte Praefixe).
     password = str(fields.get("password") or "")
-    if not APP_PASSWORD or not hmac.compare_digest(password, APP_PASSWORD):
+    if not hmac.compare_digest(password, APP_PASSWORD):
+        entry = _failed_login_attempts.setdefault(client_ip, {"count": 0, "locked_until": 0.0})
+        entry["count"] += 1
+        if entry["count"] >= _LOGIN_ATTEMPT_LIMIT:
+            entry["locked_until"] = now + _LOGIN_LOCKOUT_SECONDS
+        try:
+            db.record_failed_login(client_ip, datetime.now(timezone.utc).isoformat())
+        except Exception:
+            # Rein informativ (Anzeige in settings.html) - darf den Login-
+            # Fehler selbst nicht verdecken, falls z.B. Supabase kurz nicht
+            # erreichbar ist.
+            logger.exception("Fehlgeschlagenen Login-Versuch konnte nicht protokolliert werden.")
         raise HTTPException(status_code=401, detail="Falsches Passwort.")
+    _failed_login_attempts.pop(client_ip, None)
     request.session["authenticated"] = True
     return JSONResponse({"ok": True})
 
@@ -2910,6 +2971,14 @@ async def _require_login(request: Request, call_next):
     if path in ("/login.html", "/api/login", "/manifest.json", "/sw.js") or path.startswith("/assets/"):
         return await call_next(request)
     if request.session.get("authenticated"):
+        # Sitzung bei jeder authentifizierten Anfrage "anfassen" (mark_modified
+        # in Starlettes Session-Klasse) - SessionMiddleware stellt dadurch bei
+        # jeder Antwort ein frisch signiertes Cookie mit neuem Zeitstempel aus.
+        # Macht aus SESSION_TIMEOUT_MINUTES ein gleitendes Inaktivitaets-Fenster
+        # statt einer festen Ablaufzeit ab dem Login (ohne das wuerde die
+        # Sitzung nach SESSION_TIMEOUT_MINUTES ablaufen, selbst bei staendiger
+        # Nutzung).
+        request.session["authenticated"] = True
         return await call_next(request)
     if path.startswith("/api/"):
         return JSONResponse({"detail": "Nicht angemeldet - bitte zuerst einloggen."}, status_code=401)
@@ -2938,8 +3007,15 @@ async def _no_cache_for_html(request: Request, call_next):
 # _no_cache_for_html und befuellt request.session, bevor die beiden es lesen.
 # secret_key faellt ohne SESSION_SECRET_KEY auf einen zufaelligen Wert pro
 # Prozessstart zurueck (siehe Warnung oben) - ganz ohne Schluessel wuerde
-# SessionMiddleware selbst fehlschlagen.
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY or secrets.token_hex(32))
+# SessionMiddleware selbst fehlschlagen. https_only/max_age explizit statt
+# den SessionMiddleware-Defaults ueberlassen (siehe SESSION_COOKIE_SECURE/
+# SESSION_TIMEOUT_MINUTES oben).
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET_KEY or secrets.token_hex(32),
+    max_age=SESSION_TIMEOUT_MINUTES * 60,
+    https_only=SESSION_COOKIE_SECURE,
+)
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

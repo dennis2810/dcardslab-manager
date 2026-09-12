@@ -129,6 +129,12 @@ if ("serviceWorker" in navigator) {
       – automatisch aus dem Build-Kontext ausgelesen, ohne zusätzliche Einrichtung – Commit-Kurzhash und Nummer des
       zuletzt gemergten Pull Requests. Praktisch, um nach einem Update zu prüfen, ob eine erwartete Änderung
       wirklich angekommen ist, statt nur zu vermuten (siehe README.md).</li>
+    <li>Login-Härtung: nach 5 falschen Passwörtern von derselben Quelle sperrt das Tool weitere Versuche für
+      60 Sekunden; fehlgeschlagene Anmeldeversuche (Zeitpunkt + IP) werden zusätzlich in den Einstellungen unter
+      „Login" angezeigt. Die Session-Cookie-Sicherheitsoptionen (<code>SESSION_COOKIE_SECURE</code>,
+      <code>SESSION_TIMEOUT_MINUTES</code>) lassen sich jetzt explizit konfigurieren, siehe README.md.</li>
+    <li>Preis-Alarm-Schwelle (Kartenseite, eBay-Übersicht, Dashboard-Kachel „Preis-Alarme") ist jetzt in den
+      Einstellungen konfigurierbar, statt fest bei 20&nbsp;% zu liegen.</li>
   </ul>
 
   <h2>Bedienung &amp; Rückmeldungen <span class="date">September 2026</span></h2>
@@ -182,6 +188,8 @@ if ("serviceWorker" in navigator) {
       (sofern beim Deployment ein entsprechendes Docker-Volume eingebunden wurde).</li>
     <li>Kleines 📥-Symbol in der Kartenübersicht (Kachel- und Listenansicht) für Karten mit einem manuell
       importierten, extern verwalteten eBay-Angebot.</li>
+    <li>Filter, Sortierung, Seite und Scrollposition der Kartenübersicht bleiben jetzt beim Besuch einer
+      Kartendetailseite und der Rückkehr erhalten, statt bei jedem Neuladen zurückgesetzt zu werden.</li>
   </ul>
 
   <h2>Käufe <span class="date">September 2026</span></h2>

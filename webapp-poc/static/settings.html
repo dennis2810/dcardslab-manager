@@ -92,9 +92,12 @@ if ("serviceWorker" in navigator) {
   <section id="login-section">
     <h2>Login</h2>
     <p>Schützt das gesamte Tool mit einem gemeinsamen Passwort (siehe README.md, „Login einrichten") – ohne
-      hinterlegtes <code>APP_PASSWORD</code> bleibt diese Funktion inaktiv und der Abmelden-Button ohne Wirkung.</p>
+      hinterlegtes <code>APP_PASSWORD</code> bleibt diese Funktion inaktiv und der Abmelden-Button ohne Wirkung.
+      Nach 5 falschen Passwörtern von derselben Quelle sperrt das Tool weitere Versuche für 60 Sekunden.</p>
     <button type="button" id="logout-btn">Abmelden</button>
     <p class="status" id="logout-status"></p>
+    <p id="failed-login-log-status" class="status"></p>
+    <ul id="failed-login-log-list"></ul>
   </section>
 
   <section id="help-section">
@@ -153,6 +156,18 @@ if ("serviceWorker" in navigator) {
     </label>
     <button type="button" id="save-low-stock-threshold-btn">Speichern</button>
     <p class="status" id="low-stock-threshold-status"></p>
+  </section>
+
+  <section id="price-alert-threshold-section">
+    <h2>Preis-Alarm</h2>
+    <p>Ab welcher prozentualen Abweichung des Angebotspreises vom Preisrecherche-Marktdurchschnitt ein Preis-Alarm
+      ausgelöst wird (Kartenseite, eBay-Übersicht, Dashboard-Kachel „Preis-Alarme"). Wirkt in beide Richtungen
+      (zu teuer wie zu billig).</p>
+    <label>Schwelle in %
+      <input type="number" id="price-alert-threshold-input" min="0.1" step="0.1">
+    </label>
+    <button type="button" id="save-price-alert-threshold-btn">Speichern</button>
+    <p class="status" id="price-alert-threshold-status"></p>
   </section>
 
   <section id="sender-address-section">
@@ -319,6 +334,8 @@ async function loadBackupStatus() {
     document.getElementById("last-auto-backup-status").textContent =
       "Letztes automatisches Backup: " + (body.last_auto_backup_at ? formatDateTime(body.last_auto_backup_at) : "noch keins");
     document.getElementById("low-stock-threshold-input").value = body.low_stock_threshold || 0;
+    document.getElementById("price-alert-threshold-input").value = body.price_alert_threshold_pct ?? 20;
+    renderFailedLoginLog(body.failed_login_log || []);
     document.getElementById("sender-address-input").value = body.sender_address || "";
     document.getElementById("notify-on-sale-input").checked = Boolean(body.notify_on_sale);
     document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
@@ -563,6 +580,53 @@ document.getElementById("save-low-stock-threshold-btn").addEventListener("click"
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Mindestbestand-Schwelle gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+function renderFailedLoginLog(log) {
+  const statusEl = document.getElementById("failed-login-log-status");
+  const listEl = document.getElementById("failed-login-log-list");
+  listEl.innerHTML = "";
+  if (!log.length) {
+    statusEl.textContent = "Keine fehlgeschlagenen Anmeldeversuche protokolliert.";
+    return;
+  }
+  statusEl.textContent = "Letzte fehlgeschlagene Anmeldeversuche:";
+  for (const entry of log.slice(0, 5)) {
+    const li = document.createElement("li");
+    li.textContent = `${formatDateTime(entry.at)} – ${entry.ip || "unbekannt"}`;
+    listEl.appendChild(li);
+  }
+}
+
+document.getElementById("save-price-alert-threshold-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("price-alert-threshold-status");
+  const threshold = parseFloat(document.getElementById("price-alert-threshold-input").value);
+  if (!Number.isFinite(threshold) || threshold <= 0) {
+    statusEl.textContent = "Bitte eine Zahl > 0 eingeben.";
+    statusEl.className = "error";
+    return;
+  }
+  try {
+    const res = await fetch("/api/price-alert-threshold", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threshold }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Preis-Alarm-Schwelle gespeichert.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

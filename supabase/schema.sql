@@ -493,3 +493,13 @@ update ebay_listings set listing_since = published_at
 -- "Aufrufe laden" geklickt wird, statt nach jedem Seiten-Neuladen wieder
 -- bei "-" zu starten (Klaerung mit dem Nutzer).
 alter table ebay_listings add column if not exists last_known_views int;
+
+-- Migration (2026-09-12): konfigurierbare Preis-Alarm-Schwelle (Einstellungen)
+-- statt der zuvor fest verdrahteten 20% in card.html/dashboard.html/ebay.html.
+alter table app_status add column if not exists price_alert_threshold_pct numeric not null default 20;
+
+-- Migration (2026-09-12): rein informatives Protokoll fehlgeschlagener
+-- Login-Versuche (main.py's db.record_failed_login(), Anzeige in
+-- settings.html) - die eigentliche Bruteforce-Drossel in main.py's
+-- /api/login laeuft komplett in-memory und ist davon unabhaengig.
+alter table app_status add column if not exists failed_login_log jsonb not null default '[]'::jsonb;

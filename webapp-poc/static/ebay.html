@@ -504,14 +504,20 @@ async function loadListings() {
   }
 }
 
-// Gleicher +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite - damit
-// man direkt in der Uebersicht sieht, wo der Angebotspreis noch angepasst
-// werden sollte, statt jede Karte einzeln oeffnen zu muessen.
+// Gleicher, in den Einstellungen konfigurierbarer Schwellwert wie der
+// Preis-Alarm auf der Kartenseite (Default 20%, siehe priceAlertThresholdPct)
+// - damit man direkt in der Uebersicht sieht, wo der Angebotspreis noch
+// angepasst werden sollte, statt jede Karte einzeln oeffnen zu muessen.
+let priceAlertThresholdPct = 20;
+fetch("/api/app-status").then((r) => r.json()).then((body) => {
+  priceAlertThresholdPct = body.price_alert_threshold_pct || 20;
+}).catch(() => {});
+
 function priceResearchFlag(listing) {
   if (!listing.price_research_count || listing.price == null) return null;
   const avg = listing.price_research_avg;
   const diffPct = ((Number(listing.price) - avg) / avg) * 100;
-  if (Math.abs(diffPct) < 20) {
+  if (Math.abs(diffPct) < priceAlertThresholdPct) {
     return { kind: "ok", symbol: "✅", title: `Preis ok (Marktdurchschnitt ${fmtEuro(avg)})` };
   }
   const direction = diffPct > 0 ? "über" : "unter";

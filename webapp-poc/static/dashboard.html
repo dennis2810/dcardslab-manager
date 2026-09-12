@@ -321,6 +321,7 @@ async function load() {
     const sheets = await sheetsRes.json();
     const appStatus = await appStatusRes.json();
     const wishlist = await wishlistRes.json();
+    priceAlertThresholdPct = appStatus.price_alert_threshold_pct || 20;
     const ebayStatus = await loadEbayStatus();
     dashboardGoal = await loadGoal();
     lastStats = stats;
@@ -429,12 +430,14 @@ goalForm.addEventListener("submit", async (ev) => {
   }
 });
 
-// Gleicher +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite/die
-// Preis-Check-Spalte auf der eBay-Seite (dupliziert, kein Shared-JS-Modul).
+// Gleicher, in den Einstellungen konfigurierbarer Schwellwert wie der
+// Preis-Alarm auf der Kartenseite/die Preis-Check-Spalte auf der eBay-Seite
+// (dupliziert, kein Shared-JS-Modul) - Default 20%, siehe priceAlertThresholdPct.
+let priceAlertThresholdPct = 20;
 function hasPriceAlert(listing) {
   if (!listing.price_research_count || listing.price == null) return false;
   const diffPct = ((Number(listing.price) - listing.price_research_avg) / listing.price_research_avg) * 100;
-  return Math.abs(diffPct) >= 20;
+  return Math.abs(diffPct) >= priceAlertThresholdPct;
 }
 
 // Gleiche Logik wie wishlist.html's isSourcingHit() - dupliziert, kein

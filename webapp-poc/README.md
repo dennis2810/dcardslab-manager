@@ -162,6 +162,24 @@ Endpunkte über eine signierte Session-Cookie
 2. Beim nächsten Aufruf des Tools leitet `login.html` automatisch dorthin
    weiter; „Abmelden" steht in den Einstellungen zur Verfügung.
 
+Optional zusätzlich, beide ebenfalls beim Container-Deployment gesetzt:
+
+- `SESSION_COOKIE_SECURE` (`true`/`1`/`yes`, Standard aus): setzt das
+  `secure`-Flag auf der Session-Cookie. Auf `true` setzen, sobald das Tool
+  nur noch über HTTPS erreichbar ist (Standard bleibt `false`, damit ein
+  reines-LAN-Deployment ohne Reverse-Proxy-TLS nicht ausgesperrt wird - ein
+  Browser sendet ein `secure`-Cookie sonst nie über eine unverschlüsselte
+  Verbindung).
+- `SESSION_TIMEOUT_MINUTES` (Standard `20160` = 14 Tage): wie lange eine
+  Sitzung nach der letzten Nutzung gültig bleibt - ein gleitendes
+  Inaktivitäts-Fenster, jede Nutzung verlängert es erneut um denselben
+  Zeitraum, statt fest ab dem Login abzulaufen.
+
+Nach 5 falschen Passwörtern von derselben Quelle sperrt `/api/login`
+weitere Versuche für 60 Sekunden (In-Memory, überlebt keinen Neustart);
+fehlgeschlagene Versuche werden zusätzlich (Zeitpunkt + IP) in den
+Einstellungen unter „Login" angezeigt.
+
 Die eBay-OAuth-Callback (`/api/sheets/oauth/callback` für Google
 entsprechend) läuft über eine normale Browser-Weiterleitung im bereits
 angemeldeten Tab und bleibt daher hinter dem Login - keine gesonderte
