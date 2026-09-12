@@ -66,6 +66,10 @@ if ("serviceWorker" in navigator) {
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
+  #items-table.hide-col-3 th:nth-child(3), #items-table.hide-col-3 td:nth-child(3) { display: none; }
+  #items-table.hide-col-4 th:nth-child(4), #items-table.hide-col-4 td:nth-child(4) { display: none; }
+  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr:hover { background: var(--hover-bg); }
@@ -149,7 +153,9 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="column-toggle-btn" class="no-print">⚙ Spalten</button>
   </div>
+  <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -269,6 +275,56 @@ let CSV_DELIMITER = ";";
 let currentPage = 0;
 let sortKey = "saleDate";
 let sortAsc = false;
+
+// Frei wählbare Tabellenspalten - gleiches Prinzip wie auf cards.html
+// (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
+// der Tabelle aus-/einblenden statt bedingt zu rendern.
+const COLUMN_TOGGLES = [
+  { key: "channel", label: "Kanal", index: 3 },
+  { key: "saleDate", label: "Verkauft am", index: 4 },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = "shipping_hidden_columns";
+let hiddenColumns = new Set();
+try {
+  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+} catch (err) {}
+
+function applyColumnVisibility() {
+  const table = document.getElementById("items-table");
+  for (const col of COLUMN_TOGGLES) {
+    table.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+  }
+}
+
+function renderColumnTogglePanel() {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.innerHTML = "";
+  for (const col of COLUMN_TOGGLES) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(col.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(col.key);
+      else hiddenColumns.add(col.key);
+      try {
+        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+      } catch (err) {}
+      applyColumnVisibility();
+    });
+    label.appendChild(checkbox);
+    label.append(" " + col.label);
+    panel.appendChild(label);
+  }
+}
+
+document.getElementById("column-toggle-btn").addEventListener("click", () => {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderColumnTogglePanel();
+applyColumnVisibility();
 
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("items-table");

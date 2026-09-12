@@ -55,6 +55,12 @@ if ("serviceWorker" in navigator) {
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
+  #rows-table.hide-col-1 th:nth-child(1), #rows-table.hide-col-1 td:nth-child(1) { display: none; }
+  #rows-table.hide-col-3 th:nth-child(3), #rows-table.hide-col-3 td:nth-child(3) { display: none; }
+  #rows-table.hide-col-9 th:nth-child(9), #rows-table.hide-col-9 td:nth-child(9) { display: none; }
+  #rows-table.hide-col-10 th:nth-child(10), #rows-table.hide-col-10 td:nth-child(10) { display: none; }
+  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row-link { cursor: pointer; }
@@ -183,7 +189,9 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="datev-csv-btn">⭳ Buchhaltungsexport (DATEV/Lexoffice)</button>
+    <button type="button" id="column-toggle-btn" class="no-print">⚙ Spalten</button>
   </div>
+  <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -231,6 +239,59 @@ document.addEventListener("keydown", (ev) => {
   qInput.select();
 });
 let allRows = [];
+
+// Frei wählbare Tabellenspalten - gleiches Prinzip wie auf cards.html
+// (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
+// der Tabelle aus-/einblenden statt bedingt zu rendern.
+const COLUMN_TOGGLES = [
+  { key: "sku", label: "SKU", index: 1 },
+  { key: "purchase_date", label: "Kaufdatum (WE)", index: 3 },
+  { key: "margin_pct", label: "Marge", index: 9 },
+  { key: "holding_days", label: "Liegedauer", index: 10 },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = "statistics_sales_hidden_columns";
+let hiddenColumns = new Set();
+try {
+  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+} catch (err) {}
+
+function applyColumnVisibility() {
+  const table = document.getElementById("rows-table");
+  for (const col of COLUMN_TOGGLES) {
+    table.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+  }
+}
+
+function renderColumnTogglePanel() {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.innerHTML = "";
+  for (const col of COLUMN_TOGGLES) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(col.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(col.key);
+      else hiddenColumns.add(col.key);
+      try {
+        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+      } catch (err) {}
+      applyColumnVisibility();
+    });
+    label.appendChild(checkbox);
+    label.append(" " + col.label);
+    panel.appendChild(label);
+  }
+}
+
+document.getElementById("column-toggle-btn").addEventListener("click", () => {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderColumnTogglePanel();
+applyColumnVisibility();
+
 let sortKey = "sku";
 let sortAsc = true;
 
