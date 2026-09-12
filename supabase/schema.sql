@@ -563,6 +563,15 @@ alter table app_status add column if not exists kleinunternehmer_hint_enabled bo
 -- Aufbewahrungspflicht betrifft auch Verkaufsbelege, nicht nur Kaufbelege.
 alter table manual_sales add column if not exists receipt_path text default '';
 
+-- Rechnungstool (zusaetzlich zum bestehenden Kleinbetragsrechnung-Beleg,
+-- nicht als Ersatz): fortlaufende, eindeutige Rechnungsnummer ueber alle
+-- Jahre hinweg (Paragraph 14 UStG verlangt Fortlaufendheit/Eindeutigkeit,
+-- nicht zwingend einen Jahresreset) - einmal vergeben, nie wieder geaendert
+-- (siehe db.py's issue_invoice(), idempotent). unique-Constraint schuetzt
+-- vor versehentlicher Doppelvergabe bei parallelen Anfragen.
+alter table manual_sales add column if not exists invoice_number integer unique;
+alter table manual_sales add column if not exists invoice_issued_at timestamptz;
+
 -- Sonstige Betriebsausgaben (Verpackungsmaterial, Buerobedarf, Software-
 -- Abos, Fahrtkosten, Porto ohne Verkaufsbezug, ...) - eigenstaendige,
 -- schlanke Erfassung statt eine bestehende Tabelle (purchases/manual_sales)

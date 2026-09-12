@@ -697,6 +697,21 @@ class UpdateManualSaleEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class IssueManualSaleInvoiceEndpointTests(unittest.TestCase):
+    def test_issues_invoice(self):
+        issued = {"id": "ms-1", "invoice_number": 1, "invoice_issued_at": "2026-09-12T00:00:00+00:00"}
+        with patch("main.db.issue_invoice", return_value=issued) as mock_issue:
+            response = client.post("/api/manual-sales/ms-1/invoice")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["invoice_number"], 1)
+        mock_issue.assert_called_once_with("ms-1")
+
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.issue_invoice", return_value=None):
+            response = client.post("/api/manual-sales/does-not-exist/invoice")
+        self.assertEqual(response.status_code, 404)
+
+
 class DeleteManualSaleEndpointTests(unittest.TestCase):
     def test_deletes_manual_sale_and_restores_inventory(self):
         with patch("main.db.delete_manual_sale", return_value={"id": "ms-1", "card_id": "card-1"}), \

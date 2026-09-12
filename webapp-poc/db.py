@@ -3,6 +3,7 @@ Field names mirror integrations/ai_card_recognition.py's recognize_card()
 output 1:1 - duplicated here rather than imported, so this module has no
 import-order dependency on integrations/ being on sys.path first."""
 from collections import Counter
+from datetime import datetime, timezone
 
 from supabase_client import get_client
 
@@ -1252,6 +1253,36 @@ def set_manual_sale_receipt(sale_id, receipt_path):
     Storage-Objekt-Referenz)."""
     response = (
         get_client().table("manual_sales").update({"receipt_path": receipt_path}).eq("id", sale_id).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def next_invoice_number():
+    # Fortlaufend ueber alle Jahre hinweg (Paragraph 14 UStG) statt jaehrlich
+    # zurueckgesetzt - schlicht die bisher hoechste vergebene Nummer + 1.
+    response = (
+        get_client().table("manual_sales").select("invoice_number")
+        .not_.is_("invoice_number", "null")
+        .order("invoice_number", desc=True).limit(1).execute()
+    )
+    return (response.data[0]["invoice_number"] + 1) if response.data else 1
+
+
+def issue_invoice(sale_id):
+    """Vergibt die naechste fortlaufende Rechnungsnummer an einen manuellen
+    Verkauf - idempotent, da eine einmal vergebene Nummer nie geaendert oder
+    neu vergeben werden darf (Paragraph 14 UStG: fortlaufend/eindeutig). Ein
+    Verkauf, der schon eine Nummer hat, wird also unveraendert zurueckgegeben."""
+    sale = get_manual_sale(sale_id)
+    if sale is None:
+        return None
+    if sale.get("invoice_number"):
+        return sale
+    response = (
+        get_client().table("manual_sales").update({
+            "invoice_number": next_invoice_number(),
+            "invoice_issued_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", sale_id).execute()
     )
     return response.data[0] if response.data else None
 

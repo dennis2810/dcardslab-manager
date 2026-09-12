@@ -87,7 +87,7 @@ if ("serviceWorker" in navigator) {
     <li>Neue Seite „Kleinunternehmer": zeigt Vorjahresumsatz und laufenden Jahresumsatz im Verhältnis zu den
       beiden Umsatzgrenzen der Kleinunternehmerregelung (§19 UStG), mit Fortschrittsbalken und farbigem
       Statushinweis. Umsatzbasis ist die Summe aller Verkäufe (eBay und manuelle Kanäle), Retouren bereits
-      abgezogen. Der Abschnitt „Rechnungstool" ist als Platzhalter für eine spätere Erweiterung vorbereitet.</li>
+      abgezogen.</li>
     <li>Neuer Abschnitt „Einnahmen-Überschuss-Rechnung (EÜR)" auf der Kleinunternehmer-Seite: fasst Einnahmen und
       Ausgaben eines wählbaren Jahres nach dem Zufluss-Abfluss-Prinzip zusammen (Wareneinkauf im Kaufjahr,
       Verkaufserlöse/erhaltener Versand/Verkaufsgebühren im Verkaufsjahr, sonstige Betriebsausgaben im Jahr der
@@ -105,6 +105,13 @@ if ("serviceWorker" in navigator) {
     <li>Kartendetail, Abschnitt „Verkauf außerhalb eBay": neuer Bereich „Beleg (Aufbewahrungspflicht)" zum
       Hochladen/Ansehen/Löschen eines eigenen Belegs (PDF oder Foto) zu einem manuellen Verkauf – gleiches Prinzip
       wie der bestehende Beleg-Upload bei Käufen.</li>
+    <li>Rechnungstool: neuer Button „🧾 Rechnung erstellen" im Abschnitt „Verkauf außerhalb eBay" – zusätzlich zum
+      bestehenden Beleg (nicht als Ersatz) lässt sich eine formale Rechnung mit fortlaufender, eindeutiger
+      Rechnungsnummer (§14 UStG) ausstellen. Die Nummer wird einmalig vergeben, läuft fortlaufend über alle Jahre
+      hinweg und bleibt dem Verkauf dauerhaft zugeordnet; ein erneuter Klick druckt dieselbe Rechnung nochmals.</li>
+    <li>Liste „Sonstige Betriebsausgaben" auf der Kleinunternehmer-Seite: Spalten jetzt per Klick sortierbar,
+      paginiert (gleiche Seitengröße wie andere Listen) sowie über „🖨 Drucken" und „⭳ Ausgaben als CSV"
+      druckbar/exportierbar.</li>
   </ul>
 
   <h2>Dashboard &amp; Zugriff <span class="date">September 2026</span></h2>
@@ -311,6 +318,9 @@ if ("serviceWorker" in navigator) {
       statt des reinen Artikelpreises (eBay meldet das nicht immer so, wie die eigene API-Doku es beschreibt).
       Der Sync nutzt jetzt den zuverlässigeren Artikelpreis; „Verkaufspreis" ist außerdem manuell korrigierbar
       für Verkäufe, die vor diesem Fix synchronisiert wurden.</li>
+    <li>Neuer Button „Kachelansicht" auf der eBay-Seite zeigt die Angebote als Foto-Kacheln statt Tabellenzeilen
+      (gleiches Prinzip wie die Kachelansicht auf der Kartenübersicht) – die Tabelle bleibt für Massenauswahl,
+      Sortierung und alle Detail-Spalten weiterhin verfügbar.</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert
