@@ -72,6 +72,17 @@ if ("serviceWorker" in navigator) {
   /* Kompakt-Ansicht (Einstellungen) - dichtere Zeilen, kein gemeinsames CSS
      ueber alle Seiten hinweg, daher pro Seite einzeln ergaenzt. */
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
+  /* Frei wählbare Tabellenspalten (Einstellungen je Seite, localStorage) -
+     per CSS statt in render() bedingt zu rendern. */
+  #listings-table.hide-col-6 th:nth-child(6), #listings-table.hide-col-6 td:nth-child(6) { display: none; }
+  #listings-table.hide-col-8 th:nth-child(8), #listings-table.hide-col-8 td:nth-child(8) { display: none; }
+  #listings-table.hide-col-9 th:nth-child(9), #listings-table.hide-col-9 td:nth-child(9) { display: none; }
+  #listings-table.hide-col-10 th:nth-child(10), #listings-table.hide-col-10 td:nth-child(10) { display: none; }
+  #listings-table.hide-col-11 th:nth-child(11), #listings-table.hide-col-11 td:nth-child(11) { display: none; }
+  #listings-table.hide-col-12 th:nth-child(12), #listings-table.hide-col-12 td:nth-child(12) { display: none; }
+  #listings-table.hide-col-13 th:nth-child(13), #listings-table.hide-col-13 td:nth-child(13) { display: none; }
+  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   td.thumb img { width: 48px; height: 64px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
@@ -213,7 +224,9 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="column-toggle-btn">⚙ Spalten</button>
   </div>
+  <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -526,6 +539,61 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   document.body.classList.toggle("compact", body.view_density === "compact");
   if (currentListings) render(sortedListings());
 }).catch(() => {});
+
+// Frei wählbare Tabellenspalten - gleiches Prinzip wie auf cards.html
+// (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
+// der Tabelle aus-/einblenden statt bedingt in render() zu rendern.
+const COLUMN_TOGGLES = [
+  { key: "price_check", label: "Preis-Check", index: 6 },
+  { key: "listing_since", label: "Eingestellt am", index: 8 },
+  { key: "scheduled_at", label: "Geplant für", index: 9 },
+  { key: "sale_date", label: "Verkauft am", index: 10 },
+  { key: "sale_price", label: "Verkaufspreis", index: 11 },
+  { key: "published_at", label: "Zuletzt aktualisiert", index: 12 },
+  { key: "views", label: "Aufrufe", index: 13 },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = "ebay_hidden_columns";
+let hiddenColumns = new Set();
+try {
+  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+} catch (err) {}
+
+function applyColumnVisibility() {
+  const listingsTable = document.getElementById("listings-table");
+  for (const col of COLUMN_TOGGLES) {
+    listingsTable.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+  }
+}
+
+function renderColumnTogglePanel() {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.innerHTML = "";
+  for (const col of COLUMN_TOGGLES) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(col.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(col.key);
+      else hiddenColumns.add(col.key);
+      try {
+        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+      } catch (err) {}
+      applyColumnVisibility();
+    });
+    label.appendChild(checkbox);
+    label.append(" " + col.label);
+    panel.appendChild(label);
+  }
+}
+
+document.getElementById("column-toggle-btn").addEventListener("click", () => {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderColumnTogglePanel();
+applyColumnVisibility();
 
 function priceResearchFlag(listing) {
   if (!listing.price_research_count || listing.price == null) return null;

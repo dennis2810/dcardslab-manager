@@ -53,6 +53,14 @@ if ("serviceWorker" in navigator) {
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
+  /* Frei wählbare Tabellenspalten (Einstellungen je Seite, localStorage) -
+     per CSS statt in render() bedingt zu rendern. */
+  #inventory-table.hide-col-5 th:nth-child(5), #inventory-table.hide-col-5 td:nth-child(5) { display: none; }
+  #inventory-table.hide-col-6 th:nth-child(6), #inventory-table.hide-col-6 td:nth-child(6) { display: none; }
+  #inventory-table.hide-col-7 th:nth-child(7), #inventory-table.hide-col-7 td:nth-child(7) { display: none; }
+  #inventory-table.hide-col-8 th:nth-child(8), #inventory-table.hide-col-8 td:nth-child(8) { display: none; }
+  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   th { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
@@ -215,7 +223,9 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="column-toggle-btn">⚙ Spalten</button>
   </div>
+  <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
 <script src="vendor/qrcode.js"></script>
 <script>
@@ -343,6 +353,57 @@ function fmtEuro(value) {
 }
 
 let lowStockThreshold = 0;
+
+// Frei wählbare Tabellenspalten - gleiches Prinzip wie auf cards.html/
+// ebay.html: Spalten per CSS-Klasse auf der Tabelle aus-/einblenden statt
+// bedingt in render() zu rendern.
+const COLUMN_TOGGLES = [
+  { key: "condition", label: "Zustand", index: 5 },
+  { key: "location", label: "Lagerort", index: 6 },
+  { key: "notes", label: "Notizen", index: 7 },
+  { key: "value", label: "Wert", index: 8 },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = "inventory_hidden_columns";
+let hiddenColumns = new Set();
+try {
+  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+} catch (err) {}
+
+function applyColumnVisibility() {
+  for (const col of COLUMN_TOGGLES) {
+    table.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+  }
+}
+
+function renderColumnTogglePanel() {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.innerHTML = "";
+  for (const col of COLUMN_TOGGLES) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(col.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(col.key);
+      else hiddenColumns.add(col.key);
+      try {
+        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+      } catch (err) {}
+      applyColumnVisibility();
+    });
+    label.appendChild(checkbox);
+    label.append(" " + col.label);
+    panel.appendChild(label);
+  }
+}
+
+document.getElementById("column-toggle-btn").addEventListener("click", () => {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderColumnTogglePanel();
+applyColumnVisibility();
 
 async function loadInventory() {
   statusMsg.textContent = "Lädt …";

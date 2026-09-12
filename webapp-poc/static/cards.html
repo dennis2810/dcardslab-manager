@@ -83,6 +83,15 @@ if ("serviceWorker" in navigator) {
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
   body.compact .list th, body.compact .list td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   body.compact .list img { width: 32px; height: 32px; }
+  /* Frei wählbare Tabellenspalten (Einstellungen je Seite, localStorage) -
+     per CSS statt in renderList() bedingt zu rendern, damit die Auswahl
+     unabhaengig von Ladereihenfolge/Sortierung sofort greift. */
+  #list.hide-col-5 th:nth-child(5), #list.hide-col-5 td:nth-child(5) { display: none; }
+  #list.hide-col-6 th:nth-child(6), #list.hide-col-6 td:nth-child(6) { display: none; }
+  #list.hide-col-7 th:nth-child(7), #list.hide-col-7 td:nth-child(7) { display: none; }
+  #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
+  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   .list th .sort-arrow { color: #888; font-size: 0.8em; }
   /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
@@ -225,7 +234,9 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="column-toggle-btn" class="no-print">⚙ Spalten</button>
   </div>
+  <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -300,6 +311,61 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   document.body.classList.toggle("compact", body.view_density === "compact");
   renderCurrentView();
 }).catch(() => {});
+
+// Frei wählbare Tabellenspalten (Listenansicht) - je Spalte ihr fester
+// nth-child-Index im #list-Tabellenkopf (siehe <thead> oben), damit das
+// Ausblenden per CSS-Klasse auf der Tabelle passiert statt in renderList()
+// bedingt zu rendern (siehe .hide-col-N-Regeln oben im <style>). Nur die
+// weniger zentralen Spalten sind wählbar, SKU/Titel/Verkauf/Versand bleiben
+// immer sichtbar.
+const COLUMN_TOGGLES = [
+  { key: "team", label: "Team", index: 5 },
+  { key: "season_year", label: "Saison", index: 6 },
+  { key: "recognition_status", label: "Erkennung", index: 7 },
+  { key: "tags", label: "Tags", index: 10 },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
+let hiddenColumns = new Set();
+try {
+  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+} catch (err) {}
+
+function applyColumnVisibility() {
+  const table = document.getElementById("list");
+  for (const col of COLUMN_TOGGLES) {
+    table.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+  }
+}
+
+function renderColumnTogglePanel() {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.innerHTML = "";
+  for (const col of COLUMN_TOGGLES) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(col.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(col.key);
+      else hiddenColumns.add(col.key);
+      try {
+        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+      } catch (err) {}
+      applyColumnVisibility();
+    });
+    label.appendChild(checkbox);
+    label.append(" " + col.label);
+    panel.appendChild(label);
+  }
+}
+
+document.getElementById("column-toggle-btn").addEventListener("click", () => {
+  const panel = document.getElementById("column-toggle-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderColumnTogglePanel();
+applyColumnVisibility();
 
 const qInput = document.getElementById("q");
 
