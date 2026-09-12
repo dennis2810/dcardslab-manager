@@ -2715,13 +2715,27 @@ def _sync_ebay_sales_once():
                 # als Fallback auf pricingSummary.deliveryCost der Bestellung.
                 order_delivery_cost = (order.get("pricingSummary") or {}).get("deliveryCost") or {}
                 shipping_charged = float(order_delivery_cost.get("value", 0) or 0)
+            quantity = line_item.get("quantity", 1)
+            line_item_cost = (line_item.get("lineItemCost") or {}).get("value")
+            if line_item_cost is not None:
+                # lineItemCost ist der Preis PRO EINHEIT, total dagegen bei
+                # manchen Bestellungen (beobachtet, entgegen eBays eigener
+                # Doku) der Gesamtbetrag INKLUSIVE Versand - lineItemCost *
+                # quantity liefert daher zuverlässig den reinen Artikelpreis
+                # ohne Versand (= eBays eigene "Zwischensumme"-Anzeige).
+                gross_price = float(line_item_cost) * quantity
+            else:
+                # Fallback fuer den unwahrscheinlichen Fall, dass eBay
+                # lineItemCost mal nicht mitliefert - besser eine grobe
+                # Naeherung (ggf. inkl. Versand) als ein Verkaufspreis von 0.
+                gross_price = float((line_item.get("total") or {}).get("value", 0) or 0)
             sale_fields = {
                 "listing_id": listing["id"], "card_id": listing["card_id"],
                 "ebay_order_id": order_id,
                 "ebay_line_item_id": line_item.get("lineItemId", ""),
                 "sale_date": order.get("creationDate"),
-                "quantity": line_item.get("quantity", 1),
-                "gross_price": float((line_item.get("total") or {}).get("value", 0) or 0),
+                "quantity": quantity,
+                "gross_price": gross_price,
                 # Vom Kaeufer gezahlter Versand - durchlaufender Posten, siehe
                 # shipping_cost (manuell, tatsaechliches Porto) im Gewinn.
                 "shipping_charged": shipping_charged,

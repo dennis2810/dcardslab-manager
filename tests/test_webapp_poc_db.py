@@ -1595,6 +1595,17 @@ class UpdateEbaySaleTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row["shipping_charged"], 2.5)
 
+    def test_updates_gross_price_rounded(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "sale-1", "gross_price": 1.99}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.update_ebay_sale("sale-1", {"gross_price": "1.994"})
+        self.assertEqual(result["gross_price"], 1.99)
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["gross_price"], 1.99)
+
     def test_updates_ebay_fees_rounded(self):
         mock_client = MagicMock()
         response = MagicMock()
@@ -1634,7 +1645,7 @@ class UpdateEbaySaleTests(unittest.TestCase):
         response.data = [{"id": "sale-1"}]
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
-            db.update_ebay_sale("sale-1", {"gross_price": 999, "notes": "hack"})
+            db.update_ebay_sale("sale-1", {"card_id": "other-card", "notes": "hack"})
         mock_client.table.return_value.update.assert_not_called()
 
     def test_returns_none_when_not_found(self):
