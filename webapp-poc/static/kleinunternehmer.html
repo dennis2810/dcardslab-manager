@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DCardLabs – Kleinunternehmer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --neutral-bg: #eee;
+    --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
+    --danger-bg: #fdecea; --danger-fg: #611a15;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --neutral-bg: #333;
+      --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+      --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; --neutral-bg: #333;
+    --success-bg: #1c3324; --success-fg: #7fd99a; --warn-bg: #4a3c00; --warn-fg: #ffd866;
+    --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
+  .nav-search { display: flex; gap: 0.4rem; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
+  p, li { line-height: 1.5; }
+  .note { font-size: 0.85rem; color: #555; }
+  .status-box { font-weight: 600; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.75rem 0; }
+  .status-ok { background: var(--success-bg); color: var(--success-fg); }
+  .status-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .status-danger { background: var(--danger-bg); color: var(--danger-fg); }
+  .ku-metric { margin: 1rem 0; }
+  .ku-metric-label { display: flex; justify-content: space-between; font-size: 0.9rem; }
+  .ku-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.4rem; }
+  .ku-bar-fill { height: 100%; width: 0%; transition: width 0.3s; background: #1e8e3e; }
+  .ku-bar-fill.ku-warn { background: #f9ab00; }
+  .ku-bar-fill.ku-danger { background: #d93025; }
+  .placeholder-section { color: #555; }
+  .placeholder-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; background: var(--neutral-bg); }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Kleinunternehmer</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+
+  <p class="note">Alles rund ums Kleinunternehmertum an einem Ort: aktueller Stand zu den Umsatzgrenzen der
+    Kleinunternehmerregelung, perspektivisch ergänzt um eine Einnahmen-Überschuss-Rechnung (EÜR) und ein
+    Rechnungstool.</p>
+
+  <h2 id="umsatzgrenzen">Umsatzgrenzen (§19 UStG)</h2>
+  <p>Die Kleinunternehmerregelung befreit von der Umsatzsteuer, solange zwei Grenzen eingehalten werden: der
+    Umsatz im <strong>Vorjahr</strong> darf die erste Grenze nicht überschritten haben, und der Umsatz im
+    <strong>laufenden Jahr</strong> darf die zweite Grenze nicht übersteigen – wird sie während des Jahres
+    überschritten, entfällt die Regelung ab diesem Zeitpunkt sofort (nicht erst rückwirkend zum Jahresanfang).
+    Umsatzbasis hier ist die Summe aller Verkäufe (eBay und manuelle Kanäle wie Kleinanzeigen/Vinted), Retouren
+    bereits abgezogen; Gebühren und Versandkosten mindern den umsatzsteuerlichen Umsatz nicht und werden daher
+    nicht abgezogen. Diese Seite ist eine reine Orientierungshilfe – die endgültige Einschätzung sowie eine
+    eventuell nötige Ummeldung beim Finanzamt bleiben Aufgabe des Steuerberaters/Finanzamts.</p>
+
+  <p id="status-msg">Lädt …</p>
+  <div id="status-box" hidden></div>
+
+  <div class="ku-metric">
+    <div class="ku-metric-label"><span id="prev-year-label">Vorjahr</span><span id="prev-year-value"></span></div>
+    <div class="ku-bar-track"><div class="ku-bar-fill" id="prev-year-bar"></div></div>
+  </div>
+  <div class="ku-metric">
+    <div class="ku-metric-label"><span id="current-year-label">Laufendes Jahr</span><span id="current-year-value"></span></div>
+    <div class="ku-bar-track"><div class="ku-bar-fill" id="current-year-bar"></div></div>
+  </div>
+  <p class="note">Die beiden Schwellenwerte lassen sich in den <a href="settings.html">Einstellungen</a>
+    anpassen, falls sich die gesetzlichen Grenzen künftig ändern.</p>
+
+  <h2 id="euer">Einnahmen-Überschuss-Rechnung (EÜR)</h2>
+  <p class="placeholder-section"><span class="placeholder-badge">in Planung</span> Eine EÜR fasst Einnahmen und
+    Ausgaben eines Jahres steuerlich auf – geplant ist ein Export aus den bereits erfassten Käufen/Verkäufen,
+    ähnlich dem bestehenden DATEV/Lexoffice-Export auf der Seite „Alle Verkäufe".</p>
+
+  <h2 id="rechnungstool">Rechnungstool</h2>
+  <p class="placeholder-section"><span class="placeholder-badge">in Planung</span> Geplant ist eine Möglichkeit,
+    Rechnungen für Verkäufe direkt aus dem Tool heraus zu erstellen und zu verwalten.</p>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+function fmtEuro(v) {
+  return v != null ? `${Number(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "–";
+}
+
+// Gleiche Summenbildung wie dashboard.html's currentYearTotal()/
+// previousYearTotal() - Umsatzbasis ist stats.monthly (siehe
+// _compute_statistics() in main.py), Retouren dort bereits ausgenommen.
+function yearTotal(stats, year) {
+  const key = String(year);
+  return (stats.monthly || [])
+    .filter((m) => m.month.startsWith(key))
+    .reduce((sum, m) => sum + m.revenue, 0);
+}
+
+async function load() {
+  const statusMsg = document.getElementById("status-msg");
+  try {
+    const [statsRes, appStatusRes] = await Promise.all([
+      fetch("/api/statistics"), fetch("/api/app-status"),
+    ]);
+    const stats = await statsRes.json();
+    const appStatus = await appStatusRes.json();
+    if (!statsRes.ok || !appStatusRes.ok) {
+      statusMsg.textContent = "Fehler beim Laden.";
+      return;
+    }
+    statusMsg.style.display = "none";
+    render(stats, appStatus);
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function render(stats, appStatus) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const prevYearThreshold = appStatus.kleinunternehmer_prev_year_threshold || 22000;
+  const currentYearThreshold = appStatus.kleinunternehmer_current_year_threshold || 50000;
+  const prevYearRevenue = yearTotal(stats, currentYear - 1);
+  const currentYearRevenue = yearTotal(stats, currentYear);
+
+  document.getElementById("prev-year-label").textContent = `Vorjahresumsatz (${currentYear - 1})`;
+  document.getElementById("prev-year-value").textContent = `${fmtEuro(prevYearRevenue)} von ${fmtEuro(prevYearThreshold)}`;
+  const prevPct = Math.max(0, Math.min(100, (prevYearRevenue / prevYearThreshold) * 100));
+  const prevBar = document.getElementById("prev-year-bar");
+  prevBar.style.width = `${prevPct}%`;
+  prevBar.className = "ku-bar-fill" + (prevYearRevenue > prevYearThreshold ? " ku-danger" : "");
+
+  document.getElementById("current-year-label").textContent = `Laufender Jahresumsatz (${currentYear})`;
+  document.getElementById("current-year-value").textContent = `${fmtEuro(currentYearRevenue)} von ${fmtEuro(currentYearThreshold)}`;
+  const currentPct = Math.max(0, Math.min(100, (currentYearRevenue / currentYearThreshold) * 100));
+  const currentBar = document.getElementById("current-year-bar");
+  currentBar.style.width = `${currentPct}%`;
+  let currentBarClass = "";
+  if (currentYearRevenue > currentYearThreshold) currentBarClass = " ku-danger";
+  else if (currentYearRevenue >= currentYearThreshold * 0.8) currentBarClass = " ku-warn";
+  currentBar.className = "ku-bar-fill" + currentBarClass;
+
+  const statusBox = document.getElementById("status-box");
+  statusBox.hidden = false;
+  if (prevYearRevenue > prevYearThreshold) {
+    statusBox.className = "status-box status-danger";
+    statusBox.textContent = `Kleinunternehmerregelung entfällt dieses Jahr bereits: der Vorjahresumsatz (${fmtEuro(prevYearRevenue)}) liegt über der Grenze von ${fmtEuro(prevYearThreshold)}.`;
+  } else if (currentYearRevenue > currentYearThreshold) {
+    statusBox.className = "status-box status-danger";
+    statusBox.textContent = `Grenze für das laufende Jahr überschritten (${fmtEuro(currentYearRevenue)} von ${fmtEuro(currentYearThreshold)}) – die Kleinunternehmerregelung entfällt ab sofort.`;
+  } else if (currentYearRevenue >= currentYearThreshold * 0.8) {
+    statusBox.className = "status-box status-warn";
+    statusBox.textContent = `Achtung: bereits ${currentPct.toFixed(0)} % der Jahresgrenze erreicht.`;
+  } else {
+    statusBox.className = "status-box status-ok";
+    statusBox.textContent = "Beide Umsatzgrenzen aktuell eingehalten.";
+  }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -922,6 +922,16 @@ def set_reminder_thresholds(stale_listing_min_days, stale_listing_check_days, st
     return response.data[0]
 
 
+def set_kleinunternehmer_thresholds(prev_year_threshold, current_year_threshold):
+    # Gleiches Singleton-Row-Muster wie set_reminder_thresholds().
+    response = get_client().table("app_status").upsert({
+        "id": True,
+        "kleinunternehmer_prev_year_threshold": prev_year_threshold,
+        "kleinunternehmer_current_year_threshold": current_year_threshold,
+    }).execute()
+    return response.data[0]
+
+
 def record_failed_login(ip, at):
     # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
     # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory

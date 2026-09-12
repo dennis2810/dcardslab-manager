@@ -1966,6 +1966,22 @@ class AppStatusTests(unittest.TestCase):
             "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
         })
 
+    def test_set_kleinunternehmer_thresholds_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{
+            "id": True, "kleinunternehmer_prev_year_threshold": 25000,
+            "kleinunternehmer_current_year_threshold": 55000,
+        }]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_kleinunternehmer_thresholds(25000, 55000)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {
+            "id": True, "kleinunternehmer_prev_year_threshold": 25000,
+            "kleinunternehmer_current_year_threshold": 55000,
+        })
+
     def test_record_failed_login_prepends_to_existing_log(self):
         mock_client = MagicMock()
         select_response = MagicMock()

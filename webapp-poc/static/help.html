@@ -76,6 +76,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -461,7 +462,22 @@ if ("serviceWorker" in navigator) {
     angelegte, noch keinem Kauf zugeordnete Karten) mit Direktlink zur jeweiligen Karte. Der Button „Aktivitäten
     leeren" blendet ältere Ereignisse dauerhaft aus (die Liste wird live berechnet, nicht wirklich gelöscht) – sobald
     wieder etwas Neues passiert, taucht es auf. Der Schalter „Design" (System/Hell/Dunkel) legt das Farbschema fest
-    – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard.</p>
+    – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard. Unter dem Jahresziel zeigt eine kurze
+    Statuszeile den aktuellen Stand zu den Umsatzgrenzen der Kleinunternehmerregelung (siehe Abschnitt
+    „Kleinunternehmer" unten), mit Link zu den Details.</p>
+
+  <h2 id="kleinunternehmer">Kleinunternehmer</h2>
+  <p>Eigene Seite rund ums Kleinunternehmertum. Aktuell zeigt sie die beiden Umsatzgrenzen der
+    Kleinunternehmerregelung (§19 UStG): der Umsatz im Vorjahr darf die erste Grenze nicht überschritten haben,
+    der Umsatz im laufenden Jahr die zweite Grenze nicht übersteigen – wird sie unterjährig überschritten, entfällt
+    die Regelung ab diesem Zeitpunkt sofort. Umsatzbasis ist die Summe aller Verkäufe (eBay und manuelle Kanäle),
+    Retouren bereits abgezogen, ohne Abzug von Gebühren/Versand. Zwei Fortschrittsbalken zeigen Vorjahr und
+    laufendes Jahr im Verhältnis zur jeweiligen Grenze, dazu ein farbiger Statushinweis (grün/gelb/rot). Die beiden
+    Schwellenwerte (Standard 22.000&nbsp;€/50.000&nbsp;€) lassen sich in den Einstellungen anpassen, falls sich die
+    gesetzlichen Grenzen künftig ändern. Die Abschnitte „Einnahmen-Überschuss-Rechnung (EÜR)" und „Rechnungstool"
+    sind als Platzhalter für spätere Erweiterungen vorbereitet, aber noch nicht umgesetzt. Diese Seite ist eine
+    reine Orientierungshilfe – die endgültige Einschätzung sowie eine eventuell nötige Ummeldung beim Finanzamt
+    bleiben Aufgabe des Steuerberaters/Finanzamts.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport, inklusive

@@ -547,3 +547,9 @@ alter table app_status add column if not exists stale_wishlist_min_days int not 
 -- eBay, Inventur, Wunschliste, Private Sammlung, Versand, Statistiken) -
 -- Standard Semikolon, da deutsches Excel das ohne Umweg erwartet.
 alter table app_status add column if not exists csv_delimiter text not null default ';';
+-- Schwellwerte fuer die Kleinunternehmer-Umsatzgrenzen-Warnung (siehe
+-- kleinunternehmer.html/dashboard.html) - Standard sind die aktuellen
+-- gesetzlichen Grenzen aus Paragraph 19 UStG, konfigurierbar, falls sich
+-- diese per Gesetzesaenderung mal verschieben.
+alter table app_status add column if not exists kleinunternehmer_prev_year_threshold numeric not null default 22000;
+alter table app_status add column if not exists kleinunternehmer_current_year_threshold numeric not null default 50000;

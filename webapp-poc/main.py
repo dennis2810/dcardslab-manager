@@ -815,6 +815,12 @@ STALE_LISTING_MIN_DAYS = 90
 STALE_LISTING_CHECK_MAX_AGE_DAYS = 30
 STALE_WISHLIST_MIN_DAYS = 60
 
+# Default-Umsatzgrenzen der Kleinunternehmerregelung (Paragraph 19 UStG,
+# Stand 2025) - greifen nur, solange in app_status noch keine eigenen Werte
+# gespeichert sind (Einstellungen, Abschnitt Kleinunternehmer-Schwellenwerte).
+KLEINUNTERNEHMER_PREV_YEAR_THRESHOLD = 22000
+KLEINUNTERNEHMER_CURRENT_YEAR_THRESHOLD = 50000
+
 
 def _stale_listing_reminders(status=None):
     if status is None:
@@ -2952,6 +2958,8 @@ async def app_status():
         "stale_listing_check_days": status.get("stale_listing_check_days") or STALE_LISTING_CHECK_MAX_AGE_DAYS,
         "stale_wishlist_min_days": status.get("stale_wishlist_min_days") or STALE_WISHLIST_MIN_DAYS,
         "csv_delimiter": status.get("csv_delimiter") or ";",
+        "kleinunternehmer_prev_year_threshold": status.get("kleinunternehmer_prev_year_threshold") or KLEINUNTERNEHMER_PREV_YEAR_THRESHOLD,
+        "kleinunternehmer_current_year_threshold": status.get("kleinunternehmer_current_year_threshold") or KLEINUNTERNEHMER_CURRENT_YEAR_THRESHOLD,
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
@@ -3131,6 +3139,19 @@ async def set_reminder_thresholds(fields: dict = Body(...)):
     if not (_positive_int(min_days) and _positive_int(check_days) and _positive_int(wishlist_days)):
         raise HTTPException(status_code=400, detail="Alle drei Schwellwerte müssen positive Ganzzahlen sein.")
     updated = db.set_reminder_thresholds(min_days, check_days, wishlist_days)
+    return JSONResponse(updated)
+
+
+@app.put("/api/kleinunternehmer-thresholds")
+async def set_kleinunternehmer_thresholds(fields: dict = Body(...)):
+    def _positive_number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+    prev_year_threshold = fields.get("prev_year_threshold")
+    current_year_threshold = fields.get("current_year_threshold")
+    if not (_positive_number(prev_year_threshold) and _positive_number(current_year_threshold)):
+        raise HTTPException(status_code=400, detail="Beide Schwellwerte müssen positive Zahlen sein.")
+    updated = db.set_kleinunternehmer_thresholds(prev_year_threshold, current_year_threshold)
     return JSONResponse(updated)
 
 
