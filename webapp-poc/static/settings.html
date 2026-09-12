@@ -40,6 +40,7 @@ if ("serviceWorker" in navigator) {
   button { padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; margin-right: 0.5rem; }
   table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
   th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   .table-scroll { overflow-x: auto; }
   .template-body-cell { max-width: 340px; white-space: pre-wrap; font-size: 0.85rem; color: #555; }
   .status { font-style: italic; color: #555; margin-top: 0.5rem; }
@@ -219,6 +220,23 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="notification-settings-status"></p>
   </section>
 
+  <section id="reminder-thresholds-section">
+    <h2>Wiedervorlage-Schwellenwerte</h2>
+    <p>Steuert, ab wann die beiden automatisch erkannten Situationen im Dashboard unter „Was jetzt tun?"
+      (und in der täglichen Erinnerungs-E-Mail) erscheinen.</p>
+    <label>Eigenes eBay-Angebot: unverkauft seit mind. (Tage)
+      <input type="number" id="stale-listing-min-days-input" min="1" step="1">
+    </label>
+    <label>… und zuletzt preisgeprüft vor mind. (Tage)
+      <input type="number" id="stale-listing-check-days-input" min="1" step="1">
+    </label>
+    <label>Wunschliste: Zielpreis seit mind. (Tage) nicht erreicht
+      <input type="number" id="stale-wishlist-min-days-input" min="1" step="1">
+    </label>
+    <button type="button" id="save-reminder-thresholds-btn">Speichern</button>
+    <p class="status" id="reminder-thresholds-status"></p>
+  </section>
+
   <section id="push-notification-section">
     <h2>Push-Benachrichtigungen</h2>
     <p>Zusätzlich zur E-Mail: eine Browser-Benachrichtigung auf diesem Gerät, sobald neue eBay-Verkäufe
@@ -357,10 +375,14 @@ async function loadBackupStatus() {
     document.getElementById("price-alert-threshold-input").value = body.price_alert_threshold_pct ?? 20;
     document.getElementById("page-size-input").value = body.page_size ?? 40;
     document.getElementById("view-density-input").value = body.view_density || "comfort";
+    document.body.classList.toggle("compact", body.view_density === "compact");
     renderFailedLoginLog(body.failed_login_log || []);
     document.getElementById("sender-address-input").value = body.sender_address || "";
     document.getElementById("notify-on-sale-input").checked = Boolean(body.notify_on_sale);
     document.getElementById("notify-on-reminders-input").checked = Boolean(body.notify_on_reminders);
+    document.getElementById("stale-listing-min-days-input").value = body.stale_listing_min_days ?? 90;
+    document.getElementById("stale-listing-check-days-input").value = body.stale_listing_check_days ?? 30;
+    document.getElementById("stale-wishlist-min-days-input").value = body.stale_wishlist_min_days ?? 60;
     document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
     document.getElementById("smtp-host-input").value = body.smtp_host || "";
     document.getElementById("smtp-port-input").value = body.smtp_port || "";
@@ -650,6 +672,43 @@ document.getElementById("save-price-alert-threshold-btn").addEventListener("clic
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Preis-Alarm-Schwelle gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-reminder-thresholds-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("reminder-thresholds-status");
+  const staleListingMinDays = parseInt(document.getElementById("stale-listing-min-days-input").value, 10);
+  const staleListingCheckDays = parseInt(document.getElementById("stale-listing-check-days-input").value, 10);
+  const staleWishlistMinDays = parseInt(document.getElementById("stale-wishlist-min-days-input").value, 10);
+  if (![staleListingMinDays, staleListingCheckDays, staleWishlistMinDays].every((v) => Number.isInteger(v) && v > 0)) {
+    statusEl.textContent = "Bitte überall eine Ganzzahl > 0 eingeben.";
+    statusEl.className = "error";
+    return;
+  }
+  try {
+    const res = await fetch("/api/reminder-thresholds", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stale_listing_min_days: staleListingMinDays,
+        stale_listing_check_days: staleListingCheckDays,
+        stale_wishlist_min_days: staleWishlistMinDays,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Wiedervorlage-Schwellenwerte gespeichert.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

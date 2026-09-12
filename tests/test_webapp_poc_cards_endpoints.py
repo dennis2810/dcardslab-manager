@@ -1222,7 +1222,8 @@ class DashboardRemindersEndpointTests(unittest.TestCase):
         stale_listings = [{"id": "l1", "card_id": "card-2", "listing_since": "2026-01-01"}]
         stale_wishlist = [{"id": "w1", "title": "Wunsch A", "target_price": 5}]
         cards = [{"id": "card-1", "title": "Karte 1"}, {"id": "card-2", "title": "Karte 2"}]
-        with patch("main.db.list_due_reminders", return_value=due), \
+        with patch("main.db.get_app_status", return_value={}), \
+             patch("main.db.list_due_reminders", return_value=due), \
              patch("main.db.list_stale_unsold_listings", return_value=stale_listings), \
              patch("main.db.list_stale_wishlist_items", return_value=stale_wishlist), \
              patch("main.db.get_cards_by_ids", return_value=cards):
@@ -1234,7 +1235,8 @@ class DashboardRemindersEndpointTests(unittest.TestCase):
         self.assertEqual(body["stale_wishlist"], stale_wishlist)
 
     def test_returns_empty_lists_when_nothing_due(self):
-        with patch("main.db.list_due_reminders", return_value=[]), \
+        with patch("main.db.get_app_status", return_value={}), \
+             patch("main.db.list_due_reminders", return_value=[]), \
              patch("main.db.list_stale_unsold_listings", return_value=[]), \
              patch("main.db.list_stale_wishlist_items", return_value=[]), \
              patch("main.db.get_cards_by_ids", return_value=[]):
@@ -1242,6 +1244,17 @@ class DashboardRemindersEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body, {"due_reminders": [], "stale_listings": [], "stale_wishlist": []})
+
+    def test_uses_configured_thresholds(self):
+        status = {"stale_listing_min_days": 30, "stale_listing_check_days": 10, "stale_wishlist_min_days": 14}
+        with patch("main.db.get_app_status", return_value=status), \
+             patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]) as mock_listings, \
+             patch("main.db.list_stale_wishlist_items", return_value=[]) as mock_wishlist, \
+             patch("main.db.get_cards_by_ids", return_value=[]):
+            client.get("/api/dashboard/reminders")
+        mock_listings.assert_called_once_with(30, 10)
+        mock_wishlist.assert_called_once_with(14)
 
 
 if __name__ == "__main__":

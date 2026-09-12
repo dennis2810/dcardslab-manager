@@ -226,8 +226,8 @@ def _send_reminder_digest_if_due():
         if not settings.get("notify_on_reminders"):
             return
         due_reminders = _due_reminders_with_titles()
-        stale_listings = _stale_listing_reminders()
-        stale_wishlist = _stale_wishlist_reminders()
+        stale_listings = _stale_listing_reminders(settings)
+        stale_wishlist = _stale_wishlist_reminders(settings)
         if not (due_reminders or stale_listings or stale_wishlist):
             return
         subject, body = email_notify.format_reminder_digest(due_reminders, stale_listings, stale_wishlist)
@@ -807,18 +807,21 @@ async def delete_reminder(reminder_id: str):
     return Response(status_code=204)
 
 
-# Schwellwerte fuer die beiden automatischen Wiedervorlage-Regeln (Klaerung
-# mit dem Nutzer, Beispiel "seit 90 Tagen unverkauft") - bewusst nicht
-# konfigurierbar (anders als z.B. der Preis-Alarm-Schwellwert), um die
-# Einstellungen nicht mit einer weiteren Zahl zu ueberladen; Werte koennen
-# bei Bedarf spaeter aus app_status gelesen werden.
+# Default-Schwellwerte fuer die beiden automatischen Wiedervorlage-Regeln
+# (Klaerung mit dem Nutzer, Beispiel "seit 90 Tagen unverkauft") - greifen nur,
+# solange in app_status noch keine eigenen Werte gespeichert sind (Einstellungen,
+# Abschnitt E-Mail-Benachrichtigungen/Wiedervorlage).
 STALE_LISTING_MIN_DAYS = 90
 STALE_LISTING_CHECK_MAX_AGE_DAYS = 30
 STALE_WISHLIST_MIN_DAYS = 60
 
 
-def _stale_listing_reminders():
-    listings = db.list_stale_unsold_listings(STALE_LISTING_MIN_DAYS, STALE_LISTING_CHECK_MAX_AGE_DAYS)
+def _stale_listing_reminders(status=None):
+    if status is None:
+        status = db.get_app_status() or {}
+    min_days = status.get("stale_listing_min_days") or STALE_LISTING_MIN_DAYS
+    check_days = status.get("stale_listing_check_days") or STALE_LISTING_CHECK_MAX_AGE_DAYS
+    listings = db.list_stale_unsold_listings(min_days, check_days)
     card_ids = [l["card_id"] for l in listings]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
     return [
@@ -827,8 +830,11 @@ def _stale_listing_reminders():
     ]
 
 
-def _stale_wishlist_reminders():
-    return db.list_stale_wishlist_items(STALE_WISHLIST_MIN_DAYS)
+def _stale_wishlist_reminders(status=None):
+    if status is None:
+        status = db.get_app_status() or {}
+    min_days = status.get("stale_wishlist_min_days") or STALE_WISHLIST_MIN_DAYS
+    return db.list_stale_wishlist_items(min_days)
 
 
 def _due_reminders_with_titles():
@@ -843,10 +849,11 @@ def _due_reminders_with_titles():
 
 @app.get("/api/dashboard/reminders")
 async def dashboard_reminders():
+    status = db.get_app_status() or {}
     return JSONResponse({
         "due_reminders": _due_reminders_with_titles(),
-        "stale_listings": _stale_listing_reminders(),
-        "stale_wishlist": _stale_wishlist_reminders(),
+        "stale_listings": _stale_listing_reminders(status),
+        "stale_wishlist": _stale_wishlist_reminders(status),
     })
 
 
@@ -2941,6 +2948,9 @@ async def app_status():
         "price_alert_threshold_pct": status.get("price_alert_threshold_pct") or 20,
         "page_size": status.get("page_size") or 40,
         "view_density": status.get("view_density") or "comfort",
+        "stale_listing_min_days": status.get("stale_listing_min_days") or STALE_LISTING_MIN_DAYS,
+        "stale_listing_check_days": status.get("stale_listing_check_days") or STALE_LISTING_CHECK_MAX_AGE_DAYS,
+        "stale_wishlist_min_days": status.get("stale_wishlist_min_days") or STALE_WISHLIST_MIN_DAYS,
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
@@ -3097,6 +3107,20 @@ async def set_view_density(fields: dict = Body(...)):
     if density not in ("comfort", "compact"):
         raise HTTPException(status_code=400, detail="density muss 'comfort' oder 'compact' sein.")
     updated = db.set_view_density(density)
+    return JSONResponse(updated)
+
+
+@app.put("/api/reminder-thresholds")
+async def set_reminder_thresholds(fields: dict = Body(...)):
+    def _positive_int(value):
+        return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+    min_days = fields.get("stale_listing_min_days")
+    check_days = fields.get("stale_listing_check_days")
+    wishlist_days = fields.get("stale_wishlist_min_days")
+    if not (_positive_int(min_days) and _positive_int(check_days) and _positive_int(wishlist_days)):
+        raise HTTPException(status_code=400, detail="Alle drei Schwellwerte müssen positive Ganzzahlen sein.")
+    updated = db.set_reminder_thresholds(min_days, check_days, wishlist_days)
     return JSONResponse(updated)
 
 

@@ -58,6 +58,7 @@ if ("serviceWorker" in navigator) {
   .summary-card .value { font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   /* Feste Spaltenbreiten statt table-layout: auto's Default - sonst sizen
      die vier Auswertungstabellen (Plattform/Kanal/Team/Set) ihre Spalten
      unabhaengig voneinander an der jeweils laengsten Kopfzeile ("Plattform"
@@ -205,6 +206,10 @@ if ("serviceWorker" in navigator) {
 })();
 
 const statusMsg = document.getElementById("status-msg");
+
+fetch("/api/app-status").then((r) => r.json()).then((body) => {
+  document.body.classList.toggle("compact", body.view_density === "compact");
+}).catch(() => {});
 
 // de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
 // groessere Betraege/Prozentwerte deutlich lesbarer ist als toFixed().

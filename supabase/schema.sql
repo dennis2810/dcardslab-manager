@@ -536,3 +536,10 @@ create index if not exists reminders_due_date_idx on reminders(due_date) where r
 -- _send_reminder_digest_if_due()).
 alter table app_status add column if not exists notify_on_reminders boolean not null default false;
 alter table app_status add column if not exists last_reminder_email_sent_at timestamptz;
+-- Schwellwerte fuer die beiden automatischen Wiedervorlage-Regeln (siehe
+-- main.py's _stale_listing_reminders()/_stale_wishlist_reminders()) -
+-- konfigurierbar statt fest verdrahtet, damit z.B. eine andere Kartenart/
+-- Preisklasse ein anderes Tempo braucht als die Standardwerte.
+alter table app_status add column if not exists stale_listing_min_days int not null default 90;
+alter table app_status add column if not exists stale_listing_check_days int not null default 30;
+alter table app_status add column if not exists stale_wishlist_min_days int not null default 60;

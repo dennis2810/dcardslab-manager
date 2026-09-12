@@ -1940,6 +1940,22 @@ class AppStatusTests(unittest.TestCase):
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "view_density": "compact"})
 
+    def test_set_reminder_thresholds_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{
+            "id": True, "stale_listing_min_days": 30,
+            "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        }]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_reminder_thresholds(30, 10, 14)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {
+            "id": True, "stale_listing_min_days": 30,
+            "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        })
+
     def test_record_failed_login_prepends_to_existing_log(self):
         mock_client = MagicMock()
         select_response = MagicMock()

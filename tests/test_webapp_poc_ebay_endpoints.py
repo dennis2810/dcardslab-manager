@@ -1562,6 +1562,22 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
              patch("main.email_notify.send_email", side_effect=OSError("boom")):
             main._send_reminder_digest_if_due()  # must not raise
 
+    def test_uses_configured_thresholds(self):
+        settings = {
+            "notify_on_reminders": True, "stale_listing_min_days": 30,
+            "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        }
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]) as mock_listings, \
+             patch("main.db.list_stale_wishlist_items", return_value=[]) as mock_wishlist, \
+             patch("main.email_notify.send_email"):
+            main._send_reminder_digest_if_due()
+        mock_listings.assert_called_once_with(30, 10)
+        mock_wishlist.assert_called_once_with(14)
+
 
 class SyncEbayReturnsOnceTests(unittest.TestCase):
     def test_marks_sale_refunded_when_return_has_refund(self):
