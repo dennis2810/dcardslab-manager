@@ -2698,12 +2698,23 @@ def _sync_ebay_sales_once():
         # mehrfach. None = noch nicht versucht, [] = versucht, nichts
         # gefunden bzw. Ladefehler (siehe except unten).
         fulfillments = None
-        for line_item in order.get("lineItems", []):
+        order_line_items = order.get("lineItems", [])
+        for line_item in order_line_items:
             listing = ebay_listing.match_sale_line_item(line_item, listings_by_sku, listings_by_item_id)
             if listing is None:
                 skipped += 1
                 continue
             delivery_cost = (line_item.get("deliveryCost") or {}).get("shippingCost") or {}
+            shipping_charged = float(delivery_cost.get("value", 0) or 0)
+            if not shipping_charged and len(order_line_items) == 1:
+                # eBay meldet den vom Kaeufer gezahlten Versand manchmal nur
+                # auf Bestellungs- statt auf Artikelebene (deliveryCost auf
+                # dem Line Item bleibt dann 0, obwohl tatsaechlich Versand
+                # gewaehlt/bezahlt wurde) - bei genau einer Position in der
+                # Bestellung ist die Zuordnung trotzdem eindeutig, daher hier
+                # als Fallback auf pricingSummary.deliveryCost der Bestellung.
+                order_delivery_cost = (order.get("pricingSummary") or {}).get("deliveryCost") or {}
+                shipping_charged = float(order_delivery_cost.get("value", 0) or 0)
             sale_fields = {
                 "listing_id": listing["id"], "card_id": listing["card_id"],
                 "ebay_order_id": order_id,
@@ -2713,7 +2724,7 @@ def _sync_ebay_sales_once():
                 "gross_price": float((line_item.get("total") or {}).get("value", 0) or 0),
                 # Vom Kaeufer gezahlter Versand - durchlaufender Posten, siehe
                 # shipping_cost (manuell, tatsaechliches Porto) im Gewinn.
-                "shipping_charged": float(delivery_cost.get("value", 0) or 0),
+                "shipping_charged": shipping_charged,
                 # Pseudonymer eBay-Handle fuer die Kaeufer-Historie (siehe
                 # statistics-sales.html) - bewusst kein Klarname/Adresse.
                 "buyer_username": (order.get("buyer") or {}).get("username") or "",

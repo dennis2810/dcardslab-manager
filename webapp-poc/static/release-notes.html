@@ -303,6 +303,10 @@ if ("serviceWorker" in navigator) {
       verkauft wurde.</li>
     <li>Fix: die gleiche Warnung fehlte auf der Kartenseite, solange das eBay-Angebot noch „Geplant" statt
       „Veröffentlicht" war – erscheint jetzt in beiden Fällen.</li>
+    <li>„Versand erhalten" bei eBay-Verkäufen lässt sich jetzt korrigieren, falls eBay ihn automatisch mit
+      0,00&nbsp;€ übernimmt, obwohl der Käufer tatsächlich Versand bezahlt hat. Zusätzlich versucht der
+      Verkaufs-Sync bei Bestellungen mit nur einer Karte jetzt automatisch, den auf Bestellungsebene gemeldeten
+      Versandbetrag zu übernehmen, statt bei 0,00&nbsp;€ zu bleiben.</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert

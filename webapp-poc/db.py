@@ -717,17 +717,22 @@ def upsert_ebay_sale(fields):
 
 
 EBAY_SALE_WRITABLE_FIELDS = {
-    "shipping_cost", "ebay_fees", "refunded", "delivered", "tracking_number", "shipping_carrier",
+    "shipping_cost", "ebay_fees", "shipping_charged", "refunded", "delivered",
+    "tracking_number", "shipping_carrier",
 }
-EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees"}
+EBAY_SALE_MONEY_FIELDS = {"shipping_cost", "ebay_fees", "shipping_charged"}
 
 
 def update_ebay_sale(sale_id, fields):
-    # shipping_cost, ebay_fees and refunded are the only user-editable
-    # fields on ebay_sales - everything else comes from the eBay order sync
-    # (sync_ebay_sales()). eBay's Order API (used for that sync) doesn't
-    # report the marketplace fee itself (that lives in the separate
-    # Finances API, not integrated here), so it's manually entered for now.
+    # shipping_cost, ebay_fees, shipping_charged and refunded are the only
+    # user-editable fields on ebay_sales - everything else comes from the
+    # eBay order sync (sync_ebay_sales()). eBay's Order API (used for that
+    # sync) doesn't report the marketplace fee itself (that lives in the
+    # separate Finances API, not integrated here), so it's manually entered
+    # for now. shipping_charged is normally auto-filled from the order's
+    # delivery cost, but that can come back as 0 even though the buyer did
+    # pay for shipping (e.g. eBay reporting it only at the order level for
+    # a multi-item order) - manually correctable here as a fallback.
     # refunded is a plain boolean, not numeric - passing it through
     # _blank_numeric_to_none()/_round_money() below is a no-op for it
     # (neither ever matches a bool value), so no special-casing needed.

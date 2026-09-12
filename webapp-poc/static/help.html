@@ -210,7 +210,10 @@ if ("serviceWorker" in navigator) {
     automatisch alle aktuell verknüpften Fotos (Vorder-/Rückseite plus weitere, bis zu eBays Limit von 12) erneut an
     eBay. Nach einem Verkauf lassen
     sich Versandkosten (tatsächliches Porto) und eBay-Gebühren eintragen, da beide von eBays Bestell-API nicht
-    automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Dort lässt sich auch die Trackingnummer
+    automatisch geliefert werden – sie fließen direkt in Gewinn/Marge ein. Der vom Käufer gezahlte Versand
+    („Versand erhalten") wird normalerweise automatisch aus der eBay-Bestellung übernommen, lässt sich bei Bedarf
+    aber ebenfalls korrigieren – z. B. wenn eBay ihn bei einer Sammelbestellung mit mehreren Karten nur auf
+    Bestellungs- statt auf Artikelebene meldet und das Feld deshalb fälschlich 0,00 € zeigt. Dort lässt sich auch die Trackingnummer
     samt Versanddienstleister eintragen und „An eBay übermitteln" klicken: eBay markiert die Bestellung dann selbst
     als versendet und benachrichtigt den Käufer automatisch, gleichzeitig wird das „Versendet"-Kästchen der Karte
     mitgesetzt (dieselbe Funktion steht gesammelt für alle offenen Verkäufe auch auf der Versand-Seite zur
