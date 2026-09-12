@@ -184,6 +184,63 @@ async def _start_backup_scheduler():
 async def _start_portfolio_scheduler():
     asyncio.create_task(portfolio.run_forever(_compute_portfolio_value))
 
+
+@app.on_event("startup")
+async def _start_reminder_digest_scheduler():
+    asyncio.create_task(_run_reminder_digest_forever())
+
+
+# Eigener, taeglicher Takt statt jeden 5-Minuten-Durchlauf von
+# ebay_scheduler.py mitzunutzen - eine Wiedervorlage/Erinnerung ist per
+# Definition kein Echtzeit-Ereignis wie ein neuer Verkauf.
+_REMINDER_DIGEST_CHECK_INTERVAL_SECONDS = 3600
+_REMINDER_DIGEST_INTERVAL_HOURS = 24
+
+
+def _is_reminder_digest_due():
+    status = db.get_app_status() or {}
+    last = status.get("last_reminder_email_sent_at")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except ValueError:
+        return True
+    return datetime.now(timezone.utc) - last_dt >= timedelta(hours=_REMINDER_DIGEST_INTERVAL_HOURS)
+
+
+def _send_reminder_digest_if_due():
+    # Zeitstempel wird unabhaengig vom Schalter/Ergebnis gesetzt (gleiches
+    # Prinzip wie backup.py's run_scheduled_backup_once()), damit ein
+    # deaktivierter Schalter oder ein leerer Digest nicht bei jedem
+    # stuendlichen Takt erneut geprueft wird.
+    if not _is_reminder_digest_due():
+        return
+    try:
+        db.record_reminder_email_sent(datetime.now(timezone.utc).isoformat())
+    except Exception:
+        logger.exception("Zeitstempel des Erinnerungs-Digests konnte nicht gespeichert werden")
+        return
+    try:
+        settings = db.get_app_status() or {}
+        if not settings.get("notify_on_reminders"):
+            return
+        due_reminders = _due_reminders_with_titles()
+        stale_listings = _stale_listing_reminders()
+        stale_wishlist = _stale_wishlist_reminders()
+        if not (due_reminders or stale_listings or stale_wishlist):
+            return
+        subject, body = email_notify.format_reminder_digest(due_reminders, stale_listings, stale_wishlist)
+        email_notify.send_email(settings, subject, body)
+    except Exception:
+        logger.exception("Wiedervorlage-E-Mail-Digest fehlgeschlagen")
+
+
+async def _run_reminder_digest_forever():
+    while True:
+        _send_reminder_digest_if_due()
+        await asyncio.sleep(_REMINDER_DIGEST_CHECK_INTERVAL_SECONDS)
+
 # Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
 JPEG_QUALITY = 97
 ROTATE = True
@@ -681,6 +738,11 @@ async def get_card(card_id: str):
         # dieser Supabase-Instanz noch nicht eingespielt wurde.
         logger.exception("Preisrecherche-Verlauf konnte nicht geladen werden fuer Karte %s", card_id)
         card["price_research"] = []
+    try:
+        card["reminders"] = db.list_reminders_for_card(card_id)
+    except Exception:
+        logger.exception("Erinnerungen konnten nicht geladen werden fuer Karte %s", card_id)
+        card["reminders"] = []
     return JSONResponse(card)
 
 
@@ -712,6 +774,80 @@ async def unmark_card_private_collection(card_id: str):
 async def list_private_collection(q: str | None = None):
     cards = [_attach_signed_urls(c) for c in db.list_private_collection_cards(q=q)]
     return JSONResponse({"cards": cards})
+
+
+# Wiedervorlage/Erinnerungen (Klaerung mit dem Nutzer) - freie, selbst
+# angelegte Erinnerungen an eine Karte, ergaenzend zu den beiden
+# automatischen Regeln (siehe _stale_listing_reminders()/
+# _stale_wishlist_reminders() unten, genutzt vom Dashboard und dem
+# E-Mail-Digest).
+@app.post("/api/cards/{card_id}/reminders")
+async def create_reminder(card_id: str, fields: dict = Body(...)):
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    due_date = fields.get("due_date")
+    if not due_date:
+        raise HTTPException(status_code=400, detail="due_date wird benötigt.")
+    reminder = db.create_reminder(card_id, fields.get("note", ""), due_date)
+    return JSONResponse(reminder)
+
+
+@app.post("/api/reminders/{reminder_id}/resolve")
+async def resolve_reminder(reminder_id: str):
+    reminder = db.resolve_reminder(reminder_id)
+    if reminder is None:
+        raise HTTPException(status_code=404, detail=f"Erinnerung {reminder_id} nicht gefunden.")
+    return JSONResponse(reminder)
+
+
+@app.delete("/api/reminders/{reminder_id}", status_code=204)
+async def delete_reminder(reminder_id: str):
+    db.delete_reminder(reminder_id)
+    return Response(status_code=204)
+
+
+# Schwellwerte fuer die beiden automatischen Wiedervorlage-Regeln (Klaerung
+# mit dem Nutzer, Beispiel "seit 90 Tagen unverkauft") - bewusst nicht
+# konfigurierbar (anders als z.B. der Preis-Alarm-Schwellwert), um die
+# Einstellungen nicht mit einer weiteren Zahl zu ueberladen; Werte koennen
+# bei Bedarf spaeter aus app_status gelesen werden.
+STALE_LISTING_MIN_DAYS = 90
+STALE_LISTING_CHECK_MAX_AGE_DAYS = 30
+STALE_WISHLIST_MIN_DAYS = 60
+
+
+def _stale_listing_reminders():
+    listings = db.list_stale_unsold_listings(STALE_LISTING_MIN_DAYS, STALE_LISTING_CHECK_MAX_AGE_DAYS)
+    card_ids = [l["card_id"] for l in listings]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    return [
+        {**l, "title": cards_by_id.get(l["card_id"], {}).get("title")}
+        for l in listings
+    ]
+
+
+def _stale_wishlist_reminders():
+    return db.list_stale_wishlist_items(STALE_WISHLIST_MIN_DAYS)
+
+
+def _due_reminders_with_titles():
+    reminders = db.list_due_reminders()
+    card_ids = [r["card_id"] for r in reminders]
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    return [
+        {**r, "title": cards_by_id.get(r["card_id"], {}).get("title")}
+        for r in reminders
+    ]
+
+
+@app.get("/api/dashboard/reminders")
+async def dashboard_reminders():
+    return JSONResponse({
+        "due_reminders": _due_reminders_with_titles(),
+        "stale_listings": _stale_listing_reminders(),
+        "stale_wishlist": _stale_wishlist_reminders(),
+    })
 
 
 def _delete_card_and_images(card_id):
@@ -2810,6 +2946,7 @@ async def app_status():
         "sender_address": status.get("sender_address") or "",
         "activity_cleared_at": status.get("activity_cleared_at"),
         "notify_on_sale": bool(status.get("notify_on_sale")),
+        "notify_on_reminders": bool(status.get("notify_on_reminders")),
         "smtp_host": status.get("smtp_host") or "",
         "smtp_port": status.get("smtp_port"),
         "smtp_username": status.get("smtp_username") or "",

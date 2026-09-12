@@ -1482,6 +1482,87 @@ class NotifyNewSalesTests(unittest.TestCase):
         mock_send.assert_called_once()
 
 
+class IsReminderDigestDueTests(unittest.TestCase):
+    def test_due_when_never_sent(self):
+        with patch("main.db.get_app_status", return_value={}):
+            self.assertTrue(main._is_reminder_digest_due())
+
+    def test_due_when_no_status_row(self):
+        with patch("main.db.get_app_status", return_value=None):
+            self.assertTrue(main._is_reminder_digest_due())
+
+    def test_not_due_when_sent_recently(self):
+        recent = main.datetime.now(main.timezone.utc).isoformat()
+        with patch("main.db.get_app_status", return_value={"last_reminder_email_sent_at": recent}):
+            self.assertFalse(main._is_reminder_digest_due())
+
+    def test_due_when_sent_over_24h_ago(self):
+        old = (main.datetime.now(main.timezone.utc) - main.timedelta(hours=25)).isoformat()
+        with patch("main.db.get_app_status", return_value={"last_reminder_email_sent_at": old}):
+            self.assertTrue(main._is_reminder_digest_due())
+
+
+class SendReminderDigestIfDueTests(unittest.TestCase):
+    def test_does_nothing_when_not_due(self):
+        with patch("main._is_reminder_digest_due", return_value=False), \
+             patch("main.db.record_reminder_email_sent") as mock_record, \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_record.assert_not_called()
+        mock_send.assert_not_called()
+
+    def test_stamps_timestamp_even_when_notifications_disabled(self):
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent") as mock_record, \
+             patch("main.db.get_app_status", return_value={"notify_on_reminders": False}), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_record.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_does_nothing_when_nothing_due(self):
+        settings = {"notify_on_reminders": True}
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_send.assert_not_called()
+
+    def test_sends_digest_when_due_reminders_exist(self):
+        settings = {"notify_on_reminders": True}
+        due = [{"id": "r1", "card_id": "c1", "note": "x", "due_date": "2026-09-01"}]
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=due), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        self.assertEqual(args[0], settings)
+        self.assertIn("Karte 1", args[2])
+
+    def test_smtp_failure_does_not_raise(self):
+        settings = {"notify_on_reminders": True}
+        due = [{"id": "r1", "card_id": "c1", "note": "x", "due_date": "2026-09-01"}]
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=due), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.email_notify.send_email", side_effect=OSError("boom")):
+            main._send_reminder_digest_if_due()  # must not raise
+
+
 class SyncEbayReturnsOnceTests(unittest.TestCase):
     def test_marks_sale_refunded_when_return_has_refund(self):
         returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}}]

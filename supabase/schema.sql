@@ -511,3 +511,28 @@ alter table app_status add column if not exists view_density text not null defau
 -- settings.html) - die eigentliche Bruteforce-Drossel in main.py's
 -- /api/login laeuft komplett in-memory und ist davon unabhaengig.
 alter table app_status add column if not exists failed_login_log jsonb not null default '[]'::jsonb;
+
+-- Migration (2026-09-12): Wiedervorlage/Erinnerungen (Klaerung mit dem
+-- Nutzer) - freie, selbst angelegte Erinnerungen an eine Karte (Datum +
+-- Notiz), ergaenzend zu den beiden automatischen Regeln (lange unverkauft
+-- ohne aktuelle Preisrecherche; Wunschlisten-Preis lange nicht erreicht),
+-- die main.py rein aus bestehenden Tabellen ableitet, ohne eigene Zeilen.
+create table if not exists reminders (
+    id          uuid primary key default gen_random_uuid(),
+    card_id     uuid not null references cards(id) on delete cascade,
+    note        text not null default '',
+    due_date    date not null,
+    resolved_at timestamptz,
+    created_at  timestamptz not null default now()
+);
+create index if not exists reminders_card_id_idx on reminders(card_id);
+-- Fuer die Dashboard-Abfrage "faellige, noch offene Erinnerungen" - filtert
+-- zuerst auf unresolved (Teilindex), due_date-Vergleich bleibt im Query.
+create index if not exists reminders_due_date_idx on reminders(due_date) where resolved_at is null;
+
+-- E-Mail-Digest fuer faellige Wiedervorlagen/Erinnerungen - eigener Schalter
+-- statt notify_on_sale mitzunutzen, da inhaltlich unabhaengig (taeglich
+-- geprueft statt bei jedem Verkaufs-Sync, siehe main.py's
+-- _send_reminder_digest_if_due()).
+alter table app_status add column if not exists notify_on_reminders boolean not null default false;
+alter table app_status add column if not exists last_reminder_email_sent_at timestamptz;
