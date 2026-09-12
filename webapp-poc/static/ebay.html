@@ -50,6 +50,15 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   .sums-block { font-weight: 700; font-size: 1.05rem; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.75rem 0; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
@@ -287,6 +296,7 @@ function makeRowKeyboardNavigable(row) {
 }
 
 let PAGE_SIZE = 40;
+let CSV_DELIMITER = ";";
 let currentPage = 0;
 // Gleicher Schwellwert wie im Dashboard unter "Was jetzt tun?" (dupliziert,
 // kein Shared-JS-Modul).
@@ -537,6 +547,7 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   // korrekte Wert schon beim ersten render()-Aufruf aus loadListings()).
   PAGE_SIZE = body.page_size || 40;
   document.body.classList.toggle("compact", body.view_density === "compact");
+  CSV_DELIMITER = body.csv_delimiter || ";";
   if (currentListings) render(sortedListings());
 }).catch(() => {});
 
@@ -849,9 +860,9 @@ document.getElementById("print-btn").addEventListener("click", () => window.prin
 function downloadCsv(filename, headers, rows) {
   const escape = (v) => {
     const s = v == null ? "" : String(v);
-    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    return /["\n,;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const lines = [headers, ...rows].map((row) => row.map(escape).join(";"));
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(CSV_DELIMITER));
   const csv = "\uFEFF" + lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

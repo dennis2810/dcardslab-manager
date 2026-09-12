@@ -39,11 +39,25 @@ if ("serviceWorker" in navigator) {
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
   .nav-search { display: flex; gap: 0.4rem; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
+     grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
+     sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
+     Desktop-Groessen unveraendert zu lassen. */
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+    table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
+    table td button, table td a { padding: 0.4rem 0.7rem; }
+  }
   .theme-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
   .theme-toggle select { padding: 0.3rem 0.5rem; font-size: 0.85rem; font-weight: normal; }
   #status-msg { font-style: italic; color: #555; }
   .last-updates { font-size: 0.8rem; color: #555; }
   .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+  .kpi-settings-toggle { display: flex; justify-content: flex-end; }
+  .kpi-settings-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin: 0.4rem 0 0.75rem; }
+  .kpi-settings-row { display: flex; align-items: center; gap: 0.5rem; }
+  .kpi-settings-row label { display: flex; align-items: center; gap: 0.4rem; font-weight: normal; flex: 1; }
+  .kpi-settings-row button { font-size: 0.8rem; padding: 0.1rem 0.5rem; }
   .summary-card { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 0.9rem; min-height: 4.5rem; display: flex; flex-direction: column; justify-content: center; color: inherit; text-decoration: none; }
   a.summary-card:hover { border-color: #888; }
   .summary-card .label { font-size: 0.8rem; color: #555; }
@@ -143,6 +157,10 @@ if ("serviceWorker" in navigator) {
     </form>
   </div>
 
+  <div class="kpi-settings-toggle">
+    <button type="button" id="kpi-settings-btn">⚙ Kacheln</button>
+  </div>
+  <div id="kpi-settings-panel" class="kpi-settings-panel" hidden></div>
   <div class="summary-cards" id="summary-cards" style="display: none;"></div>
 
   <h2>Was jetzt tun?</h2>
@@ -462,36 +480,142 @@ function isSourcingHit(item) {
   return Number(item.last_match_price) <= Number(item.target_price);
 }
 
-function renderSummary(stats, inventory, publishedListings, wishlistItems) {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const monthBucket = (stats.monthly || []).find((m) => m.month === currentMonth) || { revenue: 0, profit: 0 };
-  const priceAlertCount = publishedListings.filter(hasPriceAlert).length;
-  const sourcingHitCount = (wishlistItems || []).filter(isSourcingHit).length;
+// Feste Definitionen aller moeglichen Kennzahlen-Kacheln (Klaerung mit dem
+// Nutzer: Auswahl + Reihenfolge je Browser speicherbar, gleiches
+// localStorage-Prinzip wie die "Frei wählbare Tabellenspalten"-Funktion auf
+// cards.html/ebay.html/inventory.html). compute() bekommt dieselben Daten
+// wie renderSummary() und liefert den anzuzeigenden Wert.
+const KPI_DEFINITIONS = [
+  { key: "inventory_value", label: "Aktueller Inventarwert", href: "inventory.html",
+    compute: (stats, inventory) => fmtEuro(inventory.total_value) },
+  { key: "revenue_month", label: "Umsatz laufender Monat", href: "statistics.html",
+    compute: (stats) => fmtEuro(currentMonthBucket(stats).revenue) },
+  { key: "profit_month", label: "Gewinn laufender Monat", href: "statistics.html",
+    compute: (stats) => fmtEuro(currentMonthBucket(stats).profit) },
+  { key: "realized_profit", label: "Realisierter Gewinn (gesamt)", href: "statistics.html",
+    compute: (stats) => fmtEuro(stats.summary.realized_profit) },
+  { key: "roi", label: "ROI (verkauft)", href: "statistics.html",
+    compute: (stats) => fmtPercent(stats.summary.roi_pct) },
+  { key: "sold_count", label: "Verkaufte Karten (gesamt)", href: "statistics-sales.html",
+    compute: (stats) => String(stats.summary.sold_count) },
+  { key: "open_count", label: "Offene Karten (Kauf, unverkauft)", href: "cards.html",
+    compute: (stats) => String(stats.summary.open_count) },
+  { key: "price_alerts", label: "Preis-Alarme (eBay)", href: "ebay.html",
+    compute: (stats, inventory, publishedListings) => String(publishedListings.filter(hasPriceAlert).length) },
+  { key: "sourcing_hits", label: "Sourcing-Treffer (Wunschliste)", href: "wishlist.html",
+    compute: (stats, inventory, publishedListings, wishlistItems) =>
+      String((wishlistItems || []).filter(isSourcingHit).length) },
+];
+const KPI_ORDER_STORAGE_KEY = "dashboard_kpi_order";
+const KPI_DEFAULT_ORDER = KPI_DEFINITIONS.map((d) => d.key);
 
+function currentMonthBucket(stats) {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  return (stats.monthly || []).find((m) => m.month === currentMonth) || { revenue: 0, profit: 0 };
+}
+
+// Gespeichert wird nur die Reihenfolge der SICHTBAREN Kacheln - ausgeblendete
+// Kacheln fehlen einfach im Array, statt eine zweite "hidden"-Liste zu
+// pflegen. Ungueltige/veraltete Keys (z.B. nach einem Update) werden beim
+// Laden verworfen, unbekannte neue Kacheln fehlen dann einfach zunaechst.
+function loadKpiOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(KPI_ORDER_STORAGE_KEY) || "null");
+    if (Array.isArray(stored)) {
+      return stored.filter((key) => KPI_DEFAULT_ORDER.includes(key));
+    }
+  } catch (err) {}
+  return [...KPI_DEFAULT_ORDER];
+}
+function saveKpiOrder(order) {
+  try {
+    localStorage.setItem(KPI_ORDER_STORAGE_KEY, JSON.stringify(order));
+  } catch (err) {}
+}
+let kpiOrder = loadKpiOrder();
+let lastSummaryArgs = null;
+
+function renderSummary(stats, inventory, publishedListings, wishlistItems) {
+  lastSummaryArgs = [stats, inventory, publishedListings, wishlistItems];
   const cards = document.getElementById("summary-cards");
   cards.style.display = "flex";
+  cards.innerHTML = "";
   // href pro Kachel - macht jede Kennzahl klickbar zur passenden Detailseite,
   // statt nur eine reine Zahl zu zeigen.
-  const entries = [
-    ["Aktueller Inventarwert", fmtEuro(inventory.total_value), "inventory.html"],
-    ["Umsatz laufender Monat", fmtEuro(monthBucket.revenue), "statistics.html"],
-    ["Gewinn laufender Monat", fmtEuro(monthBucket.profit), "statistics.html"],
-    ["Realisierter Gewinn (gesamt)", fmtEuro(stats.summary.realized_profit), "statistics.html"],
-    ["ROI (verkauft)", fmtPercent(stats.summary.roi_pct), "statistics.html"],
-    ["Verkaufte Karten (gesamt)", String(stats.summary.sold_count), "statistics-sales.html"],
-    ["Offene Karten (Kauf, unverkauft)", String(stats.summary.open_count), "cards.html"],
-    ["Preis-Alarme (eBay)", String(priceAlertCount), "ebay.html"],
-    ["Sourcing-Treffer (Wunschliste)", String(sourcingHitCount), "wishlist.html"],
-  ];
-  cards.innerHTML = "";
-  for (const [label, value, href] of entries) {
-    const card = document.createElement(href ? "a" : "div");
+  for (const key of kpiOrder) {
+    const def = KPI_DEFINITIONS.find((d) => d.key === key);
+    if (!def) continue;
+    const card = document.createElement("a");
     card.className = "summary-card";
-    if (href) card.href = href;
-    card.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    card.href = def.href;
+    card.innerHTML = `<div class="label">${def.label}</div><div class="value">${def.compute(stats, inventory, publishedListings, wishlistItems)}</div>`;
     cards.appendChild(card);
   }
 }
+
+function renderKpiSettingsPanel() {
+  const panel = document.getElementById("kpi-settings-panel");
+  panel.innerHTML = "";
+  // Erst sichtbare Kacheln in gespeicherter Reihenfolge, danach die
+  // ausgeblendeten (feste Reihenfolge, da fuer die nicht sichtbar egal).
+  const hiddenKeys = KPI_DEFAULT_ORDER.filter((key) => !kpiOrder.includes(key));
+  const allKeysInPanelOrder = [...kpiOrder, ...hiddenKeys];
+  for (const key of allKeysInPanelOrder) {
+    const def = KPI_DEFINITIONS.find((d) => d.key === key);
+    if (!def) continue;
+    const visible = kpiOrder.includes(key);
+    const row = document.createElement("div");
+    row.className = "kpi-settings-row";
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = visible;
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) kpiOrder.push(key);
+      else kpiOrder = kpiOrder.filter((k) => k !== key);
+      saveKpiOrder(kpiOrder);
+      renderKpiSettingsPanel();
+      if (lastSummaryArgs) renderSummary(...lastSummaryArgs);
+    });
+    label.appendChild(checkbox);
+    label.append(" " + def.label);
+    row.appendChild(label);
+
+    if (visible) {
+      const index = kpiOrder.indexOf(key);
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.textContent = "▲";
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener("click", () => {
+        [kpiOrder[index - 1], kpiOrder[index]] = [kpiOrder[index], kpiOrder[index - 1]];
+        saveKpiOrder(kpiOrder);
+        renderKpiSettingsPanel();
+        if (lastSummaryArgs) renderSummary(...lastSummaryArgs);
+      });
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.textContent = "▼";
+      downBtn.disabled = index === kpiOrder.length - 1;
+      downBtn.addEventListener("click", () => {
+        [kpiOrder[index + 1], kpiOrder[index]] = [kpiOrder[index], kpiOrder[index + 1]];
+        saveKpiOrder(kpiOrder);
+        renderKpiSettingsPanel();
+        if (lastSummaryArgs) renderSummary(...lastSummaryArgs);
+      });
+      row.append(upBtn, downBtn);
+    }
+    panel.appendChild(row);
+  }
+}
+
+document.getElementById("kpi-settings-btn").addEventListener("click", () => {
+  const panel = document.getElementById("kpi-settings-panel");
+  panel.hidden = !panel.hidden;
+});
+
+renderKpiSettingsPanel();
 
 // Dauerhaft sichtbare Ampel statt nur einer Warnzeile in "Was jetzt tun?" -
 // so ist der Verbindungsstatus auch dann auf einen Blick erkennbar, wenn

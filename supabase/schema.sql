@@ -543,3 +543,7 @@ alter table app_status add column if not exists last_reminder_email_sent_at time
 alter table app_status add column if not exists stale_listing_min_days int not null default 90;
 alter table app_status add column if not exists stale_listing_check_days int not null default 30;
 alter table app_status add column if not exists stale_wishlist_min_days int not null default 60;
+-- CSV-Trennzeichen fuer alle downloadCsv()-Exporte (Karten, Kaeufe, Inventar,
+-- eBay, Inventur, Wunschliste, Private Sammlung, Versand, Statistiken) -
+-- Standard Semikolon, da deutsches Excel das ohne Umweg erwartet.
+alter table app_status add column if not exists csv_delimiter text not null default ';';
