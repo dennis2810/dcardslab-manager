@@ -91,6 +91,7 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   .empty-state { color: #555; font-style: italic; }
   .table-scroll { overflow-x: auto; }
+  [hidden] { display: none !important; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -119,6 +120,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>

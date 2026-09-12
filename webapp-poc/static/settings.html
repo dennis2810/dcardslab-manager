@@ -84,6 +84,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -254,6 +255,23 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="reminder-thresholds-status"></p>
   </section>
 
+  <section id="kleinunternehmer-thresholds-section">
+    <h2>Kleinunternehmer-Schwellenwerte</h2>
+    <p>Umsatzgrenzen der Kleinunternehmerregelung (§19 UStG) für die Warnung auf dem Dashboard und die
+      <a href="kleinunternehmer.html">Kleinunternehmer-Seite</a> – Vorbelegung mit den aktuell gültigen
+      gesetzlichen Werten, hier anpassbar, falls sich diese künftig ändern.</p>
+    <label>Vorjahresumsatz-Grenze (€)
+      <input type="number" id="kleinunternehmer-prev-year-input" min="1" step="1">
+    </label>
+    <label>Grenze laufendes Jahr (€)
+      <input type="number" id="kleinunternehmer-current-year-input" min="1" step="1">
+    </label>
+    <label><input type="checkbox" id="kleinunternehmer-hint-enabled-input"> Kleinunternehmer-Hinweis (§19 UStG) auf
+      gedruckten Verkaufsbelegen anzeigen</label>
+    <button type="button" id="save-kleinunternehmer-thresholds-btn">Speichern</button>
+    <p class="status" id="kleinunternehmer-thresholds-status"></p>
+  </section>
+
   <section id="push-notification-section">
     <h2>Push-Benachrichtigungen</h2>
     <p>Zusätzlich zur E-Mail: eine Browser-Benachrichtigung auf diesem Gerät, sobald neue eBay-Verkäufe
@@ -401,6 +419,9 @@ async function loadBackupStatus() {
     document.getElementById("stale-listing-min-days-input").value = body.stale_listing_min_days ?? 90;
     document.getElementById("stale-listing-check-days-input").value = body.stale_listing_check_days ?? 30;
     document.getElementById("stale-wishlist-min-days-input").value = body.stale_wishlist_min_days ?? 60;
+    document.getElementById("kleinunternehmer-prev-year-input").value = body.kleinunternehmer_prev_year_threshold ?? 22000;
+    document.getElementById("kleinunternehmer-current-year-input").value = body.kleinunternehmer_current_year_threshold ?? 50000;
+    document.getElementById("kleinunternehmer-hint-enabled-input").checked = body.kleinunternehmer_hint_enabled !== false;
     document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
     document.getElementById("smtp-host-input").value = body.smtp_host || "";
     document.getElementById("smtp-port-input").value = body.smtp_port || "";
@@ -727,6 +748,51 @@ document.getElementById("save-reminder-thresholds-btn").addEventListener("click"
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Wiedervorlage-Schwellenwerte gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-kleinunternehmer-thresholds-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("kleinunternehmer-thresholds-status");
+  const prevYearThreshold = parseFloat(document.getElementById("kleinunternehmer-prev-year-input").value);
+  const currentYearThreshold = parseFloat(document.getElementById("kleinunternehmer-current-year-input").value);
+  if (![prevYearThreshold, currentYearThreshold].every((v) => Number.isFinite(v) && v > 0)) {
+    statusEl.textContent = "Bitte überall eine Zahl > 0 eingeben.";
+    statusEl.className = "error";
+    return;
+  }
+  const hintEnabled = document.getElementById("kleinunternehmer-hint-enabled-input").checked;
+  try {
+    const [thresholdsRes, hintRes] = await Promise.all([
+      fetch("/api/kleinunternehmer-thresholds", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prev_year_threshold: prevYearThreshold,
+          current_year_threshold: currentYearThreshold,
+        }),
+      }),
+      fetch("/api/kleinunternehmer-hint-enabled", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: hintEnabled }),
+      }),
+    ]);
+    const thresholdsBody = await thresholdsRes.json();
+    const hintBody = await hintRes.json();
+    if (!thresholdsRes.ok || !hintRes.ok) {
+      const detail = (!thresholdsRes.ok ? thresholdsBody.detail : hintBody.detail) || "Speichern fehlgeschlagen.";
+      statusEl.textContent = "Fehler: " + detail;
+      statusEl.className = "error";
+      showToast("Fehler: " + detail, true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Kleinunternehmer-Schwellenwerte gespeichert.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

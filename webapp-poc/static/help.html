@@ -76,6 +76,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -244,6 +245,13 @@ if ("serviceWorker" in navigator) {
     und „Als zugestellt markieren" setzen. Wird ein solcher Verkauf wieder gelöscht, wird der
     Inventareintrag automatisch zurückgesetzt. Wurde die Karte bereits über eBay verkauft, ist dieser Abschnitt
     ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich).</p>
+  <p>Über den Button „🖨 Beleg drucken" lässt sich zu einem manuellen Verkauf ein druckbarer Beleg mit den
+    Pflichtangaben einer Kleinbetragsrechnung (§33 UStDV) erstellen: die Absenderadresse aus den Einstellungen
+    (Abschnitt „Absenderadresse"), Datum, Artikel und Gesamtbetrag – dazu, sofern in den Einstellungen aktiviert,
+    der Hinweis „Gemäß § 19 UStG wird keine Umsatzsteuer berechnet". Zusätzlich lässt sich im Abschnitt „Beleg
+    (Aufbewahrungspflicht)" ein eigener Beleg (z. B. eine Zahlungsbestätigung) als PDF oder Foto hochladen und
+    später wieder ansehen/löschen – dieselbe Aufbewahrungspflicht wie bei Kaufbelegen (siehe Käufe unten) gilt
+    auch für Verkäufe.</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
     ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
     zurückziehen. Derselbe Warnhinweis erscheint auch, wenn die Karte per Privatentnahme in die private Sammlung
@@ -461,7 +469,25 @@ if ("serviceWorker" in navigator) {
     angelegte, noch keinem Kauf zugeordnete Karten) mit Direktlink zur jeweiligen Karte. Der Button „Aktivitäten
     leeren" blendet ältere Ereignisse dauerhaft aus (die Liste wird live berechnet, nicht wirklich gelöscht) – sobald
     wieder etwas Neues passiert, taucht es auf. Der Schalter „Design" (System/Hell/Dunkel) legt das Farbschema fest
-    – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard.</p>
+    – die Wahl gilt für das ganze Tool, nicht nur für das Dashboard. Unter dem Jahresziel zeigt eine kurze
+    Statuszeile den aktuellen Stand zu den Umsatzgrenzen der Kleinunternehmerregelung (siehe Abschnitt
+    „Kleinunternehmer" unten), mit Link zu den Details.</p>
+
+  <h2 id="kleinunternehmer">Kleinunternehmer</h2>
+  <p>Eigene Seite rund ums Kleinunternehmertum. Aktuell zeigt sie die beiden Umsatzgrenzen der
+    Kleinunternehmerregelung (§19 UStG): der Umsatz im Vorjahr darf die erste Grenze nicht überschritten haben,
+    der Umsatz im laufenden Jahr die zweite Grenze nicht übersteigen – wird sie unterjährig überschritten, entfällt
+    die Regelung ab diesem Zeitpunkt sofort. Umsatzbasis ist die Summe aller Verkäufe (eBay und manuelle Kanäle),
+    Retouren bereits abgezogen, ohne Abzug von Gebühren/Versand. Zwei Fortschrittsbalken zeigen Vorjahr und
+    laufendes Jahr im Verhältnis zur jeweiligen Grenze, dazu ein farbiger Statushinweis (grün/gelb/rot). Die beiden
+    Schwellenwerte (Standard 22.000&nbsp;€/50.000&nbsp;€) lassen sich in den Einstellungen anpassen, falls sich die
+    gesetzlichen Grenzen künftig ändern. Dort lässt sich außerdem der Kleinunternehmer-Hinweis (§19 UStG) auf
+    gedruckten Verkaufsbelegen (siehe Kartendetail, Abschnitt „Verkauf außerhalb eBay") ein-/ausschalten – abschaltbar,
+    sobald die Grenze überschritten ist und regulär Umsatzsteuer ausgewiesen werden muss. Die Abschnitte
+    „Einnahmen-Überschuss-Rechnung (EÜR)" und „Rechnungstool" sind als Platzhalter für spätere Erweiterungen
+    vorbereitet, aber noch nicht umgesetzt. Diese Seite ist eine reine Orientierungshilfe – die endgültige
+    Einschätzung sowie eine eventuell nötige Ummeldung beim Finanzamt bleiben Aufgabe des
+    Steuerberaters/Finanzamts.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport, inklusive

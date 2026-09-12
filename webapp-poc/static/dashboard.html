@@ -86,6 +86,12 @@ if ("serviceWorker" in navigator) {
   .section-header button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
   .goal-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; margin-top: 0.5rem; }
   .goal-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
+  .ku-block { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--neutral-bg); font-size: 0.9rem; }
+  .ku-block a { font-weight: 600; }
+  .ku-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 10px; overflow: hidden; margin-top: 0.4rem; }
+  .ku-bar-fill { height: 100%; width: 0%; transition: width 0.3s; background: #1e8e3e; }
+  .ku-bar-fill.ku-warn { background: #f9ab00; }
+  .ku-bar-fill.ku-danger { background: #d93025; }
   .goal-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap; }
   [hidden] { display: none !important; }
   .goal-form input, .goal-form select { padding: 0.3rem 0.5rem; }
@@ -127,6 +133,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -155,6 +162,7 @@ if ("serviceWorker" in navigator) {
       <button type="button" id="goal-cancel-btn">Abbrechen</button>
       <span id="goal-status"></span>
     </form>
+    <div class="ku-block" id="ku-block"></div>
   </div>
 
   <div class="kpi-settings-toggle">
@@ -359,6 +367,7 @@ async function load() {
     renderConnectionAmpel(sheets, ebayStatus);
     renderLastUpdates(sheets, appStatus);
     renderGoal();
+    renderKleinunternehmerStatus(stats, appStatus);
     renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
     renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus, reminders);
     activityClearedAt = appStatus.activity_cleared_at || null;
@@ -399,6 +408,51 @@ function currentYearTotal(stats, metric) {
   return (stats.monthly || [])
     .filter((m) => m.month.startsWith(year))
     .reduce((sum, m) => sum + (metric === "profit" ? m.profit : m.revenue), 0);
+}
+
+// Gleiches Prinzip wie currentYearTotal(), nur fuer das direkte Vorjahr -
+// noetig fuer die Kleinunternehmer-Umsatzgrenzen-Warnung unten.
+function previousYearTotal(stats, metric) {
+  const year = String(new Date().getFullYear() - 1);
+  return (stats.monthly || [])
+    .filter((m) => m.month.startsWith(year))
+    .reduce((sum, m) => sum + (metric === "profit" ? m.profit : m.revenue), 0);
+}
+
+// Kleinunternehmer-Umsatzgrenzen (Paragraph 19 UStG) - reine Warnung/Info,
+// keine automatische Ummeldung. Vorjahresumsatz entscheidet, ob die Regelung
+// dieses Jahr ueberhaupt gilt; die laufende Jahresgrenze ist ein harter
+// Deckel, ab dessen Ueberschreiten die Regelung sofort entfaellt. Umsatzbasis
+// ist der Verkaufspreis aller Verkaufskanaele (Retouren bereits ausgenommen,
+// siehe stats.monthly/_compute_statistics()), ohne Abzug von Gebuehren/Versand.
+function renderKleinunternehmerStatus(stats, appStatus) {
+  const block = document.getElementById("ku-block");
+  const prevYearThreshold = appStatus.kleinunternehmer_prev_year_threshold || 22000;
+  const currentYearThreshold = appStatus.kleinunternehmer_current_year_threshold || 50000;
+  const prevYear = previousYearTotal(stats, "revenue");
+  const currentYear = currentYearTotal(stats, "revenue");
+  const pct = Math.max(0, Math.min(100, (currentYear / currentYearThreshold) * 100));
+
+  let level = "ok";
+  let message;
+  if (prevYear > prevYearThreshold) {
+    level = "danger";
+    message = `Kleinunternehmerregelung entfällt dieses Jahr bereits: Vorjahresumsatz ${fmtEuro(prevYear)} über der Grenze von ${fmtEuro(prevYearThreshold)}.`;
+  } else if (currentYear > currentYearThreshold) {
+    level = "danger";
+    message = `Laufender Jahresumsatz ${fmtEuro(currentYear)} über der Grenze von ${fmtEuro(currentYearThreshold)} – Kleinunternehmerregelung entfällt ab sofort.`;
+  } else if (currentYear >= currentYearThreshold * 0.8) {
+    level = "warn";
+    message = `Laufender Jahresumsatz ${fmtEuro(currentYear)} – bereits ${pct.toFixed(0)} % der Grenze von ${fmtEuro(currentYearThreshold)} erreicht.`;
+  } else {
+    message = `Laufender Jahresumsatz ${fmtEuro(currentYear)} von ${fmtEuro(currentYearThreshold)} (${pct.toFixed(0)} %), Vorjahr ${fmtEuro(prevYear)} von ${fmtEuro(prevYearThreshold)}.`;
+  }
+
+  const barClass = level === "danger" ? "ku-danger" : level === "warn" ? "ku-warn" : "";
+  block.innerHTML = `
+    <div>Kleinunternehmer-Status: ${message} <a href="kleinunternehmer.html">Details</a></div>
+    <div class="ku-bar-track"><div class="ku-bar-fill ${barClass}" style="width: ${pct}%"></div></div>
+  `;
 }
 
 function renderGoal() {

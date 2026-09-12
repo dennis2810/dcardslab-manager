@@ -282,6 +282,35 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["auto_relist_enabled"])
 
+    def test_kleinunternehmer_thresholds_default(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kleinunternehmer_prev_year_threshold"], 22000)
+        self.assertEqual(response.json()["kleinunternehmer_current_year_threshold"], 50000)
+
+    def test_returns_kleinunternehmer_thresholds(self):
+        with patch("main.db.get_app_status", return_value={
+            "kleinunternehmer_prev_year_threshold": 25000,
+            "kleinunternehmer_current_year_threshold": 55000,
+        }):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kleinunternehmer_prev_year_threshold"], 25000)
+        self.assertEqual(response.json()["kleinunternehmer_current_year_threshold"], 55000)
+
+    def test_kleinunternehmer_hint_enabled_defaults_to_true(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["kleinunternehmer_hint_enabled"])
+
+    def test_returns_kleinunternehmer_hint_enabled_false(self):
+        with patch("main.db.get_app_status", return_value={"kleinunternehmer_hint_enabled": False}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["kleinunternehmer_hint_enabled"])
+
     def test_returns_last_auto_backup_at(self):
         with patch("main.db.get_app_status", return_value={"last_auto_backup_at": "2026-09-10T03:00:00+00:00"}):
             response = client.get("/api/app-status")
@@ -586,6 +615,77 @@ class ReminderThresholdsEndpointTests(unittest.TestCase):
             "stale_listing_min_days": 30, "stale_listing_check_days": 10,
         })
         self.assertEqual(response.status_code, 400)
+
+
+class KleinunternehmerThresholdsEndpointTests(unittest.TestCase):
+    def test_sets_thresholds(self):
+        updated = {
+            "id": True, "kleinunternehmer_prev_year_threshold": 25000,
+            "kleinunternehmer_current_year_threshold": 55000,
+        }
+        with patch("main.db.set_kleinunternehmer_thresholds", return_value=updated) as mock_set:
+            response = client.put("/api/kleinunternehmer-thresholds", json={
+                "prev_year_threshold": 25000, "current_year_threshold": 55000,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kleinunternehmer_prev_year_threshold"], 25000)
+        mock_set.assert_called_once_with(25000, 55000)
+
+    def test_accepts_float_values(self):
+        updated = {
+            "id": True, "kleinunternehmer_prev_year_threshold": 22000.5,
+            "kleinunternehmer_current_year_threshold": 50000.5,
+        }
+        with patch("main.db.set_kleinunternehmer_thresholds", return_value=updated):
+            response = client.put("/api/kleinunternehmer-thresholds", json={
+                "prev_year_threshold": 22000.5, "current_year_threshold": 50000.5,
+            })
+        self.assertEqual(response.status_code, 200)
+
+    def test_rejects_zero_value(self):
+        response = client.put("/api/kleinunternehmer-thresholds", json={
+            "prev_year_threshold": 0, "current_year_threshold": 50000,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_negative_value(self):
+        response = client.put("/api/kleinunternehmer-thresholds", json={
+            "prev_year_threshold": 22000, "current_year_threshold": -1,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_number_value(self):
+        response = client.put("/api/kleinunternehmer-thresholds", json={
+            "prev_year_threshold": 22000, "current_year_threshold": "abc",
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_bool_value(self):
+        response = client.put("/api/kleinunternehmer-thresholds", json={
+            "prev_year_threshold": True, "current_year_threshold": 50000,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_missing_field(self):
+        response = client.put("/api/kleinunternehmer-thresholds", json={
+            "prev_year_threshold": 22000,
+        })
+        self.assertEqual(response.status_code, 400)
+
+
+class KleinunternehmerHintEnabledEndpointTests(unittest.TestCase):
+    def test_enables_hint(self):
+        with patch("main.db.set_kleinunternehmer_hint_enabled", return_value={"id": True, "kleinunternehmer_hint_enabled": True}) as mock_set:
+            response = client.put("/api/kleinunternehmer-hint-enabled", json={"enabled": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["kleinunternehmer_hint_enabled"])
+        mock_set.assert_called_once_with(True)
+
+    def test_disables_hint(self):
+        with patch("main.db.set_kleinunternehmer_hint_enabled", return_value={"id": True, "kleinunternehmer_hint_enabled": False}) as mock_set:
+            response = client.put("/api/kleinunternehmer-hint-enabled", json={"enabled": False})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(False)
 
 
 class AutoRelistEnabledEndpointTests(unittest.TestCase):

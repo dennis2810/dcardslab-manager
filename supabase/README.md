@@ -28,11 +28,15 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
    `run_forever()`), zusätzlich zum manuellen Download unter
    Einstellungen → Backup. Die letzten 4 Wochen werden behalten, ältere
    automatisch gelöscht.
-6. Unter Project Settings → API: `Project URL` und `service_role`
+6. Unter Storage einen vierten Bucket `sale-receipts` anlegen, ebenfalls
+   **"Public bucket" AUSGESCHALTET lassen** — gleiche Begründung wie
+   `purchase-receipts`, nur für hochgeladene Belege zu manuellen Verkäufen
+   (card.html, Abschnitt „Verkauf außerhalb eBay").
+7. Unter Project Settings → API: `Project URL` und `service_role`
    Secret Key kopieren (NICHT den `anon`-Key – der Service-Role-Key hat
    vollen Server-Zugriff und gehört nur ins Backend-Environment, niemals
    in Frontend-Code).
-6. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
+8. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
    `SUPABASE_URL` = Project URL, `SUPABASE_SERVICE_KEY` = service_role-Key.
 
 Bekannte Free-Tier-Einschränkung: Projekte pausieren nach 1 Woche ohne

@@ -139,6 +139,35 @@ def delete_receipt(object_path):
     get_client().storage.from_(RECEIPTS_BUCKET).remove([object_path])
 
 
+SALE_RECEIPTS_BUCKET = "sale-receipts"
+# Eigener Bucket statt RECEIPTS_BUCKET mitzubenutzen - Kauf- und Verkaufs-
+# beleg pro Karte sollen unabhaengig voneinander geloescht/ersetzt werden
+# koennen, ohne Pfad-Kollisionen ueber dieselbe ID (manual_sales.id !=
+# purchases.id). Gleiche Privatsphaere-Begruendung wie RECEIPTS_BUCKET.
+
+
+def upload_sale_receipt(sale_id, content_type, data):
+    """Gleiches Prinzip wie upload_receipt() fuer Kaeufe, nur fuer einen
+    manuellen Verkauf (manual_sales.id) statt einen Kauf."""
+    ext = RECEIPT_CONTENT_TYPES[content_type]
+    object_path = f"{sale_id}/receipt.{ext}"
+    get_client().storage.from_(SALE_RECEIPTS_BUCKET).upload(
+        object_path, data, file_options={"content-type": content_type, "upsert": "true"}
+    )
+    return object_path
+
+
+def sale_receipt_signed_url(object_path, expires_in=3600):
+    response = get_client().storage.from_(SALE_RECEIPTS_BUCKET).create_signed_url(object_path, expires_in)
+    return response["signedURL"]
+
+
+def delete_sale_receipt(object_path):
+    if not object_path:
+        return
+    get_client().storage.from_(SALE_RECEIPTS_BUCKET).remove([object_path])
+
+
 BACKUPS_BUCKET = "backups"
 # Privater Bucket (siehe supabase/README.md), gleiche Begruendung wie
 # purchase-receipts - Backups enthalten dieselben Daten wie die DB selbst.
