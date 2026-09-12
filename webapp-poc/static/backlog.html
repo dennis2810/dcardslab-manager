@@ -93,6 +93,36 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
+    <h3>UI-Anpassung mit Canva <span class="status-tag status-open">offen – Klärung nötig</span></h3>
+    <p>Ganz am Anfang des Projekts angedacht: das Look &amp; Feel (Farben, Icons, Layout, evtl. eigenes Branding
+      statt nur des DCardsLab-Logos oben rechts) statt weiter direkt in HTML/CSS über Canva gestalten und dann
+      hier übernehmen. Bevor das angegangen wird, muss geklärt werden:</p>
+    <ul>
+      <li>Soll es um einzelne Elemente gehen (Logo/Icons, Farbschema) oder ein komplettes Redesign aller Seiten?</li>
+      <li>Canva-Entwürfe müssten von Hand in die bestehende Struktur übertragen werden – jede Seite ist aktuell
+        eine eigenständige HTML-Datei mit eigenem <code>&lt;style&gt;</code>-Block, kein Build-Schritt und kein
+        gemeinsames CSS/JS über alle Seiten hinweg. Ein Redesign würde entweder pro Seite einzeln nachgezogen oder
+        wäre ein guter Anlass, zuerst eine gemeinsame CSS-Datei einzuführen.</li>
+      <li>Wer liefert die Canva-Entwürfe (Screenshots/Export) als Vorlage?</li>
+    </ul>
+  </div>
+
+  <div class="item">
+    <h3>Bessere Lesbarkeit auf Smartphones <span class="status-tag status-open">offen</span></h3>
+    <p>Mobile-freundliche Tabellen (Karten-Layout statt Scroll-Tabelle) sind bereits umgesetzt, aber Schriftgrößen,
+      Zeilenabstände und Touch-Ziele (Buttons, Checkboxen, das Seiten-Auswahlfeld in der Navigation) sind bisher
+      nicht gezielt für kleine Bildschirme geprüft/optimiert – die Seiten sind primär Desktop-first gestaltet.
+      Umfasst z. B.:</p>
+    <ul>
+      <li>Schriftgrößen und Abstände auf Handy-Breite (~360–400px) einzeln durchgehen, nicht nur "schrumpfen
+        lassen".</li>
+      <li>Größere Touch-Flächen für Buttons/Checkboxen/Links in Tabellenzeilen.</li>
+      <li>Sticky-Elemente (Massenaktionen-Leiste, Navigation) auf kleinen Bildschirmen gegenprüfen, ob sie zu viel
+        vertikalen Platz wegnehmen.</li>
+    </ul>
+  </div>
+
+  <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
     <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
