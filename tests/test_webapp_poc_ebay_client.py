@@ -121,6 +121,17 @@ class GetItemByLegacyIdTests(unittest.TestCase):
             result = ebay_client.get_item_by_legacy_id("app-tok", "1")
         self.assertIsNone(result["price"])
 
+    def test_returns_listing_since_from_item_creation_date(self):
+        payload = {"title": "X", "itemCreationDate": "2026-01-15T10:00:00.000Z"}
+        with patch("ebay_client.httpx.get", return_value=_response(200, payload)):
+            result = ebay_client.get_item_by_legacy_id("app-tok", "1")
+        self.assertEqual(result["listing_since"], "2026-01-15T10:00:00.000Z")
+
+    def test_listing_since_is_none_when_ebay_does_not_provide_it(self):
+        with patch("ebay_client.httpx.get", return_value=_response(200, {"title": "X"})):
+            result = ebay_client.get_item_by_legacy_id("app-tok", "1")
+        self.assertIsNone(result["listing_since"])
+
     def test_image_urls_empty_when_no_images(self):
         with patch("ebay_client.httpx.get", return_value=_response(200, {"title": "Ohne Foto"})):
             result = ebay_client.get_item_by_legacy_id("app-tok", "1")

@@ -1807,9 +1807,15 @@ async def import_ebay_listing(item_id: str = Form(...)):
     }
     sku = ebay_listing.sku_for_card(card_row["card_no"])
     listing = db.create_ebay_listing(card_row["id"], sku, row)
+    # listing_since: eBays eigenes Erstellungsdatum des Angebots (falls von
+    # der Browse API geliefert - siehe ebay_client.get_item_by_legacy_id()),
+    # sonst ersatzweise der Import-Zeitpunkt. Ohne das wuerde "Eingestellt
+    # am" faelschlich den Import-Zeitpunkt statt des echten eBay-Startdatums
+    # zeigen (Klaerung mit dem Nutzer).
+    now_iso = datetime.now(timezone.utc).isoformat()
     listing = db.update_ebay_listing(listing["id"], {
         "status": "Veroeffentlicht", "ebay_listing_id": item_id,
-        "published_at": datetime.now(timezone.utc).isoformat(),
+        "published_at": now_iso, "listing_since": item.get("listing_since") or now_iso,
     })
 
     result = _attach_signed_urls(card_row)
@@ -1862,6 +1868,39 @@ async def get_ebay_listing(listing_id: str):
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
     return JSONResponse(_listing_with_card(listing))
+
+
+@app.post("/api/ebay/listings/{listing_id}/refresh-listing-since")
+async def refresh_ebay_listing_since(listing_id: str):
+    # Importierte Angebote (import_ebay_listing()) bekamen listing_since vor
+    # diesem Fix immer den Import-Zeitpunkt statt eBays echtem Startdatum -
+    # dieser Endpoint holt das fuer ein bereits importiertes Angebot
+    # nachtraeglich per Browse-API nach (Klaerung mit dem Nutzer, konkretes
+    # Beispiel: eine Karte, deren "Eingestellt am" nicht zur tatsaechlichen
+    # eBay-Startzeit passte).
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if not _is_externally_managed(listing):
+        raise HTTPException(
+            status_code=400,
+            detail="Nur fuer importierte, extern verwaltete Angebote verfuegbar.",
+        )
+    if not listing.get("ebay_listing_id"):
+        raise HTTPException(status_code=400, detail="Angebot hat keine eBay-Artikelnummer.")
+    try:
+        app_token = ebay_client.get_application_access_token()
+        item = ebay_client.get_item_by_legacy_id(app_token, listing["ebay_listing_id"])
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"eBay-Angebot konnte nicht geladen werden: {exc}"
+        ) from exc
+    if not item.get("listing_since"):
+        raise HTTPException(
+            status_code=422, detail="eBay liefert für dieses Angebot kein Erstellungsdatum."
+        )
+    updated = db.update_ebay_listing(listing_id, {"listing_since": item["listing_since"]})
+    return JSONResponse(_listing_with_card(updated))
 
 
 def _is_externally_managed(listing):
