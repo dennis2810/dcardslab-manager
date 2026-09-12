@@ -267,7 +267,8 @@ if ("serviceWorker" in navigator) {
   <p>Mehrere Käufe lassen sich per Checkbox auswählen – die Massenaktionen-Leiste erlaubt dann, die Plattform für
     alle ausgewählten Käufe auf einmal zu setzen, das Kaufdatum um eine bestimmte Anzahl Tage zu verschieben (z. B.
     nach einem Importfehler) oder mehrere Käufe auf einmal zu löschen (mit kurzer Gnadenfrist samt „Rückgängig",
-    statt sofort endgültig zu sein).</p>
+    statt sofort endgültig zu sein). Über den Button „⚙ Spalten" lassen sich die Spalten Verkäufer und Versand
+    aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
   <p>„⭱ CSV importieren" legt mehrere Käufe auf einmal aus einer CSV-Datei an – Spalten: Datum (TT.MM.JJJJ),
     Plattform, Verkäufer, Gesamt, Versand, Notizen (Semikolon-getrennt), also genau das Format des CSV-Exports
     weiter unten. Fehlerhafte Zeilen (ungültiges Datum oder ungültiger Betrag) werden übersprungen und einzeln
@@ -358,7 +359,9 @@ if ("serviceWorker" in navigator) {
     einem Neuladen – „Fortschritt zurücksetzen" beginnt eine neue Inventur. Unter „Unerwartet gefunden" lassen sich
     Karten notieren, die auftauchen, aber nicht im Inventar stehen. Der Abschlussbericht zeigt am Ende, was fehlt
     und was unerwartet war. Die Checkliste lässt sich per Klick auf eine Spaltenüberschrift sortieren, ist bei
-    vielen Karten seitenweise blätterbar und über „🖨 Drucken" ausdruckbar sowie über „⭳ CSV-Export" exportierbar.</p>
+    vielen Karten seitenweise blätterbar und über „🖨 Drucken" ausdruckbar sowie über „⭳ CSV-Export" exportierbar.
+    Über den Button „⚙ Spalten" lässt sich die Spalte Lagerort aus-/einblenden – die Auswahl wird je Browser
+    gemerkt.</p>
 
   <h2 id="versand">Versand</h2>
   <p>Sammelt alle verkauften, aber noch nicht als versendet markierten Karten an einem Ort – sowohl eBay- als auch
@@ -372,7 +375,8 @@ if ("serviceWorker" in navigator) {
     nicht dauerhaft gespeichert, sondern nur bei Bedarf für den Druck geladen. Bei manuellen Verkäufen gibt es dafür
     keine API, hier bleibt das Adressfeld leer zum Selbstausfüllen.</p>
   <p>Die Liste ist sortierbar (Klick auf Spaltenüberschrift) und bei vielen Einträgen seitenweise blätterbar, dazu
-    ein Druck- und ein CSV-Export-Button.</p>
+    ein Druck- und ein CSV-Export-Button. Über den Button „⚙ Spalten" lassen sich die Spalten Kanal und Verkauft am
+    aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
 
   <h2 id="wunschliste">Wunschliste</h2>
   <p>Für Karten, die (noch) nicht im Besitz sind: Titel, Team, Set, Wunschpreis und eine Notiz erfassen. Bewusst
@@ -384,7 +388,8 @@ if ("serviceWorker" in navigator) {
     fehlerhafte Zeilen werden einzeln gemeldet und übersprungen). Mehrere Einträge lassen sich per Kästchen auswählen
     und über die dann erscheinende Massenaktionen-Leiste auf einmal löschen (mit kurzer Gnadenfrist samt
     „Rückgängig" statt eines Bestätigungsdialogs). Der Pfeil-Button vor jedem Eintrag prüft aktive eBay-Angebote
-    zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen.</p>
+    zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen. Über den Button
+    „⚙ Spalten" lassen sich die Spalten Team, Set und Notiz aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
   <p>Zusätzlich läuft im Hintergrund automatisch (ca. einmal täglich je Eintrag) dieselbe Preisprüfung – der
     günstigste gefundene Treffer erscheint direkt in der Spalte „Sourcing", ohne dass man jeden Eintrag einzeln
     aufklappen muss (✓-Markierung, wenn er auf/unter dem Wunschpreis liegt, mit Direktlink zum Angebot). Die
@@ -405,7 +410,8 @@ if ("serviceWorker" in navigator) {
   <p>Die Seite listet alle Karten der privaten Sammlung – sortierbar, seitenweise blätterbar, über „🖨 Drucken"/
     „⭳ CSV-Export" exportierbar. Der Button „Zurückholen" macht die Privatentnahme rückgängig und setzt den
     Inventarbestand wieder auf 1. Mehrere Karten lassen sich per Kästchen auswählen und über die dann erscheinende
-    Massenaktionen-Leiste auf einmal zurückholen (mit „Rückgängig").</p>
+    Massenaktionen-Leiste auf einmal zurückholen (mit „Rückgängig"). Über den Button „⚙ Spalten" lassen sich die
+    Spalten Team, Set, Kartennr. und Tags aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
 
   <h2 id="suche">Suche</h2>
   <p>Ein Suchfeld direkt in der Seitennavigation (oben, neben der Seitenauswahl) ist auf jeder Seite verfügbar und
@@ -433,7 +439,9 @@ if ("serviceWorker" in navigator) {
     gespeichert), inklusive Anzahl Käufe, Summe und letztem Kauf; folgt dem aktuellen Zeit-/Kanal-/Suchfilter der
     Seite. Ein Pfeil-Button pro Käufer klappt die einzelnen Käufe auf, jeweils mit Kartentitel, Verkaufspreis,
     -datum sowie eBay-Artikelnummer und Link zum Angebot. Die Käufer-Historie hat eine eigene Sortierung
-    (Klick auf Spaltenüberschrift), Seitenblätterung, einen Druck- und einen CSV-Export-Button. Der Abschnitt
+    (Klick auf Spaltenüberschrift), Seitenblätterung, einen Druck- und einen CSV-Export-Button. Über den Button
+    „⚙ Spalten" bei „Alle Verkäufe" lassen sich die Spalten SKU, Kaufdatum (WE), Marge und Liegedauer aus-/einblenden
+    – die Auswahl wird je Browser gemerkt. Der Abschnitt
     „Portfolio-Wertverlauf" auf der Übersichtsseite zeigt den geschätzten Bestandswert (eBay-Angebotspreis,
     ersatzweise Einstandspreis) als Verlauf – wird automatisch einmal pro Woche als Schnappschuss festgehalten,
     zusätzlich per Button „Jetzt Snapshot erstellen" manuell möglich.</p>
