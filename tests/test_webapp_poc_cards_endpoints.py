@@ -720,6 +720,98 @@ class DeleteManualSaleEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+class UploadManualSaleReceiptEndpointTests(unittest.TestCase):
+    def test_uploads_receipt_and_returns_updated_sale(self):
+        sale = {"id": "ms-1", "receipt_path": ""}
+        updated = {"id": "ms-1", "receipt_path": "ms-1/receipt.pdf"}
+        with patch("main.db.get_manual_sale", return_value=sale), \
+             patch("main.storage.upload_sale_receipt", return_value="ms-1/receipt.pdf") as mock_upload, \
+             patch("main.storage.delete_sale_receipt") as mock_delete, \
+             patch("main.db.set_manual_sale_receipt", return_value=updated) as mock_set, \
+             patch("main.storage.sale_receipt_signed_url", return_value="https://signed/ms-1/receipt.pdf"):
+            response = client.post(
+                "/api/manual-sales/ms-1/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_upload.assert_called_once_with("ms-1", "application/pdf", b"%PDF-fake")
+        mock_delete.assert_not_called()
+        mock_set.assert_called_once_with("ms-1", "ms-1/receipt.pdf")
+        self.assertEqual(response.json()["receipt_url"], "https://signed/ms-1/receipt.pdf")
+
+    def test_deletes_old_receipt_when_replacing(self):
+        sale = {"id": "ms-1", "receipt_path": "ms-1/receipt.jpg"}
+        updated = {"id": "ms-1", "receipt_path": "ms-1/receipt.pdf"}
+        with patch("main.db.get_manual_sale", return_value=sale), \
+             patch("main.storage.upload_sale_receipt", return_value="ms-1/receipt.pdf"), \
+             patch("main.storage.delete_sale_receipt") as mock_delete, \
+             patch("main.db.set_manual_sale_receipt", return_value=updated):
+            response = client.post(
+                "/api/manual-sales/ms-1/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_called_once_with("ms-1/receipt.jpg")
+
+    def test_returns_400_for_unsupported_content_type(self):
+        with patch("main.db.get_manual_sale", return_value={"id": "ms-1"}), \
+             patch("main.storage.upload_sale_receipt") as mock_upload:
+            response = client.post(
+                "/api/manual-sales/ms-1/receipt",
+                files={"file": ("beleg.txt", b"hello", "text/plain")},
+            )
+        self.assertEqual(response.status_code, 400)
+        mock_upload.assert_not_called()
+
+    def test_returns_404_when_sale_not_found(self):
+        with patch("main.db.get_manual_sale", return_value=None):
+            response = client.post(
+                "/api/manual-sales/does-not-exist/receipt",
+                files={"file": ("beleg.pdf", b"%PDF-fake", "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_400_when_file_too_large(self):
+        oversized = b"0" * (10 * 1024 * 1024 + 1)
+        with patch("main.db.get_manual_sale", return_value={"id": "ms-1"}), \
+             patch("main.storage.upload_sale_receipt") as mock_upload:
+            response = client.post(
+                "/api/manual-sales/ms-1/receipt",
+                files={"file": ("beleg.pdf", oversized, "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 400)
+        mock_upload.assert_not_called()
+
+
+class DeleteManualSaleReceiptEndpointTests(unittest.TestCase):
+    def test_deletes_receipt_and_clears_path(self):
+        sale = {"id": "ms-1", "receipt_path": "ms-1/receipt.pdf"}
+        updated = {"id": "ms-1", "receipt_path": ""}
+        with patch("main.db.get_manual_sale", return_value=sale), \
+             patch("main.storage.delete_sale_receipt") as mock_delete, \
+             patch("main.db.set_manual_sale_receipt", return_value=updated) as mock_set:
+            response = client.delete("/api/manual-sales/ms-1/receipt")
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_called_once_with("ms-1/receipt.pdf")
+        mock_set.assert_called_once_with("ms-1", "")
+        self.assertNotIn("receipt_url", response.json())
+
+    def test_noop_when_no_receipt_present(self):
+        sale = {"id": "ms-1", "receipt_path": ""}
+        updated = {"id": "ms-1", "receipt_path": ""}
+        with patch("main.db.get_manual_sale", return_value=sale), \
+             patch("main.storage.delete_sale_receipt") as mock_delete, \
+             patch("main.db.set_manual_sale_receipt", return_value=updated):
+            response = client.delete("/api/manual-sales/ms-1/receipt")
+        self.assertEqual(response.status_code, 200)
+        mock_delete.assert_not_called()
+
+    def test_returns_404_when_sale_not_found(self):
+        with patch("main.db.get_manual_sale", return_value=None):
+            response = client.delete("/api/manual-sales/does-not-exist/receipt")
+        self.assertEqual(response.status_code, 404)
+
+
 class GetCardPriceResearchFieldTests(unittest.TestCase):
     def test_includes_price_research_entries_for_the_card(self):
         card = {"id": "card-1", "front_image_path": None, "back_image_path": None}

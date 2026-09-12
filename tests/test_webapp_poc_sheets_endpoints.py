@@ -299,6 +299,18 @@ class AppStatusEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["kleinunternehmer_prev_year_threshold"], 25000)
         self.assertEqual(response.json()["kleinunternehmer_current_year_threshold"], 55000)
 
+    def test_kleinunternehmer_hint_enabled_defaults_to_true(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["kleinunternehmer_hint_enabled"])
+
+    def test_returns_kleinunternehmer_hint_enabled_false(self):
+        with patch("main.db.get_app_status", return_value={"kleinunternehmer_hint_enabled": False}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["kleinunternehmer_hint_enabled"])
+
     def test_returns_last_auto_backup_at(self):
         with patch("main.db.get_app_status", return_value={"last_auto_backup_at": "2026-09-10T03:00:00+00:00"}):
             response = client.get("/api/app-status")
@@ -659,6 +671,21 @@ class KleinunternehmerThresholdsEndpointTests(unittest.TestCase):
             "prev_year_threshold": 22000,
         })
         self.assertEqual(response.status_code, 400)
+
+
+class KleinunternehmerHintEnabledEndpointTests(unittest.TestCase):
+    def test_enables_hint(self):
+        with patch("main.db.set_kleinunternehmer_hint_enabled", return_value={"id": True, "kleinunternehmer_hint_enabled": True}) as mock_set:
+            response = client.put("/api/kleinunternehmer-hint-enabled", json={"enabled": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["kleinunternehmer_hint_enabled"])
+        mock_set.assert_called_once_with(True)
+
+    def test_disables_hint(self):
+        with patch("main.db.set_kleinunternehmer_hint_enabled", return_value={"id": True, "kleinunternehmer_hint_enabled": False}) as mock_set:
+            response = client.put("/api/kleinunternehmer-hint-enabled", json={"enabled": False})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(False)
 
 
 class AutoRelistEnabledEndpointTests(unittest.TestCase):

@@ -932,6 +932,14 @@ def set_kleinunternehmer_thresholds(prev_year_threshold, current_year_threshold)
     return response.data[0]
 
 
+def set_kleinunternehmer_hint_enabled(enabled):
+    # Gleiches Singleton-Row-Muster wie set_view_density().
+    response = get_client().table("app_status").upsert({
+        "id": True, "kleinunternehmer_hint_enabled": enabled,
+    }).execute()
+    return response.data[0]
+
+
 def record_failed_login(ip, at):
     # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
     # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory
@@ -1206,6 +1214,11 @@ def get_manual_sale_for_card(card_id):
     return response.data[0] if response.data else None
 
 
+def get_manual_sale(sale_id):
+    response = get_client().table("manual_sales").select("*").eq("id", sale_id).execute()
+    return response.data[0] if response.data else None
+
+
 def all_manual_sales():
     return get_client().table("manual_sales").select("*").execute().data
 
@@ -1222,6 +1235,17 @@ def update_manual_sale(sale_id, fields):
         response = get_client().table("manual_sales").select("*").eq("id", sale_id).execute()
         return response.data[0] if response.data else None
     response = get_client().table("manual_sales").update(row).eq("id", sale_id).execute()
+    return response.data[0] if response.data else None
+
+
+def set_manual_sale_receipt(sale_id, receipt_path):
+    """Gleiches Prinzip wie set_purchase_receipt() - schreibt receipt_path
+    direkt, unter Umgehung von MANUAL_SALE_FIELDS (das ist fuer die
+    Formularfelder auf card.html, nicht diese serverseitig verwaltete
+    Storage-Objekt-Referenz)."""
+    response = (
+        get_client().table("manual_sales").update({"receipt_path": receipt_path}).eq("id", sale_id).execute()
+    )
     return response.data[0] if response.data else None
 
 

@@ -1982,6 +1982,16 @@ class AppStatusTests(unittest.TestCase):
             "kleinunternehmer_current_year_threshold": 55000,
         })
 
+    def test_set_kleinunternehmer_hint_enabled_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "kleinunternehmer_hint_enabled": False}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_kleinunternehmer_hint_enabled(False)
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "kleinunternehmer_hint_enabled": False})
+
     def test_record_failed_login_prepends_to_existing_log(self):
         mock_client = MagicMock()
         select_response = MagicMock()
@@ -2778,6 +2788,48 @@ class GetManualSaleForCardTests(unittest.TestCase):
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.get_manual_sale_for_card("card-1")
+        self.assertIsNone(result)
+
+
+class GetManualSaleTests(unittest.TestCase):
+    def test_returns_the_row_by_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "card_id": "card-1"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_manual_sale("ms-1")
+        self.assertEqual(result["id"], "ms-1")
+        mock_client.table.return_value.select.return_value.eq.assert_called_once_with("id", "ms-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_manual_sale("does-not-exist")
+        self.assertIsNone(result)
+
+
+class SetManualSaleReceiptTests(unittest.TestCase):
+    def test_writes_receipt_path(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "ms-1", "receipt_path": "ms-1/receipt.pdf"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_manual_sale_receipt("ms-1", "ms-1/receipt.pdf")
+        self.assertEqual(result["receipt_path"], "ms-1/receipt.pdf")
+        mock_client.table.return_value.update.assert_called_once_with({"receipt_path": "ms-1/receipt.pdf"})
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_manual_sale_receipt("does-not-exist", "x/receipt.pdf")
         self.assertIsNone(result)
 
 

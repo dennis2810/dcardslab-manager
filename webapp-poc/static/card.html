@@ -109,6 +109,9 @@ if ("serviceWorker" in navigator) {
   .manual-sale-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
   .manual-sale-readonly dt { font-weight: 600; }
   .manual-sale-readonly dd { margin: 0; }
+  .manual-sale-section .receipt-section { margin-top: 1.5rem; }
+  .manual-sale-section .receipt-section h3 { font-size: 0.95rem; margin-bottom: 0.4rem; }
+  .manual-sale-section .receipt-upload { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .ebay-status-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
   .ebay-status-Entwurf { background: var(--neutral-bg); color: var(--neutral-fg); }
   .ebay-status-Geplant { background: var(--warn-bg); color: var(--warn-fg); }
@@ -289,9 +292,21 @@ if ("serviceWorker" in navigator) {
 // geantwortet hat. Einmal beim Laden der Seite abgerufen, nicht bei jedem
 // loadCard() erneut (spart einen Request pro Speichern-Klick).
 let priceAlertThresholdPct = 20;
+// Fuer den gedruckten Verkaufsbeleg (siehe printManualSaleReceipt()) -
+// gleiche Absenderadresse wie das Lieferschein-Etikett auf shipping.html.
+let senderAddress = "";
+let kleinunternehmerHintEnabled = true;
 fetch("/api/app-status").then((r) => r.json()).then((body) => {
   priceAlertThresholdPct = body.price_alert_threshold_pct || 20;
+  senderAddress = body.sender_address || "";
+  kleinunternehmerHintEnabled = body.kleinunternehmer_hint_enabled !== false;
 }).catch(() => {});
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
 
 // Kurze, auffaellige Einblendung fuer das Ergebnis einer Aktion (Speichern/
 // Loeschen/Bulk) - anders als ein reiner Status-Text neben dem jeweiligen
@@ -689,7 +704,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection);
-    renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing);
+    renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
       card.ebay_listing?.ebay_listing_id, card.ebay_listing
@@ -1327,11 +1342,11 @@ function renderInventoryRow(item) {
 // POST/PATCH/DELETE /api/manual-sales), analog zu renderSaleStats() fuer
 // eBay-Verkaeufe, aber mit editierbarem Kanal/Preis/Datum statt nur
 // nachtraeglich anpassbaren Gebuehren.
-function renderManualSaleSection(manualSale, purchase, ebayListing) {
+function renderManualSaleSection(manualSale, purchase, ebayListing, cardTitle) {
   const section = document.getElementById("manual-sale-section");
   const importedAndActive = ebayListing && ebayListing.status === "Veroeffentlicht" && !ebayListing.ebay_offer_id;
   if (manualSale) {
-    renderManualSaleReadonly(section, manualSale, purchase);
+    renderManualSaleReadonly(section, manualSale, purchase, cardTitle);
   } else if (ebayListing && ebayListing.status === "Verkauft") {
     // Schon ueber eBay verkauft - ein zusaetzlicher manueller Verkauf fuer
     // dieselbe Karte waere widerspruechlich, daher hier ausgegraut statt
@@ -1362,7 +1377,7 @@ function renderManualSaleDisabled(section, message) {
   section.appendChild(hint);
 }
 
-function renderManualSaleReadonly(section, sale, purchase) {
+function renderManualSaleReadonly(section, sale, purchase, cardTitle) {
   section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
   const readonly = document.createElement("div");
   readonly.className = "manual-sale-readonly";
@@ -1436,7 +1451,160 @@ function renderManualSaleReadonly(section, sale, purchase) {
     }
   });
   actions.appendChild(deleteBtn);
+
+  const printBtn = document.createElement("button");
+  printBtn.type = "button";
+  printBtn.textContent = "🖨 Beleg drucken";
+  printBtn.addEventListener("click", () => printManualSaleReceipt(sale, cardTitle));
+  actions.appendChild(printBtn);
+
   section.appendChild(actions);
+  renderManualSaleReceiptUpload(section, sale);
+}
+
+// Aufbewahrungspflicht betrifft auch Verkaufsbelege, nicht nur Kaufbelege
+// (siehe purchase.html's Beleg-Upload) - gleiches Upload/Ansehen/Löschen-
+// Muster, aber inline statt auf einer eigenen Seite, da diese Sektion
+// bereits vollstaendig per JS gerendert wird.
+function renderManualSaleReceiptUpload(section, sale) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "receipt-section";
+  const heading = document.createElement("h3");
+  heading.textContent = "Beleg (Aufbewahrungspflicht)";
+  wrapper.appendChild(heading);
+
+  const status = document.createElement("p");
+  wrapper.appendChild(status);
+
+  function renderStatus() {
+    status.innerHTML = "";
+    if (sale.receipt_url) {
+      const link = document.createElement("a");
+      link.href = sale.receipt_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "Beleg ansehen";
+      status.appendChild(link);
+      status.appendChild(document.createTextNode(" "));
+      const deleteReceiptBtn = document.createElement("button");
+      deleteReceiptBtn.type = "button";
+      deleteReceiptBtn.textContent = "Beleg löschen";
+      deleteReceiptBtn.addEventListener("click", async () => {
+        if (!confirm("Beleg wirklich löschen?")) return;
+        try {
+          const res = await fetch(`/api/manual-sales/${encodeURIComponent(sale.id)}/receipt`, { method: "DELETE" });
+          const body = await res.json();
+          if (!res.ok) {
+            showToast("Fehler: " + (body.detail || res.statusText), true);
+            return;
+          }
+          sale.receipt_url = body.receipt_url || null;
+          showToast("Beleg gelöscht.");
+          renderStatus();
+        } catch (err) {
+          showToast("Fehler: " + err, true);
+        }
+      });
+      status.appendChild(deleteReceiptBtn);
+    } else {
+      status.textContent = "Kein Beleg hochgeladen.";
+    }
+  }
+  renderStatus();
+
+  const uploadRow = document.createElement("div");
+  uploadRow.className = "receipt-upload";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "application/pdf,image/jpeg,image/png,image/webp";
+  uploadRow.appendChild(fileInput);
+  const uploadBtn = document.createElement("button");
+  uploadBtn.type = "button";
+  uploadBtn.textContent = "Hochladen";
+  const uploadStatus = document.createElement("span");
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      uploadStatus.textContent = "Bitte zuerst eine Datei wählen.";
+      uploadStatus.className = "error";
+      return;
+    }
+    uploadStatus.textContent = "Lädt hoch …";
+    uploadStatus.className = "";
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/manual-sales/${encodeURIComponent(sale.id)}/receipt`, {
+        method: "POST",
+        body: formData,
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        uploadStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+        uploadStatus.className = "error";
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      uploadStatus.textContent = "";
+      fileInput.value = "";
+      sale.receipt_url = body.receipt_url;
+      showToast("Beleg hochgeladen.");
+      renderStatus();
+    } catch (err) {
+      uploadStatus.textContent = "Fehler: " + err;
+      uploadStatus.className = "error";
+      showToast("Fehler: " + err, true);
+    }
+  });
+  uploadRow.appendChild(uploadBtn);
+  uploadRow.appendChild(uploadStatus);
+  wrapper.appendChild(uploadRow);
+  section.appendChild(wrapper);
+}
+
+// Druckbarer Verkaufsbeleg mit den Pflichtangaben einer Kleinbetragsrechnung
+// (Paragraph 33 UStDV): Name/Anschrift Verkaeufer, Datum, Menge/Art der Ware,
+// Entgelt - plus dem Kleinunternehmer-Hinweis nach Paragraph 19 UStG, falls
+// in den Einstellungen aktiviert. Gleiches window.open()+document.write()-
+// Druckfenster-Muster wie printShippingLabel() auf shipping.html.
+function printManualSaleReceipt(sale, cardTitle) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const total = Number(sale.gross_price || 0) + Number(sale.shipping_charged || 0);
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Beleg</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  .sender { font-size: 0.8rem; color: #555; margin-bottom: 2rem; }
+  h1 { font-size: 1.2rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd; }
+  .total-row td { font-weight: 700; border-top: 2px solid #333; border-bottom: none; }
+  .hint { margin-top: 2rem; font-size: 0.85rem; color: #555; }
+</style></head>
+<body>
+  <div class="sender">${escapeHtml(senderAddress).replace(/\n/g, "<br>") || "(keine Absenderadresse hinterlegt - siehe Einstellungen)"}</div>
+  <h1>Beleg</h1>
+  <p>Datum: ${escapeHtml(formatDate(sale.sale_date))}${sale.channel ? ` &middot; Kanal: ${escapeHtml(sale.channel)}` : ""}</p>
+  <table>
+    <thead><tr><th>Menge</th><th>Artikel</th><th>Einzelpreis</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>${escapeHtml(cardTitle || "")}</td><td>${escapeHtml(fmtEuro(sale.gross_price))}</td></tr>
+      ${Number(sale.shipping_charged || 0) > 0
+        ? `<tr><td></td><td>Versand</td><td>${escapeHtml(fmtEuro(sale.shipping_charged))}</td></tr>`
+        : ""}
+      <tr class="total-row"><td></td><td>Gesamt</td><td>${escapeHtml(fmtEuro(total))}</td></tr>
+    </tbody>
+  </table>
+  ${kleinunternehmerHintEnabled
+    ? '<p class="hint">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>'
+    : ""}
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
 }
 
 function renderManualSaleForm(section, existingSale) {

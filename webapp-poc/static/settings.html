@@ -266,6 +266,8 @@ if ("serviceWorker" in navigator) {
     <label>Grenze laufendes Jahr (€)
       <input type="number" id="kleinunternehmer-current-year-input" min="1" step="1">
     </label>
+    <label><input type="checkbox" id="kleinunternehmer-hint-enabled-input"> Kleinunternehmer-Hinweis (§19 UStG) auf
+      gedruckten Verkaufsbelegen anzeigen</label>
     <button type="button" id="save-kleinunternehmer-thresholds-btn">Speichern</button>
     <p class="status" id="kleinunternehmer-thresholds-status"></p>
   </section>
@@ -419,6 +421,7 @@ async function loadBackupStatus() {
     document.getElementById("stale-wishlist-min-days-input").value = body.stale_wishlist_min_days ?? 60;
     document.getElementById("kleinunternehmer-prev-year-input").value = body.kleinunternehmer_prev_year_threshold ?? 22000;
     document.getElementById("kleinunternehmer-current-year-input").value = body.kleinunternehmer_current_year_threshold ?? 50000;
+    document.getElementById("kleinunternehmer-hint-enabled-input").checked = body.kleinunternehmer_hint_enabled !== false;
     document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
     document.getElementById("smtp-host-input").value = body.smtp_host || "";
     document.getElementById("smtp-port-input").value = body.smtp_port || "";
@@ -761,20 +764,30 @@ document.getElementById("save-kleinunternehmer-thresholds-btn").addEventListener
     statusEl.className = "error";
     return;
   }
+  const hintEnabled = document.getElementById("kleinunternehmer-hint-enabled-input").checked;
   try {
-    const res = await fetch("/api/kleinunternehmer-thresholds", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prev_year_threshold: prevYearThreshold,
-        current_year_threshold: currentYearThreshold,
+    const [thresholdsRes, hintRes] = await Promise.all([
+      fetch("/api/kleinunternehmer-thresholds", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prev_year_threshold: prevYearThreshold,
+          current_year_threshold: currentYearThreshold,
+        }),
       }),
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      fetch("/api/kleinunternehmer-hint-enabled", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: hintEnabled }),
+      }),
+    ]);
+    const thresholdsBody = await thresholdsRes.json();
+    const hintBody = await hintRes.json();
+    if (!thresholdsRes.ok || !hintRes.ok) {
+      const detail = (!thresholdsRes.ok ? thresholdsBody.detail : hintBody.detail) || "Speichern fehlgeschlagen.";
+      statusEl.textContent = "Fehler: " + detail;
       statusEl.className = "error";
-      showToast("Fehler: " + (body.detail || res.statusText), true);
+      showToast("Fehler: " + detail, true);
       return;
     }
     statusEl.textContent = "Gespeichert.";

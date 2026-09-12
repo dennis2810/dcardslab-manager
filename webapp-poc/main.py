@@ -613,6 +613,22 @@ def _attach_purchase_items(purchase):
     return purchase
 
 
+def _attach_manual_sale_receipt(sale):
+    if sale is None:
+        return sale
+    sale = dict(sale)
+    receipt_path = sale.get("receipt_path")
+    if receipt_path:
+        # Gleiche Guard-Logik wie _attach_purchase_items(): ein Storage-
+        # Hiccup darf die restliche Verkaufsauskunft nicht mit einem 500
+        # blockieren.
+        try:
+            sale["receipt_url"] = storage.sale_receipt_signed_url(receipt_path)
+        except Exception:
+            pass
+    return sale
+
+
 def _attach_signed_urls(card):
     # Mirrors process_one()'s pattern in POST /api/scan: each signed_url()
     # call is guarded individually, so a transient Supabase Storage hiccup
@@ -729,7 +745,7 @@ async def get_card(card_id: str):
     card["ebay_listing"] = db.get_ebay_listing_for_card(card_id)
     card["inventory"] = db.get_inventory_for_card(card_id)
     card["ebay_sale"] = db.get_sale_for_card(card_id)
-    card["manual_sale"] = db.get_manual_sale_for_card(card_id)
+    card["manual_sale"] = _attach_manual_sale_receipt(db.get_manual_sale_for_card(card_id))
     try:
         card["price_research"] = db.list_price_research_for_card(card_id)
     except Exception:
@@ -1419,6 +1435,56 @@ async def delete_manual_sale(sale_id: str):
         # nicht mehr zu einem 500 machen.
         logger.exception("Inventar-Wiederherstellung fuer Karte %s fehlgeschlagen", deleted["card_id"])
     return Response(status_code=204)
+
+
+@app.post("/api/manual-sales/{sale_id}/receipt")
+async def upload_manual_sale_receipt(sale_id: str, file: UploadFile = File(...)):
+    # Gleiches Muster wie upload_purchase_receipt() - Aufbewahrungspflicht
+    # betrifft auch Verkaufsbelege bei manuellen Verkaeufen (Kleinanzeigen,
+    # Vinted, ...), nicht nur Kaufbelege.
+    sale = db.get_manual_sale(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    if file.content_type not in storage.RECEIPT_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Beleg muss PDF, JPEG, PNG oder WebP sein.",
+        )
+    data = await file.read()
+    if len(data) > _RECEIPT_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Beleg darf höchstens 10 MB groß sein.")
+
+    old_path = sale.get("receipt_path")
+    if old_path:
+        try:
+            storage.delete_sale_receipt(old_path)
+        except Exception:
+            logger.exception("Alten Beleg konnte nicht gelöscht werden für Verkauf %s", sale_id)
+
+    try:
+        object_path = storage.upload_sale_receipt(sale_id, file.content_type, data)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Beleg-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    updated = db.set_manual_sale_receipt(sale_id, object_path)
+    return JSONResponse(_attach_manual_sale_receipt(updated))
+
+
+@app.delete("/api/manual-sales/{sale_id}/receipt")
+async def delete_manual_sale_receipt(sale_id: str):
+    sale = db.get_manual_sale(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    old_path = sale.get("receipt_path")
+    if old_path:
+        try:
+            storage.delete_sale_receipt(old_path)
+        except Exception:
+            logger.exception("Beleg konnte nicht gelöscht werden für Verkauf %s", sale_id)
+    updated = db.set_manual_sale_receipt(sale_id, "")
+    return JSONResponse(_attach_manual_sale_receipt(updated))
 
 
 def _parse_date_like(value):
@@ -2960,6 +3026,7 @@ async def app_status():
         "csv_delimiter": status.get("csv_delimiter") or ";",
         "kleinunternehmer_prev_year_threshold": status.get("kleinunternehmer_prev_year_threshold") or KLEINUNTERNEHMER_PREV_YEAR_THRESHOLD,
         "kleinunternehmer_current_year_threshold": status.get("kleinunternehmer_current_year_threshold") or KLEINUNTERNEHMER_CURRENT_YEAR_THRESHOLD,
+        "kleinunternehmer_hint_enabled": status.get("kleinunternehmer_hint_enabled", True),
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
         "sender_address": status.get("sender_address") or "",
@@ -3152,6 +3219,15 @@ async def set_kleinunternehmer_thresholds(fields: dict = Body(...)):
     if not (_positive_number(prev_year_threshold) and _positive_number(current_year_threshold)):
         raise HTTPException(status_code=400, detail="Beide Schwellwerte müssen positive Zahlen sein.")
     updated = db.set_kleinunternehmer_thresholds(prev_year_threshold, current_year_threshold)
+    return JSONResponse(updated)
+
+
+@app.put("/api/kleinunternehmer-hint-enabled")
+async def set_kleinunternehmer_hint_enabled(fields: dict = Body(...)):
+    # Schalter fuer den Paragraph-19-UStG-Hinweis auf gedruckten Verkaufs-
+    # belegen (card.html) - abschaltbar, sobald die Kleinunternehmergrenze
+    # ueberschritten ist und regulaer Umsatzsteuer ausgewiesen werden muss.
+    updated = db.set_kleinunternehmer_hint_enabled(bool(fields.get("enabled")))
     return JSONResponse(updated)
 
 

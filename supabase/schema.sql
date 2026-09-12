@@ -553,3 +553,12 @@ alter table app_status add column if not exists csv_delimiter text not null defa
 -- diese per Gesetzesaenderung mal verschieben.
 alter table app_status add column if not exists kleinunternehmer_prev_year_threshold numeric not null default 22000;
 alter table app_status add column if not exists kleinunternehmer_current_year_threshold numeric not null default 50000;
+-- Ob der Kleinunternehmer-Hinweis (Paragraph 19 UStG) auf gedruckten
+-- Verkaufsbelegen erscheint (card.html, "Verkauf ausserhalb eBay") -
+-- Standard an, laesst sich abschalten, sobald man die Kleinunternehmer-
+-- grenze ueberschritten hat und regulaer Umsatzsteuer ausweisen muss.
+alter table app_status add column if not exists kleinunternehmer_hint_enabled boolean not null default true;
+-- Beleg fuer manuelle Verkaeufe (Kleinanzeigen, Vinted, privat, ...) -
+-- gleiches Muster wie purchases.receipt_path, aber fuer die Verkaufsseite:
+-- Aufbewahrungspflicht betrifft auch Verkaufsbelege, nicht nur Kaufbelege.
+alter table manual_sales add column if not exists receipt_path text default '';
