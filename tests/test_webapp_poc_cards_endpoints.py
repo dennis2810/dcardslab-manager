@@ -882,6 +882,30 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
         self.assertFalse(cards[1]["delivered"])
         self.assertFalse(cards[1]["refunded"])
 
+    def test_attaches_last_auto_relisted_at_and_listing_since(self):
+        rows = [
+            {"id": "card-1", "front_image_path": None, "back_image_path": None},
+            {"id": "card-2", "front_image_path": None, "back_image_path": None},
+        ]
+        info = {
+            "card-1": {
+                "status": "Veroeffentlicht", "sku": "webapp-000001",
+                "last_auto_relisted_at": "2026-09-10T08:00:00+00:00",
+                "listing_since": "2026-08-01T08:00:00+00:00",
+            },
+        }
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value=info), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}):
+            response = client.get("/api/cards")
+        cards = response.json()["cards"]
+        self.assertEqual(cards[0]["last_auto_relisted_at"], "2026-09-10T08:00:00+00:00")
+        self.assertEqual(cards[0]["listing_since"], "2026-08-01T08:00:00+00:00")
+        self.assertIsNone(cards[1]["last_auto_relisted_at"])
+        self.assertIsNone(cards[1]["listing_since"])
+
 
 class RecognizeCardImagesEndpointTests(unittest.TestCase):
     def _post_recognize(self):
