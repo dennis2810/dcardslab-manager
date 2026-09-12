@@ -3071,7 +3071,6 @@ function renderSaleStats(purchase, sale) {
   const rows = [
     ["Verkauft am (WA)", formatDate(sale.sale_date)],
     ["Käufer (eBay)", sale.buyer_username || "–", "sale-buyer-dd"],
-    ["Verkaufspreis", fmtEuro(sale.gross_price)],
   ];
   if (refunded) rows.push(["Status", "↩ Rückerstattet"]);
   if (purchase && purchase.allocated_cost != null && sale.gross_price != null) {
@@ -3175,6 +3174,25 @@ function renderSaleStats(purchase, sale) {
   buyerInfoBlock.appendChild(buyerInfoStatus);
   wrapper.appendChild(buyerInfoBlock);
 
+  // Reiner Artikelpreis - normalerweise automatisch aus der eBay-Bestellung
+  // uebernommen (sync_ebay_sales()'s lineItemCost), kann fuer vor einem
+  // Sync-Logik-Fix synchronisierte Verkaeufe aber falsch sein (z.B. wenn
+  // eBay dort Versand mit in den Gesamtbetrag eingerechnet hatte) - ein
+  // erneuter Sync holt so einen bereits synchronisierten Verkauf nicht
+  // nochmal, daher hier manuell korrigierbar.
+  const grossPriceP = document.createElement("p");
+  grossPriceP.className = "fee-input-row";
+  const grossPriceLabel = document.createElement("label");
+  grossPriceLabel.textContent = "Verkaufspreis ";
+  const grossPriceInput = document.createElement("input");
+  grossPriceInput.type = "number";
+  grossPriceInput.step = "0.01";
+  grossPriceInput.value = sale.gross_price ?? 0;
+  grossPriceLabel.appendChild(grossPriceInput);
+  grossPriceP.appendChild(grossPriceLabel);
+  grossPriceP.appendChild(document.createTextNode(" €"));
+  wrapper.appendChild(grossPriceP);
+
   // Vom Kaeufer gezahlter Versand - normalerweise automatisch aus der eBay-
   // Bestellung uebernommen (sync_ebay_sales()), landet dort aber manchmal
   // bei 0, obwohl tatsaechlich Versand gewaehlt/bezahlt wurde (z.B. wenn
@@ -3259,6 +3277,7 @@ function renderSaleStats(purchase, sale) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          gross_price: grossPriceInput.value,
           shipping_charged: shippingChargedInput.value,
           shipping_cost: shippingCostInput.value, ebay_fees: ebayFeesInput.value,
           refunded: refundedCheckbox.checked, delivered: deliveredCheckbox.checked,

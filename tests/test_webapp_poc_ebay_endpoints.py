@@ -1239,6 +1239,72 @@ class SyncSalesEndpointTests(unittest.TestCase):
         sale_fields = mock_upsert.call_args[0][0]
         self.assertEqual(sale_fields["shipping_charged"], 2.5)
 
+    def test_gross_price_uses_line_item_cost_not_bundled_total(self):
+        # Beobachtet an einer echten Bestellung: eBays "total" auf dem Line
+        # Item war der Gesamtbetrag INKLUSIVE Versand (2.94 EUR = 1.99 EUR
+        # Artikelpreis + 0.95 EUR Versand), obwohl eBays eigene Doku "total"
+        # als reinen Artikelpreis beschreibt - lineItemCost liefert
+        # zuverlaessig den reinen Artikelpreis (main.py's _sync_ebay_sales_once()).
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-09-02T10:00:00Z",
+            "lineItems": [{
+                "sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1,
+                "lineItemCost": {"value": "1.99", "currency": "EUR"},
+                "total": {"value": "2.94"},
+                "deliveryCost": {"shippingCost": {"value": "0.95", "currency": "EUR"}},
+            }],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["gross_price"], 1.99)
+        self.assertEqual(sale_fields["shipping_charged"], 0.95)
+
+    def test_gross_price_multiplies_line_item_cost_by_quantity(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-09-02T10:00:00Z",
+            "lineItems": [{
+                "sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 2,
+                "lineItemCost": {"value": "1.99", "currency": "EUR"},
+                "total": {"value": "4.93"},
+            }],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertAlmostEqual(sale_fields["gross_price"], 3.98)
+
+    def test_gross_price_falls_back_to_total_when_line_item_cost_missing(self):
+        matched_listing = _listing(id="listing-1", sku="webapp-card-1")
+        orders = [{
+            "orderId": "O1", "creationDate": "2026-09-02T10:00:00Z",
+            "lineItems": [{"sku": "webapp-card-1", "lineItemId": "LI1", "quantity": 1, "total": {"value": "9.99"}}],
+        }]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.db.latest_sale_sync_cursor", return_value=None), \
+             patch("main.ebay_client.get_orders", return_value=orders), \
+             patch("main.db.list_ebay_listings", return_value=[matched_listing]), \
+             patch("main.db.upsert_ebay_sale", return_value={"id": "sale-1"}) as mock_upsert, \
+             patch("main.db.update_ebay_listing", return_value=matched_listing), \
+             patch("main.db.zero_inventory_for_card"):
+            client.post("/api/ebay/sync-sales")
+        sale_fields = mock_upsert.call_args[0][0]
+        self.assertEqual(sale_fields["gross_price"], 9.99)
+
     def test_no_order_level_fallback_for_multi_item_orders(self):
         # Bei mehreren Positionen in einer Bestellung ist nicht eindeutig,
         # welcher Artikel den (kombinierten) Versand "verursacht" hat - der

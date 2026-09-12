@@ -307,6 +307,10 @@ if ("serviceWorker" in navigator) {
       0,00&nbsp;€ übernimmt, obwohl der Käufer tatsächlich Versand bezahlt hat. Zusätzlich versucht der
       Verkaufs-Sync bei Bestellungen mit nur einer Karte jetzt automatisch, den auf Bestellungsebene gemeldeten
       Versandbetrag zu übernehmen, statt bei 0,00&nbsp;€ zu bleiben.</li>
+    <li>Fix: der „Verkaufspreis" eines eBay-Verkaufs zeigte teils fälschlich den Gesamtbetrag inklusive Versand
+      statt des reinen Artikelpreises (eBay meldet das nicht immer so, wie die eigene API-Doku es beschreibt).
+      Der Sync nutzt jetzt den zuverlässigeren Artikelpreis; „Verkaufspreis" ist außerdem manuell korrigierbar
+      für Verkäufe, die vor diesem Fix synchronisiert wurden.</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert
