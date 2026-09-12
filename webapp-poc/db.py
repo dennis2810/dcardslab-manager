@@ -902,6 +902,18 @@ def set_view_density(density):
     return response.data[0]
 
 
+def set_reminder_thresholds(stale_listing_min_days, stale_listing_check_days, stale_wishlist_min_days):
+    # Gleiches Singleton-Row-Muster wie set_view_density() - alle drei
+    # Schwellwerte werden gemeinsam im selben Formular bearbeitet/gespeichert.
+    response = get_client().table("app_status").upsert({
+        "id": True,
+        "stale_listing_min_days": stale_listing_min_days,
+        "stale_listing_check_days": stale_listing_check_days,
+        "stale_wishlist_min_days": stale_wishlist_min_days,
+    }).execute()
+    return response.data[0]
+
+
 def record_failed_login(ip, at):
     # Rein informativ fuer settings.html ("Login"-Abschnitt) - die eigentliche
     # Bruteforce-Drossel in main.py's /api/login laeuft komplett in-memory

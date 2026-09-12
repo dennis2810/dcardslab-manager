@@ -392,6 +392,23 @@ class AppStatusEndpointTests(unittest.TestCase):
             response = client.get("/api/app-status")
         self.assertFalse(response.json()["notify_on_reminders"])
 
+    def test_returns_reminder_thresholds(self):
+        status = {"stale_listing_min_days": 30, "stale_listing_check_days": 10, "stale_wishlist_min_days": 14}
+        with patch("main.db.get_app_status", return_value=status):
+            response = client.get("/api/app-status")
+        body = response.json()
+        self.assertEqual(body["stale_listing_min_days"], 30)
+        self.assertEqual(body["stale_listing_check_days"], 10)
+        self.assertEqual(body["stale_wishlist_min_days"], 14)
+
+    def test_reminder_thresholds_default_to_90_30_60(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        body = response.json()
+        self.assertEqual(body["stale_listing_min_days"], 90)
+        self.assertEqual(body["stale_listing_check_days"], 30)
+        self.assertEqual(body["stale_wishlist_min_days"], 60)
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):
@@ -494,6 +511,51 @@ class ViewDensityEndpointTests(unittest.TestCase):
 
     def test_rejects_invalid_density(self):
         response = client.put("/api/view-density", json={"density": "tiny"})
+        self.assertEqual(response.status_code, 400)
+
+
+class ReminderThresholdsEndpointTests(unittest.TestCase):
+    def test_sets_thresholds(self):
+        updated = {
+            "id": True, "stale_listing_min_days": 30,
+            "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        }
+        with patch("main.db.set_reminder_thresholds", return_value=updated) as mock_set:
+            response = client.put("/api/reminder-thresholds", json={
+                "stale_listing_min_days": 30, "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["stale_listing_min_days"], 30)
+        mock_set.assert_called_once_with(30, 10, 14)
+
+    def test_rejects_zero_value(self):
+        response = client.put("/api/reminder-thresholds", json={
+            "stale_listing_min_days": 0, "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_negative_value(self):
+        response = client.put("/api/reminder-thresholds", json={
+            "stale_listing_min_days": 30, "stale_listing_check_days": -1, "stale_wishlist_min_days": 14,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_integer_value(self):
+        response = client.put("/api/reminder-thresholds", json={
+            "stale_listing_min_days": 30, "stale_listing_check_days": 10, "stale_wishlist_min_days": "abc",
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_bool_value(self):
+        response = client.put("/api/reminder-thresholds", json={
+            "stale_listing_min_days": True, "stale_listing_check_days": 10, "stale_wishlist_min_days": 14,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_missing_field(self):
+        response = client.put("/api/reminder-thresholds", json={
+            "stale_listing_min_days": 30, "stale_listing_check_days": 10,
+        })
         self.assertEqual(response.status_code, 400)
 
 
