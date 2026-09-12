@@ -21,6 +21,7 @@ _TABLE_NAMES = (
     "ebay_listings", "ebay_sales", "inventory", "price_research",
     "manual_sales", "wishlist_items", "wishlist_price_checks",
     "description_templates", "portfolio_value_snapshots", "dashboard_goals",
+    "business_expenses",
 )
 # Bewusst NICHT dabei: google_sheets_settings (enthaelt den Google-OAuth-
 # Refresh-Token) und app_status (u.a. smtp_password) - beides Zugangsdaten,

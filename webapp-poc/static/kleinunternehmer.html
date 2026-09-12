@@ -69,6 +69,17 @@ if ("serviceWorker" in navigator) {
   .ku-bar-fill.ku-danger { background: #d93025; }
   .placeholder-section { color: #555; }
   .placeholder-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; background: var(--neutral-bg); }
+  .euer-controls { display: flex; align-items: center; gap: 0.6rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .euer-controls select { padding: 0.4rem 0.6rem; font-size: 0.9rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  td.euer-amount, th.euer-amount { text-align: right; }
+  tr.euer-total-row td { font-weight: 600; border-top: 2px solid #999; }
+  tr.euer-profit-row td { font-weight: 700; }
+  .expense-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 1rem; max-width: 32rem; }
+  .expense-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .expense-form input, .expense-form select { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
+  .expense-form .actions { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -131,9 +142,61 @@ if ("serviceWorker" in navigator) {
     anpassen, falls sich die gesetzlichen Grenzen künftig ändern.</p>
 
   <h2 id="euer">Einnahmen-Überschuss-Rechnung (EÜR)</h2>
-  <p class="placeholder-section"><span class="placeholder-badge">in Planung</span> Eine EÜR fasst Einnahmen und
-    Ausgaben eines Jahres steuerlich auf – geplant ist ein Export aus den bereits erfassten Käufen/Verkäufen,
-    ähnlich dem bestehenden DATEV/Lexoffice-Export auf der Seite „Alle Verkäufe".</p>
+  <p>Fasst Einnahmen und Ausgaben eines Jahres nach dem Zufluss-Abfluss-Prinzip zusammen (Paragraph 4 Abs. 3
+    EStG): jede Position zählt im Jahr ihres eigenen Datums – Wareneinkauf im Kaufjahr, Verkaufserlöse/Versand/
+    Verkaufsgebühren im Verkaufsjahr, sonstige Betriebsausgaben im Jahr der Ausgabe. Eine reine Vorbereitung/
+    Orientierungshilfe, keine offizielle Steuererklärung – die endgültige EÜR bleibt Aufgabe des
+    Steuerberaters/Finanzamts.</p>
+
+  <div class="euer-controls">
+    <label for="euer-year-select">Jahr
+      <select id="euer-year-select"></select>
+    </label>
+    <button type="button" id="euer-csv-btn">⭳ Als CSV exportieren</button>
+  </div>
+  <p id="euer-status-msg" class="note">Lädt …</p>
+  <table id="euer-table" hidden>
+    <thead>
+      <tr><th>Position</th><th class="euer-amount">Betrag</th></tr>
+    </thead>
+    <tbody id="euer-table-body"></tbody>
+  </table>
+
+  <h3>Sonstige Betriebsausgaben erfassen</h3>
+  <p class="note">Für Ausgaben ohne Bezug zu einem einzelnen Kauf/Verkauf – z.B. Verpackungsmaterial,
+    Bürobedarf, Software-Abos, Fahrtkosten oder Porto ohne Verkaufsbezug.</p>
+  <form class="expense-form" id="expense-form">
+    <label>Datum
+      <input type="date" id="expense-date-input" required>
+    </label>
+    <label>Kategorie
+      <select id="expense-category-input">
+        <option value="Verpackungsmaterial">Verpackungsmaterial</option>
+        <option value="Bürobedarf">Bürobedarf</option>
+        <option value="Software/Abos">Software/Abos</option>
+        <option value="Fahrtkosten">Fahrtkosten</option>
+        <option value="Porto">Porto</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+    </label>
+    <label>Betrag (€)
+      <input type="number" id="expense-amount-input" step="0.01" min="0" required>
+    </label>
+    <label>Notiz
+      <input type="text" id="expense-note-input" maxlength="200">
+    </label>
+    <div class="actions">
+      <button type="submit">Ausgabe erfassen</button>
+      <span id="expense-form-status"></span>
+    </div>
+  </form>
+
+  <table id="expenses-table" hidden>
+    <thead>
+      <tr><th>Datum</th><th>Kategorie</th><th class="euer-amount">Betrag</th><th>Notiz</th><th></th></tr>
+    </thead>
+    <tbody id="expenses-table-body"></tbody>
+  </table>
 
   <h2 id="rechnungstool">Rechnungstool</h2>
   <p class="placeholder-section"><span class="placeholder-badge">in Planung</span> Geplant ist eine Möglichkeit,
@@ -168,6 +231,8 @@ function yearTotal(stats, year) {
     .reduce((sum, m) => sum + m.revenue, 0);
 }
 
+let CSV_DELIMITER = ";";
+
 async function load() {
   const statusMsg = document.getElementById("status-msg");
   try {
@@ -180,11 +245,241 @@ async function load() {
       statusMsg.textContent = "Fehler beim Laden.";
       return;
     }
+    CSV_DELIMITER = appStatus.csv_delimiter || ";";
     statusMsg.style.display = "none";
     render(stats, appStatus);
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
   }
+  initEuer();
+}
+
+// Semikolon als Standard-Trennzeichen (deutsches Excel) + UTF-8-BOM, gleiches
+// Muster wie downloadCsv() auf statistics-sales.html/wishlist.html/etc.
+function downloadCsv(filename, headers, rows) {
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /["\n,;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers, ...rows].map((row) => row.map(escape).join(CSV_DELIMITER));
+  const csv = "﻿" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function fmtNumber(v, decimals) {
+  return v != null ? Number(v).toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "";
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : value;
+}
+
+let currentEuerData = null;
+let currentExpenses = [];
+
+function euerYearSelect() {
+  return document.getElementById("euer-year-select");
+}
+
+function populateEuerYearOptions() {
+  const select = euerYearSelect();
+  const now = new Date().getFullYear();
+  const years = new Set([now, now - 1, now - 2]);
+  for (const expense of currentExpenses) {
+    if (expense.expense_date) years.add(Number(String(expense.expense_date).slice(0, 4)));
+  }
+  const previouslySelected = Number(select.value) || now;
+  years.add(previouslySelected);
+  const sorted = [...years].sort((a, b) => b - a);
+  select.innerHTML = "";
+  for (const year of sorted) {
+    const opt = document.createElement("option");
+    opt.value = String(year);
+    opt.textContent = String(year);
+    select.appendChild(opt);
+  }
+  select.value = String(previouslySelected);
+}
+
+async function loadEuer(year) {
+  const statusMsg = document.getElementById("euer-status-msg");
+  const table = document.getElementById("euer-table");
+  try {
+    const res = await fetch(`/api/euer?year=${encodeURIComponent(year)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      statusMsg.textContent = "Fehler beim Laden: " + (data.detail || res.statusText);
+      table.hidden = true;
+      return;
+    }
+    currentEuerData = data;
+    renderEuerTable(data);
+    statusMsg.style.display = "none";
+    table.hidden = false;
+  } catch (err) {
+    statusMsg.textContent = "Fehler: " + err;
+  }
+}
+
+function renderEuerTable(data) {
+  const body = document.getElementById("euer-table-body");
+  body.innerHTML = "";
+  const sectionRow = (label) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.colSpan = 2;
+    th.textContent = label;
+    tr.appendChild(th);
+    body.appendChild(tr);
+  };
+  const addRow = (label, amount, cls) => {
+    const tr = document.createElement("tr");
+    if (cls) tr.className = cls;
+    const labelTd = document.createElement("td");
+    labelTd.textContent = label;
+    const amountTd = document.createElement("td");
+    amountTd.className = "euer-amount";
+    amountTd.textContent = fmtEuro(amount);
+    tr.appendChild(labelTd);
+    tr.appendChild(amountTd);
+    body.appendChild(tr);
+  };
+  sectionRow("Einnahmen");
+  for (const item of data.income) addRow(item.label, item.amount);
+  addRow("Summe Einnahmen", data.income_total, "euer-total-row");
+  sectionRow("Ausgaben");
+  for (const item of data.expenses) addRow(item.label, item.amount);
+  addRow("Summe Ausgaben", data.expense_total, "euer-total-row");
+  addRow("Überschuss (EÜR-Ergebnis)", data.profit, "euer-profit-row");
+}
+
+async function loadExpenses() {
+  try {
+    const res = await fetch("/api/business-expenses");
+    const data = await res.json();
+    currentExpenses = data.expenses || [];
+  } catch (err) {
+    currentExpenses = [];
+  }
+}
+
+function renderExpensesTable(year) {
+  const table = document.getElementById("expenses-table");
+  const body = document.getElementById("expenses-table-body");
+  body.innerHTML = "";
+  const yearStr = String(year);
+  const filtered = currentExpenses.filter((e) => String(e.expense_date || "").startsWith(yearStr));
+  if (!filtered.length) {
+    table.hidden = true;
+    return;
+  }
+  table.hidden = false;
+  for (const expense of filtered) {
+    const tr = document.createElement("tr");
+    const dateTd = document.createElement("td");
+    dateTd.textContent = formatDate(expense.expense_date);
+    const catTd = document.createElement("td");
+    catTd.textContent = expense.category || "";
+    const amountTd = document.createElement("td");
+    amountTd.className = "euer-amount";
+    amountTd.textContent = fmtEuro(expense.amount);
+    const noteTd = document.createElement("td");
+    noteTd.textContent = expense.note || "";
+    const actionsTd = document.createElement("td");
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "Löschen";
+    delBtn.addEventListener("click", () => deleteExpense(expense.id));
+    actionsTd.appendChild(delBtn);
+    tr.append(dateTd, catTd, amountTd, noteTd, actionsTd);
+    body.appendChild(tr);
+  }
+}
+
+async function deleteExpense(expenseId) {
+  if (!confirm("Ausgabe wirklich löschen?")) return;
+  try {
+    const res = await fetch(`/api/business-expenses/${encodeURIComponent(expenseId)}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      alert("Fehler beim Löschen.");
+      return;
+    }
+    await refreshEuerAndExpenses();
+  } catch (err) {
+    alert("Fehler: " + err);
+  }
+}
+
+async function refreshEuerAndExpenses() {
+  const year = euerYearSelect().value;
+  await loadExpenses();
+  populateEuerYearOptions();
+  euerYearSelect().value = year;
+  renderExpensesTable(euerYearSelect().value);
+  await loadEuer(euerYearSelect().value);
+}
+
+async function initEuer() {
+  await loadExpenses();
+  populateEuerYearOptions();
+  const select = euerYearSelect();
+  select.addEventListener("change", async () => {
+    renderExpensesTable(select.value);
+    await loadEuer(select.value);
+  });
+  renderExpensesTable(select.value);
+  await loadEuer(select.value);
+
+  document.getElementById("euer-csv-btn").addEventListener("click", () => {
+    if (!currentEuerData) return;
+    const headers = ["Position", "Betrag"];
+    const rows = [
+      ...currentEuerData.income.map((item) => [item.label, fmtNumber(item.amount, 2)]),
+      ["Summe Einnahmen", fmtNumber(currentEuerData.income_total, 2)],
+      ...currentEuerData.expenses.map((item) => [item.label, fmtNumber(-item.amount, 2)]),
+      ["Summe Ausgaben", fmtNumber(-currentEuerData.expense_total, 2)],
+      ["Überschuss (EÜR-Ergebnis)", fmtNumber(currentEuerData.profit, 2)],
+    ];
+    downloadCsv(`euer-${currentEuerData.year}.csv`, headers, rows);
+  });
+
+  document.getElementById("expense-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const statusEl = document.getElementById("expense-form-status");
+    const fields = {
+      expense_date: document.getElementById("expense-date-input").value,
+      category: document.getElementById("expense-category-input").value,
+      amount: document.getElementById("expense-amount-input").value,
+      note: document.getElementById("expense-note-input").value,
+    };
+    try {
+      const res = await fetch("/api/business-expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+        return;
+      }
+      statusEl.textContent = "";
+      document.getElementById("expense-form").reset();
+      await refreshEuerAndExpenses();
+    } catch (err) {
+      statusEl.textContent = "Fehler: " + err;
+    }
+  });
 }
 
 function render(stats, appStatus) {

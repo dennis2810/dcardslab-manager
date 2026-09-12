@@ -1388,6 +1388,51 @@ def delete_description_template(template_id):
     return response.data[0]
 
 
+BUSINESS_EXPENSE_FIELDS = ["expense_date", "category", "amount", "note"]
+BUSINESS_EXPENSE_NUMERIC_FIELDS = {"amount"}
+BUSINESS_EXPENSE_MONEY_FIELDS = {"amount"}
+
+
+def list_business_expenses():
+    response = get_client().table("business_expenses").select("*").order("expense_date", desc=True).execute()
+    return response.data
+
+
+def create_business_expense(fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: fields[name] for name in BUSINESS_EXPENSE_FIELDS if name in fields},
+            BUSINESS_EXPENSE_NUMERIC_FIELDS,
+        ),
+        BUSINESS_EXPENSE_MONEY_FIELDS,
+    )
+    response = get_client().table("business_expenses").insert(row).execute()
+    return response.data[0]
+
+
+def update_business_expense(expense_id, fields):
+    row = _round_money(
+        _blank_numeric_to_none(
+            {name: value for name, value in fields.items() if name in BUSINESS_EXPENSE_FIELDS},
+            BUSINESS_EXPENSE_NUMERIC_FIELDS,
+        ),
+        BUSINESS_EXPENSE_MONEY_FIELDS,
+    )
+    if not row:
+        response = get_client().table("business_expenses").select("*").eq("id", expense_id).execute()
+        return response.data[0] if response.data else None
+    response = get_client().table("business_expenses").update(row).eq("id", expense_id).execute()
+    return response.data[0] if response.data else None
+
+
+def delete_business_expense(expense_id):
+    response = get_client().table("business_expenses").select("id").eq("id", expense_id).execute()
+    if not response.data:
+        return None
+    get_client().table("business_expenses").delete().eq("id", expense_id).execute()
+    return response.data[0]
+
+
 def all_price_research():
     return get_client().table("price_research").select("*").execute().data
 
@@ -1415,6 +1460,10 @@ def all_portfolio_value_snapshots():
 
 def all_dashboard_goals():
     return get_client().table("dashboard_goals").select("*").execute().data
+
+
+def all_business_expenses():
+    return get_client().table("business_expenses").select("*").execute().data
 
 
 def bulk_upsert_rows(table_name, rows):
