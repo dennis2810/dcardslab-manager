@@ -2510,6 +2510,47 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     readonly.appendChild(sinceP);
   }
 
+  // Nicht nur fuer importierte Angebote: die Migration, die listing_since
+  // eingefuehrt hat, fuellte die Spalte fuer bereits vorher veroeffentlichte
+  // Angebote nur mit published_at (siehe supabase/schema.sql) - das wird
+  // aber bei jeder Bearbeitung neu gesetzt und ist daher nur eine Naeherung,
+  // kein echtes Startdatum. Dieser Button holt das per Browse-API nach, fuer
+  // jedes Angebot mit einer eBay-Artikelnummer (main.py's
+  // refresh_ebay_listing_since()).
+  if (listing.ebay_listing_id) {
+    const refreshP = document.createElement("p");
+    const refreshBtn = document.createElement("button");
+    refreshBtn.type = "button";
+    refreshBtn.textContent = "Startdatum von eBay neu laden";
+    const refreshStatus = document.createElement("span");
+    refreshStatus.style.marginLeft = "0.5rem";
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.disabled = true;
+      refreshStatus.textContent = "Lädt …";
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/refresh-listing-since`, {
+          method: "POST",
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          refreshStatus.textContent = "";
+          showToast("Fehler: " + (body.detail || res.statusText), true);
+          refreshBtn.disabled = false;
+          return;
+        }
+        showToast("Startdatum aktualisiert.");
+        loadCard();
+      } catch (err) {
+        refreshStatus.textContent = "";
+        showToast("Fehler: " + err, true);
+        refreshBtn.disabled = false;
+      }
+    });
+    refreshP.appendChild(refreshBtn);
+    refreshP.appendChild(refreshStatus);
+    readonly.appendChild(refreshP);
+  }
+
   if (listing.published_at) {
     const updatedP = document.createElement("p");
     const isRecent = Date.now() - new Date(listing.published_at).getTime() <= RECENTLY_UPDATED_WINDOW_MS;
@@ -2594,40 +2635,6 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     note.textContent = "Dieses Angebot wurde importiert und wird nicht vom Tool verwaltet - Preisänderungen "
       + "oder das Beenden bitte direkt auf eBay vornehmen.";
     section.appendChild(note);
-
-    // "Eingestellt am" bekam beim Import frueher immer den Import-Zeitpunkt
-    // statt eBays echtem Startdatum (siehe main.py's import_ebay_listing()) -
-    // dieser Button holt das nachtraeglich per Browse-API nach, fuer bereits
-    // vor diesem Fix importierte Angebote.
-    const refreshBtn = document.createElement("button");
-    refreshBtn.type = "button";
-    refreshBtn.textContent = "Startdatum von eBay neu laden";
-    const refreshStatus = document.createElement("span");
-    refreshStatus.style.marginLeft = "0.5rem";
-    refreshBtn.addEventListener("click", async () => {
-      refreshBtn.disabled = true;
-      refreshStatus.textContent = "Lädt …";
-      try {
-        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/refresh-listing-since`, {
-          method: "POST",
-        });
-        const body = await res.json();
-        if (!res.ok) {
-          refreshStatus.textContent = "";
-          showToast("Fehler: " + (body.detail || res.statusText), true);
-          refreshBtn.disabled = false;
-          return;
-        }
-        showToast("Startdatum aktualisiert.");
-        loadCard();
-      } catch (err) {
-        refreshStatus.textContent = "";
-        showToast("Fehler: " + err, true);
-        refreshBtn.disabled = false;
-      }
-    });
-    section.appendChild(refreshBtn);
-    section.appendChild(refreshStatus);
   } else if (listing.status === "Veroeffentlicht") {
     const editBtn = document.createElement("button");
     editBtn.type = "button";

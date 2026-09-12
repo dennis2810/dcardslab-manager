@@ -322,10 +322,21 @@ class RefreshEbayListingSinceEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/listings/does-not-exist/refresh-listing-since")
         self.assertEqual(response.status_code, 404)
 
-    def test_returns_400_for_non_imported_listing(self):
-        with patch("main.db.get_ebay_listing", return_value=_listing(status="Veroeffentlicht", ebay_offer_id="offer-1")):
+    def test_works_for_non_imported_listing_with_ebay_listing_id(self):
+        # Nicht nur importierte Angebote koennen ein falsches listing_since
+        # haben - die Backfill-Migration fuellte es fuer alle vor der
+        # listing_since-Einfuehrung veroeffentlichten Angebote nur mit
+        # published_at (siehe supabase/schema.sql), egal ob importiert oder
+        # ueber die API eingestellt.
+        with patch("main.db.get_ebay_listing", return_value=_listing(status="Veroeffentlicht", ebay_offer_id="offer-1", ebay_listing_id="110412345678")), \
+             patch("main.ebay_client.get_application_access_token", return_value="app-tok"), \
+             patch("main.ebay_client.get_item_by_legacy_id", return_value={"listing_since": "2026-01-15T10:00:00.000Z"}), \
+             patch("main.db.update_ebay_listing", return_value=_listing(listing_since="2026-01-15T10:00:00.000Z")), \
+             patch("main.db.get_cards_by_ids", return_value=[_card()]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}):
             response = client.post("/api/ebay/listings/listing-1/refresh-listing-since")
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
 
     def test_returns_400_when_no_ebay_listing_id(self):
         with patch("main.db.get_ebay_listing", return_value=self._imported(ebay_listing_id="")):
