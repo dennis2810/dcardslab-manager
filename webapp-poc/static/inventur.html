@@ -56,6 +56,7 @@ if ("serviceWorker" in navigator) {
   .progress-bar-fill { background: var(--success-fg); height: 100%; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.checked { background: var(--success-bg); }
@@ -229,7 +230,12 @@ const checkedIds = new Set(progress.checkedIds);
 let unexpected = progress.unexpected;
 let items = [];
 
-const PAGE_SIZE = 40;
+let PAGE_SIZE = 40;
+fetch("/api/app-status").then((r) => r.json()).then((body) => {
+  PAGE_SIZE = body.page_size || 40;
+  document.body.classList.toggle("compact", body.view_density === "compact");
+  render();
+}).catch(() => {});
 let currentPage = 0;
 let sortKey = "sku";
 let sortAsc = true;

@@ -56,6 +56,7 @@ if ("serviceWorker" in navigator) {
   }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+  body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr:hover { background: var(--hover-bg); }
@@ -254,7 +255,7 @@ function formatShipToAddress(shipTo) {
 
 let items = [];
 
-const PAGE_SIZE = 40;
+let PAGE_SIZE = 40;
 let currentPage = 0;
 let sortKey = "saleDate";
 let sortAsc = false;
@@ -514,6 +515,8 @@ async function load() {
       return;
     }
     senderAddress = statusBody.sender_address || "";
+    PAGE_SIZE = statusBody.page_size || 40;
+    document.body.classList.toggle("compact", statusBody.view_density === "compact");
 
     const listingByCardId = {};
     for (const listing of listingsBody.listings || []) {

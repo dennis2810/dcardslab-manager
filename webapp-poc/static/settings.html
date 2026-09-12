@@ -170,6 +170,25 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="price-alert-threshold-status"></p>
   </section>
 
+  <section id="display-settings-section">
+    <h2>Anzeige</h2>
+    <p>Gilt global für alle Tabellenseiten (Karten, Käufe, Inventar, eBay, Inventur, Wunschliste,
+      Statistik-Listen).</p>
+    <label>Zeilen pro Seite
+      <input type="number" id="page-size-input" min="5" max="500" step="1">
+    </label>
+    <button type="button" id="save-page-size-btn">Speichern</button>
+    <p class="status" id="page-size-status"></p>
+    <label>Ansicht
+      <select id="view-density-input">
+        <option value="comfort">Komfort (Standard)</option>
+        <option value="compact">Kompakt (dichtere Zeilen)</option>
+      </select>
+    </label>
+    <button type="button" id="save-view-density-btn">Speichern</button>
+    <p class="status" id="view-density-status"></p>
+  </section>
+
   <section id="sender-address-section">
     <h2>Absenderadresse</h2>
     <p>Wird auf dem druckbaren Adress-Etikett/Lieferschein als Absender verwendet (Versand-Checkliste).</p>
@@ -335,6 +354,8 @@ async function loadBackupStatus() {
       "Letztes automatisches Backup: " + (body.last_auto_backup_at ? formatDateTime(body.last_auto_backup_at) : "noch keins");
     document.getElementById("low-stock-threshold-input").value = body.low_stock_threshold || 0;
     document.getElementById("price-alert-threshold-input").value = body.price_alert_threshold_pct ?? 20;
+    document.getElementById("page-size-input").value = body.page_size ?? 40;
+    document.getElementById("view-density-input").value = body.view_density || "comfort";
     renderFailedLoginLog(body.failed_login_log || []);
     document.getElementById("sender-address-input").value = body.sender_address || "";
     document.getElementById("notify-on-sale-input").checked = Boolean(body.notify_on_sale);
@@ -627,6 +648,63 @@ document.getElementById("save-price-alert-threshold-btn").addEventListener("clic
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Preis-Alarm-Schwelle gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-page-size-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("page-size-status");
+  const size = parseInt(document.getElementById("page-size-input").value, 10);
+  if (!Number.isInteger(size) || size < 5 || size > 500) {
+    statusEl.textContent = "Bitte eine Ganzzahl zwischen 5 und 500 eingeben.";
+    statusEl.className = "error";
+    return;
+  }
+  try {
+    const res = await fetch("/api/page-size", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ size }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Seitengröße gespeichert.");
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-view-density-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("view-density-status");
+  const density = document.getElementById("view-density-input").value;
+  try {
+    const res = await fetch("/api/view-density", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ density }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Ansicht gespeichert.");
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

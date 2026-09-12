@@ -79,22 +79,6 @@ if ("serviceWorker" in navigator) {
     einen Termin. Wird von Hand gepflegt, wenn neue Ideen entstehen oder ein Punkt umgesetzt wird.</p>
 
   <div class="item">
-    <h3>Automatische Preisanpassung bei Preis-Alarm <span class="status-tag status-open">offen – Klärung nötig</span>
-      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
-    <p>Der bestehende Preis-Alarm (eBay-Seite, Dashboard-Kachel „Preis-Alarme") zeigt heute nur an, wenn ein
-      Angebotspreis mehr als 20&nbsp;% vom Preisrecherche-Marktdurchschnitt abweicht – eine Preisanpassung passiert
-      nicht automatisch. Bevor das umgesetzt wird, muss geklärt werden:</p>
-    <ul>
-      <li>Soll der Preis wirklich automatisch geändert werden, oder nur ein Anpassungsvorschlag mit Bestätigung
-        angezeigt werden?</li>
-      <li>In welche Richtung: nur nach unten (Verkaufsförderung), nur nach oben (Marktpreis-Anstieg mitnehmen),
-        oder beides?</li>
-      <li>Ab welcher Schwelle/mit welchem Ziel-Abstand zum Marktdurchschnitt soll angepasst werden – derselbe
-        20&nbsp;%-Wert wie beim Alarm, oder ein eigener?</li>
-    </ul>
-  </div>
-
-  <div class="item">
     <h3>UI-Anpassung mit Canva <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Ganz am Anfang des Projekts angedacht: das Look &amp; Feel (Farben, Icons, Layout, evtl. eigenes Branding
@@ -134,22 +118,6 @@ if ("serviceWorker" in navigator) {
       standardmäßig Semikolon, sonst landet beim Öffnen alles in einer Spalte. Eine Einstellung (Komma/Semikolon)
       müsste in jede der bestehenden, pro Seite eigenständigen Export-Funktionen einfließen – daher „klein" pro
       Stelle, aber auf mehrere Seiten verteilt.</p>
-  </div>
-
-  <div class="item">
-    <h3>Einstellbare Pagination-Seitengröße <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: klein–mittel</span></h3>
-    <p>Tabellen (Karten, Käufe, Inventar, eBay, Inventur, Wunschliste, Statistik-Listen …) zeigen aktuell fest
-      40 Zeilen pro Seite. Eine globale, in den Einstellungen änderbare Seitengröße würde dieselbe Logik auf
-      mehreren, eigenständigen Seiten anfassen – ähnlich verteilter Aufwand wie beim CSV-Trennzeichen.</p>
-  </div>
-
-  <div class="item">
-    <h3>Kompakt-/Komfort-Ansicht <span class="status-tag status-open">offen</span>
-      <span class="status-tag status-effort">Aufwand: klein–mittel</span></h3>
-    <p>Ein Umschalter für dichtere Tabellenzeilen (mehr Einträge sichtbar, kleinere Schrift/Abstände) gegenüber der
-      aktuellen, eher großzügigen Standardansicht. Da jede Seite ihr eigenes <code>&lt;style&gt;</code> hat (kein
-      gemeinsames CSS), müsste die Umschaltklasse auf jeder Tabellenseite einzeln ergänzt werden.</p>
   </div>
 
   <div class="item">

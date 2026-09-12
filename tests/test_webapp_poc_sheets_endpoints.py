@@ -362,6 +362,26 @@ class AppStatusEndpointTests(unittest.TestCase):
             response = client.get("/api/app-status")
         self.assertEqual(response.json()["failed_login_log"], [])
 
+    def test_returns_page_size(self):
+        with patch("main.db.get_app_status", return_value={"page_size": 100}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["page_size"], 100)
+
+    def test_page_size_defaults_to_40(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["page_size"], 40)
+
+    def test_returns_view_density(self):
+        with patch("main.db.get_app_status", return_value={"view_density": "compact"}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["view_density"], "compact")
+
+    def test_view_density_defaults_to_comfort(self):
+        with patch("main.db.get_app_status", return_value=None):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.json()["view_density"], "comfort")
+
 
 class ClearActivityEndpointTests(unittest.TestCase):
     def test_stores_current_timestamp(self):
@@ -420,6 +440,50 @@ class PriceAlertThresholdEndpointTests(unittest.TestCase):
 
     def test_rejects_non_numeric_threshold(self):
         response = client.put("/api/price-alert-threshold", json={"threshold": "abc"})
+        self.assertEqual(response.status_code, 400)
+
+
+class PageSizeEndpointTests(unittest.TestCase):
+    def test_sets_size(self):
+        with patch("main.db.set_page_size", return_value={"id": True, "page_size": 100}) as mock_set:
+            response = client.put("/api/page-size", json={"size": 100})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["page_size"], 100)
+        mock_set.assert_called_once_with(100)
+
+    def test_rejects_too_small_size(self):
+        response = client.put("/api/page-size", json={"size": 1})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_too_large_size(self):
+        response = client.put("/api/page-size", json={"size": 501})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_integer_size(self):
+        response = client.put("/api/page-size", json={"size": "abc"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_bool_size(self):
+        response = client.put("/api/page-size", json={"size": True})
+        self.assertEqual(response.status_code, 400)
+
+
+class ViewDensityEndpointTests(unittest.TestCase):
+    def test_sets_compact(self):
+        with patch("main.db.set_view_density", return_value={"id": True, "view_density": "compact"}) as mock_set:
+            response = client.put("/api/view-density", json={"density": "compact"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["view_density"], "compact")
+        mock_set.assert_called_once_with("compact")
+
+    def test_sets_comfort(self):
+        with patch("main.db.set_view_density", return_value={"id": True, "view_density": "comfort"}) as mock_set:
+            response = client.put("/api/view-density", json={"density": "comfort"})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("comfort")
+
+    def test_rejects_invalid_density(self):
+        response = client.put("/api/view-density", json={"density": "tiny"})
         self.assertEqual(response.status_code, 400)
 
 

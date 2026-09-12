@@ -46,6 +46,7 @@ if ("serviceWorker" in navigator) {
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
   tr.row { cursor: pointer; }
@@ -295,7 +296,12 @@ function makeRowKeyboardNavigable(row) {
   });
 }
 
-const PAGE_SIZE = 40;
+let PAGE_SIZE = 40;
+fetch("/api/app-status").then((r) => r.json()).then((body) => {
+  PAGE_SIZE = body.page_size || 40;
+  document.body.classList.toggle("compact", body.view_density === "compact");
+  renderCurrentView();
+}).catch(() => {});
 let currentPage = 0;
 
 const qInput = document.getElementById("q");
