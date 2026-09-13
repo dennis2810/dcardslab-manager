@@ -616,3 +616,10 @@ alter table cards add column if not exists grading_condition_note text not null 
 -- ihren eigenen manual_sales-Eintrag (Preis/Versand/Gebuehren gleichmaessig
 -- aufgeteilt), lot_id verknuepft die zusammengehoerigen Eintraege nur lose.
 alter table manual_sales add column if not exists lot_id uuid;
+
+-- Wunschliste: Karte per Checkbox als "erreicht" (bereits erworben/nicht mehr
+-- gesucht) abhaken, ohne den Eintrag gleich zu loeschen - fuer den
+-- Erreichungsbalken auf wishlist.html. Ein abgehakter Eintrag wird ausserdem
+-- von der automatischen Preispruefung/Wiedervorlage ausgenommen (siehe
+-- db.list_wishlist_items_due_for_price_check()/list_stale_wishlist_items()).
+alter table wishlist_items add column if not exists acquired boolean not null default false;

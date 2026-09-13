@@ -2573,6 +2573,16 @@ class UpdateWishlistItemTests(unittest.TestCase):
             result = db.update_wishlist_item("does-not-exist", {"title": "x"})
         self.assertIsNone(result)
 
+    def test_acquired_flag_is_writable(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "acquired": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_item("w1", {"acquired": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"acquired": True})
+
 
 class DeleteWishlistItemTests(unittest.TestCase):
     def test_deletes_and_returns_entry(self):
@@ -2630,6 +2640,18 @@ class ListWishlistItemsDueForPriceCheckTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.list_wishlist_items_due_for_price_check(limit=2)
         self.assertEqual(len(result), 2)
+
+    def test_excludes_acquired_items(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": None, "acquired": True},
+            {"id": "w2", "last_price_check_at": None, "acquired": False},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2"])
 
 
 class UpdateWishlistPriceCheckTests(unittest.TestCase):
@@ -3718,6 +3740,21 @@ class ListStaleWishlistItemsTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [{"id": "w1", "created_at": recent, "target_price": 10, "last_match_price": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual(result, [])
+
+    def test_excludes_acquired_item(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_created = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{
+            "id": "w1", "created_at": old_created, "target_price": 10,
+            "last_match_price": None, "acquired": True,
+        }]
         mock_client.table.return_value.select.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.list_stale_wishlist_items()

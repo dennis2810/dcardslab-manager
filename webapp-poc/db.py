@@ -1378,7 +1378,7 @@ def delete_manual_sale(sale_id):
     return response.data[0]
 
 
-WISHLIST_FIELDS = ["title", "team", "set_name", "target_price", "notes"]
+WISHLIST_FIELDS = ["title", "team", "set_name", "target_price", "notes", "acquired"]
 WISHLIST_NUMERIC_FIELDS = {"target_price"}
 WISHLIST_MONEY_FIELDS = {"target_price"}
 
@@ -1431,7 +1431,8 @@ def list_wishlist_items_due_for_price_check(limit=3, max_age_days=1):
     cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
     due = [
         row for row in response.data
-        if not row.get("last_price_check_at") or row["last_price_check_at"] <= cutoff_iso
+        if not row.get("acquired")
+        and (not row.get("last_price_check_at") or row["last_price_check_at"] <= cutoff_iso)
     ]
     due.sort(key=lambda row: row.get("last_price_check_at") or "")
     return due[:limit]
@@ -1877,6 +1878,8 @@ def list_stale_wishlist_items(min_days=60):
     cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=min_days)).isoformat()
     stale = []
     for row in response.data:
+        if row.get("acquired"):
+            continue
         if row.get("created_at", "") > cutoff_iso:
             continue
         target = row.get("target_price")

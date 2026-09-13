@@ -24,13 +24,14 @@ if ("serviceWorker" in navigator) {
     color-scheme: light dark;
     --hover-bg: #f7f7f7; --detail-bg: #fafafa;
     --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --neutral-bg: #eee;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --detail-bg: #202020;
-      --success-bg: #1c3324; --success-fg: #7fd99a; }
+      --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
   }
   :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --detail-bg: #202020;
-    --success-bg: #1c3324; --success-fg: #7fd99a; }
+    --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
   :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
@@ -50,6 +51,12 @@ if ("serviceWorker" in navigator) {
     table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
     table td button, table td a { padding: 0.4rem 0.7rem; }
   }
+  .progress-block { margin: 0.75rem 0 1.25rem; }
+  .progress-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .progress-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; }
+  .progress-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
+  tr.acquired-row { opacity: 0.6; }
+  tr.acquired-row td:nth-child(4) { text-decoration: line-through; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -57,9 +64,9 @@ if ("serviceWorker" in navigator) {
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   /* Frei wählbare Tabellenspalten (je Browser, localStorage) - gleiches
      Prinzip wie cards.html/ebay.html/inventory.html. */
-  #items-table.hide-col-4 th:nth-child(4), #items-table.hide-col-4 td:nth-child(4) { display: none; }
   #items-table.hide-col-5 th:nth-child(5), #items-table.hide-col-5 td:nth-child(5) { display: none; }
-  #items-table.hide-col-8 th:nth-child(8), #items-table.hide-col-8 td:nth-child(8) { display: none; }
+  #items-table.hide-col-6 th:nth-child(6), #items-table.hide-col-6 td:nth-child(6) { display: none; }
+  #items-table.hide-col-9 th:nth-child(9), #items-table.hide-col-9 td:nth-child(9) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   tr:hover { background: var(--hover-bg); }
@@ -133,6 +140,15 @@ if ("serviceWorker" in navigator) {
   <p class="empty-state">Karten, die (noch) nicht im Besitz sind – bewusst getrennt von der Kartenübersicht, damit
     Bestand und Auswertungen unberührt bleiben.</p>
 
+  <div class="progress-block">
+    <div class="progress-header">
+      <span id="progress-text">0 von 0 Karten erreicht</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar-fill"></div>
+    </div>
+  </div>
+
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
     <label><input type="checkbox" id="sourcing-only-filter"> Nur Sourcing-Treffer anzeigen</label>
@@ -178,6 +194,7 @@ if ("serviceWorker" in navigator) {
       <thead>
         <tr>
           <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+          <th title="Erreicht">✓</th>
           <th></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
@@ -270,9 +287,9 @@ let currentPage = 0;
 // (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
 // der Tabelle aus-/einblenden statt bedingt zu rendern.
 const COLUMN_TOGGLES = [
-  { key: "team", label: "Team", index: 4 },
-  { key: "set_name", label: "Set", index: 5 },
-  { key: "note", label: "Notiz", index: 8 },
+  { key: "team", label: "Team", index: 5 },
+  { key: "set_name", label: "Set", index: 6 },
+  { key: "note", label: "Notiz", index: 9 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "wishlist_hidden_columns";
 let hiddenColumns = new Set();
@@ -766,7 +783,7 @@ function buildDetailRow(item) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 9;
+  td.colSpan = 10;
 
   const sparkline = buildPriceSparkline(item.price_history);
   if (sparkline) {
@@ -819,6 +836,45 @@ function buildDetailRow(item) {
   return tr;
 }
 
+function renderProgress() {
+  const total = allItems.length;
+  const acquiredCount = allItems.filter((i) => i.acquired).length;
+  const pct = total ? Math.round((acquiredCount / total) * 100) : 0;
+  document.getElementById("progress-text").textContent = `${acquiredCount} von ${total} Karten erreicht`;
+  document.getElementById("progress-bar-fill").style.width = `${pct}%`;
+}
+
+// Karte per Checkbox als "erreicht" abhaken (z.B. bereits erworben oder
+// nicht mehr gesucht), ohne den Eintrag gleich zu loeschen - speist den
+// Erreichungsbalken oben. Optimistisches Update mit Rollback bei Fehler,
+// damit die Checkbox sofort reagiert statt auf die Antwort zu warten.
+async function toggleAcquired(item, acquired) {
+  item.acquired = acquired;
+  renderProgress();
+  render();
+  try {
+    const res = await fetch(`/api/wishlist/${encodeURIComponent(item.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acquired }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      item.acquired = !acquired;
+      renderProgress();
+      render();
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast(acquired ? "Als erreicht markiert." : "Markierung entfernt.");
+  } catch (err) {
+    item.acquired = !acquired;
+    renderProgress();
+    render();
+    showToast("Fehler: " + err, true);
+  }
+}
+
 function render() {
   const sorted = sortedItems();
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -867,6 +923,18 @@ function render() {
     });
     checkTd.appendChild(checkbox);
     tr.appendChild(checkTd);
+
+    const acquiredTd = document.createElement("td");
+    const acquiredCheckbox = document.createElement("input");
+    acquiredCheckbox.type = "checkbox";
+    acquiredCheckbox.className = "no-print";
+    acquiredCheckbox.title = "Als erreicht abhaken";
+    acquiredCheckbox.checked = Boolean(item.acquired);
+    acquiredCheckbox.addEventListener("change", () => toggleAcquired(item, acquiredCheckbox.checked));
+    acquiredTd.appendChild(acquiredCheckbox);
+    tr.appendChild(acquiredTd);
+
+    if (item.acquired) tr.classList.add("acquired-row");
 
     const toggleTd = document.createElement("td");
     const toggleBtn = document.createElement("button");
@@ -929,6 +997,7 @@ async function loadItems() {
     statusMsg.textContent = "";
     allItems = responseBody.items || [];
     currentPage = 0;
+    renderProgress();
     render();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
