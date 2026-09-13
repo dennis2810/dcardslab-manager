@@ -26,20 +26,23 @@ if ("serviceWorker" in navigator) {
     --accent-bg: #f0f4f8; --accent-border: #d5dee6;
     --success-bg: #e6f4ea; --success-fg: #1e4620;
     --danger-bg: #fdecea; --danger-fg: #611a15;
-    --info-fg: #0b3d91; --warn-fg: #7a5c00;
+    --info-bg: #cce5ff; --info-fg: #0b3d91;
+    --warn-bg: #fff3cd; --warn-fg: #7a5c00;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --placeholder-bg: #2a2a2a;
       --accent-bg: #1d2733; --accent-border: #3a4a5a;
       --success-bg: #1c3324; --success-fg: #7fd99a;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82;
-      --info-fg: #8ab4f8; --warn-fg: #ffd866; }
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866; }
   }
   :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --placeholder-bg: #2a2a2a;
       --accent-bg: #1d2733; --accent-border: #3a4a5a;
       --success-bg: #1c3324; --success-fg: #7fd99a;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82;
-      --info-fg: #8ab4f8; --warn-fg: #ffd866; }
+      --info-bg: #1d2c44; --info-fg: #8ab4f8;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866; }
   :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
@@ -128,6 +131,12 @@ if ("serviceWorker" in navigator) {
   .listing-tile:hover { background: var(--hover-bg); }
   .listing-tile img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
   .listing-tile .title { font-weight: 600; margin-top: 0.4rem; }
+  /* Gleiche Badges/Klassen wie cards.html's Kachelansicht - Warnhinweise
+     (Doppelverkauf/Privatentnahme/haengengebliebenes "Geplant") sowie
+     Status-Badges (Zugestellt/Retoure/neu eingestellt/importiert/lange
+     gelistet), damit beide Kachelansichten optisch/inhaltlich analog sind. */
+  .listing-tile .manual-sale-badge, .listing-tile .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
+  .listing-tile .imported-badge { display: inline-block; font-size: 0.8rem; margin-top: 0.2rem; margin-left: 0.15rem; cursor: help; }
   .listing-tile .meta { font-size: 0.8rem; color: #555; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
@@ -923,8 +932,75 @@ function renderGrid(pageItems) {
     }
     tile.appendChild(statusEl);
 
+    // Restliche Badges analog zu cards.html's Kachelansicht (gleiche
+    // Klassen/Optik) - in der Tabelle stecken dieselben Infos als Icons in
+    // der Status-/"Eingestellt am"-Spalte, hier als eigene Badge-Zeilen.
+    const delivered = ebayDeliveredBadge(listing);
+    if (delivered) tile.appendChild(delivered);
+
+    const refunded = ebayRefundedBadge(listing);
+    if (refunded) tile.appendChild(refunded);
+
+    const relisted = ebayRelistedBadge(listing);
+    if (relisted) tile.appendChild(relisted);
+
+    const longListedEl = ebayLongListedBadge(listing);
+    if (longListedEl) tile.appendChild(longListedEl);
+
+    const imported = ebayImportedBadge(listing);
+    if (imported) tile.appendChild(imported);
+
     grid.appendChild(tile);
   }
+}
+
+function ebayDeliveredBadge(listing) {
+  if (listing.status !== "Verkauft" || !listing.delivered) return null;
+  const badge = document.createElement("span");
+  badge.className = "shipped-badge";
+  badge.textContent = "Zugestellt";
+  return badge;
+}
+
+function ebayRefundedBadge(listing) {
+  if (listing.status !== "Verkauft" || !listing.refunded) return null;
+  const badge = document.createElement("span");
+  badge.className = "manual-sale-badge";
+  badge.textContent = "Retoure";
+  return badge;
+}
+
+// Icon-only wie cards.html's relistedBadge() - ein voller Text-Badge wuerde
+// neben den anderen Badges die Kachelbreite sprengen.
+function ebayRelistedBadge(listing) {
+  if (!listing.last_auto_relisted_at) return null;
+  const badge = document.createElement("span");
+  badge.className = "imported-badge";
+  badge.textContent = "🔄";
+  badge.title = `Neu eingestellt am ${formatDateTime(listing.last_auto_relisted_at)}`;
+  return badge;
+}
+
+// Gleicher Schwellwert wie die "Eingestellt am"-Spalte der Tabelle/das
+// Dashboard unter "Was jetzt tun?" (LONG_LISTED_DAYS, dupliziert).
+function ebayLongListedBadge(listing) {
+  if (listing.status !== "Veroeffentlicht" || !listing.listing_since) return null;
+  const days = Math.floor((Date.now() - new Date(listing.listing_since).getTime()) / (24 * 60 * 60 * 1000));
+  if (days <= LONG_LISTED_DAYS) return null;
+  const badge = document.createElement("span");
+  badge.className = "imported-badge";
+  badge.textContent = "⏳";
+  badge.title = `Seit ${days} Tagen auf eBay gelistet, ohne Verkauf.`;
+  return badge;
+}
+
+function ebayImportedBadge(listing) {
+  if (listing.status !== "Veroeffentlicht" || listing.ebay_offer_id) return null;
+  const badge = document.createElement("span");
+  badge.className = "imported-badge";
+  badge.textContent = "📥";
+  badge.title = "Importiertes eBay-Angebot - wird nicht vom Tool verwaltet (Preisänderungen/Beenden nur direkt auf eBay).";
+  return badge;
 }
 
 function renderSums(listings) {
