@@ -199,6 +199,24 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
+    <h3>Kamera-Barcode-Scan im Kassenmodus <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Das Suchfeld im Kassenmodus (<code>pos.html</code>) nimmt bereits Eingaben von externen USB-/Bluetooth-
+      Barcode-/QR-Scannern entgegen (die tippen wie eine Tastatur + Enter). Direkt im Browser mit der Handykamera
+      scannen, ganz ohne separates Scanner-Gerät oder App, geht damit aber noch nicht – dafür fehlt Kamerazugriff
+      (<code>getUserMedia</code>) plus eine Decoding-Bibliothek. Die native <code>BarcodeDetector</code>-API würde
+      ohne zusätzlichen Code auskommen, wird aber von Safari/iPhone nicht unterstützt; für geräteunabhängige
+      Zuverlässigkeit bräuchte es eine selbst gehostete JS-Bibliothek (z. B. jsQR, analog zum bereits vendorten
+      <code>vendor/qrcode.js</code> für die Etiketten-Erzeugung – kein CDN-Aufruf, PWA-/Offline-tauglich).</p>
+    <p>Klärungsbedarf: Die bestehenden QR-Etiketten (<code>cards.html</code>/<code>card.html</code>) codieren
+      aktuell eine URL (<code>card.html?id=...</code>), keine rohe SKU – ein gescannter Code müsste entweder per
+      ID nachschlagen statt über die Text-Suche zu laufen, oder die Etikettenerzeugung müsste zusätzlich die SKU
+      codieren. Außerdem: reicht QR-Codes lesen (kleinerer Aufwand, deckt die eigenen Etiketten ab) oder sollen
+      auch echte 1D-Barcodes (EAN/Code128, z. B. von Drittanbieter-Etiketten) erkannt werden (deutlich größerer
+      Aufwand wegen einer schwereren Bibliothek und mehr Testaufwand über Geräte/Lichtverhältnisse hinweg)?</p>
+  </div>
+
+  <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
     <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
