@@ -586,3 +586,24 @@ create table if not exists business_expenses (
     note          text not null default '',
     created_at    timestamptz not null default now()
 );
+
+-- Jahresabschluss-Sperre: ein bereits eingereichtes/abgeschlossenes EUER-
+-- Jahr laesst sich hierueber gegen nachtraegliche Aenderungen an den
+-- sonstigen Betriebsausgaben sperren (siehe main.py's is_euer_year_locked()-
+-- Pruefung in den business-expenses-Endpoints) - reine Existenz einer Zeile
+-- bedeutet "gesperrt", kein zusaetzliches Flag noetig.
+create table if not exists locked_euer_years (
+    year       integer primary key,
+    locked_at  timestamptz not null default now()
+);
+
+-- Grading-Tracking (PSA/BGS/SGC/...): Status eines optionalen Einsende-
+-- Vorgangs direkt auf der Karte statt einer eigenen Tabelle, da hoechstens
+-- eine aktive/letzte Einsendung pro Karte relevant ist (siehe db.py's
+-- GRADING_FIELDS/update_card()). grading_status leer = kein Grading.
+alter table cards add column if not exists grading_status text not null default '';
+alter table cards add column if not exists grading_company text not null default '';
+alter table cards add column if not exists grading_submitted_at timestamptz;
+alter table cards add column if not exists grading_received_at timestamptz;
+alter table cards add column if not exists grading_cost numeric;
+alter table cards add column if not exists grading_grade text not null default '';

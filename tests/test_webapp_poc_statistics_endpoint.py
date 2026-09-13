@@ -263,6 +263,10 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(team_ranking[1]["name"], "FC Bayern")
         self.assertEqual(team_ranking[1]["profit"], 9.0)
         self.assertEqual(team_ranking[1]["count"], 2)
+        # Verkaufsgeschwindigkeit: Real Madrid 1.1.-1.2. = 31 Tage; FC Bayern
+        # (1.1.-15.1. = 14 Tage, 1.1.-20.1. = 19 Tage) im Schnitt 16.5 Tage.
+        self.assertEqual(team_ranking[0]["avg_holding_days"], 31.0)
+        self.assertEqual(team_ranking[1]["avg_holding_days"], 16.5)
 
         set_ranking = body["set_ranking"]
         self.assertEqual(len(set_ranking), 2)
@@ -380,7 +384,8 @@ class EuerEndpointTests(unittest.TestCase):
             "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
         }]
         with patch("main.db.statistics_rows", return_value=rows), \
-                patch("main.db.list_business_expenses", return_value=[]):
+                patch("main.db.list_business_expenses", return_value=[]), \
+                patch("main.db.is_euer_year_locked", return_value=False):
             response_2025 = client.get("/api/euer", params={"year": 2025})
             response_2026 = client.get("/api/euer", params={"year": 2026})
         body_2025 = response_2025.json()
@@ -397,7 +402,8 @@ class EuerEndpointTests(unittest.TestCase):
             "shipping_charged": 4.0, "shipping_cost": 3.0, "ebay_fees": 1.0, "refunded": True,
         }]
         with patch("main.db.statistics_rows", return_value=rows), \
-                patch("main.db.list_business_expenses", return_value=[]):
+                patch("main.db.list_business_expenses", return_value=[]), \
+                patch("main.db.is_euer_year_locked", return_value=False):
             response = client.get("/api/euer", params={"year": 2026})
         body = response.json()
         self.assertEqual(next(i["amount"] for i in body["income"] if i["label"] == "Verkaufserlöse"), 0.0)
@@ -411,7 +417,8 @@ class EuerEndpointTests(unittest.TestCase):
             {"id": "e2", "expense_date": "2025-12-01", "category": "Porto", "amount": 99.0, "note": ""},
         ]
         with patch("main.db.statistics_rows", return_value=[]), \
-                patch("main.db.list_business_expenses", return_value=expenses):
+                patch("main.db.list_business_expenses", return_value=expenses), \
+                patch("main.db.is_euer_year_locked", return_value=False):
             response = client.get("/api/euer", params={"year": 2026})
         body = response.json()
         self.assertEqual(
@@ -424,7 +431,8 @@ class EuerEndpointTests(unittest.TestCase):
             "sale_date": "2026-01-11T00:00:00+00:00", "sale_price": 15.0,
         }]
         with patch("main.db.statistics_rows", return_value=rows), \
-                patch("main.db.list_business_expenses", return_value=[]):
+                patch("main.db.list_business_expenses", return_value=[]), \
+                patch("main.db.is_euer_year_locked", return_value=False):
             response = client.get("/api/euer", params={"year": 2026})
         body = response.json()
         self.assertEqual(body["income_total"], 15.0)
@@ -433,10 +441,77 @@ class EuerEndpointTests(unittest.TestCase):
 
     def test_defaults_to_current_year_when_year_omitted(self):
         with patch("main.db.statistics_rows", return_value=[]), \
-                patch("main.db.list_business_expenses", return_value=[]):
+                patch("main.db.list_business_expenses", return_value=[]), \
+                patch("main.db.is_euer_year_locked", return_value=False):
             response = client.get("/api/euer")
         self.assertEqual(response.status_code, 200)
         self.assertIn("year", response.json())
+
+    def test_locked_flag_reflects_is_euer_year_locked(self):
+        with patch("main.db.statistics_rows", return_value=[]), \
+                patch("main.db.list_business_expenses", return_value=[]), \
+                patch("main.db.is_euer_year_locked", return_value=True) as mock_locked:
+            response = client.get("/api/euer", params={"year": 2026})
+        self.assertTrue(response.json()["locked"])
+        mock_locked.assert_called_once_with(2026)
+
+
+class EuerLockedYearsEndpointTests(unittest.TestCase):
+    def test_lists_locked_years(self):
+        with patch("main.db.list_locked_euer_years", return_value=[2024, 2025]):
+            response = client.get("/api/euer/locked-years")
+        self.assertEqual(response.json()["years"], [2024, 2025])
+
+    def test_locks_a_year(self):
+        with patch("main.db.lock_euer_year", return_value={"year": 2025}) as mock_lock:
+            response = client.post("/api/euer/locked-years/2025")
+        self.assertEqual(response.status_code, 200)
+        mock_lock.assert_called_once_with(2025)
+
+    def test_unlocks_a_year(self):
+        with patch("main.db.unlock_euer_year") as mock_unlock:
+            response = client.delete("/api/euer/locked-years/2025")
+        self.assertEqual(response.status_code, 204)
+        mock_unlock.assert_called_once_with(2025)
+
+
+class BusinessExpenseLockGuardTests(unittest.TestCase):
+    def test_create_rejected_when_year_locked(self):
+        with patch("main.db.is_euer_year_locked", return_value=True):
+            response = client.post("/api/business-expenses", json={"expense_date": "2025-06-01", "amount": 5})
+        self.assertEqual(response.status_code, 409)
+
+    def test_create_allowed_when_year_not_locked(self):
+        with patch("main.db.is_euer_year_locked", return_value=False), \
+                patch("main.db.create_business_expense", return_value={"id": "e1"}):
+            response = client.post("/api/business-expenses", json={"expense_date": "2026-06-01", "amount": 5})
+        self.assertEqual(response.status_code, 200)
+
+    def test_update_rejected_when_existing_expense_year_locked(self):
+        with patch("main.db.get_business_expense", return_value={"id": "e1", "expense_date": "2025-06-01"}), \
+                patch("main.db.is_euer_year_locked", return_value=True):
+            response = client.patch("/api/business-expenses/e1", json={"amount": 9})
+        self.assertEqual(response.status_code, 409)
+
+    def test_update_rejected_when_moving_into_locked_year(self):
+        with patch("main.db.get_business_expense", return_value={"id": "e1", "expense_date": "2026-06-01"}), \
+                patch("main.db.is_euer_year_locked", return_value=True) as mock_locked:
+            response = client.patch("/api/business-expenses/e1", json={"expense_date": "2025-01-01"})
+        self.assertEqual(response.status_code, 409)
+        mock_locked.assert_called_once_with(2025)
+
+    def test_delete_rejected_when_existing_expense_year_locked(self):
+        with patch("main.db.get_business_expense", return_value={"id": "e1", "expense_date": "2025-06-01"}), \
+                patch("main.db.is_euer_year_locked", return_value=True):
+            response = client.delete("/api/business-expenses/e1")
+        self.assertEqual(response.status_code, 409)
+
+    def test_delete_allowed_when_year_not_locked(self):
+        with patch("main.db.get_business_expense", return_value={"id": "e1", "expense_date": "2026-06-01"}), \
+                patch("main.db.is_euer_year_locked", return_value=False), \
+                patch("main.db.delete_business_expense", return_value={"id": "e1"}):
+            response = client.delete("/api/business-expenses/e1")
+        self.assertEqual(response.status_code, 204)
 
 
 if __name__ == "__main__":

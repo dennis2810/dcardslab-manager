@@ -1378,14 +1378,28 @@ async def list_business_expenses():
     return JSONResponse({"expenses": db.list_business_expenses()})
 
 
+def _year_from_date_str(date_str):
+    return int(str(date_str)[:4]) if date_str else None
+
+
+def _raise_if_euer_year_locked(year):
+    if year is not None and db.is_euer_year_locked(year):
+        raise HTTPException(status_code=409, detail=f"Das Jahr {year} ist für die EÜR gesperrt.")
+
+
 @app.post("/api/business-expenses")
 async def create_business_expense(fields: dict = Body(default={})):
+    _raise_if_euer_year_locked(_year_from_date_str(fields.get("expense_date")))
     created = db.create_business_expense(fields)
     return JSONResponse(created)
 
 
 @app.patch("/api/business-expenses/{expense_id}")
 async def update_business_expense(expense_id: str, fields: dict = Body(...)):
+    existing = db.get_business_expense(expense_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
+    _raise_if_euer_year_locked(_year_from_date_str(fields.get("expense_date", existing.get("expense_date"))))
     updated = db.update_business_expense(expense_id, fields)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
@@ -1394,6 +1408,10 @@ async def update_business_expense(expense_id: str, fields: dict = Body(...)):
 
 @app.delete("/api/business-expenses/{expense_id}", status_code=204)
 async def delete_business_expense(expense_id: str):
+    existing = db.get_business_expense(expense_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
+    _raise_if_euer_year_locked(_year_from_date_str(existing.get("expense_date")))
     deleted = db.delete_business_expense(expense_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail=f"Ausgabe {expense_id} nicht gefunden.")
@@ -1683,7 +1701,8 @@ def _rank_statistics_by(enriched_rows, field):
     # tatsaechlich verkaufte Karten (profit bekannt) nach Team bzw. Set und
     # sortiert nach Gesamtgewinn absteigend - Karten ohne Team/Set-Angabe
     # (leerer String) fliessen nicht mit ein, da sie keine sinnvolle Gruppe
-    # bilden wuerden.
+    # bilden wuerden. avg_holding_days ("Verkaufsgeschwindigkeit") zeigt
+    # zusaetzlich, wie schnell sich eine Gruppe im Schnitt verkauft.
     groups = {}
     for row in enriched_rows:
         if row["profit"] is None:
@@ -1691,14 +1710,26 @@ def _rank_statistics_by(enriched_rows, field):
         key = (row.get(field) or "").strip()
         if not key:
             continue
-        group = groups.setdefault(key, {"name": key, "count": 0, "revenue": 0.0, "profit": 0.0})
+        group = groups.setdefault(key, {
+            "name": key, "count": 0, "revenue": 0.0, "profit": 0.0,
+            "_holding_days_sum": 0, "_holding_days_count": 0,
+        })
         group["count"] += 1
         group["revenue"] += float(row.get("sale_price") or 0)
         group["profit"] += row["profit"]
+        if row.get("holding_days") is not None:
+            group["_holding_days_sum"] += row["holding_days"]
+            group["_holding_days_count"] += 1
     ranked = sorted(groups.values(), key=lambda g: g["profit"], reverse=True)
     for group in ranked:
         group["revenue"] = round(group["revenue"], 2)
         group["profit"] = round(group["profit"], 2)
+        group["avg_holding_days"] = (
+            round(group["_holding_days_sum"] / group["_holding_days_count"], 1)
+            if group["_holding_days_count"] else None
+        )
+        del group["_holding_days_sum"]
+        del group["_holding_days_count"]
     return ranked
 
 
@@ -1809,6 +1840,7 @@ def _compute_euer(year):
         "expenses": expenses,
         "expense_total": expense_total,
         "profit": round(income_total - expense_total, 2),
+        "locked": db.is_euer_year_locked(year),
     }
 
 
@@ -1816,6 +1848,22 @@ def _compute_euer(year):
 async def get_euer(year: int | None = None):
     year = year or datetime.now(timezone.utc).year
     return JSONResponse(_compute_euer(year))
+
+
+@app.get("/api/euer/locked-years")
+async def list_locked_euer_years():
+    return JSONResponse({"years": db.list_locked_euer_years()})
+
+
+@app.post("/api/euer/locked-years/{year}")
+async def lock_euer_year(year: int):
+    return JSONResponse(db.lock_euer_year(year))
+
+
+@app.delete("/api/euer/locked-years/{year}", status_code=204)
+async def unlock_euer_year(year: int):
+    db.unlock_euer_year(year)
+    return Response(status_code=204)
 
 
 DASHBOARD_GOAL_METRICS = {"revenue", "profit"}

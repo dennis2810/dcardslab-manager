@@ -210,7 +210,7 @@ if ("serviceWorker" in navigator) {
         <option value="">– keiner –</option>
       </select>
     </label>
-    <button type="button" id="bulk-print-labels">🏷️ Etiketten drucken</button>
+    <button type="button" id="bulk-print-labels">🏷️ QR-Etiketten drucken</button>
     <label>Zu Kauf hinzufügen
       <select id="bulk-add-purchase-select">
         <option value="">– Kauf wählen –</option>
@@ -258,6 +258,7 @@ if ("serviceWorker" in navigator) {
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
+<script src="vendor/qrcode.js"></script>
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
 // von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
@@ -1198,9 +1199,12 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// Einfache Text-Etiketten (SKU/Team/Saison/Titel), kein echtes Barcode-
-// Symbol - vermeidet eine externe Barcode-Bibliothek fuer ein Nice-to-have;
-// oeffnet ein eigenes Fenster statt window.print() auf der Kartenseite
+// Text-Etiketten (SKU/Team/Saison/Titel) plus echter QR-Code, der auf
+// diese Kartenseite zurueckverlinkt (card.html?id=...) - gleiches Prinzip
+// wie printLocationLabels() auf inventory.html: qrcode.js ist bereits lokal
+// vendort (MIT-lizenziert, kein CDN-Aufruf). Praktisch zum Aufkleben auf
+// Ordner/Toploader - ein Scan mit dem Handy oeffnet direkt die Kartenseite.
+// Oeffnet ein eigenes Fenster statt window.print() auf der Kartenseite
 // selbst, damit Filter/Layout der Kartenliste unberuehrt bleiben.
 function printLabels(cards) {
   const win = window.open("", "_blank");
@@ -1208,19 +1212,29 @@ function printLabels(cards) {
     alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
     return;
   }
-  const rows = cards.map((c) => `
+  const rows = cards.map((c) => {
+    const url = `${location.origin}/card.html?id=${encodeURIComponent(c.id)}`;
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    return `
     <div class="label">
-      <div class="sku">${escapeHtml(c.ebay_sku || "(keine SKU)")}</div>
-      <div class="meta">${escapeHtml([c.team, c.season_year].filter(Boolean).join(" · "))}</div>
-      <div class="title">${escapeHtml(c.title || "(ohne Titel)")}</div>
+      ${qr.createSvgTag(2)}
+      <div class="label-text">
+        <div class="sku">${escapeHtml(c.ebay_sku || "(keine SKU)")}</div>
+        <div class="meta">${escapeHtml([c.team, c.season_year].filter(Boolean).join(" · "))}</div>
+        <div class="title">${escapeHtml(c.title || "(ohne Titel)")}</div>
+      </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
   win.document.write(`<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><title>Etiketten</title>
 <style>
   body { font-family: system-ui, sans-serif; margin: 1rem; }
   .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
-  .label { border: 1px solid #999; border-radius: 4px; padding: 0.4rem 0.5rem; page-break-inside: avoid; }
+  .label { display: flex; align-items: center; gap: 0.4rem; border: 1px solid #999; border-radius: 4px; padding: 0.4rem 0.5rem; page-break-inside: avoid; }
+  .label svg { width: 48px; height: 48px; flex-shrink: 0; }
   .label .sku { font-weight: 700; font-size: 0.85rem; }
   .label .meta { font-size: 0.7rem; color: #555; }
   .label .title { font-size: 0.75rem; margin-top: 0.15rem; }

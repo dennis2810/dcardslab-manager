@@ -82,6 +82,7 @@ if ("serviceWorker" in navigator) {
   label.checkbox-field { flex-direction: row; align-items: center; gap: 0.4rem; }
   input { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
   .actions { grid-column: 1 / -1; display: flex; gap: 0.75rem; margin-top: 1rem; }
+  .grading-heading { grid-column: 1 / -1; font-size: 1.05rem; margin: 0.5rem 0 0; padding-top: 0.75rem; border-top: 1px solid #ddd; }
   button { padding: 0.6rem 1.2rem; font-size: 1rem; cursor: pointer; }
   #delete-btn { background: #b00020; color: white; border: none; border-radius: 4px; }
   #private-collection-btn { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
@@ -792,6 +793,78 @@ function render(card) {
   tagsWrapper.appendChild(tagsInput);
   form.appendChild(tagsWrapper);
 
+  const gradingHeading = document.createElement("h3");
+  gradingHeading.className = "grading-heading";
+  gradingHeading.textContent = "Grading";
+  form.appendChild(gradingHeading);
+
+  const gradingCompanyWrapper = document.createElement("label");
+  gradingCompanyWrapper.textContent = "Grading-Unternehmen";
+  const gradingCompanySelect = document.createElement("select");
+  gradingCompanySelect.name = "grading_company";
+  for (const value of ["", "PSA", "BGS", "SGC", "Sonstiges"]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value || "– keine –";
+    if ((card.grading_company || "") === value) option.selected = true;
+    gradingCompanySelect.appendChild(option);
+  }
+  gradingCompanyWrapper.appendChild(gradingCompanySelect);
+  form.appendChild(gradingCompanyWrapper);
+
+  const gradingStatusWrapper = document.createElement("label");
+  gradingStatusWrapper.textContent = "Grading-Status";
+  const gradingStatusSelect = document.createElement("select");
+  gradingStatusSelect.name = "grading_status";
+  for (const value of ["", "Eingeschickt", "In Bearbeitung", "Zurück"]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value || "– keiner –";
+    if ((card.grading_status || "") === value) option.selected = true;
+    gradingStatusSelect.appendChild(option);
+  }
+  gradingStatusWrapper.appendChild(gradingStatusSelect);
+  form.appendChild(gradingStatusWrapper);
+
+  const gradingSubmittedWrapper = document.createElement("label");
+  gradingSubmittedWrapper.textContent = "Eingeschickt am";
+  const gradingSubmittedInput = document.createElement("input");
+  gradingSubmittedInput.type = "date";
+  gradingSubmittedInput.name = "grading_submitted_at";
+  gradingSubmittedInput.value = card.grading_submitted_at ? card.grading_submitted_at.slice(0, 10) : "";
+  gradingSubmittedWrapper.appendChild(gradingSubmittedInput);
+  form.appendChild(gradingSubmittedWrapper);
+
+  const gradingReceivedWrapper = document.createElement("label");
+  gradingReceivedWrapper.textContent = "Zurückerhalten am";
+  const gradingReceivedInput = document.createElement("input");
+  gradingReceivedInput.type = "date";
+  gradingReceivedInput.name = "grading_received_at";
+  gradingReceivedInput.value = card.grading_received_at ? card.grading_received_at.slice(0, 10) : "";
+  gradingReceivedWrapper.appendChild(gradingReceivedInput);
+  form.appendChild(gradingReceivedWrapper);
+
+  const gradingCostWrapper = document.createElement("label");
+  gradingCostWrapper.textContent = "Grading-Kosten (€)";
+  const gradingCostInput = document.createElement("input");
+  gradingCostInput.type = "number";
+  gradingCostInput.step = "0.01";
+  gradingCostInput.name = "grading_cost";
+  gradingCostInput.value = card.grading_cost ?? "";
+  gradingCostWrapper.appendChild(gradingCostInput);
+  form.appendChild(gradingCostWrapper);
+
+  const gradingGradeWrapper = document.createElement("label");
+  gradingGradeWrapper.textContent = "Grade/Note";
+  gradingGradeWrapper.title = "Das Ergebnis, z. B. 9, 9.5 oder Gem Mt 10";
+  const gradingGradeInput = document.createElement("input");
+  gradingGradeInput.type = "text";
+  gradingGradeInput.name = "grading_grade";
+  gradingGradeInput.placeholder = "z. B. 9.5";
+  gradingGradeInput.value = card.grading_grade ?? "";
+  gradingGradeWrapper.appendChild(gradingGradeInput);
+  form.appendChild(gradingGradeWrapper);
+
   const actions = document.createElement("div");
   actions.className = "actions";
 
@@ -874,6 +947,12 @@ form.addEventListener("submit", async (ev) => {
   fields.shipped = form.elements["shipped"].checked;
   fields.picked_up = form.elements["picked_up"].checked;
   fields.tags = form.elements["tags"].value;
+  fields.grading_company = form.elements["grading_company"].value;
+  fields.grading_status = form.elements["grading_status"].value;
+  fields.grading_submitted_at = form.elements["grading_submitted_at"].value || null;
+  fields.grading_received_at = form.elements["grading_received_at"].value || null;
+  fields.grading_cost = form.elements["grading_cost"].value;
+  fields.grading_grade = form.elements["grading_grade"].value;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
   statusP.className = "";
