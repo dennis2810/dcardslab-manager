@@ -120,6 +120,10 @@ if ("serviceWorker" in navigator) {
      zusaetzlich zur Tabelle, nicht als Ersatz (Bulk-Aktionen/Sortierung
      bleiben tabellenspezifisch). */
   #listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
+  /* Oben rechts neben dem Sport/Non-Sport-Filter statt unten bei der
+     Pagination - schiebt sich selbst und alles danach in der Controls-Zeile
+     nach rechts (gleiches Prinzip wie .seller-hub-link). */
+  #view-toggle { margin-left: auto; }
   .listing-tile { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; cursor: pointer; }
   .listing-tile:hover { background: var(--hover-bg); }
   .listing-tile img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
@@ -182,6 +186,7 @@ if ("serviceWorker" in navigator) {
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
     </select>
+    <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
   </div>
@@ -245,7 +250,6 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="column-toggle-btn">⚙ Spalten</button>
-    <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 

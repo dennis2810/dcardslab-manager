@@ -1287,6 +1287,28 @@ def issue_invoice(sale_id):
     return response.data[0] if response.data else None
 
 
+def invoiced_manual_sales():
+    """Fuer die Rechnungen-Tabelle auf kleinunternehmer.html - alle manuellen
+    Verkaeufe, denen bereits eine Rechnungsnummer zugewiesen wurde (siehe
+    issue_invoice()), angereichert um den Kartentitel (manual_sales selbst
+    speichert nur card_id)."""
+    response = (
+        get_client().table("manual_sales")
+        .select("id,card_id,invoice_number,invoice_issued_at,sale_date,gross_price,channel")
+        .not_.is_("invoice_number", "null")
+        .order("invoice_number", desc=True).execute()
+    )
+    rows = response.data
+    if not rows:
+        return []
+    card_ids = list({row["card_id"] for row in rows})
+    cards_response = get_client().table("cards").select("id,title").in_("id", card_ids).execute()
+    titles = {c["id"]: c["title"] for c in cards_response.data}
+    for row in rows:
+        row["title"] = titles.get(row["card_id"], "")
+    return rows
+
+
 def delete_manual_sale(sale_id):
     # card_id wird mitselektiert, damit der Aufrufer (siehe main.py's
     # DELETE /api/manual-sales/{id}) danach das Inventar der Karte wieder

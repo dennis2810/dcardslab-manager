@@ -1440,6 +1440,14 @@ async def list_manual_sales():
     return JSONResponse({"manual_sales": db.all_manual_sales()})
 
 
+@app.get("/api/manual-sales/invoiced")
+async def list_invoiced_manual_sales():
+    # Fuer die Rechnungen-Tabelle auf kleinunternehmer.html (Abschnitt
+    # Rechnungstool) - alle manuellen Verkaeufe mit bereits vergebener
+    # Rechnungsnummer, samt Kartentitel.
+    return JSONResponse({"invoices": db.invoiced_manual_sales()})
+
+
 @app.patch("/api/manual-sales/{sale_id}")
 async def update_manual_sale(sale_id: str, fields: dict = Body(...)):
     updated = db.update_manual_sale(sale_id, fields)

@@ -683,6 +683,15 @@ class ListManualSalesEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["manual_sales"], rows)
 
 
+class ListInvoicedManualSalesEndpointTests(unittest.TestCase):
+    def test_returns_invoiced_sales(self):
+        rows = [{"id": "ms-1", "invoice_number": 1, "title": "Karte 1"}]
+        with patch("main.db.invoiced_manual_sales", return_value=rows):
+            response = client.get("/api/manual-sales/invoiced")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["invoices"], rows)
+
+
 class UpdateManualSaleEndpointTests(unittest.TestCase):
     def test_updates_manual_sale(self):
         with patch("main.db.update_manual_sale", return_value={"id": "ms-1", "gross_price": 9.0}) as mock_update:

@@ -82,8 +82,8 @@ if ("serviceWorker" in navigator) {
   .expense-form .actions { grid-column: 1 / -1; }
   /* Sortierung/Pagination/Druck/CSV-Export fuer "Sonstige Betriebsausgaben" -
      gleiches Prinzip wie auf inventur.html/wishlist.html. */
-  #expenses-table th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
-  #expenses-table th .sort-arrow { color: #888; font-size: 0.8em; }
+  #expenses-table th[data-key], #invoices-table th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  #expenses-table th .sort-arrow, #invoices-table th .sort-arrow { color: #888; font-size: 0.8em; }
   .expenses-pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
   [hidden] { display: none !important; }
 </style>
@@ -225,6 +225,27 @@ if ("serviceWorker" in navigator) {
     keine abrufbare Rechnung/Dokument über die API an - hierfür verweisen wir auf die
     Bestellübersicht im eBay-Verkäufer-Cockpit.</p>
 
+  <h3>Ausgestellte Rechnungen</h3>
+  <p id="invoices-status" class="note">Lädt …</p>
+  <table id="invoices-table" hidden>
+    <thead>
+      <tr>
+        <th data-key="invoice_number">Rechnungsnr. <span class="sort-arrow"></span></th>
+        <th data-key="invoice_issued_at">Rechnungsdatum <span class="sort-arrow"></span></th>
+        <th data-key="title">Karte <span class="sort-arrow"></span></th>
+        <th data-key="sale_date">Verkaufsdatum <span class="sort-arrow"></span></th>
+        <th class="euer-amount" data-key="gross_price">Betrag <span class="sort-arrow"></span></th>
+        <th class="no-print"></th>
+      </tr>
+    </thead>
+    <tbody id="invoices-table-body"></tbody>
+  </table>
+  <div class="expenses-pagination no-print" id="invoices-pagination" hidden>
+    <button type="button" id="invoices-prev-page">&larr; Zurück</button>
+    <span id="invoices-page-info"></span>
+    <button type="button" id="invoices-next-page">Weiter &rarr;</button>
+  </div>
+
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
 // von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
@@ -277,6 +298,7 @@ async function load() {
     statusMsg.textContent = "Fehler: " + err;
   }
   initEuer();
+  initInvoices();
 }
 
 // Semikolon als Standard-Trennzeichen (deutsches Excel) + UTF-8-BOM, gleiches
@@ -629,6 +651,115 @@ async function initEuer() {
     } catch (err) {
       statusEl.textContent = "Fehler: " + err;
     }
+  });
+}
+
+let currentInvoices = [];
+let invoiceSortKey = "invoice_number";
+let invoiceSortAsc = false;
+let invoicePage = 0;
+
+function invoiceSortValue(invoice, key) {
+  if (key === "gross_price" || key === "invoice_number") return Number(invoice[key] || 0);
+  return String(invoice[key] || "").toLowerCase();
+}
+
+function updateInvoiceSortArrows() {
+  for (const th of document.querySelectorAll("#invoices-table th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === invoiceSortKey ? (invoiceSortAsc ? "▲" : "▼") : "";
+  }
+}
+
+function renderInvoicesTable() {
+  const table = document.getElementById("invoices-table");
+  const pagination = document.getElementById("invoices-pagination");
+  const body = document.getElementById("invoices-table-body");
+  const statusMsg = document.getElementById("invoices-status");
+  body.innerHTML = "";
+
+  if (!currentInvoices.length) {
+    table.hidden = true;
+    pagination.hidden = true;
+    statusMsg.textContent = "Noch keine Rechnungen erstellt.";
+    statusMsg.hidden = false;
+    return;
+  }
+  statusMsg.hidden = true;
+  table.hidden = false;
+  pagination.hidden = false;
+  updateInvoiceSortArrows();
+
+  const sorted = [...currentInvoices].sort((a, b) => {
+    const va = invoiceSortValue(a, invoiceSortKey);
+    const vb = invoiceSortValue(b, invoiceSortKey);
+    if (va < vb) return invoiceSortAsc ? -1 : 1;
+    if (va > vb) return invoiceSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / EXPENSES_PAGE_SIZE));
+  invoicePage = Math.min(invoicePage, pageCount - 1);
+  const visible = sorted.slice(invoicePage * EXPENSES_PAGE_SIZE, (invoicePage + 1) * EXPENSES_PAGE_SIZE);
+
+  for (const invoice of visible) {
+    const tr = document.createElement("tr");
+    const numberTd = document.createElement("td");
+    numberTd.textContent = invoice.invoice_number;
+    const issuedTd = document.createElement("td");
+    issuedTd.textContent = formatDate(invoice.invoice_issued_at);
+    const titleTd = document.createElement("td");
+    titleTd.textContent = invoice.title || "";
+    const saleDateTd = document.createElement("td");
+    saleDateTd.textContent = formatDate(invoice.sale_date);
+    const amountTd = document.createElement("td");
+    amountTd.className = "euer-amount";
+    amountTd.textContent = fmtEuro(invoice.gross_price);
+    const linkTd = document.createElement("td");
+    linkTd.className = "no-print";
+    const link = document.createElement("a");
+    link.href = `card.html?id=${encodeURIComponent(invoice.card_id)}`;
+    link.textContent = "Zur Karte →";
+    linkTd.appendChild(link);
+    tr.append(numberTd, issuedTd, titleTd, saleDateTd, amountTd, linkTd);
+    body.appendChild(tr);
+  }
+
+  document.getElementById("invoices-page-info").textContent =
+    `Seite ${invoicePage + 1} von ${pageCount} (${sorted.length} Rechnung(en))`;
+  document.getElementById("invoices-prev-page").disabled = invoicePage === 0;
+  document.getElementById("invoices-next-page").disabled = invoicePage >= pageCount - 1;
+}
+
+async function initInvoices() {
+  try {
+    const res = await fetch("/api/manual-sales/invoiced");
+    const data = await res.json();
+    currentInvoices = data.invoices || [];
+  } catch (err) {
+    currentInvoices = [];
+  }
+  renderInvoicesTable();
+
+  for (const th of document.querySelectorAll("#invoices-table th[data-key]")) {
+    th.addEventListener("click", () => {
+      if (invoiceSortKey === th.dataset.key) {
+        invoiceSortAsc = !invoiceSortAsc;
+      } else {
+        invoiceSortKey = th.dataset.key;
+        invoiceSortAsc = true;
+      }
+      invoicePage = 0;
+      renderInvoicesTable();
+    });
+  }
+  document.getElementById("invoices-prev-page").addEventListener("click", () => {
+    invoicePage = Math.max(0, invoicePage - 1);
+    renderInvoicesTable();
+  });
+  document.getElementById("invoices-next-page").addEventListener("click", () => {
+    invoicePage += 1;
+    renderInvoicesTable();
   });
 }
 

@@ -3253,6 +3253,46 @@ class IssueInvoiceTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class InvoicedManualSalesTests(unittest.TestCase):
+    def _table(self, manual_rows, card_rows):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "manual_sales":
+                response.data = manual_rows
+                builder.select.return_value.not_.is_.return_value.order.return_value.execute.return_value = response
+            elif name == "cards":
+                response.data = card_rows
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        return table
+
+    def test_returns_invoiced_sales_with_card_title(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            manual_rows=[{
+                "id": "ms-1", "card_id": "card-1", "invoice_number": 2,
+                "invoice_issued_at": "2026-09-12T00:00:00+00:00",
+                "sale_date": "2026-09-01T00:00:00+00:00", "gross_price": 12.5, "channel": "Vinted",
+            }],
+            card_rows=[{"id": "card-1", "title": "Karte 1"}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.invoiced_manual_sales()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["invoice_number"], 2)
+        self.assertEqual(result[0]["title"], "Karte 1")
+
+    def test_returns_empty_list_when_none_issued(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(manual_rows=[], card_rows=[])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.invoiced_manual_sales()
+        self.assertEqual(result, [])
+        called_tables = [call.args[0] for call in mock_client.table.call_args_list]
+        self.assertNotIn("cards", called_tables)
+
+
 class StatisticsRowsTests(unittest.TestCase):
     def test_joins_purchase_and_sale_info_per_card(self):
         mock_client = MagicMock()
