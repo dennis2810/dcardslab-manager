@@ -116,6 +116,15 @@ if ("serviceWorker" in navigator) {
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
   .table-scroll { overflow-x: auto; }
+  /* Kachelansicht - gleiches Prinzip wie cards.html's grid/list-Umschalter:
+     zusaetzlich zur Tabelle, nicht als Ersatz (Bulk-Aktionen/Sortierung
+     bleiben tabellenspezifisch). */
+  #listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
+  .listing-tile { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; cursor: pointer; }
+  .listing-tile:hover { background: var(--hover-bg); }
+  .listing-tile img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
+  .listing-tile .title { font-weight: 600; margin-top: 0.4rem; }
+  .listing-tile .meta { font-size: 0.8rem; color: #555; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -205,6 +214,7 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
+  <div id="listings-grid" hidden></div>
   <div class="table-scroll">
     <table id="listings-table" style="display: none;">
         <thead>
@@ -235,6 +245,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="column-toggle-btn">⚙ Spalten</button>
+    <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
 
@@ -346,6 +357,8 @@ const cardTypeFilterSelect = document.getElementById("card-type-filter");
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
+const grid = document.getElementById("listings-grid");
+const viewToggle = document.getElementById("view-toggle");
 const publishSelectedBtn = document.getElementById("publish-selected-btn");
 const priceBulkBtn = document.getElementById("price-bulk-btn");
 const endSelectedBtn = document.getElementById("end-selected-btn");
@@ -395,6 +408,35 @@ let selectedIds = new Set();
 // SKU-ascending by default - the seller's most-used reference number.
 let sortKey = "sku";
 let sortAsc = true;
+
+// Kachelansicht ist rein zusaetzlich zur Tabelle (Standard bleibt "list",
+// anders als bei cards.html, wo die Kachelansicht historisch zuerst da war)
+// - Bulk-Aktionen/Sortierung bleiben tabellenspezifisch, gleiches Prinzip
+// wie cards.html's grid/list-Umschalter.
+let currentView = "list";
+try {
+  currentView = localStorage.getItem("ebayView") || "list";
+} catch (err) {
+  // localStorage kann in abgesicherten Browserkontexten werfen - Listenansicht
+  // bleibt dann einfach Standard.
+}
+
+function applyView() {
+  grid.hidden = currentView !== "grid";
+  table.hidden = currentView !== "list";
+  viewToggle.textContent = currentView === "grid" ? "Listenansicht" : "Kachelansicht";
+}
+applyView();
+
+viewToggle.addEventListener("click", () => {
+  currentView = currentView === "grid" ? "list" : "grid";
+  applyView();
+  try {
+    localStorage.setItem("ebayView", currentView);
+  } catch (err) {
+    // Nicht schlimm - die Wahl wird dann beim naechsten Besuch nicht erinnert.
+  }
+});
 
 // Fuer den "Auf eBay ansehen"-Link je Zeile - von loadOauthStatus() gesetzt,
 // gleiches Muster wie card.html's getEbayEnvironment().
@@ -817,8 +859,68 @@ function render(listings) {
     makeRowKeyboardNavigable(tr);
     body.appendChild(tr);
   }
+  renderGrid(pageItems);
   updateBulkBar();
   renderSums(listings);
+}
+
+// Kachelansicht - zeigt dieselbe (gefilterte/sortierte/paginierte) Seite wie
+// die Tabelle, nur als Foto-Kacheln statt Zeilen. Bewusst ohne Checkbox/
+// Massenauswahl (wie cards.html's Kachelansicht) - dafuer weiter die
+// Tabelle nutzen.
+function renderGrid(pageItems) {
+  grid.innerHTML = "";
+  for (const listing of pageItems) {
+    const tile = document.createElement("div");
+    tile.className = "listing-tile";
+    tile.tabIndex = 0;
+    tile.addEventListener("click", () => {
+      location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
+    });
+    tile.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
+      }
+    });
+
+    const img = document.createElement("img");
+    if (listing.card && listing.card.front_image_url) img.src = listing.card.front_image_url;
+    img.alt = listing.title || "";
+    tile.appendChild(img);
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = listing.title || "(ohne Titel)";
+    tile.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = [listing.sku, fmtEuro(listing.price)].filter(Boolean).join(" · ");
+    tile.appendChild(meta);
+
+    const statusEl = document.createElement("div");
+    statusEl.className = "meta status-" + listing.status;
+    statusEl.textContent = STATUS_LABELS[listing.status] || listing.status;
+    // Gleiche Warnhinweise wie die Tabelle (Doppelverkauf/Privatentnahme/
+    // haengengebliebenes "Geplant") - nur kompakter, ohne Detail-Tooltip-
+    // Text im sichtbaren Text, das Title-Attribut traegt ihn trotzdem.
+    if (listing.status === "Geplant" && daysPending(listing) > STALE_GEPLANT_DAYS) {
+      statusEl.textContent += " ⚠️";
+      statusEl.title = `Seit über ${STALE_GEPLANT_DAYS} Tagen "Geplant", aber nicht veröffentlicht.`;
+    }
+    if (listing.manual_sale_channel && (listing.status === "Veroeffentlicht" || listing.status === "Geplant")) {
+      statusEl.textContent += " ⚠️";
+      statusEl.title = `Karte wurde bereits anderweitig verkauft (${listing.manual_sale_channel}) - Angebot sollte beendet werden.`;
+    }
+    if (listing.private_collection && (listing.status === "Veroeffentlicht" || listing.status === "Geplant")) {
+      statusEl.textContent += " ⚠️";
+      statusEl.title = "Karte wurde in die private Sammlung überführt (Privatentnahme) - Angebot sollte beendet werden.";
+    }
+    tile.appendChild(statusEl);
+
+    grid.appendChild(tile);
+  }
 }
 
 function renderSums(listings) {

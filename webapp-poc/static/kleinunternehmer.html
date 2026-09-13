@@ -80,6 +80,12 @@ if ("serviceWorker" in navigator) {
   .expense-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
   .expense-form input, .expense-form select { font-weight: normal; padding: 0.4rem; margin-top: 0.2rem; }
   .expense-form .actions { grid-column: 1 / -1; }
+  /* Sortierung/Pagination/Druck/CSV-Export fuer "Sonstige Betriebsausgaben" -
+     gleiches Prinzip wie auf inventur.html/wishlist.html. */
+  #expenses-table th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+  #expenses-table th .sort-arrow { color: #888; font-size: 0.8em; }
+  .expenses-pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -114,8 +120,7 @@ if ("serviceWorker" in navigator) {
   </nav>
 
   <p class="note">Alles rund ums Kleinunternehmertum an einem Ort: aktueller Stand zu den Umsatzgrenzen der
-    Kleinunternehmerregelung, perspektivisch ergänzt um eine Einnahmen-Überschuss-Rechnung (EÜR) und ein
-    Rechnungstool.</p>
+    Kleinunternehmerregelung, eine Einnahmen-Überschuss-Rechnung (EÜR) sowie das Rechnungstool.</p>
 
   <h2 id="umsatzgrenzen">Umsatzgrenzen (§19 UStG)</h2>
   <p>Die Kleinunternehmerregelung befreit von der Umsatzsteuer, solange zwei Grenzen eingehalten werden: der
@@ -193,14 +198,32 @@ if ("serviceWorker" in navigator) {
 
   <table id="expenses-table" hidden>
     <thead>
-      <tr><th>Datum</th><th>Kategorie</th><th class="euer-amount">Betrag</th><th>Notiz</th><th></th></tr>
+      <tr>
+        <th data-key="expense_date">Datum <span class="sort-arrow"></span></th>
+        <th data-key="category">Kategorie <span class="sort-arrow"></span></th>
+        <th class="euer-amount" data-key="amount">Betrag <span class="sort-arrow"></span></th>
+        <th data-key="note">Notiz <span class="sort-arrow"></span></th>
+        <th class="no-print"></th>
+      </tr>
     </thead>
     <tbody id="expenses-table-body"></tbody>
   </table>
+  <div class="expenses-pagination no-print" id="expenses-pagination" hidden>
+    <button type="button" id="expenses-prev-page">&larr; Zurück</button>
+    <span id="expenses-page-info"></span>
+    <button type="button" id="expenses-next-page">Weiter &rarr;</button>
+    <button type="button" id="expenses-print-btn">🖨 Drucken</button>
+    <button type="button" id="expenses-csv-btn">⭳ Ausgaben als CSV</button>
+  </div>
 
   <h2 id="rechnungstool">Rechnungstool</h2>
-  <p class="placeholder-section"><span class="placeholder-badge">in Planung</span> Geplant ist eine Möglichkeit,
-    Rechnungen für Verkäufe direkt aus dem Tool heraus zu erstellen und zu verwalten.</p>
+  <p>Für Verkäufe außerhalb von eBay lässt sich zusätzlich zum Beleg (Kleinbetragsrechnung) eine
+    formale Rechnung mit fortlaufender, eindeutiger Rechnungsnummer (§ 14 UStG) erstellen - über
+    den Button „🧾 Rechnung erstellen" im Abschnitt „Verkauf außerhalb eBay" auf der jeweiligen
+    Kartenseite. Eine einmal vergebene Rechnungsnummer bleibt dauerhaft dieser Karte zugeordnet;
+    ein erneuter Klick druckt dieselbe Rechnung nochmals. Für eBay-Verkäufe bietet eBay selbst
+    keine abrufbare Rechnung/Dokument über die API an - hierfür verweisen wir auf die
+    Bestellübersicht im eBay-Verkäufer-Cockpit.</p>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -232,6 +255,7 @@ function yearTotal(stats, year) {
 }
 
 let CSV_DELIMITER = ";";
+let EXPENSES_PAGE_SIZE = 40;
 
 async function load() {
   const statusMsg = document.getElementById("status-msg");
@@ -246,6 +270,7 @@ async function load() {
       return;
     }
     CSV_DELIMITER = appStatus.csv_delimiter || ";";
+    EXPENSES_PAGE_SIZE = appStatus.page_size || 40;
     statusMsg.style.display = "none";
     render(stats, appStatus);
   } catch (err) {
@@ -373,18 +398,58 @@ async function loadExpenses() {
   }
 }
 
+let expenseSortKey = "expense_date";
+let expenseSortAsc = false;
+let expensePage = 0;
+let currentFilteredExpenses = [];
+
+function expenseSortValue(expense, key) {
+  if (key === "amount") return Number(expense.amount || 0);
+  return String(expense[key] || "").toLowerCase();
+}
+
+function sortedFilteredExpenses(year) {
+  const yearStr = String(year);
+  const filtered = currentExpenses.filter((e) => String(e.expense_date || "").startsWith(yearStr));
+  filtered.sort((a, b) => {
+    const va = expenseSortValue(a, expenseSortKey);
+    const vb = expenseSortValue(b, expenseSortKey);
+    if (va < vb) return expenseSortAsc ? -1 : 1;
+    if (va > vb) return expenseSortAsc ? 1 : -1;
+    return 0;
+  });
+  return filtered;
+}
+
+function updateExpenseSortArrows() {
+  for (const th of document.querySelectorAll("#expenses-table th[data-key]")) {
+    const arrow = th.querySelector(".sort-arrow");
+    arrow.textContent = th.dataset.key === expenseSortKey ? (expenseSortAsc ? "▲" : "▼") : "";
+  }
+}
+
 function renderExpensesTable(year) {
   const table = document.getElementById("expenses-table");
   const body = document.getElementById("expenses-table-body");
+  const pagination = document.getElementById("expenses-pagination");
   body.innerHTML = "";
-  const yearStr = String(year);
-  const filtered = currentExpenses.filter((e) => String(e.expense_date || "").startsWith(yearStr));
-  if (!filtered.length) {
+  currentFilteredExpenses = sortedFilteredExpenses(year);
+  if (!currentFilteredExpenses.length) {
     table.hidden = true;
+    pagination.hidden = true;
     return;
   }
   table.hidden = false;
-  for (const expense of filtered) {
+  pagination.hidden = false;
+  updateExpenseSortArrows();
+
+  const pageCount = Math.max(1, Math.ceil(currentFilteredExpenses.length / EXPENSES_PAGE_SIZE));
+  expensePage = Math.min(expensePage, pageCount - 1);
+  const visible = currentFilteredExpenses.slice(
+    expensePage * EXPENSES_PAGE_SIZE, (expensePage + 1) * EXPENSES_PAGE_SIZE
+  );
+
+  for (const expense of visible) {
     const tr = document.createElement("tr");
     const dateTd = document.createElement("td");
     dateTd.textContent = formatDate(expense.expense_date);
@@ -396,6 +461,7 @@ function renderExpensesTable(year) {
     const noteTd = document.createElement("td");
     noteTd.textContent = expense.note || "";
     const actionsTd = document.createElement("td");
+    actionsTd.className = "no-print";
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Löschen";
@@ -404,6 +470,57 @@ function renderExpensesTable(year) {
     tr.append(dateTd, catTd, amountTd, noteTd, actionsTd);
     body.appendChild(tr);
   }
+
+  document.getElementById("expenses-page-info").textContent =
+    `Seite ${expensePage + 1} von ${pageCount} (${currentFilteredExpenses.length} Einträge)`;
+  document.getElementById("expenses-prev-page").disabled = expensePage === 0;
+  document.getElementById("expenses-next-page").disabled = expensePage >= pageCount - 1;
+}
+
+// Eigenes Druckfenster statt @media print - kleinunternehmer.html enthaelt
+// mehrere Abschnitte (Umsatzgrenzen, EUER, Rechnungstool), ein simples
+// window.print() wuerde die ganze Seite statt nur der Ausgabenliste drucken.
+function printExpensesList(year) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const total = currentFilteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const rows = currentFilteredExpenses.map((e) => `
+      <tr>
+        <td>${escapeHtml(formatDate(e.expense_date))}</td>
+        <td>${escapeHtml(e.category || "")}</td>
+        <td>${escapeHtml(fmtEuro(e.amount))}</td>
+        <td>${escapeHtml(e.note || "")}</td>
+      </tr>`).join("");
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Sonstige Betriebsausgaben ${escapeHtml(String(year))}</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  h1 { font-size: 1.2rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd; }
+  .total-row td { font-weight: 700; border-top: 2px solid #333; border-bottom: none; }
+</style></head>
+<body>
+  <h1>Sonstige Betriebsausgaben ${escapeHtml(String(year))}</h1>
+  <table>
+    <thead><tr><th>Datum</th><th>Kategorie</th><th>Betrag</th><th>Notiz</th></tr></thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row"><td></td><td></td><td>${escapeHtml(fmtEuro(total))}</td><td></td></tr>
+    </tbody>
+  </table>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value == null ? "" : String(value);
+  return div.innerHTML;
 }
 
 async function deleteExpense(expenseId) {
@@ -434,11 +551,44 @@ async function initEuer() {
   populateEuerYearOptions();
   const select = euerYearSelect();
   select.addEventListener("change", async () => {
+    expensePage = 0;
     renderExpensesTable(select.value);
     await loadEuer(select.value);
   });
   renderExpensesTable(select.value);
   await loadEuer(select.value);
+
+  for (const th of document.querySelectorAll("#expenses-table th[data-key]")) {
+    th.addEventListener("click", () => {
+      if (expenseSortKey === th.dataset.key) {
+        expenseSortAsc = !expenseSortAsc;
+      } else {
+        expenseSortKey = th.dataset.key;
+        expenseSortAsc = true;
+      }
+      expensePage = 0;
+      renderExpensesTable(select.value);
+    });
+  }
+
+  document.getElementById("expenses-prev-page").addEventListener("click", () => {
+    expensePage = Math.max(0, expensePage - 1);
+    renderExpensesTable(select.value);
+  });
+  document.getElementById("expenses-next-page").addEventListener("click", () => {
+    expensePage += 1;
+    renderExpensesTable(select.value);
+  });
+  document.getElementById("expenses-print-btn").addEventListener("click", () => {
+    printExpensesList(select.value);
+  });
+  document.getElementById("expenses-csv-btn").addEventListener("click", () => {
+    const headers = ["Datum", "Kategorie", "Betrag", "Notiz"];
+    const rows = currentFilteredExpenses.map((e) => [
+      formatDate(e.expense_date), e.category || "", fmtNumber(e.amount, 2), e.note || "",
+    ]);
+    downloadCsv(`betriebsausgaben-${select.value}.csv`, headers, rows);
+  });
 
   document.getElementById("euer-csv-btn").addEventListener("click", () => {
     if (!currentEuerData) return;

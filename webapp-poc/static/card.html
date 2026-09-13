@@ -1388,6 +1388,9 @@ function renderManualSaleReadonly(section, sale, purchase, cardTitle) {
     ["Verkaufspreis", fmtEuro(sale.gross_price)],
     ["Versand erhalten", fmtEuro(sale.shipping_charged)],
   ];
+  if (sale.invoice_number) {
+    rows.push(["Rechnungsnr.", `${sale.invoice_number} (${formatDate(sale.invoice_issued_at)})`]);
+  }
   if (sale.refunded) rows.push(["Status", "↩ Rückerstattet"]);
   if (sale.tracking_number) {
     rows.push(["Tracking", `${sale.tracking_number}${sale.shipping_carrier ? ` (${sale.shipping_carrier})` : ""}`]);
@@ -1457,6 +1460,34 @@ function renderManualSaleReadonly(section, sale, purchase, cardTitle) {
   printBtn.textContent = "🖨 Beleg drucken";
   printBtn.addEventListener("click", () => printManualSaleReceipt(sale, cardTitle));
   actions.appendChild(printBtn);
+
+  // Zusaetzlich zum Beleg (Kleinbetragsrechnung), nicht als Ersatz - eine
+  // formale Rechnung mit fortlaufender Rechnungsnummer (Paragraph 14 UStG).
+  const invoiceBtn = document.createElement("button");
+  invoiceBtn.type = "button";
+  invoiceBtn.textContent = sale.invoice_number ? "🧾 Rechnung erneut drucken" : "🧾 Rechnung erstellen";
+  invoiceBtn.addEventListener("click", async () => {
+    if (sale.invoice_number) {
+      printManualSaleInvoice(sale, cardTitle);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/manual-sales/${encodeURIComponent(sale.id)}/invoice`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        showToast("Fehler: " + (body.detail || res.statusText), true);
+        return;
+      }
+      sale.invoice_number = body.invoice_number;
+      sale.invoice_issued_at = body.invoice_issued_at;
+      showToast(`Rechnung Nr. ${body.invoice_number} erstellt.`);
+      printManualSaleInvoice(sale, cardTitle);
+      renderManualSaleReadonly(section, sale, purchase, cardTitle);
+    } catch (err) {
+      showToast("Fehler: " + err, true);
+    }
+  });
+  actions.appendChild(invoiceBtn);
 
   section.appendChild(actions);
   renderManualSaleReceiptUpload(section, sale);
@@ -1589,6 +1620,52 @@ function printManualSaleReceipt(sale, cardTitle) {
   <div class="sender">${escapeHtml(senderAddress).replace(/\n/g, "<br>") || "(keine Absenderadresse hinterlegt - siehe Einstellungen)"}</div>
   <h1>Beleg</h1>
   <p>Datum: ${escapeHtml(formatDate(sale.sale_date))}${sale.channel ? ` &middot; Kanal: ${escapeHtml(sale.channel)}` : ""}</p>
+  <table>
+    <thead><tr><th>Menge</th><th>Artikel</th><th>Einzelpreis</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>${escapeHtml(cardTitle || "")}</td><td>${escapeHtml(fmtEuro(sale.gross_price))}</td></tr>
+      ${Number(sale.shipping_charged || 0) > 0
+        ? `<tr><td></td><td>Versand</td><td>${escapeHtml(fmtEuro(sale.shipping_charged))}</td></tr>`
+        : ""}
+      <tr class="total-row"><td></td><td>Gesamt</td><td>${escapeHtml(fmtEuro(total))}</td></tr>
+    </tbody>
+  </table>
+  ${kleinunternehmerHintEnabled
+    ? '<p class="hint">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>'
+    : ""}
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+// Formale Rechnung mit fortlaufender Rechnungsnummer (Paragraph 14 UStG) -
+// zusaetzliche Option neben dem Beleg (printManualSaleReceipt()), gleiches
+// Druckfenster-Muster. Hinweis: erfasst wie der Beleg keine Kaeuferadresse -
+// bei Verkaufsbetraegen bis 250 EUR unproblematisch (Kleinbetragsrechnung,
+// Paragraph 33 UStDV); oberhalb dessen fehlt fuer eine vollstaendig
+// UStG-konforme Rechnung formal die Anschrift des Leistungsempfaengers.
+function printManualSaleInvoice(sale, cardTitle) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const total = Number(sale.gross_price || 0) + Number(sale.shipping_charged || 0);
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Rechnung</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  .sender { font-size: 0.8rem; color: #555; margin-bottom: 2rem; }
+  h1 { font-size: 1.2rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd; }
+  .total-row td { font-weight: 700; border-top: 2px solid #333; border-bottom: none; }
+  .hint { margin-top: 2rem; font-size: 0.85rem; color: #555; }
+</style></head>
+<body>
+  <div class="sender">${escapeHtml(senderAddress).replace(/\n/g, "<br>") || "(keine Absenderadresse hinterlegt - siehe Einstellungen)"}</div>
+  <h1>Rechnung Nr. ${escapeHtml(String(sale.invoice_number))}</h1>
+  <p>Rechnungsdatum: ${escapeHtml(formatDate(sale.invoice_issued_at))} &middot; Verkaufsdatum: ${escapeHtml(formatDate(sale.sale_date))}${sale.channel ? ` &middot; Kanal: ${escapeHtml(sale.channel)}` : ""}</p>
   <table>
     <thead><tr><th>Menge</th><th>Artikel</th><th>Einzelpreis</th></tr></thead>
     <tbody>

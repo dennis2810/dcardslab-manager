@@ -3187,6 +3187,72 @@ class DeleteManualSaleTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class NextInvoiceNumberTests(unittest.TestCase):
+    def test_returns_one_when_no_invoices_yet(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        (
+            mock_client.table.return_value.select.return_value.not_.is_.return_value
+            .order.return_value.limit.return_value.execute.return_value
+        ) = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.next_invoice_number()
+        self.assertEqual(result, 1)
+
+    def test_returns_highest_plus_one(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"invoice_number": 7}]
+        (
+            mock_client.table.return_value.select.return_value.not_.is_.return_value
+            .order.return_value.limit.return_value.execute.return_value
+        ) = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.next_invoice_number()
+        self.assertEqual(result, 8)
+
+
+class IssueInvoiceTests(unittest.TestCase):
+    def test_assigns_next_number_when_not_yet_issued(self):
+        mock_client = MagicMock()
+        sale_response = MagicMock()
+        sale_response.data = [{"id": "ms-1", "invoice_number": None}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = sale_response
+        next_number_response = MagicMock()
+        next_number_response.data = []
+        (
+            mock_client.table.return_value.select.return_value.not_.is_.return_value
+            .order.return_value.limit.return_value.execute.return_value
+        ) = next_number_response
+        update_response = MagicMock()
+        update_response.data = [{"id": "ms-1", "invoice_number": 1, "invoice_issued_at": "2026-09-12T00:00:00+00:00"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = update_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.issue_invoice("ms-1")
+        self.assertEqual(result["invoice_number"], 1)
+        self.assertIsNotNone(result["invoice_issued_at"])
+
+    def test_idempotent_when_already_issued(self):
+        mock_client = MagicMock()
+        sale_response = MagicMock()
+        sale_response.data = [{"id": "ms-1", "invoice_number": 5, "invoice_issued_at": "2026-01-01T00:00:00+00:00"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = sale_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.issue_invoice("ms-1")
+        self.assertEqual(result["invoice_number"], 5)
+        mock_client.table.return_value.update.assert_not_called()
+
+    def test_returns_none_when_sale_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.issue_invoice("does-not-exist")
+        self.assertIsNone(result)
+
+
 class StatisticsRowsTests(unittest.TestCase):
     def test_joins_purchase_and_sale_info_per_card(self):
         mock_client = MagicMock()

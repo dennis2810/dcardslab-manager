@@ -1448,6 +1448,18 @@ async def update_manual_sale(sale_id: str, fields: dict = Body(...)):
     return JSONResponse(updated)
 
 
+@app.post("/api/manual-sales/{sale_id}/invoice")
+async def issue_manual_sale_invoice(sale_id: str):
+    # Zusaetzlich zum bestehenden Kleinbetragsrechnung-Beleg (siehe
+    # upload_manual_sale_receipt()), nicht als Ersatz - vergibt eine
+    # fortlaufende Rechnungsnummer (Paragraph 14 UStG). Idempotent: ein
+    # bereits verrechneter Verkauf behaelt seine Nummer (db.issue_invoice()).
+    issued = db.issue_invoice(sale_id)
+    if issued is None:
+        raise HTTPException(status_code=404, detail=f"Verkauf {sale_id} nicht gefunden.")
+    return JSONResponse(issued)
+
+
 @app.delete("/api/manual-sales/{sale_id}", status_code=204)
 async def delete_manual_sale(sale_id: str):
     deleted = db.delete_manual_sale(sale_id)
