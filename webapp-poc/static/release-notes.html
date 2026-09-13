@@ -82,6 +82,21 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Verkaufsgeschwindigkeit, Jahresabschluss &amp; Grading <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Statistik-Übersicht: Team- und Set-Ranking zeigen jetzt zusätzlich „Ø Tage bis Verkauf" – die
+      durchschnittliche Liegedauer (Kauf- bis Verkaufsdatum) je Team/Set, als Anhaltspunkt, welche Gruppen sich
+      erfahrungsgemäß schneller verkaufen.</li>
+    <li>Kleinunternehmer-Seite, Abschnitt EÜR: neuer Button „🔒 Jahr sperren" (bzw. „🔓 Jahr entsperren") sperrt ein
+      bereits eingereichtes/abgeschlossenes Jahr gegen nachträgliche Änderungen an den sonstigen Betriebsausgaben
+      (Anlegen, Bearbeiten, Löschen wird für ein gesperrtes Jahr abgelehnt).</li>
+    <li>Kartenübersicht: „Etiketten drucken" heißt jetzt „🏷️ QR-Etiketten drucken" und druckt zusätzlich zu den
+      bisherigen Textangaben (SKU/Team/Saison/Titel) einen QR-Code je Karte, der direkt zur jeweiligen
+      Kartendetailseite führt – gleiches Prinzip wie die bestehenden Lagerort-Etiketten, aber pro Karte.</li>
+    <li>Kartendetail: neuer Abschnitt „Grading" zum Festhalten des Wegs einer Karte zu PSA, BGS, SGC oder einem
+      sonstigen Grading-Unternehmen – Status, Einschick-/Rückerhalt-Datum, Kosten und Ergebnis (Grade/Note).</li>
+  </ul>
+
   <h2>Kleinunternehmer <span class="date">September 2026</span></h2>
   <ul>
     <li>Neue Seite „Kleinunternehmer": zeigt Vorjahresumsatz und laufenden Jahresumsatz im Verhältnis zu den
@@ -108,7 +123,9 @@ if ("serviceWorker" in navigator) {
     <li>Rechnungstool: neuer Button „🧾 Rechnung erstellen" im Abschnitt „Verkauf außerhalb eBay" – zusätzlich zum
       bestehenden Beleg (nicht als Ersatz) lässt sich eine formale Rechnung mit fortlaufender, eindeutiger
       Rechnungsnummer (§14 UStG) ausstellen. Die Nummer wird einmalig vergeben, läuft fortlaufend über alle Jahre
-      hinweg und bleibt dem Verkauf dauerhaft zugeordnet; ein erneuter Klick druckt dieselbe Rechnung nochmals.</li>
+      hinweg und bleibt dem Verkauf dauerhaft zugeordnet; ein erneuter Klick druckt dieselbe Rechnung nochmals.
+      Auf der Kleinunternehmer-Seite listet eine neue, sortierbare Tabelle „Ausgestellte Rechnungen" alle bisher
+      vergebenen Rechnungsnummern samt Link zurück zur jeweiligen Karte.</li>
     <li>Liste „Sonstige Betriebsausgaben" auf der Kleinunternehmer-Seite: Spalten jetzt per Klick sortierbar,
       paginiert (gleiche Seitengröße wie andere Listen) sowie über „🖨 Drucken" und „⭳ Ausgaben als CSV"
       druckbar/exportierbar.</li>
@@ -318,9 +335,11 @@ if ("serviceWorker" in navigator) {
       statt des reinen Artikelpreises (eBay meldet das nicht immer so, wie die eigene API-Doku es beschreibt).
       Der Sync nutzt jetzt den zuverlässigeren Artikelpreis; „Verkaufspreis" ist außerdem manuell korrigierbar
       für Verkäufe, die vor diesem Fix synchronisiert wurden.</li>
-    <li>Neuer Button „Kachelansicht" auf der eBay-Seite zeigt die Angebote als Foto-Kacheln statt Tabellenzeilen
-      (gleiches Prinzip wie die Kachelansicht auf der Kartenübersicht) – die Tabelle bleibt für Massenauswahl,
-      Sortierung und alle Detail-Spalten weiterhin verfügbar.</li>
+    <li>Neuer Button „Kachelansicht" auf der eBay-Seite (oben rechts neben dem Sport/Non-Sport-Filter) zeigt die
+      Angebote als Foto-Kacheln statt Tabellenzeilen (gleiches Prinzip wie die Kachelansicht auf der
+      Kartenübersicht) – die Tabelle bleibt für Massenauswahl, Sortierung und alle Detail-Spalten weiterhin
+      verfügbar. Die Kacheln zeigen dieselben Badges wie die Tabelle (Zugestellt, Retoure, neu eingestellt,
+      lange gelistet ohne Verkauf, importiertes Angebot).</li>
     <li>Die Massenaktion "Ausgewählte beenden" fragt jetzt vorher nach Bestätigung, genau wie das einzelne
       Beenden auf der Kartenseite.</li>
     <li>Das eigene, bereits veröffentlichte Angebot wird in den Preisrecherche-Suchtreffern erkannt und markiert

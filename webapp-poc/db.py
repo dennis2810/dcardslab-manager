@@ -14,6 +14,14 @@ CARD_FIELDS = [
     "serial_number", "print_run",
 ]
 
+# Grading-Tracking (PSA/BGS/SGC/...): Status eines optionalen Einsende-
+# Vorgangs direkt auf der Karte, keine eigene Tabelle noetig, da hoechstens
+# eine aktive/letzte Einsendung pro Karte relevant ist (siehe update_card()).
+GRADING_FIELDS = (
+    "grading_status", "grading_company", "grading_submitted_at",
+    "grading_received_at", "grading_cost", "grading_grade",
+)
+
 
 def create_batch(card_count):
     response = get_client().table("scan_batches").insert(
@@ -149,7 +157,10 @@ def update_card(card_id, fields):
     row = {
         name: value for name, value in fields.items()
         if name in CARD_FIELDS or name in ("recognition_status", "shipped", "picked_up", "tags")
+        or name in GRADING_FIELDS
     }
+    if "grading_cost" in row:
+        row["grading_cost"] = round(float(row["grading_cost"]), 2) if row["grading_cost"] not in (None, "") else None
     if not row:
         return get_card(card_id)
     response = get_client().table("cards").update(row).eq("id", card_id).execute()
@@ -1287,6 +1298,28 @@ def issue_invoice(sale_id):
     return response.data[0] if response.data else None
 
 
+def invoiced_manual_sales():
+    """Fuer die Rechnungen-Tabelle auf kleinunternehmer.html - alle manuellen
+    Verkaeufe, denen bereits eine Rechnungsnummer zugewiesen wurde (siehe
+    issue_invoice()), angereichert um den Kartentitel (manual_sales selbst
+    speichert nur card_id)."""
+    response = (
+        get_client().table("manual_sales")
+        .select("id,card_id,invoice_number,invoice_issued_at,sale_date,gross_price,channel")
+        .not_.is_("invoice_number", "null")
+        .order("invoice_number", desc=True).execute()
+    )
+    rows = response.data
+    if not rows:
+        return []
+    card_ids = list({row["card_id"] for row in rows})
+    cards_response = get_client().table("cards").select("id,title").in_("id", card_ids).execute()
+    titles = {c["id"]: c["title"] for c in cards_response.data}
+    for row in rows:
+        row["title"] = titles.get(row["card_id"], "")
+    return rows
+
+
 def delete_manual_sale(sale_id):
     # card_id wird mitselektiert, damit der Aufrufer (siehe main.py's
     # DELETE /api/manual-sales/{id}) danach das Inventar der Karte wieder
@@ -1436,6 +1469,11 @@ def list_business_expenses():
     return response.data
 
 
+def get_business_expense(expense_id):
+    response = get_client().table("business_expenses").select("*").eq("id", expense_id).execute()
+    return response.data[0] if response.data else None
+
+
 def create_business_expense(fields):
     row = _round_money(
         _blank_numeric_to_none(
@@ -1502,6 +1540,31 @@ def all_dashboard_goals():
 
 def all_business_expenses():
     return get_client().table("business_expenses").select("*").execute().data
+
+
+def list_locked_euer_years():
+    response = get_client().table("locked_euer_years").select("year").execute()
+    return sorted(row["year"] for row in response.data)
+
+
+def is_euer_year_locked(year):
+    response = get_client().table("locked_euer_years").select("year").eq("year", year).execute()
+    return bool(response.data)
+
+
+def lock_euer_year(year):
+    # Upsert statt Insert - ein bereits gesperrtes Jahr erneut zu sperren
+    # soll nicht mit einem Duplicate-Key-Fehler scheitern.
+    response = get_client().table("locked_euer_years").upsert({"year": year}).execute()
+    return response.data[0] if response.data else {"year": year}
+
+
+def unlock_euer_year(year):
+    get_client().table("locked_euer_years").delete().eq("year", year).execute()
+
+
+def all_locked_euer_years():
+    return get_client().table("locked_euer_years").select("*").execute().data
 
 
 def bulk_upsert_rows(table_name, rows):

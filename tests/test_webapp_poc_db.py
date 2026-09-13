@@ -223,6 +223,47 @@ class UpdateCardTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"tags": "Rookie, Investment"})
 
+    def test_grading_fields_are_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "grading_status": "Eingeschickt", "grading_company": "PSA"}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {
+                "grading_status": "Eingeschickt", "grading_company": "PSA",
+                "grading_submitted_at": "2026-01-01", "grading_received_at": "2026-02-01",
+                "grading_grade": "9",
+            })
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {
+            "grading_status": "Eingeschickt", "grading_company": "PSA",
+            "grading_submitted_at": "2026-01-01", "grading_received_at": "2026-02-01",
+            "grading_grade": "9",
+        })
+
+    def test_grading_cost_is_rounded(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "grading_cost": 25.0}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"grading_cost": 24.999})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row["grading_cost"], 25.0)
+
+    def test_blank_grading_cost_becomes_none(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "grading_cost": None}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"grading_cost": ""})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertIsNone(row["grading_cost"])
+
     def test_never_writes_structural_columns(self):
         mock_client = MagicMock()
         saved_row = {"id": "card-1", "title": "x"}
@@ -2714,6 +2755,26 @@ class ListBusinessExpensesTests(unittest.TestCase):
         )
 
 
+class GetBusinessExpenseTests(unittest.TestCase):
+    def test_returns_the_row_by_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "e1", "expense_date": "2026-03-01"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_business_expense("e1")
+        self.assertEqual(result["id"], "e1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.get_business_expense("does-not-exist")
+        self.assertIsNone(result)
+
+
 class CreateBusinessExpenseTests(unittest.TestCase):
     def test_inserts_row(self):
         mock_client = MagicMock()
@@ -2796,6 +2857,51 @@ class DeleteBusinessExpenseTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.delete_business_expense("does-not-exist")
         self.assertIsNone(result)
+
+
+class LockedEuerYearsTests(unittest.TestCase):
+    def test_list_locked_euer_years_sorted(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2025}, {"year": 2023}, {"year": 2024}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_locked_euer_years()
+        self.assertEqual(result, [2023, 2024, 2025])
+
+    def test_is_euer_year_locked_true(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2025}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.is_euer_year_locked(2025)
+        self.assertTrue(result)
+
+    def test_is_euer_year_locked_false(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.is_euer_year_locked(2026)
+        self.assertFalse(result)
+
+    def test_lock_euer_year_upserts(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"year": 2025}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.lock_euer_year(2025)
+        self.assertEqual(result["year"], 2025)
+        mock_client.table.return_value.upsert.assert_called_once_with({"year": 2025})
+
+    def test_unlock_euer_year_deletes(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            db.unlock_euer_year(2025)
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("year", 2025)
 
 
 class CreatePriceResearchEntryTests(unittest.TestCase):
@@ -3251,6 +3357,46 @@ class IssueInvoiceTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.issue_invoice("does-not-exist")
         self.assertIsNone(result)
+
+
+class InvoicedManualSalesTests(unittest.TestCase):
+    def _table(self, manual_rows, card_rows):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "manual_sales":
+                response.data = manual_rows
+                builder.select.return_value.not_.is_.return_value.order.return_value.execute.return_value = response
+            elif name == "cards":
+                response.data = card_rows
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        return table
+
+    def test_returns_invoiced_sales_with_card_title(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            manual_rows=[{
+                "id": "ms-1", "card_id": "card-1", "invoice_number": 2,
+                "invoice_issued_at": "2026-09-12T00:00:00+00:00",
+                "sale_date": "2026-09-01T00:00:00+00:00", "gross_price": 12.5, "channel": "Vinted",
+            }],
+            card_rows=[{"id": "card-1", "title": "Karte 1"}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.invoiced_manual_sales()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["invoice_number"], 2)
+        self.assertEqual(result[0]["title"], "Karte 1")
+
+    def test_returns_empty_list_when_none_issued(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(manual_rows=[], card_rows=[])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.invoiced_manual_sales()
+        self.assertEqual(result, [])
+        called_tables = [call.args[0] for call in mock_client.table.call_args_list]
+        self.assertNotIn("cards", called_tables)
 
 
 class StatisticsRowsTests(unittest.TestCase):

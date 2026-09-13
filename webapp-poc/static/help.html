@@ -162,7 +162,8 @@ if ("serviceWorker" in navigator) {
     <li>Als versendet markieren / Markierung entfernen</li>
     <li>eBay-Entwürfe für die Auswahl anlegen (optional mit einem in den Einstellungen angelegten Textbaustein,
       der in die automatisch generierte Beschreibung eingefügt wird)</li>
-    <li>Etiketten drucken (SKU/Team/Saison/Titel)</li>
+    <li>🏷️ QR-Etiketten drucken (SKU/Team/Saison/Titel plus QR-Code, der direkt zur Kartendetailseite führt – zum
+      Aufkleben auf Ordner/Toploader, damit sich eine Karte per Scan wiederfinden lässt)</li>
     <li>Zu einem bestehenden Kauf hinzufügen</li>
     <li>In private Sammlung überführen (Privatentnahme)</li>
   </ul>
@@ -263,13 +264,19 @@ if ("serviceWorker" in navigator) {
     Verkauf dauerhaft zugeordnet; ein erneuter Klick druckt dieselbe Rechnung mit derselben Nummer nochmals.
     Die Rechnungsnummern laufen fortlaufend über alle Jahre hinweg, ohne Jahresreset. Für eBay-Verkäufe bietet
     eBay selbst keine über die API abrufbare Rechnung an – hierfür bleibt nur die Bestellübersicht im eBay-
-    Verkäufer-Cockpit.</p>
+    Verkäufer-Cockpit. Alle ausgestellten Rechnungen erscheinen zusätzlich in der Tabelle „Ausgestellte
+    Rechnungen" im Abschnitt „Rechnungstool" auf der Kleinunternehmer-Seite (siehe unten), sortierbar per Klick
+    auf die Spaltenüberschrift, mit Link zurück zur jeweiligen Kartenseite.</p>
   <p>Ist eine Karte gleichzeitig noch bei eBay veröffentlicht UND bereits anderweitig verkauft worden, erscheint
     ein Warnhinweis im eBay-Bereich – über den Button „Beenden" lässt sich das Angebot dann sofort von eBay
     zurückziehen. Derselbe Warnhinweis erscheint auch, wenn die Karte per Privatentnahme in die private Sammlung
     überführt wurde, während das Angebot noch aktiv ist.</p>
   <p>Der Button „In private Sammlung überführen (Privatentnahme)" (bzw. „Aus privater Sammlung zurückholen", wenn
     die Karte schon dort ist) neben „Löschen" entnimmt die Karte dem Verkaufsbestand – siehe Private Sammlung.</p>
+  <p>Im Abschnitt „Grading" lässt sich der Weg einer Karte zu PSA, BGS, SGC oder einem sonstigen Grading-Unternehmen
+    festhalten: Unternehmen, Status (Eingeschickt/In Bearbeitung/Zurück), Einschick- und Rückerhalt-Datum,
+    Grading-Kosten sowie das Ergebnis (Grade/Note, z. B. „9.5" oder „Gem Mt 10"). Die Felder sind rein
+    informativ und werden zusammen mit den übrigen Kartendaten über „Speichern" abgelegt.</p>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Cardmarket, COMC, Sonstiges), Verkäufer,
@@ -313,8 +320,11 @@ if ("serviceWorker" in navigator) {
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
     Zuletzt aktualisiert, Aufrufe) aus-/einblenden – die Auswahl wird je Browser gemerkt. Der Button „Kachelansicht"
-    zeigt dieselbe Liste stattdessen als Foto-Kacheln (Titel, Preis, Status inkl. Warnhinweisen) – praktisch zum
-    schnellen Durchblättern nach Bild statt Tabellenzeile. Massenauswahl, Sortierung und die übrigen Spalten
+    oben rechts neben dem Sport/Non-Sport-Filter zeigt dieselbe Liste stattdessen als Foto-Kacheln (Titel, Preis,
+    Status inkl. Warnhinweisen) – praktisch zum schnellen Durchblättern nach Bild statt Tabellenzeile. Dieselben
+    Badges wie in der Tabelle (Zugestellt, Retoure, 🔄 neu eingestellt, ⏳ lange gelistet ohne Verkauf, 📥
+    importiertes Angebot) erscheinen dort analog zur Kachelansicht auf der Kartenübersicht (cards.html).
+    Massenauswahl, Sortierung und die übrigen Spalten
     bleiben dabei der Tabelle vorbehalten; „Listenansicht" wechselt zurück, die Wahl wird je Browser gemerkt.</p>
   <p>„Von eBay importieren" legt für ein bereits von Hand auf eBay eingestelltes Angebot (also nicht über dieses Tool
     erstellt) automatisch eine passende Karte samt Angebots-Datensatz an: einfach die eBay-Artikelnummer eintragen –
@@ -448,7 +458,9 @@ if ("serviceWorker" in navigator) {
     Inventarwert), ein Monats-Diagramm für Umsatz/Gewinn, eine Jahresübersicht sowie Plattform- (Einkauf),
     Kanal- (Verkauf), Team- und Set-Ranking. Die Plattform-Auswertung zeigt, wo die Karten gekauft wurden; die
     Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller Kanal) – beide mit
-    durchschnittlichem Gewinn/Marge. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
+    durchschnittlichem Gewinn/Marge. Team- und Set-Ranking zeigen zusätzlich die Spalte „Ø Tage bis Verkauf" – die
+    durchschnittliche Liegedauer (Kauf- bis Verkaufsdatum) der jeweiligen Gruppe, als grober Anhaltspunkt, welche
+    Teams/Sets sich erfahrungsgemäß schneller verkaufen. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
     (Käufe, Inventar, Karten, Alle Verkäufe); über den Button „⚙ Kacheln" lassen sich einzelne Kacheln aus-/einblenden
     und per Pfeiltasten in der gewünschten Reihenfolge anordnen – die Auswahl wird je Browser gemerkt. Der
     Jahresvergleich stellt die beiden jüngsten Jahre mit Verkäufen
@@ -506,11 +518,17 @@ if ("serviceWorker" in navigator) {
     Software-Abos, Fahrtkosten, Porto) – Datum, Kategorie, Betrag, Notiz je Eintrag, mit Lösch-Möglichkeit. Die
     Liste der erfassten Ausgaben (gefiltert auf das oben gewählte EÜR-Jahr) lässt sich per Klick auf die
     Spaltenüberschrift sortieren, ist paginiert (Seitengröße wie in den Einstellungen festgelegt) und über
-    „🖨 Drucken" bzw. „⭳ Ausgaben als CSV" ausdrucken/exportieren. Ein
+    „🖨 Drucken" bzw. „⭳ Ausgaben als CSV" ausdrucken/exportieren. Der Button „🔒 Jahr sperren" (bzw.
+    „🔓 Jahr entsperren") neben dem CSV-Export sperrt das oben gewählte Jahr gegen nachträgliche Änderungen an den
+    sonstigen Betriebsausgaben – ein bereits eingereichtes/abgeschlossenes Jahr lässt sich dann nicht mehr
+    versehentlich durch neue, geänderte oder gelöschte Ausgaben verändern (ein entsprechender Versuch wird mit
+    einer Fehlermeldung abgelehnt), bis die Sperre wieder aufgehoben wird. Die Sperre bezieht sich ausschließlich
+    auf Betriebsausgaben, nicht auf Käufe oder Verkäufe. Ein
     Button „Als CSV exportieren" lädt die Jahresaufstellung im gleichen Stil wie der DATEV/Lexoffice-Export auf
     „Alle Verkäufe" herunter. Das Rechnungstool selbst liegt auf der jeweiligen Kartenseite (Button „🧾 Rechnung
-    erstellen" im Abschnitt „Verkauf außerhalb eBay", siehe oben) – dieser Abschnitt hier fasst nur zusammen,
-    wie es funktioniert. Diese Seite ist eine reine Orientierungshilfe/Vorbereitung – die
+    erstellen" im Abschnitt „Verkauf außerhalb eBay", siehe oben); der Abschnitt „Rechnungstool" hier zeigt
+    zusätzlich eine sortierbare Tabelle „Ausgestellte Rechnungen" mit allen bisher vergebenen Rechnungsnummern
+    und einem Link zurück zur jeweiligen Karte. Diese Seite ist eine reine Orientierungshilfe/Vorbereitung – die
     endgültige EÜR sowie eine eventuell nötige Ummeldung beim Finanzamt bleiben Aufgabe des
     Steuerberaters/Finanzamts.</p>
 

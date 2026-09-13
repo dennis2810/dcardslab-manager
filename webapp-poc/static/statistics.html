@@ -83,6 +83,18 @@ if ("serviceWorker" in navigator) {
   .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
   .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
   .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
+  /* Team-/Set-Ranking haben eine fuenfte Spalte (Verkaufsgeschwindigkeit) -
+     eigene Breitenaufteilung statt der generischen 40/20/20/20-Regel oben. */
+  #team-ranking-table th:nth-child(1), #team-ranking-table td:nth-child(1),
+  #set-ranking-table th:nth-child(1), #set-ranking-table td:nth-child(1) { width: 30%; }
+  #team-ranking-table th:nth-child(2), #team-ranking-table td:nth-child(2),
+  #team-ranking-table th:nth-child(3), #team-ranking-table td:nth-child(3),
+  #team-ranking-table th:nth-child(4), #team-ranking-table td:nth-child(4),
+  #set-ranking-table th:nth-child(2), #set-ranking-table td:nth-child(2),
+  #set-ranking-table th:nth-child(3), #set-ranking-table td:nth-child(3),
+  #set-ranking-table th:nth-child(4), #set-ranking-table td:nth-child(4) { width: 15%; }
+  #team-ranking-table th:nth-child(5), #team-ranking-table td:nth-child(5),
+  #set-ranking-table th:nth-child(5), #set-ranking-table td:nth-child(5) { width: 25%; }
   .profit-positive { color: #1e4620; }
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
@@ -170,7 +182,7 @@ if ("serviceWorker" in navigator) {
   <h2>Team-Ranking (nach Gewinn)</h2>
   <div class="table-scroll">
     <table id="team-ranking-table" class="ranking-table" style="display: none;">
-        <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+        <thead><tr><th>Team</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th><th>Ø Tage bis Verkauf</th></tr></thead>
         <tbody id="team-ranking-body"></tbody>
       </table>
   </div>
@@ -179,7 +191,7 @@ if ("serviceWorker" in navigator) {
   <h2>Set-Ranking (nach Gewinn)</h2>
   <div class="table-scroll">
     <table id="set-ranking-table" class="ranking-table" style="display: none;">
-        <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th></tr></thead>
+        <thead><tr><th>Set</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th><th>Ø Tage bis Verkauf</th></tr></thead>
         <tbody id="set-ranking-body"></tbody>
       </table>
   </div>
@@ -354,6 +366,12 @@ function renderRanking(tableId, bodyId, emptyId, entries) {
     profitTd.textContent = fmtEuro(entry.profit);
     profitTd.className = entry.profit >= 0 ? "profit-positive" : "profit-negative";
     tr.appendChild(profitTd);
+    // Verkaufsgeschwindigkeit: durchschnittliche Liegedauer (Kauf- bis
+    // Verkaufsdatum) je Gruppe - hilft bei Einkaufsentscheidungen, welche
+    // Teams/Sets sich im Schnitt schneller verkaufen.
+    const holdingTd = document.createElement("td");
+    holdingTd.textContent = entry.avg_holding_days != null ? `${fmtNumber(entry.avg_holding_days, 1)} Tage` : "–";
+    tr.appendChild(holdingTd);
     body.appendChild(tr);
   }
 }
