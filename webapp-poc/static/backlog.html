@@ -77,6 +77,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -115,12 +116,74 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
-    <h3>Steuerreport/EÜR-Export <span class="status-tag status-open">offen – Klärung nötig</span>
+    <h3>Direkte Buchhaltungs-API-Anbindung (z. B. Lexoffice) <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
-    <p>Über den bestehenden DATEV/Lexoffice-CSV-Export hinaus eine einfache Vorbereitung für die
-      Einnahmen-Überschuss-Rechnung. Neue Berechnungslogik (welche Posten wie zugeordnet werden) und ein eigenes
-      Exportformat. Klärungsbedarf: welches konkrete Format/welche Software soll die Ausgabe lesen können, welche
-      Kategorien werden erwartet.</p>
+    <p>Über den bestehenden DATEV/Lexoffice-CSV-Export hinaus eine direkte API-Anbindung, die Verkäufe/Ausgaben
+      automatisch in die Buchhaltungssoftware überträgt statt nur eine CSV-Datei zum manuellen Import bereitzustellen.
+      Klärungsbedarf: welche konkrete Software/API (Lexoffice, sevDesk, ...), eigenes API-Konto/eigene Zugangsdaten
+      nötig, wie Dubletten bei mehrfacher Übertragung vermieden werden.</p>
+  </div>
+
+  <div class="item">
+    <h3>Set-Vervollständigung <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Anzeige, wie viele Karten eines Sets bereits vorhanden sind bzw. fehlen, um es zu vervollständigen.
+      Klärungsbedarf: woher kommt die vollständige Set-Liste (Gesamtzahl + Kartennummern je Set) – dafür gibt es
+      aktuell keine Datenquelle im Tool, das müsste entweder von Hand gepflegt oder aus einer externen Quelle
+      importiert werden.</p>
+  </div>
+
+  <div class="item">
+    <h3>Cardmarket-API-Anbindung <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Analog zur bestehenden eBay-Integration (Angebote anlegen/synchronisieren, Preisrecherche) eine eigene
+      Anbindung an Cardmarket. Eigenständige Neuintegration mit eigener Authentifizierung/API, unabhängig vom
+      bestehenden eBay-Code. Klärungsbedarf: Cardmarket-Händlerkonto samt API-Zugang vorhanden, welcher Funktionsumfang
+      (nur Preisrecherche oder auch Angebote verwalten).</p>
+  </div>
+
+  <div class="item">
+    <h3>Automatische Preisverfall-Strategie <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Über den bestehenden Preis-Alarm mit manuellem Anpassungsvorschlag hinaus eine automatische, zeitgesteuerte
+      Preissenkung für unverkaufte eBay-Angebote (z. B. -5&nbsp;% alle 14 Tage bis zu einer Untergrenze). Klärungsbedarf:
+      genaue Regel (Schrittweite/Intervall/Untergrenze je Angebot oder global), ob wirklich vollautomatisch ohne
+      Bestätigung oder weiterhin nur als Vorschlag.</p>
+  </div>
+
+  <div class="item">
+    <h3>Textbausteine/Auto-Antworten für eBay-Nachrichten <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Über die bestehenden Textbausteine für Angebotsbeschreibungen hinaus vorformulierte bzw. automatische
+      Antworten auf eBay-Käufernachrichten. Erfordert eine neue eBay-API-Anbindung (Nachrichten lesen/schreiben),
+      die bisher nirgends im Projekt genutzt wird. Klärungsbedarf: nur Vorlagen zum manuellen Einfügen oder
+      wirklich automatisches Antworten, welche eBay-API das überhaupt hergibt.</p>
+  </div>
+
+  <div class="item">
+    <h3>Versicherungswert-Report <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Ein druckbarer/exportierbarer Report des geschätzten Gesamtwerts der Sammlung (analog zum bestehenden
+      Portfolio-Wertverlauf) für eine Hausrat-/Wertsachenversicherung. Klärungsbedarf: welche Angaben eine
+      Versicherung konkret verlangt (Einzelaufstellung mit Fotos? Nur Gesamtsumme?), ob die private Sammlung
+      mit einbezogen werden soll.</p>
+  </div>
+
+  <div class="item">
+    <h3>Konsignation/Kommissionsverkauf <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Karten für Dritte gegen Provision verkaufen, statt nur eigene Karten. Beträfe Kaufpreis-/Gewinnlogik an
+      mehreren Stellen (Statistiken, EÜR, Steuerreport), da diese aktuell durchgehend annehmen, dass alle Karten
+      dem Tool-Betreiber selbst gehören. Klärungsbedarf: wie Fremdeigentum von eigenen Karten unterschieden werden
+      soll, wie die Provision berechnet wird, ob Auszahlungen an die Einlieferer mit erfasst werden sollen.</p>
+  </div>
+
+  <div class="item">
+    <h3>Wochendigest <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: klein</span></h3>
+    <p>Zusätzlich zur bestehenden täglichen E-Mail bei fälligen Erinnerungen/Wiedervorlagen eine wöchentliche
+      Zusammenfassung (Verkäufe, Gewinn, neue Preis-Alarme der Woche). Klärungsbedarf: welcher Wochentag/welche
+      Uhrzeit, welche Kennzahlen genau hinein sollen.</p>
   </div>
 
   <div class="item">

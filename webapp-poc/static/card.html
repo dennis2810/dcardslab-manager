@@ -97,6 +97,10 @@ if ("serviceWorker" in navigator) {
   .purchase-forms { display: flex; flex-direction: column; gap: 1rem; }
   .purchase-forms > div { border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem; }
   .purchase-forms input, .purchase-forms select { padding: 0.3rem; margin-right: 0.4rem; }
+  .target-price-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .target-price-section h2 { font-size: 1.1rem; }
+  .target-price-section label { display: inline-flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; margin: 0 1rem 0.5rem 0; }
+  .target-price-section input { font-weight: normal; padding: 0.3rem; margin-top: 0.2rem; width: 8rem; }
   .ebay-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
   .ebay-section h2 { font-size: 1.1rem; }
   .manual-sale-section { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
@@ -222,6 +226,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -267,6 +272,7 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <div class="purchase-section" id="purchase-section"></div>
+  <div class="target-price-section" id="target-price-section"></div>
   <div class="inventory-section" id="inventory-section"></div>
   <div class="ebay-section" id="ebay-section"></div>
   <div class="manual-sale-section" id="manual-sale-section"></div>
@@ -703,9 +709,10 @@ async function loadCard() {
     render(card);
     renderExtraImages(card.extra_image_urls);
     renderPurchaseSection(card.purchase);
+    renderTargetPriceCalculator(card.purchase, card.team_avg_holding_days, card.ebay_sale, card.manual_sale);
     renderInventorySection(card.inventory);
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection);
-    renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title);
+    renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title, card.lot_siblings);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
       card.ebay_listing?.ebay_listing_id, card.ebay_listing
@@ -865,6 +872,18 @@ function render(card) {
   gradingGradeWrapper.appendChild(gradingGradeInput);
   form.appendChild(gradingGradeWrapper);
 
+  const gradingConditionWrapper = document.createElement("label");
+  gradingConditionWrapper.textContent = "Zustands-Einschätzung (vor Einschicken)";
+  gradingConditionWrapper.title = "Eigene, freiwillige Notiz zu Ecken/Zentrierung/... vor dem Einschicken - "
+    + "unabhängig vom späteren offiziellen Grade";
+  const gradingConditionInput = document.createElement("input");
+  gradingConditionInput.type = "text";
+  gradingConditionInput.name = "grading_condition_note";
+  gradingConditionInput.placeholder = "z. B. Ecken minimal touched, Zentrierung 55/45";
+  gradingConditionInput.value = card.grading_condition_note ?? "";
+  gradingConditionWrapper.appendChild(gradingConditionInput);
+  form.appendChild(gradingConditionWrapper);
+
   const actions = document.createElement("div");
   actions.className = "actions";
 
@@ -953,6 +972,7 @@ form.addEventListener("submit", async (ev) => {
   fields.grading_received_at = form.elements["grading_received_at"].value || null;
   fields.grading_cost = form.elements["grading_cost"].value;
   fields.grading_grade = form.elements["grading_grade"].value;
+  fields.grading_condition_note = form.elements["grading_condition_note"].value;
   const statusP = document.getElementById("save-status");
   statusP.textContent = "Speichert …";
   statusP.className = "";
@@ -1162,6 +1182,60 @@ function renderPurchaseSection(purchase) {
       showToast("Fehler: " + err, true);
     }
   });
+}
+
+// Zielpreis-Rechner: rein clientseitige Hilfe beim Festlegen eines
+// Verkaufspreises, keine eigenen Backend-Felder - Einstandspreis wird aus
+// dem verknuepften Kauf vorbelegt (falls vorhanden), Marge/Gebuehr-Prozentsatz
+// sind freie Annahmen, die man je nach Plattform anpassen kann. Zusaetzlich
+// die Verkaufsprognose (Team-Durchschnitt Ø Tage bis Verkauf, siehe
+// statistics.html) direkt daneben, da beides bei der Preis-/Verkaufsplanung
+// zusammengehoert.
+function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, manualSale) {
+  const section = document.getElementById("target-price-section");
+  if (ebaySale || manualSale) {
+    section.innerHTML = "";
+    return;
+  }
+  section.innerHTML = `
+    <h2>Zielpreis-Rechner</h2>
+    <label>Einstandspreis (€) <input type="number" step="0.01" id="tp-cost"></label>
+    <label>Versand (€) <input type="number" step="0.01" id="tp-shipping" value="0"></label>
+    <label>Zielmarge (%) <input type="number" step="1" id="tp-margin" value="30"></label>
+    <label>Geschätzte Verkaufsgebühr (%) <input type="number" step="1" id="tp-fee" value="12"></label>
+    <p id="tp-result"></p>
+  `;
+  const costInput = document.getElementById("tp-cost");
+  costInput.value = purchase?.allocated_cost ?? "";
+  const resultP = document.getElementById("tp-result");
+
+  function recompute() {
+    const cost = parseFloat(costInput.value) || 0;
+    const shipping = parseFloat(document.getElementById("tp-shipping").value) || 0;
+    const marginPct = parseFloat(document.getElementById("tp-margin").value) || 0;
+    const feePct = parseFloat(document.getElementById("tp-fee").value) || 0;
+    const denominator = 1 - (marginPct + feePct) / 100;
+    if (denominator <= 0) {
+      resultP.textContent = "Marge + Gebühr ergeben zusammen 100% oder mehr - kein sinnvoller Preis berechenbar.";
+      resultP.className = "error";
+      return;
+    }
+    const recommended = (cost + shipping) / denominator;
+    resultP.textContent = `Empfohlener Verkaufspreis: ${fmtEuro(recommended)}`;
+    resultP.className = "";
+  }
+  for (const id of ["tp-cost", "tp-shipping", "tp-margin", "tp-fee"]) {
+    document.getElementById(id).addEventListener("input", recompute);
+  }
+  recompute();
+
+  if (teamAvgHoldingDays != null) {
+    const forecastP = document.createElement("p");
+    forecastP.className = "note";
+    forecastP.textContent =
+      `📈 Verkaufsprognose: Karten dieses Teams verkaufen sich erfahrungsgemäß in ~${teamAvgHoldingDays.toFixed(1)} Tagen (Team-Durchschnitt).`;
+    section.appendChild(forecastP);
+  }
 }
 
 const EBAY_STATUS_LABELS = {
@@ -1421,11 +1495,11 @@ function renderInventoryRow(item) {
 // POST/PATCH/DELETE /api/manual-sales), analog zu renderSaleStats() fuer
 // eBay-Verkaeufe, aber mit editierbarem Kanal/Preis/Datum statt nur
 // nachtraeglich anpassbaren Gebuehren.
-function renderManualSaleSection(manualSale, purchase, ebayListing, cardTitle) {
+function renderManualSaleSection(manualSale, purchase, ebayListing, cardTitle, lotSiblings) {
   const section = document.getElementById("manual-sale-section");
   const importedAndActive = ebayListing && ebayListing.status === "Veroeffentlicht" && !ebayListing.ebay_offer_id;
   if (manualSale) {
-    renderManualSaleReadonly(section, manualSale, purchase, cardTitle);
+    renderManualSaleReadonly(section, manualSale, purchase, cardTitle, lotSiblings);
   } else if (ebayListing && ebayListing.status === "Verkauft") {
     // Schon ueber eBay verkauft - ein zusaetzlicher manueller Verkauf fuer
     // dieselbe Karte waere widerspruechlich, daher hier ausgegraut statt
@@ -1456,7 +1530,7 @@ function renderManualSaleDisabled(section, message) {
   section.appendChild(hint);
 }
 
-function renderManualSaleReadonly(section, sale, purchase, cardTitle) {
+function renderManualSaleReadonly(section, sale, purchase, cardTitle, lotSiblings) {
   section.innerHTML = "<h2>Verkauf außerhalb eBay</h2>";
   const readonly = document.createElement("div");
   readonly.className = "manual-sale-readonly";
@@ -1503,6 +1577,12 @@ function renderManualSaleReadonly(section, sale, purchase, cardTitle) {
     const dd = document.createElement("dd"); dd.textContent = value; dl.appendChild(dd);
   }
   readonly.appendChild(dl);
+  if (lotSiblings && lotSiblings.length) {
+    const lotHint = document.createElement("p");
+    lotHint.className = "note";
+    lotHint.textContent = "📦 Teil eines Lot-Verkaufs mit: " + lotSiblings.map((s) => s.title).join(", ");
+    readonly.appendChild(lotHint);
+  }
   section.appendChild(readonly);
 
   const actions = document.createElement("div");

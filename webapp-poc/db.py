@@ -2,6 +2,7 @@
 Field names mirror integrations/ai_card_recognition.py's recognize_card()
 output 1:1 - duplicated here rather than imported, so this module has no
 import-order dependency on integrations/ being on sys.path first."""
+import uuid
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -17,9 +18,13 @@ CARD_FIELDS = [
 # Grading-Tracking (PSA/BGS/SGC/...): Status eines optionalen Einsende-
 # Vorgangs direkt auf der Karte, keine eigene Tabelle noetig, da hoechstens
 # eine aktive/letzte Einsendung pro Karte relevant ist (siehe update_card()).
+# grading_condition_note ist eine rein freiwillige Selbsteinschaetzung des
+# Zustands (Ecken/Zentrierung/...), die man sich vor dem Einschicken notiert -
+# unabhaengig vom spaeteren offiziellen grading_grade.
 GRADING_FIELDS = (
     "grading_status", "grading_company", "grading_submitted_at",
     "grading_received_at", "grading_cost", "grading_grade",
+    "grading_condition_note",
 )
 
 
@@ -1226,6 +1231,48 @@ def create_manual_sale(card_id, fields):
     row["card_id"] = card_id
     response = get_client().table("manual_sales").insert(row).execute()
     return response.data[0]
+
+
+def create_lot_sale(card_ids, fields):
+    # Verkauf mehrerer Karten als ein Lot/Bundle (z.B. Restposten-Sammelposten) -
+    # legt fuer jede Karte einen eigenen manual_sales-Eintrag an (gleiche
+    # unique-card_id-Constraint wie bei create_manual_sale()), alle mit
+    # derselben lot_id verknuepft, damit sie sich als zusammengehoerig
+    # anzeigen/wiederfinden lassen. Gesamtpreis/Versand/Gebuehren werden
+    # gleichmaessig auf die Karten aufgeteilt - gleiches Rundungsprinzip wie
+    # die Kaufpreis-Aufteilung bei Kaeufen (siehe _recompute_allocated_costs()).
+    lot_id = str(uuid.uuid4())
+    count = len(card_ids)
+    shares = {
+        name: round(float(fields.get(name) or 0) / count, 2)
+        for name in MANUAL_SALE_NUMERIC_FIELDS
+    }
+    created = []
+    for card_id in card_ids:
+        row = {name: fields[name] for name in MANUAL_SALE_FIELDS if name in fields}
+        row.update(shares)
+        row = _round_money(_blank_numeric_to_none(row, MANUAL_SALE_NUMERIC_FIELDS), MANUAL_SALE_MONEY_FIELDS)
+        row["card_id"] = card_id
+        row["lot_id"] = lot_id
+        response = get_client().table("manual_sales").insert(row).execute()
+        created.append(response.data[0])
+    return created
+
+
+def manual_sales_by_lot_id(lot_id):
+    # Fuer card.html - zeigt an, welche anderen Karten Teil desselben Lots
+    # waren (siehe create_lot_sale()), angereichert um den Kartentitel
+    # (gleiches Prinzip wie invoiced_manual_sales()).
+    response = get_client().table("manual_sales").select("id,card_id,gross_price").eq("lot_id", lot_id).execute()
+    rows = response.data
+    if not rows:
+        return []
+    card_ids = list({row["card_id"] for row in rows})
+    cards_response = get_client().table("cards").select("id,title").in_("id", card_ids).execute()
+    titles = {c["id"]: c["title"] for c in cards_response.data}
+    for row in rows:
+        row["title"] = titles.get(row["card_id"], "")
+    return rows
 
 
 def get_manual_sale_for_card(card_id):

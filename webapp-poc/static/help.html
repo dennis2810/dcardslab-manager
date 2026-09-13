@@ -77,6 +77,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -165,6 +166,10 @@ if ("serviceWorker" in navigator) {
     <li>🏷️ QR-Etiketten drucken (SKU/Team/Saison/Titel plus QR-Code, der direkt zur Kartendetailseite führt – zum
       Aufkleben auf Ordner/Toploader, damit sich eine Karte per Scan wiederfinden lässt)</li>
     <li>Zu einem bestehenden Kauf hinzufügen</li>
+    <li>📦 Als Lot verkaufen (mindestens 2 Karten auswählen, Kanal/Datum/Gesamtpreis/Versand/Gebühren eintragen –
+      der Betrag wird gleichmäßig auf die ausgewählten Karten aufgeteilt und legt für jede Karte einen eigenen
+      Eintrag unter „Verkauf außerhalb eBay" an, sichtbar auf der jeweiligen Kartenseite mit Verweis auf die
+      übrigen Karten des Lots)</li>
     <li>In private Sammlung überführen (Privatentnahme)</li>
   </ul>
   <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe, Privatentnahme) lassen sich per „Rückgängig"
@@ -185,6 +190,12 @@ if ("serviceWorker" in navigator) {
     zusätzlich „Versendet" falls zutreffend, sowie „📥 Importiert" bzw. „🔄 Neu eingestellt" für ein importiertes
     bzw. zuletzt neu eingestelltes eBay-Angebot) – ohne erst zum eBay-/Verkaufs-Abschnitt weiter unten scrollen zu
     müssen.</p>
+  <p>Direkt unter dem Kauf-Abschnitt hilft ein Zielpreis-Rechner bei der Preisfindung: Einstandspreis (aus einem
+    verknüpften Kauf vorbelegt, sonst frei eintragbar), Versand, Zielmarge und eine geschätzte Verkaufsgebühr
+    ergeben zusammen einen empfohlenen Verkaufspreis – reine Rechenhilfe, wird nirgends gespeichert. Ist die Karte
+    noch nicht verkauft und einem Team zugeordnet, erscheint darunter außerdem eine kurze Verkaufsprognose
+    („verkauft sich erfahrungsgemäß in ~X Tagen") basierend auf der Team-Verkaufsgeschwindigkeit aus den
+    Statistiken (siehe unten).</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
     Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
@@ -251,7 +262,9 @@ if ("serviceWorker" in navigator) {
     Statistiken, Rankings und Jahresübersicht ein. Auch hier lassen sich „Als Rückerstattung/Retoure markieren"
     und „Als zugestellt markieren" setzen. Wird ein solcher Verkauf wieder gelöscht, wird der
     Inventareintrag automatisch zurückgesetzt. Wurde die Karte bereits über eBay verkauft, ist dieser Abschnitt
-    ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich).</p>
+    ausgegraut (kein zusätzlicher manueller Verkauf für dieselbe Karte möglich). Wurde die Karte als Teil eines
+    Lot-Verkaufs erfasst (siehe Kartenübersicht, Massenaktion „📦 Als Lot verkaufen"), erscheint hier zusätzlich
+    ein Hinweis mit den Titeln der übrigen mitverkauften Karten.</p>
   <p>Über den Button „🖨 Beleg drucken" lässt sich zu einem manuellen Verkauf ein druckbarer Beleg mit den
     Pflichtangaben einer Kleinbetragsrechnung (§33 UStDV) erstellen: die Absenderadresse aus den Einstellungen
     (Abschnitt „Absenderadresse"), Datum, Artikel und Gesamtbetrag – dazu, sofern in den Einstellungen aktiviert,
@@ -275,7 +288,9 @@ if ("serviceWorker" in navigator) {
     die Karte schon dort ist) neben „Löschen" entnimmt die Karte dem Verkaufsbestand – siehe Private Sammlung.</p>
   <p>Im Abschnitt „Grading" lässt sich der Weg einer Karte zu PSA, BGS, SGC oder einem sonstigen Grading-Unternehmen
     festhalten: Unternehmen, Status (Eingeschickt/In Bearbeitung/Zurück), Einschick- und Rückerhalt-Datum,
-    Grading-Kosten sowie das Ergebnis (Grade/Note, z. B. „9.5" oder „Gem Mt 10"). Die Felder sind rein
+    Grading-Kosten sowie das Ergebnis (Grade/Note, z. B. „9.5" oder „Gem Mt 10"). Zusätzlich lässt sich vor dem
+    Einschicken eine freiwillige Zustands-Einschätzung notieren (z. B. „Ecken minimal touched, Zentrierung 55/45") –
+    unabhängig vom späteren offiziellen Grade, als eigene Gedächtnisstütze. Die Felder sind rein
     informativ und werden zusammen mit den übrigen Kartendaten über „Speichern" abgelegt.</p>
 
   <h2 id="kaeufe">Käufe</h2>
@@ -421,8 +436,11 @@ if ("serviceWorker" in navigator) {
     fehlerhafte Zeilen werden einzeln gemeldet und übersprungen). Mehrere Einträge lassen sich per Kästchen auswählen
     und über die dann erscheinende Massenaktionen-Leiste auf einmal löschen (mit kurzer Gnadenfrist samt
     „Rückgängig" statt eines Bestätigungsdialogs). Der Pfeil-Button vor jedem Eintrag prüft aktive eBay-Angebote
-    zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen. Über den Button
-    „⚙ Spalten" lassen sich die Spalten Team, Set und Notiz aus-/einblenden – die Auswahl wird je Browser gemerkt.</p>
+    zu Titel/Team/Set und markiert Treffer, die auf oder unter dem eingetragenen Wunschpreis liegen. Fällt der
+    Marktpreis laut Preisrecherche-Verlauf seit der ersten Erfassung, erscheint zusätzlich ein Hinweis „📉 fällt
+    seit ~X Wo." – auch schon bevor der Wunschpreis selbst erreicht ist, als Anhaltspunkt für einen guten Zeitpunkt
+    zum genaueren Hinsehen. Über den Button „⚙ Spalten" lassen sich die Spalten Team, Set und Notiz aus-/einblenden
+    – die Auswahl wird je Browser gemerkt.</p>
   <p>Zusätzlich läuft im Hintergrund automatisch (ca. einmal täglich je Eintrag) dieselbe Preisprüfung – der
     günstigste gefundene Treffer erscheint direkt in der Spalte „Sourcing", ohne dass man jeden Eintrag einzeln
     aufklappen muss (✓-Markierung, wenn er auf/unter dem Wunschpreis liegt, mit Direktlink zum Angebot). Die
@@ -531,6 +549,18 @@ if ("serviceWorker" in navigator) {
     und einem Link zurück zur jeweiligen Karte. Diese Seite ist eine reine Orientierungshilfe/Vorbereitung – die
     endgültige EÜR sowie eine eventuell nötige Ummeldung beim Finanzamt bleiben Aufgabe des
     Steuerberaters/Finanzamts.</p>
+
+  <h2 id="kassenmodus">Kassenmodus</h2>
+  <p>Schlanke Seite für Kartenshows/Börsen, ohne die volle Kartenverwaltung öffnen zu müssen: SKU scannen (jeder
+    Barcode-/QR-Scanner tippt wie eine Tastatur, gefolgt von Enter – funktioniert daher auch mit den bestehenden
+    QR-Etiketten aus der Kartenübersicht) oder Titel eintippen und Enter/„Suchen" drücken. Bei genau einem Treffer
+    erscheint sofort die Verkaufsmaske (Kanal, Preis), bei mehreren Treffern eine Auswahlliste, bei einer bereits
+    verkauften Karte ein entsprechender Hinweis statt der Verkaufsmaske. „Verkaufen" legt denselben manuellen
+    Verkauf wie im Abschnitt „Verkauf außerhalb eBay" auf der Kartenseite an (Standardkanal „Kartenshow", Datum
+    heute) und leert das Suchfeld sofort für die nächste Karte. Eine Sitzungsleiste oben zeigt Anzahl und
+    Gesamtsumme der in dieser Sitzung erfassten Verkäufe (nur im Browser gespeichert, „Sitzung zurücksetzen" setzt
+    die Zähler auf 0, ohne die Verkäufe selbst zu löschen); „↩ Rückgängig" neben dem zuletzt erfassten Verkauf
+    macht genau diesen einen Verkauf wieder rückgängig.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport, inklusive

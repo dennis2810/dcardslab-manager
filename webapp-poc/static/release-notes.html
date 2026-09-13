@@ -71,6 +71,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -81,6 +82,24 @@ if ("serviceWorker" in navigator) {
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
+
+  <h2>Kassenmodus, Lot-Verkauf &amp; Preishilfen <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite „Kassenmodus" für Kartenshows/Börsen: SKU scannen (funktioniert mit jedem
+      Barcode-/QR-Scanner sowie den bestehenden QR-Etiketten) oder Titel eintippen, Kanal/Preis bestätigen,
+      fertig – ohne die volle Kartenverwaltung zu öffnen. Mit Sitzungszähler (Anzahl/Summe) und „↩ Rückgängig"
+      für den zuletzt erfassten Verkauf.</li>
+    <li>Kartenübersicht: neue Massenaktion „📦 Als Lot verkaufen" – mehrere Karten auf einmal als ein Bundle
+      außerhalb von eBay verkaufen, der Gesamtpreis (inkl. Versand/Gebühren) wird gleichmäßig auf die Karten
+      aufgeteilt. Auf jeder beteiligten Kartenseite erscheint ein Hinweis auf die übrigen Karten des Lots.</li>
+    <li>Kartendetail: neuer Zielpreis-Rechner (Einstandspreis, Versand, Zielmarge, geschätzte Verkaufsgebühr →
+      empfohlener Verkaufspreis) sowie eine kurze Verkaufsprognose für noch nicht verkaufte Karten, basierend
+      auf der Team-Verkaufsgeschwindigkeit aus den Statistiken.</li>
+    <li>Kartendetail, Abschnitt „Grading": neues freiwilliges Feld für eine Zustands-Einschätzung
+      (Ecken/Zentrierung/...) vor dem Einschicken, unabhängig vom späteren offiziellen Grade.</li>
+    <li>Wunschliste: zusätzlich zum Zielpreis-Treffer ein Trend-Hinweis „📉 fällt seit ~X Wo.", sobald der
+      Marktpreis laut Preisrecherche-Verlauf seit der ersten Erfassung gefallen ist.</li>
+  </ul>
 
   <h2>Verkaufsgeschwindigkeit, Jahresabschluss &amp; Grading <span class="date">September 2026</span></h2>
   <ul>

@@ -72,7 +72,8 @@ if ("serviceWorker" in navigator) {
   .price-check-results li { display: flex; gap: 0.5rem; align-items: baseline; }
   .price-sparkline-wrapper { max-width: 320px; margin: 0 0 0.5rem; }
   .price-hit { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600; }
-  .sourcing-cell { font-size: 0.85rem; white-space: nowrap; }
+  .price-trend-down { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+  .sourcing-cell { font-size: 0.85rem; white-space: normal; }
   .sourcing-cell .note { color: #888; font-style: italic; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
@@ -121,6 +122,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -729,7 +731,35 @@ function buildSourcingCell(item) {
     link.title = item.last_match_title || "";
     frag.appendChild(link);
   }
+  const trend = computePriceTrend(item.price_history);
+  if (trend) {
+    frag.appendChild(document.createTextNode(" "));
+    const trendBadge = document.createElement("span");
+    trendBadge.className = "price-trend-down";
+    trendBadge.textContent = `📉 fällt seit ~${trend.weeks} Wo.`;
+    trendBadge.title = `${fmtEuro(trend.from)} → ${fmtEuro(trend.to)} laut Preisrecherche-Verlauf`;
+    frag.appendChild(trendBadge);
+  }
   return frag;
+}
+
+// Trend-Alarm: erkennt anhand des vorhandenen Preisrecherche-Verlaufs (siehe
+// buildPriceSparkline()), ob der Marktpreis seit der ersten Erfassung
+// gefallen ist - ergaenzend zum reinen Zielpreis-Treffer, da ein fallender
+// Trend schon vor Erreichen des Wunschpreises ein guter Zeitpunkt zum
+// genaueren Hinsehen sein kann.
+function computePriceTrend(history) {
+  const points = (history || [])
+    .map((entry) => ({ date: entry.checked_at, price: Number(entry.price) }))
+    .filter((p) => p.date && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (last.price >= first.price) return null;
+  const days = Math.round((new Date(last.date) - new Date(first.date)) / (24 * 60 * 60 * 1000));
+  const weeks = Math.max(1, Math.round(days / 7));
+  return { weeks, from: first.price, to: last.price };
 }
 
 function buildDetailRow(item) {

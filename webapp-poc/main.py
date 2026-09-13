@@ -759,6 +759,26 @@ async def get_card(card_id: str):
     except Exception:
         logger.exception("Erinnerungen konnten nicht geladen werden fuer Karte %s", card_id)
         card["reminders"] = []
+    # Verkaufsprognose: nur fuer noch nicht verkaufte Karten sinnvoll -
+    # zeigt die bereits fuers Team-Ranking berechnete Verkaufsgeschwindigkeit
+    # (siehe _rank_statistics_by()) auch auf der einzelnen Kartenseite.
+    card["team_avg_holding_days"] = None
+    if card.get("team") and not card["ebay_sale"] and not card["manual_sale"]:
+        try:
+            team_ranking = _compute_statistics()["team_ranking"]
+            team_stat = next((g for g in team_ranking if g["name"] == card["team"]), None)
+            card["team_avg_holding_days"] = team_stat["avg_holding_days"] if team_stat else None
+        except Exception:
+            logger.exception("Verkaufsprognose konnte nicht berechnet werden fuer Karte %s", card_id)
+    if card["manual_sale"] and card["manual_sale"].get("lot_id"):
+        try:
+            card["lot_siblings"] = [
+                row for row in db.manual_sales_by_lot_id(card["manual_sale"]["lot_id"])
+                if row["card_id"] != card_id
+            ]
+        except Exception:
+            logger.exception("Lot-Geschwister konnten nicht geladen werden fuer Karte %s", card_id)
+            card["lot_siblings"] = []
     return JSONResponse(card)
 
 
@@ -1448,6 +1468,30 @@ async def create_manual_sale(card_id: str, fields: dict = Body(default={})):
         # einem 500 machen.
         logger.exception("Inventar-Nullung fuer Karte %s (manueller Verkauf) fehlgeschlagen", card_id)
     return JSONResponse(created)
+
+
+@app.post("/api/manual-sales/lot")
+async def create_lot_sale(fields: dict = Body(...)):
+    # Verkauf mehrerer Karten als ein Lot/Bundle (z.B. Restposten-Sammelposten,
+    # siehe db.create_lot_sale()) - jede Karte muss existieren und darf noch
+    # nicht verkauft sein (weder per eBay noch bereits manuell), sonst wird
+    # der komplette Lot-Verkauf abgelehnt statt nur teilweise angelegt.
+    card_ids = fields.get("card_ids") or []
+    if len(card_ids) < 2:
+        raise HTTPException(status_code=400, detail="Ein Lot benötigt mindestens 2 Karten.")
+    for card_id in card_ids:
+        card = db.get_card(card_id)
+        if card is None:
+            raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+        if db.get_manual_sale_for_card(card_id) or db.get_sale_for_card(card_id):
+            raise HTTPException(status_code=409, detail=f"Karte „{card['title']}“ ist bereits verkauft.")
+    created = db.create_lot_sale(card_ids, fields)
+    for card_id in card_ids:
+        try:
+            db.zero_inventory_for_card(card_id)
+        except Exception:
+            logger.exception("Inventar-Nullung fuer Karte %s (Lot-Verkauf) fehlgeschlagen", card_id)
+    return JSONResponse({"sales": created})
 
 
 @app.get("/api/manual-sales")

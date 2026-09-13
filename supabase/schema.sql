@@ -607,3 +607,12 @@ alter table cards add column if not exists grading_submitted_at timestamptz;
 alter table cards add column if not exists grading_received_at timestamptz;
 alter table cards add column if not exists grading_cost numeric;
 alter table cards add column if not exists grading_grade text not null default '';
+-- Freiwillige Selbsteinschaetzung des Zustands (Ecken/Zentrierung/...) vor
+-- dem Einschicken, unabhaengig vom spaeteren offiziellen grading_grade.
+alter table cards add column if not exists grading_condition_note text not null default '';
+
+-- Lot-/Bundle-Verkauf: mehrere Karten in einem Rutsch ausserhalb von eBay
+-- verkaufen (siehe db.create_lot_sale()) - jede Karte bekommt weiterhin
+-- ihren eigenen manual_sales-Eintrag (Preis/Versand/Gebuehren gleichmaessig
+-- aufgeteilt), lot_id verknuepft die zusammengehoerigen Eintraege nur lose.
+alter table manual_sales add column if not exists lot_id uuid;
