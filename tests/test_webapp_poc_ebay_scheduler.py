@@ -1,5 +1,6 @@
 """Tests for webapp-poc/ebay_scheduler.py - the app-side background
 scheduler (fallback path, see design spec 'Scheduling')."""
+import asyncio
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -428,6 +429,53 @@ class RunReturnsSyncOnceTests(unittest.TestCase):
         with patch("ebay_scheduler.db.get_app_status", return_value={}), \
              patch("ebay_scheduler.db.record_returns_sync", side_effect=RuntimeError("db down")):
             ebay_scheduler.run_returns_sync_once(sync_fn)  # must not raise
+
+
+class RunForeverVacationModeTests(unittest.TestCase):
+    """run_forever() pausiert Preispruefung/Re-Listing waehrend des
+    Urlaubsmodus (settings.html/db.is_vacation_mode_active()) - der Sales-/
+    Retouren-Sync (hier ueber sync_sales_fn/sync_returns_fn=None ausgeklammert)
+    laeuft bewusst unabhaengig davon weiter."""
+
+    def _run_one_iteration(self, vacation_active, auto_relist_fn):
+        with patch("ebay_scheduler.run_once"), \
+             patch("ebay_scheduler.db.is_vacation_mode_active", return_value=vacation_active), \
+             patch("ebay_scheduler.run_price_research_once") as mock_price, \
+             patch("ebay_scheduler.run_wishlist_price_check_once") as mock_wishlist, \
+             patch("ebay_scheduler.asyncio.sleep", side_effect=asyncio.CancelledError):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(ebay_scheduler.run_forever(MagicMock(), auto_relist_fn=auto_relist_fn))
+        return mock_price, mock_wishlist
+
+    def test_skips_price_research_and_relist_when_vacation_active(self):
+        auto_relist_fn = MagicMock()
+        mock_price, mock_wishlist = self._run_one_iteration(True, auto_relist_fn)
+        mock_price.assert_not_called()
+        mock_wishlist.assert_not_called()
+        auto_relist_fn.assert_not_called()
+
+    def test_runs_price_research_and_relist_when_not_on_vacation(self):
+        auto_relist_fn = MagicMock()
+        mock_price, mock_wishlist = self._run_one_iteration(False, auto_relist_fn)
+        mock_price.assert_called_once()
+        mock_wishlist.assert_called_once()
+        auto_relist_fn.assert_called_once()
+
+    def test_survives_vacation_status_lookup_failure(self):
+        auto_relist_fn = MagicMock()
+        with patch("ebay_scheduler.run_once"), \
+             patch("ebay_scheduler.db.is_vacation_mode_active", side_effect=RuntimeError("db down")), \
+             patch("ebay_scheduler.run_price_research_once") as mock_price, \
+             patch("ebay_scheduler.run_wishlist_price_check_once") as mock_wishlist, \
+             patch("ebay_scheduler.asyncio.sleep", side_effect=asyncio.CancelledError):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(ebay_scheduler.run_forever(MagicMock(), auto_relist_fn=auto_relist_fn))
+        # Bei einem Fehler beim Laden des Status wird konservativ NICHT
+        # pausiert (vacation=False als Fallback) - gleiches Prinzip wie bei
+        # anderen try/except-Absicherungen in diesem Modul.
+        mock_price.assert_called_once()
+        mock_wishlist.assert_called_once()
+        auto_relist_fn.assert_called_once()
 
 
 if __name__ == "__main__":

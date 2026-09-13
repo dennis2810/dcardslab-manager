@@ -24,14 +24,17 @@ if ("serviceWorker" in navigator) {
     color-scheme: light dark;
     --hover-bg: #f7f7f7; --detail-bg: #fafafa;
     --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --warn-bg: #fff3cd; --warn-fg: #856404;
     --neutral-bg: #eee;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --detail-bg: #202020;
-      --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
+      --success-bg: #1c3324; --success-fg: #7fd99a;
+      --warn-bg: #4a3c00; --warn-fg: #ffd866; --neutral-bg: #333; }
   }
   :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --detail-bg: #202020;
-    --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
+    --success-bg: #1c3324; --success-fg: #7fd99a;
+    --warn-bg: #4a3c00; --warn-fg: #ffd866; --neutral-bg: #333; }
   :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
@@ -80,6 +83,8 @@ if ("serviceWorker" in navigator) {
   .price-check-results li { display: flex; gap: 0.5rem; align-items: baseline; }
   .price-sparkline-wrapper { max-width: 320px; margin: 0 0 0.5rem; }
   .price-hit { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600; }
+  .inventory-match-note { background: var(--warn-bg); color: var(--warn-fg); border-radius: 4px; padding: 0.3rem 0.6rem; font-weight: 600; margin: 0 0 0.5rem; }
+  .inventory-match-note a { color: inherit; }
   .price-trend-down { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.8rem; }
   .sourcing-cell { font-size: 0.85rem; white-space: normal; }
   .sourcing-cell .note { color: #888; font-style: italic; }
@@ -383,6 +388,7 @@ document.getElementById("bulk-clear-selection").addEventListener("click", () => 
 // erneutes Aufklappen nicht sofort veraltete Preise zeigt.
 const expandedIds = new Set();
 const priceCheckState = new Map();
+const inventoryCheckState = new Map();
 
 const form = document.getElementById("item-form");
 const toggleFormBtn = document.getElementById("toggle-form");
@@ -728,6 +734,34 @@ async function runPriceCheck(item) {
   render();
 }
 
+// Prueft beim Aufklappen zusaetzlich, ob eine Karte mit gleichem Titel
+// (und, falls angegeben, gleichem Team/Set) bereits im eigenen Inventar
+// existiert - z.B. wenn die Karte inzwischen erworben, aber der
+// Wunschlisten-Eintrag vergessen wurde abzuhaken. Nutzt die bestehende
+// /api/cards-Suche statt eine eigene Duplikat-Erkennung nachzubauen.
+async function runInventoryCheck(item) {
+  inventoryCheckState.set(item.id, { status: "loading" });
+  render();
+  try {
+    const res = await fetch(`/api/cards?q=${encodeURIComponent(item.title)}`);
+    const body = await res.json();
+    if (!res.ok) {
+      inventoryCheckState.set(item.id, { status: "error" });
+    } else {
+      const matches = (body.cards || []).filter((c) => {
+        if ((c.title || "").trim().toLowerCase() !== item.title.trim().toLowerCase()) return false;
+        if (item.team && c.team && c.team.trim().toLowerCase() !== item.team.trim().toLowerCase()) return false;
+        if (item.set_name && c.set_name && c.set_name.trim().toLowerCase() !== item.set_name.trim().toLowerCase()) return false;
+        return true;
+      });
+      inventoryCheckState.set(item.id, { status: "done", matches });
+    }
+  } catch (err) {
+    inventoryCheckState.set(item.id, { status: "error" });
+  }
+  render();
+}
+
 // Zeigt das Ergebnis der automatischen Hintergrund-Preispruefung (siehe
 // ebay_scheduler.run_wishlist_price_check_once()) direkt in der Tabelle -
 // ohne manuelles Aufklappen/"Neu suchen" wie beim Pfeil-Button links. Das
@@ -804,6 +838,18 @@ function buildDetailRow(item) {
     wrapper.className = "price-sparkline-wrapper";
     wrapper.appendChild(sparkline);
     td.appendChild(wrapper);
+  }
+
+  const inventoryState = inventoryCheckState.get(item.id);
+  if (inventoryState?.status === "done" && inventoryState.matches.length) {
+    const note = document.createElement("p");
+    note.className = "inventory-match-note";
+    const match = inventoryState.matches[0];
+    const link = document.createElement("a");
+    link.href = `card.html?id=${encodeURIComponent(match.id)}`;
+    link.textContent = "im Inventar ansehen";
+    note.append("⚠ Bereits im Inventar vorhanden – ", link);
+    td.appendChild(note);
   }
 
   const state = priceCheckState.get(item.id);
@@ -959,6 +1005,7 @@ function render() {
       const opening = !expandedIds.has(item.id);
       toggleExpand(item.id);
       if (opening && !priceCheckState.has(item.id)) runPriceCheck(item);
+      if (opening && !inventoryCheckState.has(item.id)) runInventoryCheck(item);
     });
     toggleTd.appendChild(toggleBtn);
     tr.appendChild(toggleTd);

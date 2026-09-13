@@ -628,3 +628,12 @@ alter table wishlist_items add column if not exists acquired boolean not null de
 -- cards.card_type ("sport"/"non_sport") - leer bedeutet unspezifiziert, da
 -- ein Wunschlisten-Eintrag manuell angelegt wird statt per KI-Erkennung.
 alter table wishlist_items add column if not exists card_type text not null default '';
+
+-- Urlaubs-/Pausenmodus (settings.html): pausiert automatische Preispruefung,
+-- Re-Listing und E-Mail-/Push-Benachrichtigungen bei neuen Verkaeufen (siehe
+-- db.is_vacation_mode_active(), ebay_scheduler.run_forever(),
+-- main.py's _notify_new_sales()). vacation_mode_until ist optional - leer
+-- bedeutet "bis auf Weiteres", ein gesetztes Datum beendet den Modus
+-- automatisch, ohne dass jemand daran denken muss, ihn wieder auszuschalten.
+alter table app_status add column if not exists vacation_mode_enabled boolean not null default false;
+alter table app_status add column if not exists vacation_mode_until date;

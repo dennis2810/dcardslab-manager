@@ -266,6 +266,7 @@ if ("serviceWorker" in navigator) {
   <form id="edit-form">
     <p id="load-status">Lädt …</p>
   </form>
+  <datalist id="tags-datalist"></datalist>
 
   <div class="purchase-section" id="purchase-section"></div>
   <div class="target-price-section" id="target-price-section"></div>
@@ -694,6 +695,32 @@ async function deleteExtraImage(index) {
   }
 }
 
+// Holt einmalig alle Karten, um daraus die bereits vergebenen Tags fuer
+// die Vorschlagsliste am Tags-Feld zu sammeln - laeuft parallel zu
+// loadCard() statt diese zu blockieren, da es nur die Datalist befuellt
+// und kein Fehler beim Laden der eigentlichen Karte sein soll.
+async function populateTagsDatalist() {
+  try {
+    const res = await fetch("/api/cards");
+    const body = await res.json();
+    if (!res.ok) return;
+    const tags = new Set();
+    for (const c of body.cards || []) {
+      for (const tag of (c.tags || "").split(",")) {
+        const trimmed = tag.trim();
+        if (trimmed) tags.add(trimmed);
+      }
+    }
+    const datalist = document.getElementById("tags-datalist");
+    datalist.innerHTML = [...tags].sort((a, b) => a.localeCompare(b, "de"))
+      .map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
+  } catch (err) {
+    // Vorschlagsliste ist ein reines Komfort-Feature - ein Fehler hier soll
+    // das Bearbeiten der Karte nicht verhindern.
+  }
+}
+populateTagsDatalist();
+
 async function loadCard() {
   try {
     const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
@@ -793,6 +820,11 @@ function render(card) {
   tagsInput.name = "tags";
   tagsInput.placeholder = "Kommagetrennt, z. B. Rookie, PSA-würdig";
   tagsInput.value = card.tags ?? "";
+  // Vorschlagsliste aus bereits vergebenen Tags (siehe populateTagsDatalist())
+  // - hilft bei Tippfehlern/Schreibweisen ("Rookie" vs. "rookie"), schlaegt
+  // aber nur beim Eintippen eines einzelnen Tags vor, da <datalist> gegen den
+  // gesamten (kommagetrennten) Feldinhalt matcht.
+  tagsInput.setAttribute("list", "tags-datalist");
   tagsWrapper.appendChild(tagsInput);
   form.appendChild(tagsWrapper);
 

@@ -217,6 +217,21 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
+    <h3>Spekulationsfrist-Warnung für die private Sammlung <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Beim Verkauf einer Karte aus der privaten Sammlung (siehe <code>private-collection.html</code>) prüfen, ob
+      seit der Anschaffung noch keine 12 Monate vergangen sind, und bei Gewinn warnen – private Veräußerungsgeschäfte
+      sind innerhalb der einjährigen Spekulationsfrist steuerpflichtig (§23 EStG), sofern der Gesamtgewinn aus
+      solchen Geschäften im Kalenderjahr die Freigrenze übersteigt. Würde sich an den bereits vorhandenen
+      Kleinunternehmer-/EÜR-Bereich anschließen (<code>kleinunternehmer.html</code>), betrifft aber ausdrücklich nur
+      die private Sammlung, nicht den gewerblichen An-/Verkauf, der dort bereits abgebildet ist.</p>
+    <p>Klärungsbedarf: die genaue Freigrenze ändert sich gelegentlich per Gesetz und müsste wie die
+      Kleinunternehmer-Schwellenwerte konfigurierbar statt fest einprogrammiert sein; außerdem müsste geklärt werden,
+      ob nur gewarnt oder die Berechnung auch in einen Steuer-Report übernommen werden soll – beides ersetzt keine
+      steuerliche Beratung im Einzelfall.</p>
+  </div>
+
+  <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
     <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:

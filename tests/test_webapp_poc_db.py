@@ -2,6 +2,7 @@
 Supabase Postgres client."""
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1943,6 +1944,60 @@ class AppStatusTests(unittest.TestCase):
             db.set_auto_relist_enabled(True)
         row = mock_client.table.return_value.upsert.call_args[0][0]
         self.assertEqual(row, {"id": True, "auto_relist_enabled": True})
+
+    def test_set_vacation_mode_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "vacation_mode_enabled": True, "vacation_mode_until": "2026-09-30"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_vacation_mode(True, "2026-09-30")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "vacation_mode_enabled": True, "vacation_mode_until": "2026-09-30"})
+
+    def test_set_vacation_mode_stores_none_for_empty_until(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "vacation_mode_enabled": True, "vacation_mode_until": None}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.set_vacation_mode(True, "")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "vacation_mode_enabled": True, "vacation_mode_until": None})
+
+    def test_is_vacation_mode_active_false_when_disabled(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "vacation_mode_enabled": False}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertFalse(db.is_vacation_mode_active())
+
+    def test_is_vacation_mode_active_true_without_until_date(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "vacation_mode_enabled": True, "vacation_mode_until": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertTrue(db.is_vacation_mode_active())
+
+    def test_is_vacation_mode_active_true_when_until_in_future(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        future = (datetime.now(timezone.utc).date() + timedelta(days=5)).isoformat()
+        response.data = [{"id": True, "vacation_mode_enabled": True, "vacation_mode_until": future}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertTrue(db.is_vacation_mode_active())
+
+    def test_is_vacation_mode_active_false_when_until_in_past(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        past = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+        response.data = [{"id": True, "vacation_mode_enabled": True, "vacation_mode_until": past}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            self.assertFalse(db.is_vacation_mode_active())
 
     def test_record_auto_backup_upserts_with_singleton_id(self):
         mock_client = MagicMock()

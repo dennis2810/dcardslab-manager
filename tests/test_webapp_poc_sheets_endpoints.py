@@ -703,6 +703,26 @@ class AutoRelistEnabledEndpointTests(unittest.TestCase):
         mock_set.assert_called_once_with(False)
 
 
+class VacationModeEndpointTests(unittest.TestCase):
+    def test_enables_with_until_date(self):
+        with patch("main.db.set_vacation_mode", return_value={
+            "id": True, "vacation_mode_enabled": True, "vacation_mode_until": "2026-09-30",
+        }) as mock_set:
+            response = client.put("/api/vacation-mode", json={"enabled": True, "until": "2026-09-30"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["vacation_mode_enabled"])
+        self.assertEqual(response.json()["vacation_mode_until"], "2026-09-30")
+        mock_set.assert_called_once_with(True, "2026-09-30")
+
+    def test_disables_without_until_date(self):
+        with patch("main.db.set_vacation_mode", return_value={
+            "id": True, "vacation_mode_enabled": False, "vacation_mode_until": None,
+        }) as mock_set:
+            response = client.put("/api/vacation-mode", json={"enabled": False})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with(False, None)
+
+
 class SenderAddressEndpointTests(unittest.TestCase):
     def test_sets_address(self):
         with patch("main.db.set_sender_address", return_value={"id": True, "sender_address": "DCardsLab\nMusterstr. 1"}) as mock_set:
