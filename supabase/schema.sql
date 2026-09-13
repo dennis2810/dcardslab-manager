@@ -607,3 +607,24 @@ alter table cards add column if not exists grading_submitted_at timestamptz;
 alter table cards add column if not exists grading_received_at timestamptz;
 alter table cards add column if not exists grading_cost numeric;
 alter table cards add column if not exists grading_grade text not null default '';
+-- Freiwillige Selbsteinschaetzung des Zustands (Ecken/Zentrierung/...) vor
+-- dem Einschicken, unabhaengig vom spaeteren offiziellen grading_grade.
+alter table cards add column if not exists grading_condition_note text not null default '';
+
+-- Lot-/Bundle-Verkauf: mehrere Karten in einem Rutsch ausserhalb von eBay
+-- verkaufen (siehe db.create_lot_sale()) - jede Karte bekommt weiterhin
+-- ihren eigenen manual_sales-Eintrag (Preis/Versand/Gebuehren gleichmaessig
+-- aufgeteilt), lot_id verknuepft die zusammengehoerigen Eintraege nur lose.
+alter table manual_sales add column if not exists lot_id uuid;
+
+-- Wunschliste: Karte per Checkbox als "erreicht" (bereits erworben/nicht mehr
+-- gesucht) abhaken, ohne den Eintrag gleich zu loeschen - fuer den
+-- Erreichungsbalken auf wishlist.html. Ein abgehakter Eintrag wird ausserdem
+-- von der automatischen Preispruefung/Wiedervorlage ausgenommen (siehe
+-- db.list_wishlist_items_due_for_price_check()/list_stale_wishlist_items()).
+alter table wishlist_items add column if not exists acquired boolean not null default false;
+
+-- Sport/Non-Sport-Einordnung fuer Wunschlisten-Eintraege, gleiche Werte wie
+-- cards.card_type ("sport"/"non_sport") - leer bedeutet unspezifiziert, da
+-- ein Wunschlisten-Eintrag manuell angelegt wird statt per KI-Erkennung.
+alter table wishlist_items add column if not exists card_type text not null default '';

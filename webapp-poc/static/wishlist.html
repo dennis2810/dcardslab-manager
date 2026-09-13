@@ -24,13 +24,14 @@ if ("serviceWorker" in navigator) {
     color-scheme: light dark;
     --hover-bg: #f7f7f7; --detail-bg: #fafafa;
     --success-bg: #e6f4ea; --success-fg: #1e4620;
+    --neutral-bg: #eee;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --hover-bg: #2a2a2a; --detail-bg: #202020;
-      --success-bg: #1c3324; --success-fg: #7fd99a; }
+      --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
   }
   :root[data-theme="dark"] { color-scheme: dark; --hover-bg: #2a2a2a; --detail-bg: #202020;
-    --success-bg: #1c3324; --success-fg: #7fd99a; }
+    --success-bg: #1c3324; --success-fg: #7fd99a; --neutral-bg: #333; }
   :root[data-theme="light"] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
@@ -50,6 +51,12 @@ if ("serviceWorker" in navigator) {
     table input[type="checkbox"] { width: 1.2rem; height: 1.2rem; }
     table td button, table td a { padding: 0.4rem 0.7rem; }
   }
+  .progress-block { margin: 0.75rem 0 1.25rem; }
+  .progress-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .progress-bar-track { background: var(--neutral-bg); border-radius: 6px; height: 14px; overflow: hidden; }
+  .progress-bar-fill { background: #1e8e3e; height: 100%; width: 0%; transition: width 0.3s; }
+  tr.acquired-row { opacity: 0.6; }
+  tr.acquired-row td:nth-child(4) { text-decoration: line-through; }
   .controls { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -57,9 +64,10 @@ if ("serviceWorker" in navigator) {
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   /* Frei wählbare Tabellenspalten (je Browser, localStorage) - gleiches
      Prinzip wie cards.html/ebay.html/inventory.html. */
-  #items-table.hide-col-4 th:nth-child(4), #items-table.hide-col-4 td:nth-child(4) { display: none; }
   #items-table.hide-col-5 th:nth-child(5), #items-table.hide-col-5 td:nth-child(5) { display: none; }
-  #items-table.hide-col-8 th:nth-child(8), #items-table.hide-col-8 td:nth-child(8) { display: none; }
+  #items-table.hide-col-6 th:nth-child(6), #items-table.hide-col-6 td:nth-child(6) { display: none; }
+  #items-table.hide-col-9 th:nth-child(9), #items-table.hide-col-9 td:nth-child(9) { display: none; }
+  #items-table.hide-col-10 th:nth-child(10), #items-table.hide-col-10 td:nth-child(10) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   tr:hover { background: var(--hover-bg); }
@@ -72,7 +80,8 @@ if ("serviceWorker" in navigator) {
   .price-check-results li { display: flex; gap: 0.5rem; align-items: baseline; }
   .price-sparkline-wrapper { max-width: 320px; margin: 0 0 0.5rem; }
   .price-hit { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-weight: 600; }
-  .sourcing-cell { font-size: 0.85rem; white-space: nowrap; }
+  .price-trend-down { background: var(--success-bg); color: var(--success-fg); border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+  .sourcing-cell { font-size: 0.85rem; white-space: normal; }
   .sourcing-cell .note { color: #888; font-style: italic; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {
@@ -121,6 +130,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -130,6 +140,15 @@ if ("serviceWorker" in navigator) {
   </nav>
   <p class="empty-state">Karten, die (noch) nicht im Besitz sind – bewusst getrennt von der Kartenübersicht, damit
     Bestand und Auswertungen unberührt bleiben.</p>
+
+  <div class="progress-block">
+    <div class="progress-header">
+      <span id="progress-text">0 von 0 Karten erreicht</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar-fill"></div>
+    </div>
+  </div>
 
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
@@ -144,6 +163,13 @@ if ("serviceWorker" in navigator) {
     <label>Team <input type="text" id="item-team"></label>
     <label>Set <input type="text" id="item-set"></label>
     <label>Wunschpreis <input type="number" id="item-target-price" step="0.01"></label>
+    <label>Sport/Non-Sport
+      <select id="item-card-type">
+        <option value="">– unspezifiziert –</option>
+        <option value="sport">Sport</option>
+        <option value="non_sport">Non-Sport</option>
+      </select>
+    </label>
     <label class="full-row">Notiz <input type="text" id="item-notes"></label>
     <div class="actions">
       <button type="submit" id="item-form-submit">Hinzufügen</button>
@@ -153,7 +179,7 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <form id="import-form" class="no-print">
-    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz, Semikolon-getrennt).</p>
+    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz;Sport/Non-Sport, Semikolon-getrennt).</p>
     <label>CSV-Datei <input type="file" name="file" accept=".csv,text/csv" required></label>
     <div class="actions">
       <button type="submit">Importieren</button>
@@ -176,6 +202,7 @@ if ("serviceWorker" in navigator) {
       <thead>
         <tr>
           <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+          <th title="Erreicht">✓</th>
           <th></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
@@ -183,6 +210,7 @@ if ("serviceWorker" in navigator) {
           <th data-key="target_price">Wunschpreis <span class="sort-arrow"></span></th>
           <th>Sourcing</th>
           <th>Notiz</th>
+          <th data-key="card_type">Typ <span class="sort-arrow"></span></th>
           <th></th>
         </tr>
       </thead>
@@ -268,9 +296,10 @@ let currentPage = 0;
 // (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
 // der Tabelle aus-/einblenden statt bedingt zu rendern.
 const COLUMN_TOGGLES = [
-  { key: "team", label: "Team", index: 4 },
-  { key: "set_name", label: "Set", index: 5 },
-  { key: "note", label: "Notiz", index: 8 },
+  { key: "team", label: "Team", index: 5 },
+  { key: "set_name", label: "Set", index: 6 },
+  { key: "note", label: "Notiz", index: 9 },
+  { key: "card_type", label: "Typ", index: 10 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "wishlist_hidden_columns";
 let hiddenColumns = new Set();
@@ -365,6 +394,7 @@ const titleInput = document.getElementById("item-title");
 const teamInput = document.getElementById("item-team");
 const setInput = document.getElementById("item-set");
 const targetPriceInput = document.getElementById("item-target-price");
+const cardTypeInput = document.getElementById("item-card-type");
 const notesInput = document.getElementById("item-notes");
 
 function resetForm() {
@@ -398,6 +428,7 @@ function startEdit(item) {
   teamInput.value = item.team || "";
   setInput.value = item.set_name || "";
   targetPriceInput.value = item.target_price ?? "";
+  cardTypeInput.value = item.card_type || "";
   notesInput.value = item.notes || "";
   submitBtn.textContent = "Aktualisieren";
   form.style.display = "grid";
@@ -416,6 +447,7 @@ form.addEventListener("submit", async (ev) => {
     team: teamInput.value.trim(),
     set_name: setInput.value.trim(),
     target_price: targetPriceInput.value,
+    card_type: cardTypeInput.value,
     notes: notesInput.value.trim(),
   };
   const itemId = idInput.value;
@@ -729,14 +761,42 @@ function buildSourcingCell(item) {
     link.title = item.last_match_title || "";
     frag.appendChild(link);
   }
+  const trend = computePriceTrend(item.price_history);
+  if (trend) {
+    frag.appendChild(document.createTextNode(" "));
+    const trendBadge = document.createElement("span");
+    trendBadge.className = "price-trend-down";
+    trendBadge.textContent = `📉 fällt seit ~${trend.weeks} Wo.`;
+    trendBadge.title = `${fmtEuro(trend.from)} → ${fmtEuro(trend.to)} laut Preisrecherche-Verlauf`;
+    frag.appendChild(trendBadge);
+  }
   return frag;
+}
+
+// Trend-Alarm: erkennt anhand des vorhandenen Preisrecherche-Verlaufs (siehe
+// buildPriceSparkline()), ob der Marktpreis seit der ersten Erfassung
+// gefallen ist - ergaenzend zum reinen Zielpreis-Treffer, da ein fallender
+// Trend schon vor Erreichen des Wunschpreises ein guter Zeitpunkt zum
+// genaueren Hinsehen sein kann.
+function computePriceTrend(history) {
+  const points = (history || [])
+    .map((entry) => ({ date: entry.checked_at, price: Number(entry.price) }))
+    .filter((p) => p.date && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (last.price >= first.price) return null;
+  const days = Math.round((new Date(last.date) - new Date(first.date)) / (24 * 60 * 60 * 1000));
+  const weeks = Math.max(1, Math.round(days / 7));
+  return { weeks, from: first.price, to: last.price };
 }
 
 function buildDetailRow(item) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 9;
+  td.colSpan = 11;
 
   const sparkline = buildPriceSparkline(item.price_history);
   if (sparkline) {
@@ -789,6 +849,45 @@ function buildDetailRow(item) {
   return tr;
 }
 
+function renderProgress() {
+  const total = allItems.length;
+  const acquiredCount = allItems.filter((i) => i.acquired).length;
+  const pct = total ? Math.round((acquiredCount / total) * 100) : 0;
+  document.getElementById("progress-text").textContent = `${acquiredCount} von ${total} Karten erreicht`;
+  document.getElementById("progress-bar-fill").style.width = `${pct}%`;
+}
+
+// Karte per Checkbox als "erreicht" abhaken (z.B. bereits erworben oder
+// nicht mehr gesucht), ohne den Eintrag gleich zu loeschen - speist den
+// Erreichungsbalken oben. Optimistisches Update mit Rollback bei Fehler,
+// damit die Checkbox sofort reagiert statt auf die Antwort zu warten.
+async function toggleAcquired(item, acquired) {
+  item.acquired = acquired;
+  renderProgress();
+  render();
+  try {
+    const res = await fetch(`/api/wishlist/${encodeURIComponent(item.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acquired }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      item.acquired = !acquired;
+      renderProgress();
+      render();
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast(acquired ? "Als erreicht markiert." : "Markierung entfernt.");
+  } catch (err) {
+    item.acquired = !acquired;
+    renderProgress();
+    render();
+    showToast("Fehler: " + err, true);
+  }
+}
+
 function render() {
   const sorted = sortedItems();
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -838,6 +937,18 @@ function render() {
     checkTd.appendChild(checkbox);
     tr.appendChild(checkTd);
 
+    const acquiredTd = document.createElement("td");
+    const acquiredCheckbox = document.createElement("input");
+    acquiredCheckbox.type = "checkbox";
+    acquiredCheckbox.className = "no-print";
+    acquiredCheckbox.title = "Als erreicht abhaken";
+    acquiredCheckbox.checked = Boolean(item.acquired);
+    acquiredCheckbox.addEventListener("change", () => toggleAcquired(item, acquiredCheckbox.checked));
+    acquiredTd.appendChild(acquiredCheckbox);
+    tr.appendChild(acquiredTd);
+
+    if (item.acquired) tr.classList.add("acquired-row");
+
     const toggleTd = document.createElement("td");
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
@@ -866,6 +977,11 @@ function render() {
     const notesTd = document.createElement("td");
     notesTd.textContent = item.notes || "";
     tr.appendChild(notesTd);
+
+    const cardTypeTd = document.createElement("td");
+    cardTypeTd.textContent =
+      item.card_type === "sport" ? "Sport" : item.card_type === "non_sport" ? "Non-Sport" : "–";
+    tr.appendChild(cardTypeTd);
 
     const actionsTd = document.createElement("td");
     const editBtn = document.createElement("button");
@@ -899,6 +1015,7 @@ async function loadItems() {
     statusMsg.textContent = "";
     allItems = responseBody.items || [];
     currentPage = 0;
+    renderProgress();
     render();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -946,10 +1063,11 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz"];
+  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz", "Sport/Non-Sport"];
   const rows = sortedItems().map((item) => [
     item.title || "", item.team || "", item.set_name || "", item.target_price ?? "",
     item.last_match_price ?? "", formatDate(item.last_price_check_at), item.notes || "",
+    item.card_type || "",
   ]);
   downloadCsv("wunschliste.csv", headers, rows);
 });

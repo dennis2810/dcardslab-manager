@@ -99,6 +99,57 @@ class GetCardEndpointTests(unittest.TestCase):
             response = client.get("/api/cards/does-not-exist")
         self.assertEqual(response.status_code, 404)
 
+    def test_includes_team_avg_holding_days_for_unsold_card_with_team(self):
+        row = {"id": "card-1", "title": "Karte 1", "team": "FC Bayern"}
+        stats = {"team_ranking": [{"name": "FC Bayern", "avg_holding_days": 12.5}]}
+        with patch("main.db.get_card", return_value=row), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]), \
+             patch("main._compute_statistics", return_value=stats):
+            response = client.get("/api/cards/card-1")
+        self.assertEqual(response.json()["team_avg_holding_days"], 12.5)
+
+    def test_omits_forecast_for_already_sold_card(self):
+        row = {"id": "card-1", "title": "Karte 1", "team": "FC Bayern"}
+        with patch("main.db.get_card", return_value=row), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value={"id": "es-1"}), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]), \
+             patch("main._compute_statistics") as mock_stats:
+            response = client.get("/api/cards/card-1")
+        self.assertIsNone(response.json()["team_avg_holding_days"])
+        mock_stats.assert_not_called()
+
+    def test_includes_lot_siblings_when_part_of_a_lot(self):
+        row = {"id": "card-1", "title": "Karte 1"}
+        manual_sale = {"id": "ms-1", "card_id": "card-1", "lot_id": "lot-1"}
+        siblings = [
+            {"id": "ms-1", "card_id": "card-1", "title": "Karte 1"},
+            {"id": "ms-2", "card_id": "card-2", "title": "Karte 2"},
+        ]
+        with patch("main.db.get_card", return_value=row), \
+             patch("main.db.get_purchase_for_card", return_value=None), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.db.get_inventory_for_card", return_value=[]), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.get_manual_sale_for_card", return_value=manual_sale), \
+             patch("main.db.list_price_research_for_card", return_value=[]), \
+             patch("main.db.list_reminders_for_card", return_value=[]), \
+             patch("main.db.manual_sales_by_lot_id", return_value=siblings):
+            response = client.get("/api/cards/card-1")
+        body = response.json()
+        self.assertEqual(len(body["lot_siblings"]), 1)
+        self.assertEqual(body["lot_siblings"][0]["card_id"], "card-2")
+
     def test_signed_url_failure_degrades_gracefully_instead_of_500(self):
         row = {"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=row), \
@@ -672,6 +723,48 @@ class CreateManualSaleEndpointTests(unittest.TestCase):
              patch("main.db.zero_inventory_for_card", side_effect=RuntimeError("inventory table down")):
             response = client.post("/api/cards/card-1/manual-sale", json={"channel": "Vinted"})
         self.assertEqual(response.status_code, 200)
+
+
+class CreateLotSaleEndpointTests(unittest.TestCase):
+    def test_creates_lot_sale_and_zeroes_inventory_for_each_card(self):
+        cards = {"card-1": {"id": "card-1", "title": "Karte 1"}, "card-2": {"id": "card-2", "title": "Karte 2"}}
+        created = [{"id": "ms-1", "card_id": "card-1"}, {"id": "ms-2", "card_id": "card-2"}]
+        with patch("main.db.get_card", side_effect=lambda cid: cards.get(cid)), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
+             patch("main.db.get_sale_for_card", return_value=None), \
+             patch("main.db.create_lot_sale", return_value=created) as mock_create, \
+             patch("main.db.zero_inventory_for_card") as mock_zero:
+            response = client.post("/api/manual-sales/lot", json={
+                "card_ids": ["card-1", "card-2"], "channel": "Kleinanzeigen", "gross_price": 100,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sales"], created)
+        mock_create.assert_called_once_with(
+            ["card-1", "card-2"], {"card_ids": ["card-1", "card-2"], "channel": "Kleinanzeigen", "gross_price": 100},
+        )
+        self.assertEqual(mock_zero.call_count, 2)
+
+    def test_rejects_fewer_than_two_cards(self):
+        response = client.post("/api/manual-sales/lot", json={"card_ids": ["card-1"]})
+        self.assertEqual(response.status_code, 400)
+
+    def test_returns_404_when_a_card_is_not_found(self):
+        with patch("main.db.get_card", return_value=None):
+            response = client.post("/api/manual-sales/lot", json={"card_ids": ["card-1", "card-2"]})
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_409_when_a_card_already_has_a_manual_sale(self):
+        with patch("main.db.get_card", return_value={"id": "card-1", "title": "Karte 1"}), \
+             patch("main.db.get_manual_sale_for_card", return_value={"id": "ms-1"}):
+            response = client.post("/api/manual-sales/lot", json={"card_ids": ["card-1", "card-2"]})
+        self.assertEqual(response.status_code, 409)
+
+    def test_returns_409_when_a_card_already_has_an_ebay_sale(self):
+        with patch("main.db.get_card", return_value={"id": "card-1", "title": "Karte 1"}), \
+             patch("main.db.get_manual_sale_for_card", return_value=None), \
+             patch("main.db.get_sale_for_card", return_value={"id": "es-1"}):
+            response = client.post("/api/manual-sales/lot", json={"card_ids": ["card-1", "card-2"]})
+        self.assertEqual(response.status_code, 409)
 
 
 class ListManualSalesEndpointTests(unittest.TestCase):

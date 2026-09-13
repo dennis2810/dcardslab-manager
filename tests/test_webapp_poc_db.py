@@ -242,6 +242,17 @@ class UpdateCardTests(unittest.TestCase):
             "grading_grade": "9",
         })
 
+    def test_grading_condition_note_is_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "grading_condition_note": "Ecken leicht touched"}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"grading_condition_note": "Ecken leicht touched"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"grading_condition_note": "Ecken leicht touched"})
+
     def test_grading_cost_is_rounded(self):
         mock_client = MagicMock()
         saved_row = {"id": "card-1", "grading_cost": 25.0}
@@ -2562,6 +2573,26 @@ class UpdateWishlistItemTests(unittest.TestCase):
             result = db.update_wishlist_item("does-not-exist", {"title": "x"})
         self.assertIsNone(result)
 
+    def test_acquired_flag_is_writable(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "acquired": True}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_item("w1", {"acquired": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"acquired": True})
+
+    def test_card_type_is_writable(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "card_type": "sport"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_item("w1", {"card_type": "sport"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"card_type": "sport"})
+
 
 class DeleteWishlistItemTests(unittest.TestCase):
     def test_deletes_and_returns_entry(self):
@@ -2619,6 +2650,18 @@ class ListWishlistItemsDueForPriceCheckTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.list_wishlist_items_due_for_price_check(limit=2)
         self.assertEqual(len(result), 2)
+
+    def test_excludes_acquired_items(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"id": "w1", "last_price_check_at": None, "acquired": True},
+            {"id": "w2", "last_price_check_at": None, "acquired": False},
+        ]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_wishlist_items_due_for_price_check()
+        self.assertEqual([r["id"] for r in result], ["w2"])
 
 
 class UpdateWishlistPriceCheckTests(unittest.TestCase):
@@ -2994,6 +3037,79 @@ class CreateManualSaleTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertIsNone(row["gross_price"])
         self.assertIsNone(row["fees"])
+
+
+class CreateLotSaleTests(unittest.TestCase):
+    def test_splits_totals_evenly_and_shares_lot_id(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "manual_sales", [{"id": "ms-1", "card_id": "card-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            created = db.create_lot_sale(["card-1", "card-2"], {
+                "channel": "Kleinanzeigen", "sale_date": "2026-09-13",
+                "gross_price": 100, "shipping_charged": 10, "shipping_cost": 4, "fees": 2,
+                "notes": "Sammelposten",
+            })
+        self.assertEqual(len(created), 2)
+        calls = mock_client.table.return_value.insert.call_args_list
+        self.assertEqual(len(calls), 2)
+        row1, row2 = calls[0][0][0], calls[1][0][0]
+        self.assertEqual(row1["card_id"], "card-1")
+        self.assertEqual(row2["card_id"], "card-2")
+        self.assertEqual(row1["gross_price"], 50.0)
+        self.assertEqual(row1["shipping_charged"], 5.0)
+        self.assertEqual(row1["shipping_cost"], 2.0)
+        self.assertEqual(row1["fees"], 1.0)
+        self.assertEqual(row1["channel"], "Kleinanzeigen")
+        self.assertEqual(row1["notes"], "Sammelposten")
+        self.assertIsNotNone(row1["lot_id"])
+        self.assertEqual(row1["lot_id"], row2["lot_id"])
+
+    def test_uneven_split_rounds_to_two_decimals(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "manual_sales", [{"id": "ms-1"}])
+        with patch("db.get_client", return_value=mock_client):
+            db.create_lot_sale(["card-1", "card-2", "card-3"], {"gross_price": 100})
+        calls = mock_client.table.return_value.insert.call_args_list
+        for call in calls:
+            self.assertEqual(call[0][0]["gross_price"], round(100 / 3, 2))
+
+
+class ManualSalesByLotIdTests(unittest.TestCase):
+    def _table(self, sale_rows, card_rows):
+        def table(name):
+            builder = MagicMock()
+            response = MagicMock()
+            if name == "manual_sales":
+                response.data = sale_rows
+                builder.select.return_value.eq.return_value.execute.return_value = response
+            elif name == "cards":
+                response.data = card_rows
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        return table
+
+    def test_returns_rows_enriched_with_card_titles(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(
+            sale_rows=[
+                {"id": "ms-1", "card_id": "card-1", "gross_price": 50.0},
+                {"id": "ms-2", "card_id": "card-2", "gross_price": 50.0},
+            ],
+            card_rows=[{"id": "card-1", "title": "Karte A"}, {"id": "card-2", "title": "Karte B"}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            result = db.manual_sales_by_lot_id("lot-1")
+        self.assertEqual(result[0]["title"], "Karte A")
+        self.assertEqual(result[1]["title"], "Karte B")
+
+    def test_returns_empty_list_when_no_rows(self):
+        mock_client = MagicMock()
+        mock_client.table.side_effect = self._table(sale_rows=[], card_rows=[])
+        with patch("db.get_client", return_value=mock_client):
+            result = db.manual_sales_by_lot_id("lot-1")
+        self.assertEqual(result, [])
+        called_tables = [call.args[0] for call in mock_client.table.call_args_list]
+        self.assertNotIn("cards", called_tables)
 
 
 class GetManualSaleForCardTests(unittest.TestCase):
@@ -3634,6 +3750,21 @@ class ListStaleWishlistItemsTests(unittest.TestCase):
         mock_client = MagicMock()
         response = MagicMock()
         response.data = [{"id": "w1", "created_at": recent, "target_price": 10, "last_match_price": None}]
+        mock_client.table.return_value.select.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_stale_wishlist_items()
+        self.assertEqual(result, [])
+
+    def test_excludes_acquired_item(self):
+        from datetime import datetime, timedelta, timezone
+
+        old_created = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{
+            "id": "w1", "created_at": old_created, "target_price": 10,
+            "last_match_price": None, "acquired": True,
+        }]
         mock_client.table.return_value.select.return_value.execute.return_value = response
         with patch("db.get_client", return_value=mock_client):
             result = db.list_stale_wishlist_items()

@@ -101,6 +101,10 @@ if ("serviceWorker" in navigator) {
   #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
+  .lot-sale-panel { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 1.5rem; }
+  .lot-sale-panel strong { flex-basis: 100%; }
+  .lot-sale-panel label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
+  .lot-sale-panel input, .lot-sale-panel select { font-weight: normal; padding: 0.3rem; margin-top: 0.2rem; }
   .list th[data-key] { cursor: pointer; user-select: none; white-space: nowrap; }
   .list th .sort-arrow { color: #888; font-size: 0.8em; }
   /* Sichtbarer Fokusring fuer per Pfeiltasten navigierbare Zeilen (siehe
@@ -145,6 +149,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -217,9 +222,32 @@ if ("serviceWorker" in navigator) {
       </select>
     </label>
     <button type="button" id="bulk-add-to-purchase-btn">Verknüpfen</button>
+    <button type="button" id="bulk-lot-sale-toggle">📦 Als Lot verkaufen</button>
     <button type="button" id="bulk-private-collection">In private Sammlung überführen</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-status"></span>
+  </div>
+
+  <div id="lot-sale-panel" class="lot-sale-panel no-print" hidden>
+    <strong>Ausgewählte Karten als ein Lot verkaufen</strong>
+    <label>Kanal
+      <select id="lot-sale-channel">
+        <option value="Kleinanzeigen">Kleinanzeigen</option>
+        <option value="Vinted">Vinted</option>
+        <option value="Cardmarket">Cardmarket</option>
+        <option value="COMC">COMC</option>
+        <option value="Kartenshow">Kartenshow</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+    </label>
+    <label>Verkaufsdatum <input type="date" id="lot-sale-date"></label>
+    <label>Gesamtpreis (€) <input type="number" step="0.01" id="lot-sale-price"></label>
+    <label>Versand gesamt (€) <input type="number" step="0.01" id="lot-sale-shipping" value="0"></label>
+    <label>Gebühren gesamt (€) <input type="number" step="0.01" id="lot-sale-fees" value="0"></label>
+    <label>Notizen <input type="text" id="lot-sale-notes"></label>
+    <button type="button" id="lot-sale-submit-btn">Lot verkaufen</button>
+    <button type="button" id="lot-sale-cancel-btn">Abbrechen</button>
+    <span id="lot-sale-status"></span>
   </div>
 
   <div id="undo-bar" class="controls no-print" hidden>
@@ -1192,6 +1220,59 @@ async function bulkAddToPurchase() {
 }
 
 document.getElementById("bulk-add-to-purchase-btn").addEventListener("click", bulkAddToPurchase);
+
+const lotSalePanel = document.getElementById("lot-sale-panel");
+document.getElementById("bulk-lot-sale-toggle").addEventListener("click", () => {
+  if (selectedIds.size < 2) {
+    bulkStatusEl.textContent = "Bitte mindestens 2 Karten für ein Lot auswählen.";
+    return;
+  }
+  lotSalePanel.hidden = !lotSalePanel.hidden;
+  if (!lotSalePanel.hidden && !document.getElementById("lot-sale-date").value) {
+    document.getElementById("lot-sale-date").value = new Date().toISOString().slice(0, 10);
+  }
+});
+document.getElementById("lot-sale-cancel-btn").addEventListener("click", () => {
+  lotSalePanel.hidden = true;
+});
+document.getElementById("lot-sale-submit-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("lot-sale-status");
+  const ids = [...selectedIds];
+  if (ids.length < 2) {
+    statusEl.textContent = "Bitte mindestens 2 Karten auswählen.";
+    return;
+  }
+  statusEl.textContent = "Verkauft …";
+  try {
+    const res = await fetch("/api/manual-sales/lot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        card_ids: ids,
+        channel: document.getElementById("lot-sale-channel").value,
+        sale_date: document.getElementById("lot-sale-date").value,
+        gross_price: document.getElementById("lot-sale-price").value,
+        shipping_charged: document.getElementById("lot-sale-shipping").value,
+        fees: document.getElementById("lot-sale-fees").value,
+        notes: document.getElementById("lot-sale-notes").value,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    showToast(`${ids.length} Karten als Lot verkauft.`);
+    lotSalePanel.hidden = true;
+    selectedIds.clear();
+    updateBulkBar();
+    loadCards();
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
+  }
+});
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({

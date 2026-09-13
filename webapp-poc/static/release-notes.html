@@ -71,6 +71,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -81,6 +82,45 @@ if ("serviceWorker" in navigator) {
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
+
+  <h2>Wunschliste: Sport/Non-Sport <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neues optionales Feld „Sport/Non-Sport" beim Anlegen und Bearbeiten von Wunschlisten-Einträgen, mit
+      Auswahl-Feld – gleiche Einordnung wie der bestehende Sport/Non-Sport-Filter auf Karten und Inventar.
+      Über den Button „⚙ Spalten" lässt sich die neue Spalte „Typ" aus-/einblenden, CSV-Export und -Import
+      unterstützen die Spalte ebenfalls.</li>
+    <li>Kartendetail: die zwei getrennten Preisrechner im eBay-Bereich (Zielmarge-Feld im Bearbeiten-Formular und
+      der separate Zielpreis-Rechner) sind zu einem zusammengefasst – der Zielpreis-Rechner kann seinen
+      empfohlenen Preis jetzt per Klick direkt ins eBay-Preisfeld übernehmen.</li>
+  </ul>
+
+  <h2>Wunschliste: Erreichungsbalken <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Spalte „✓" auf der Wunschliste: Einträge lassen sich per Checkbox als erreicht abhaken (z. B. Karte
+      erworben oder nicht mehr gesucht), ohne sie zu löschen – abgehakte Einträge werden durchgestrichen/abgeblendet
+      dargestellt.</li>
+    <li>Neuer Erreichungsbalken oben auf der Seite zeigt, wie viele der Einträge bereits abgehakt sind.</li>
+    <li>Abgehakte Einträge werden von der automatischen Preisprüfung sowie der Wiedervorlage „lange nicht erreicht"
+      ausgenommen.</li>
+  </ul>
+
+  <h2>Kassenmodus, Lot-Verkauf &amp; Preishilfen <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Neue Seite „Kassenmodus" für Kartenshows/Börsen: SKU scannen (funktioniert mit jedem
+      Barcode-/QR-Scanner sowie den bestehenden QR-Etiketten) oder Titel eintippen, Kanal/Preis bestätigen,
+      fertig – ohne die volle Kartenverwaltung zu öffnen. Mit Sitzungszähler (Anzahl/Summe) und „↩ Rückgängig"
+      für den zuletzt erfassten Verkauf.</li>
+    <li>Kartenübersicht: neue Massenaktion „📦 Als Lot verkaufen" – mehrere Karten auf einmal als ein Bundle
+      außerhalb von eBay verkaufen, der Gesamtpreis (inkl. Versand/Gebühren) wird gleichmäßig auf die Karten
+      aufgeteilt. Auf jeder beteiligten Kartenseite erscheint ein Hinweis auf die übrigen Karten des Lots.</li>
+    <li>Kartendetail: neuer Zielpreis-Rechner (Einstandspreis, Versand, Zielmarge, geschätzte Verkaufsgebühr →
+      empfohlener Verkaufspreis) sowie eine kurze Verkaufsprognose für noch nicht verkaufte Karten, basierend
+      auf der Team-Verkaufsgeschwindigkeit aus den Statistiken.</li>
+    <li>Kartendetail, Abschnitt „Grading": neues freiwilliges Feld für eine Zustands-Einschätzung
+      (Ecken/Zentrierung/...) vor dem Einschicken, unabhängig vom späteren offiziellen Grade.</li>
+    <li>Wunschliste: zusätzlich zum Zielpreis-Treffer ein Trend-Hinweis „📉 fällt seit ~X Wo.", sobald der
+      Marktpreis laut Preisrecherche-Verlauf seit der ersten Erfassung gefallen ist.</li>
+  </ul>
 
   <h2>Verkaufsgeschwindigkeit, Jahresabschluss &amp; Grading <span class="date">September 2026</span></h2>
   <ul>

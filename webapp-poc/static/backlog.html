@@ -77,6 +77,7 @@ if ("serviceWorker" in navigator) {
         <option value="statistics.html">Statistiken</option>
         <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
     </label>
@@ -115,12 +116,104 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
-    <h3>Steuerreport/EÜR-Export <span class="status-tag status-open">offen – Klärung nötig</span>
+    <h3>Direkte Buchhaltungs-API-Anbindung (z. B. Lexoffice) <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
-    <p>Über den bestehenden DATEV/Lexoffice-CSV-Export hinaus eine einfache Vorbereitung für die
-      Einnahmen-Überschuss-Rechnung. Neue Berechnungslogik (welche Posten wie zugeordnet werden) und ein eigenes
-      Exportformat. Klärungsbedarf: welches konkrete Format/welche Software soll die Ausgabe lesen können, welche
-      Kategorien werden erwartet.</p>
+    <p>Über den bestehenden DATEV/Lexoffice-CSV-Export hinaus eine direkte API-Anbindung, die Verkäufe/Ausgaben
+      automatisch in die Buchhaltungssoftware überträgt statt nur eine CSV-Datei zum manuellen Import bereitzustellen.
+      Klärungsbedarf: welche konkrete Software/API (Lexoffice, sevDesk, ...), eigenes API-Konto/eigene Zugangsdaten
+      nötig, wie Dubletten bei mehrfacher Übertragung vermieden werden.</p>
+  </div>
+
+  <div class="item">
+    <h3>Set-Vervollständigung <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Anzeige, wie viele Karten eines Sets bereits vorhanden sind bzw. fehlen, um es zu vervollständigen.
+      Klärungsbedarf: woher kommt die vollständige Set-Liste (Gesamtzahl + Kartennummern je Set) – dafür gibt es
+      aktuell keine Datenquelle im Tool, das müsste entweder von Hand gepflegt oder aus einer externen Quelle
+      importiert werden.</p>
+  </div>
+
+  <div class="item">
+    <h3>Cardmarket-API-Anbindung <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Analog zur bestehenden eBay-Integration (Angebote anlegen/synchronisieren, Preisrecherche) eine eigene
+      Anbindung an Cardmarket. Eigenständige Neuintegration mit eigener Authentifizierung/API, unabhängig vom
+      bestehenden eBay-Code. Klärungsbedarf: Cardmarket-Händlerkonto samt API-Zugang vorhanden, welcher Funktionsumfang
+      (nur Preisrecherche oder auch Angebote verwalten).</p>
+  </div>
+
+  <div class="item">
+    <h3>Automatische Preisverfall-Strategie <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Über den bestehenden Preis-Alarm mit manuellem Anpassungsvorschlag hinaus eine automatische, zeitgesteuerte
+      Preissenkung für unverkaufte eBay-Angebote (z. B. -5&nbsp;% alle 14 Tage bis zu einer Untergrenze). Klärungsbedarf:
+      genaue Regel (Schrittweite/Intervall/Untergrenze je Angebot oder global), ob wirklich vollautomatisch ohne
+      Bestätigung oder weiterhin nur als Vorschlag.</p>
+  </div>
+
+  <div class="item">
+    <h3>Textbausteine/Auto-Antworten für eBay-Nachrichten <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Über die bestehenden Textbausteine für Angebotsbeschreibungen hinaus vorformulierte bzw. automatische
+      Antworten auf eBay-Käufernachrichten. Erfordert eine neue eBay-API-Anbindung (Nachrichten lesen/schreiben),
+      die bisher nirgends im Projekt genutzt wird. Klärungsbedarf: nur Vorlagen zum manuellen Einfügen oder
+      wirklich automatisches Antworten, welche eBay-API das überhaupt hergibt.</p>
+  </div>
+
+  <div class="item">
+    <h3>Versicherungswert-Report <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Ein druckbarer/exportierbarer Report des geschätzten Gesamtwerts der Sammlung (analog zum bestehenden
+      Portfolio-Wertverlauf) für eine Hausrat-/Wertsachenversicherung. Klärungsbedarf: welche Angaben eine
+      Versicherung konkret verlangt (Einzelaufstellung mit Fotos? Nur Gesamtsumme?), ob die private Sammlung
+      mit einbezogen werden soll.</p>
+  </div>
+
+  <div class="item">
+    <h3>Konsignation/Kommissionsverkauf <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Karten für Dritte gegen Provision verkaufen, statt nur eigene Karten. Beträfe Kaufpreis-/Gewinnlogik an
+      mehreren Stellen (Statistiken, EÜR, Steuerreport), da diese aktuell durchgehend annehmen, dass alle Karten
+      dem Tool-Betreiber selbst gehören. Klärungsbedarf: wie Fremdeigentum von eigenen Karten unterschieden werden
+      soll, wie die Provision berechnet wird, ob Auszahlungen an die Einlieferer mit erfasst werden sollen.</p>
+  </div>
+
+  <div class="item">
+    <h3>Wochendigest <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: klein</span></h3>
+    <p>Zusätzlich zur bestehenden täglichen E-Mail bei fälligen Erinnerungen/Wiedervorlagen eine wöchentliche
+      Zusammenfassung (Verkäufe, Gewinn, neue Preis-Alarme der Woche). Klärungsbedarf: welcher Wochentag/welche
+      Uhrzeit, welche Kennzahlen genau hinein sollen.</p>
+  </div>
+
+  <div class="item">
+    <h3>Lot-Verkauf auch bei eBay einstellen <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Der bestehende Lot-/Bundle-Verkauf (Massenaktion „📦 Als Lot verkaufen") legt aktuell bewusst nur
+      manuelle Verkäufe an, ohne etwas bei eBay einzustellen. Grund: eBay-Angebote sind in diesem Tool durchgehend
+      1:1 je Karte modelliert (<code>ebay_listings</code>-Tabelle, ein Angebot = eine Karte) – ein echtes
+      Multi-Karten-eBay-Angebot bräuchte eine eigene, andere Datenstruktur (ein Angebot mit mehreren verknüpften
+      Karten, eigene Mengen-/Preislogik) sowie eine neue eBay-API-Anbindung für Mehrfachpositionen. Klärungsbedarf:
+      soll ein Lot als ein einzelnes eBay-Angebot mit einem Foto/einer Beschreibung für alle enthaltenen Karten
+      erscheinen, oder weiterhin mehrere Einzel-Angebote, nur mit einem gemeinsamen Rabatt-/Bundle-Hinweis?</p>
+  </div>
+
+  <div class="item">
+    <h3>Kamera-Barcode-Scan im Kassenmodus <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Das Suchfeld im Kassenmodus (<code>pos.html</code>) nimmt bereits Eingaben von externen USB-/Bluetooth-
+      Barcode-/QR-Scannern entgegen (die tippen wie eine Tastatur + Enter). Direkt im Browser mit der Handykamera
+      scannen, ganz ohne separates Scanner-Gerät oder App, geht damit aber noch nicht – dafür fehlt Kamerazugriff
+      (<code>getUserMedia</code>) plus eine Decoding-Bibliothek. Die native <code>BarcodeDetector</code>-API würde
+      ohne zusätzlichen Code auskommen, wird aber von Safari/iPhone nicht unterstützt; für geräteunabhängige
+      Zuverlässigkeit bräuchte es eine selbst gehostete JS-Bibliothek (z. B. jsQR, analog zum bereits vendorten
+      <code>vendor/qrcode.js</code> für die Etiketten-Erzeugung – kein CDN-Aufruf, PWA-/Offline-tauglich).</p>
+    <p>Klärungsbedarf: Die bestehenden QR-Etiketten (<code>cards.html</code>/<code>card.html</code>) codieren
+      aktuell eine URL (<code>card.html?id=...</code>), keine rohe SKU – ein gescannter Code müsste entweder per
+      ID nachschlagen statt über die Text-Suche zu laufen, oder die Etikettenerzeugung müsste zusätzlich die SKU
+      codieren. Außerdem: reicht QR-Codes lesen (kleinerer Aufwand, deckt die eigenen Etiketten ab) oder sollen
+      auch echte 1D-Barcodes (EAN/Code128, z. B. von Drittanbieter-Etiketten) erkannt werden (deutlich größerer
+      Aufwand wegen einer schwereren Bibliothek und mehr Testaufwand über Geräte/Lichtverhältnisse hinweg)?</p>
   </div>
 
   <div class="item">
