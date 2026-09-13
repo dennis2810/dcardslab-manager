@@ -623,3 +623,8 @@ alter table manual_sales add column if not exists lot_id uuid;
 -- von der automatischen Preispruefung/Wiedervorlage ausgenommen (siehe
 -- db.list_wishlist_items_due_for_price_check()/list_stale_wishlist_items()).
 alter table wishlist_items add column if not exists acquired boolean not null default false;
+
+-- Sport/Non-Sport-Einordnung fuer Wunschlisten-Eintraege, gleiche Werte wie
+-- cards.card_type ("sport"/"non_sport") - leer bedeutet unspezifiziert, da
+-- ein Wunschlisten-Eintrag manuell angelegt wird statt per KI-Erkennung.
+alter table wishlist_items add column if not exists card_type text not null default '';

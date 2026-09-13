@@ -2583,6 +2583,16 @@ class UpdateWishlistItemTests(unittest.TestCase):
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"acquired": True})
 
+    def test_card_type_is_writable(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "w1", "card_type": "sport"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_wishlist_item("w1", {"card_type": "sport"})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"card_type": "sport"})
+
 
 class DeleteWishlistItemTests(unittest.TestCase):
     def test_deletes_and_returns_entry(self):

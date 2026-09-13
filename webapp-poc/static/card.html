@@ -142,10 +142,6 @@ if ("serviceWorker" in navigator) {
   .ebay-aspects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .ebay-aspects label { flex: 1 1 160px; }
   .ebay-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
-  .price-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; background: var(--surface); border-radius: 6px; padding: 0.5rem 0.75rem; }
-  .price-calc label { flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
-  .price-calc input { font-weight: normal; padding: 0.3rem; width: 5rem; }
-  .price-calc .price-calc-hint { color: #555; }
   .ebay-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
   .ebay-readonly dt { font-weight: 600; }
   .ebay-readonly dd { margin: 0; }
@@ -1204,10 +1200,12 @@ function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, man
     <label>Zielmarge (%) <input type="number" step="1" id="tp-margin" value="30"></label>
     <label>Geschätzte Verkaufsgebühr (%) <input type="number" step="1" id="tp-fee" value="12"></label>
     <p id="tp-result"></p>
+    <button type="button" id="tp-apply-to-ebay-btn">→ In eBay-Angebotspreis übernehmen</button>
   `;
   const costInput = document.getElementById("tp-cost");
   costInput.value = purchase?.allocated_cost ?? "";
   const resultP = document.getElementById("tp-result");
+  let lastRecommended = null;
 
   function recompute() {
     const cost = parseFloat(costInput.value) || 0;
@@ -1218,16 +1216,30 @@ function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, man
     if (denominator <= 0) {
       resultP.textContent = "Marge + Gebühr ergeben zusammen 100% oder mehr - kein sinnvoller Preis berechenbar.";
       resultP.className = "error";
+      lastRecommended = null;
       return;
     }
-    const recommended = (cost + shipping) / denominator;
-    resultP.textContent = `Empfohlener Verkaufspreis: ${fmtEuro(recommended)}`;
+    lastRecommended = (cost + shipping) / denominator;
+    resultP.textContent = `Empfohlener Verkaufspreis: ${fmtEuro(lastRecommended)}`;
     resultP.className = "";
   }
   for (const id of ["tp-cost", "tp-shipping", "tp-margin", "tp-fee"]) {
     document.getElementById(id).addEventListener("input", recompute);
   }
   recompute();
+
+  // Fuellt den Preis direkt ins eBay-Bearbeiten-Formular (siehe renderEbayForm())
+  // ein, falls dieses gerade offen ist - ersetzt den frueheren, einfacheren
+  // Zielmarge-Rechner, der direkt in dieses Formular eingebaut war.
+  document.getElementById("tp-apply-to-ebay-btn").addEventListener("click", () => {
+    if (lastRecommended == null) return;
+    const ebayPriceInput = document.getElementById("ebay-price-input");
+    if (!ebayPriceInput) {
+      alert('Bitte zuerst im eBay-Bereich auf „Bearbeiten" klicken, dann lässt sich der Preis übernehmen.');
+      return;
+    }
+    ebayPriceInput.value = lastRecommended.toFixed(2);
+  });
 
   if (teamAvgHoldingDays != null) {
     const forecastP = document.createElement("p");
@@ -2659,6 +2671,10 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
   // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
   const priceInputEl = field("Preis (€)", "price", listing.price, "number", "0.01");
+  // Feste id, damit der Zielpreis-Rechner (siehe renderTargetPriceCalculator())
+  // den empfohlenen Preis per Klick hier einsetzen kann, statt einen eigenen,
+  // redundanten Zielmarge-Rechner in diesem Formular zu duplizieren.
+  priceInputEl.id = "ebay-price-input";
   field("Menge", "quantity", listing.quantity ?? 1, "number");
   // Leer = kein automatisches Re-Listing fuer dieses Angebot (Klaerung mit
   // dem Nutzer: pro Angebot einstellbar, da Angebote aktuell unbegrenzt
@@ -2668,41 +2684,6 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
     "Automatisch neu einstellen nach (Tage, leer = aus)",
     "auto_relist_after_days", listing.auto_relist_after_days, "number"
   );
-
-  // Einfacher Preisrechner: Zielmarge -> Preisvorschlag aus dem
-  // Einstandspreis, nur anzeigbar wenn die Karte ueberhaupt einen
-  // (automatisch aufgeteilten oder manuell gesetzten) Einstandspreis hat.
-  if (purchase && purchase.allocated_cost != null) {
-    const cost = Number(purchase.allocated_cost);
-    const calcWrapper = document.createElement("div");
-    calcWrapper.className = "price-calc";
-
-    const hint = document.createElement("span");
-    hint.className = "price-calc-hint";
-    hint.textContent = `Einstandspreis: ${fmtEuro(cost)}`;
-    calcWrapper.appendChild(hint);
-
-    const marginLabel = document.createElement("label");
-    marginLabel.textContent = "Zielmarge (%)";
-    const marginInput = document.createElement("input");
-    marginInput.type = "number";
-    marginInput.step = "1";
-    marginInput.placeholder = "z.B. 50";
-    marginLabel.appendChild(marginInput);
-    calcWrapper.appendChild(marginLabel);
-
-    const suggestBtn = document.createElement("button");
-    suggestBtn.type = "button";
-    suggestBtn.textContent = "Preis übernehmen";
-    suggestBtn.addEventListener("click", () => {
-      if (marginInput.value === "") return;
-      const suggested = cost * (1 + Number(marginInput.value) / 100);
-      priceInputEl.value = suggested.toFixed(2);
-    });
-    calcWrapper.appendChild(suggestBtn);
-
-    form.appendChild(calcWrapper);
-  }
 
   const typeWrapper = document.createElement("label");
   typeWrapper.textContent = "Kartentyp";

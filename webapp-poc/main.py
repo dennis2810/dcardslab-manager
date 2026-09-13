@@ -1319,7 +1319,10 @@ async def delete_wishlist_item(item_id: str):
     return Response(status_code=204)
 
 
-_WISHLIST_IMPORT_TEXT_COLUMNS = (("Titel", "title"), ("Team", "team"), ("Set", "set_name"), ("Notiz", "notes"))
+_WISHLIST_IMPORT_TEXT_COLUMNS = (
+    ("Titel", "title"), ("Team", "team"), ("Set", "set_name"), ("Notiz", "notes"),
+    ("Sport/Non-Sport", "card_type"),
+)
 _WISHLIST_IMPORT_MONEY_COLUMNS = (("Wunschpreis", "target_price"),)
 
 

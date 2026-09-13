@@ -217,6 +217,19 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
         })
         mock_create.assert_any_call({"title": "Kylian Mbappe", "team": "PSG", "set_name": "Topps"})
 
+    def test_imports_sport_non_sport_column(self):
+        csv_text = (
+            "Titel;Team;Set;Wunschpreis;Notiz;Sport/Non-Sport\r\n"
+            "Lionel Messi;PSG;Panini;12.5;;sport\r\n"
+        )
+        with patch("main.db.create_wishlist_item", return_value={"id": "w1"}) as mock_create:
+            response = self._upload(csv_text)
+        self.assertEqual(response.status_code, 200)
+        mock_create.assert_called_once_with({
+            "title": "Lionel Messi", "team": "PSG", "set_name": "Panini",
+            "target_price": 12.5, "card_type": "sport",
+        })
+
     def test_invalid_amount_is_reported_as_error_and_row_skipped(self):
         csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\nLionel Messi;;;zwölf;\r\n"
         with patch("main.db.create_wishlist_item") as mock_create:

@@ -1378,7 +1378,7 @@ def delete_manual_sale(sale_id):
     return response.data[0]
 
 
-WISHLIST_FIELDS = ["title", "team", "set_name", "target_price", "notes", "acquired"]
+WISHLIST_FIELDS = ["title", "team", "set_name", "target_price", "notes", "acquired", "card_type"]
 WISHLIST_NUMERIC_FIELDS = {"target_price"}
 WISHLIST_MONEY_FIELDS = {"target_price"}
 

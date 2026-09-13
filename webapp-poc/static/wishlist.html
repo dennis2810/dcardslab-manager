@@ -67,6 +67,7 @@ if ("serviceWorker" in navigator) {
   #items-table.hide-col-5 th:nth-child(5), #items-table.hide-col-5 td:nth-child(5) { display: none; }
   #items-table.hide-col-6 th:nth-child(6), #items-table.hide-col-6 td:nth-child(6) { display: none; }
   #items-table.hide-col-9 th:nth-child(9), #items-table.hide-col-9 td:nth-child(9) { display: none; }
+  #items-table.hide-col-10 th:nth-child(10), #items-table.hide-col-10 td:nth-child(10) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   tr:hover { background: var(--hover-bg); }
@@ -162,6 +163,13 @@ if ("serviceWorker" in navigator) {
     <label>Team <input type="text" id="item-team"></label>
     <label>Set <input type="text" id="item-set"></label>
     <label>Wunschpreis <input type="number" id="item-target-price" step="0.01"></label>
+    <label>Sport/Non-Sport
+      <select id="item-card-type">
+        <option value="">– unspezifiziert –</option>
+        <option value="sport">Sport</option>
+        <option value="non_sport">Non-Sport</option>
+      </select>
+    </label>
     <label class="full-row">Notiz <input type="text" id="item-notes"></label>
     <div class="actions">
       <button type="submit" id="item-form-submit">Hinzufügen</button>
@@ -171,7 +179,7 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <form id="import-form" class="no-print">
-    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz, Semikolon-getrennt).</p>
+    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz;Sport/Non-Sport, Semikolon-getrennt).</p>
     <label>CSV-Datei <input type="file" name="file" accept=".csv,text/csv" required></label>
     <div class="actions">
       <button type="submit">Importieren</button>
@@ -202,6 +210,7 @@ if ("serviceWorker" in navigator) {
           <th data-key="target_price">Wunschpreis <span class="sort-arrow"></span></th>
           <th>Sourcing</th>
           <th>Notiz</th>
+          <th data-key="card_type">Typ <span class="sort-arrow"></span></th>
           <th></th>
         </tr>
       </thead>
@@ -290,6 +299,7 @@ const COLUMN_TOGGLES = [
   { key: "team", label: "Team", index: 5 },
   { key: "set_name", label: "Set", index: 6 },
   { key: "note", label: "Notiz", index: 9 },
+  { key: "card_type", label: "Typ", index: 10 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "wishlist_hidden_columns";
 let hiddenColumns = new Set();
@@ -384,6 +394,7 @@ const titleInput = document.getElementById("item-title");
 const teamInput = document.getElementById("item-team");
 const setInput = document.getElementById("item-set");
 const targetPriceInput = document.getElementById("item-target-price");
+const cardTypeInput = document.getElementById("item-card-type");
 const notesInput = document.getElementById("item-notes");
 
 function resetForm() {
@@ -417,6 +428,7 @@ function startEdit(item) {
   teamInput.value = item.team || "";
   setInput.value = item.set_name || "";
   targetPriceInput.value = item.target_price ?? "";
+  cardTypeInput.value = item.card_type || "";
   notesInput.value = item.notes || "";
   submitBtn.textContent = "Aktualisieren";
   form.style.display = "grid";
@@ -435,6 +447,7 @@ form.addEventListener("submit", async (ev) => {
     team: teamInput.value.trim(),
     set_name: setInput.value.trim(),
     target_price: targetPriceInput.value,
+    card_type: cardTypeInput.value,
     notes: notesInput.value.trim(),
   };
   const itemId = idInput.value;
@@ -783,7 +796,7 @@ function buildDetailRow(item) {
   const tr = document.createElement("tr");
   tr.className = "detail-row";
   const td = document.createElement("td");
-  td.colSpan = 10;
+  td.colSpan = 11;
 
   const sparkline = buildPriceSparkline(item.price_history);
   if (sparkline) {
@@ -965,6 +978,11 @@ function render() {
     notesTd.textContent = item.notes || "";
     tr.appendChild(notesTd);
 
+    const cardTypeTd = document.createElement("td");
+    cardTypeTd.textContent =
+      item.card_type === "sport" ? "Sport" : item.card_type === "non_sport" ? "Non-Sport" : "–";
+    tr.appendChild(cardTypeTd);
+
     const actionsTd = document.createElement("td");
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -1045,10 +1063,11 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz"];
+  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz", "Sport/Non-Sport"];
   const rows = sortedItems().map((item) => [
     item.title || "", item.team || "", item.set_name || "", item.target_price ?? "",
     item.last_match_price ?? "", formatDate(item.last_price_check_at), item.notes || "",
+    item.card_type || "",
   ]);
   downloadCsv("wunschliste.csv", headers, rows);
 });
