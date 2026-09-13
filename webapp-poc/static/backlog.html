@@ -187,6 +187,18 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
+    <h3>Lot-Verkauf auch bei eBay einstellen <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Der bestehende Lot-/Bundle-Verkauf (Massenaktion „📦 Als Lot verkaufen") legt aktuell bewusst nur
+      manuelle Verkäufe an, ohne etwas bei eBay einzustellen. Grund: eBay-Angebote sind in diesem Tool durchgehend
+      1:1 je Karte modelliert (<code>ebay_listings</code>-Tabelle, ein Angebot = eine Karte) – ein echtes
+      Multi-Karten-eBay-Angebot bräuchte eine eigene, andere Datenstruktur (ein Angebot mit mehreren verknüpften
+      Karten, eigene Mengen-/Preislogik) sowie eine neue eBay-API-Anbindung für Mehrfachpositionen. Klärungsbedarf:
+      soll ein Lot als ein einzelnes eBay-Angebot mit einem Foto/einer Beschreibung für alle enthaltenen Karten
+      erscheinen, oder weiterhin mehrere Einzel-Angebote, nur mit einem gemeinsamen Rabatt-/Bundle-Hinweis?</p>
+  </div>
+
+  <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
     <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
