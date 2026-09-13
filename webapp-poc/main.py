@@ -2933,6 +2933,8 @@ def _notify_new_sales(newly_synced):
         settings = db.get_app_status() or {}
         if not settings.get("notify_on_sale"):
             return
+        if db.is_vacation_mode_active():
+            return
     except Exception:
         logger.exception("Benachrichtigungseinstellungen konnten nicht geladen werden")
         return
@@ -3258,6 +3260,8 @@ async def app_status():
         "kleinunternehmer_hint_enabled": status.get("kleinunternehmer_hint_enabled", True),
         "failed_login_log": status.get("failed_login_log") or [],
         "auto_relist_enabled": bool(status.get("auto_relist_enabled")),
+        "vacation_mode_enabled": bool(status.get("vacation_mode_enabled")),
+        "vacation_mode_until": status.get("vacation_mode_until"),
         "sender_address": status.get("sender_address") or "",
         "activity_cleared_at": status.get("activity_cleared_at"),
         "notify_on_sale": bool(status.get("notify_on_sale")),
@@ -3379,6 +3383,17 @@ async def set_auto_relist_enabled(fields: dict = Body(...)):
     # wirkt nur zusammen mit dem per-Angebot-Schalter auto_relist_after_days
     # (siehe _run_auto_relist_once() und db.list_listings_due_for_auto_relist()).
     updated = db.set_auto_relist_enabled(bool(fields.get("enabled")))
+    return JSONResponse(updated)
+
+
+@app.put("/api/vacation-mode")
+async def set_vacation_mode(fields: dict = Body(...)):
+    # Pausiert automatische Preispruefung/Re-Listing (ebay_scheduler.run_forever())
+    # sowie E-Mail-/Push-Benachrichtigungen bei neuen Verkaeufen (_notify_new_sales())
+    # - siehe db.is_vacation_mode_active(). "until" ist optional (ISO-Datum,
+    # z.B. "2026-09-30") und beendet den Modus automatisch; leer/None bedeutet
+    # "bis auf Weiteres" (manuell wieder ausschalten).
+    updated = db.set_vacation_mode(bool(fields.get("enabled")), fields.get("until") or None)
     return JSONResponse(updated)
 
 

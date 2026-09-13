@@ -271,8 +271,20 @@ def run_returns_sync_once(sync_returns_fn):
 async def run_forever(publish_fn, sync_sales_fn=None, on_new_sales=None, sync_returns_fn=None, auto_relist_fn=None):
     while True:
         run_once(publish_fn)
-        run_price_research_once()
-        run_wishlist_price_check_once()
+        # Urlaubs-/Pausenmodus (settings.html) pausiert nur die aktiv
+        # eingreifenden/aufdringlichen Automatiken (Preispruefung, Re-Listing)
+        # - der Sales-/Retouren-Sync oben (run_once) sowie unten laeuft
+        # bewusst weiter, damit tatsaechliche Verkaeufe waehrend der
+        # Abwesenheit nicht verpasst werden, nur eben ohne Benachrichtigung
+        # (siehe main.py's _notify_new_sales()).
+        try:
+            vacation = db.is_vacation_mode_active()
+        except Exception:
+            logger.exception("Urlaubsmodus-Status konnte nicht geladen werden")
+            vacation = False
+        if not vacation:
+            run_price_research_once()
+            run_wishlist_price_check_once()
         if sync_sales_fn is not None:
             newly_synced = run_sales_sync_once(sync_sales_fn)
             if newly_synced and on_new_sales is not None:
@@ -282,7 +294,7 @@ async def run_forever(publish_fn, sync_sales_fn=None, on_new_sales=None, sync_re
                     logger.exception("on_new_sales-Callback fehlgeschlagen")
         if sync_returns_fn is not None:
             run_returns_sync_once(sync_returns_fn)
-        if auto_relist_fn is not None:
+        if auto_relist_fn is not None and not vacation:
             # auto_relist_fn (main.py's _run_auto_relist_once()) traegt bereits
             # eigene try/except-Absicherung je Angebot - dieser Wrapper faengt
             # nur einen unerwarteten Fehler in der Funktion selbst ab (gleiches

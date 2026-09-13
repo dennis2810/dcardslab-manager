@@ -1597,6 +1597,15 @@ class NotifyNewSalesTests(unittest.TestCase):
             main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
         mock_send.assert_called_once()
 
+    def test_does_nothing_when_vacation_mode_active(self):
+        settings = {"notify_on_sale": True, "smtp_host": "smtp.example.com", "vacation_mode_enabled": True}
+        with patch("main.db.get_app_status", return_value=settings), \
+             patch("main.email_notify.send_email") as mock_send, \
+             patch("main.push_notify.send_push_to_all") as mock_push:
+            main._notify_new_sales([{"card_id": "c1", "listing": {}, "sale_fields": {}}])
+        mock_send.assert_not_called()
+        mock_push.assert_not_called()
+
 
 class IsReminderDigestDueTests(unittest.TestCase):
     def test_due_when_never_sent(self):

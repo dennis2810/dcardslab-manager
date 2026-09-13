@@ -147,7 +147,10 @@ if ("serviceWorker" in navigator) {
   <h2 id="karten">Kartenübersicht</h2>
   <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-
     Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure), Sport-&amp;-Non-Sport-Filter
-    und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld.
+    und Tag-Filter lassen sich kombinieren. Die Taste <code>/</code> springt direkt in das Suchfeld, <code>↑</code>/
+    <code>↓</code> navigieren in der Tabelle, <code>Enter</code> öffnet die markierte Zeile und <code>?</code> zeigt
+    eine Übersicht aller Tastenkürzel (auch per „⌨ Kürzel"-Button) – gleiche Kürzel auch auf der eBay-, Inventar-,
+    Käufe- und Alle-Verkäufe-Seite.
     In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
     importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
     ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Über den Button „⚙
@@ -180,7 +183,8 @@ if ("serviceWorker" in navigator) {
 
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
-    Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt) und das „Versendet"-Kästchen umschalten.
+    Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt, mit Vorschlagsliste aus bereits vergebenen
+    Tags beim Tippen) und das „Versendet"-Kästchen umschalten.
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -397,7 +401,10 @@ if ("serviceWorker" in navigator) {
     „🖨 QR-Etiketten drucken" in der Lagerort-Übersicht erzeugt zusätzlich ein druckbares Etikett je Lagerort mit
     echtem QR-Code – scannen öffnet das Inventar direkt gefiltert auf diesen Lagerort. Über den Button „⚙ Spalten"
     lassen sich einzelne, weniger zentrale Spalten (Zustand, Lagerort, Notizen, Wert) aus-/einblenden – die Auswahl
-    wird je Browser gemerkt.</p>
+    wird je Browser gemerkt. Der Button „📇 Katalog-PDF" erzeugt eine druckbare Übersicht (Foto, Titel, Wert) aller
+    aktuell vorrätigen Karten in der gerade angezeigten (gefilterten) Ansicht – z. B. zum Herumzeigen auf einer
+    Börse oder als Beleg für eine Versicherung; „PDF" bedeutet wie bei der Jahresübersicht auf der Statistikseite
+    eine Druckansicht, die sich über den Browser-Druckdialog als PDF speichern lässt.</p>
 
   <h2 id="inventur">Inventur</h2>
   <p>Soll/Ist-Abgleich für den physischen Bestand: die Seite zeigt alle vorrätigen Karten als Checkliste (nach
@@ -447,7 +454,10 @@ if ("serviceWorker" in navigator) {
     Marktpreis laut Preisrecherche-Verlauf seit der ersten Erfassung, erscheint zusätzlich ein Hinweis „📉 fällt
     seit ~X Wo." – auch schon bevor der Wunschpreis selbst erreicht ist, als Anhaltspunkt für einen guten Zeitpunkt
     zum genaueren Hinsehen. Über den Button „⚙ Spalten" lassen sich die Spalten Team, Set und Notiz aus-/einblenden
-    – die Auswahl wird je Browser gemerkt.</p>
+    – die Auswahl wird je Browser gemerkt. Beim Aufklappen eines Eintrags wird zusätzlich geprüft, ob eine Karte mit
+    gleichem Titel (und, falls angegeben, gleichem Team/Set) bereits im eigenen Inventar liegt – falls ja, erscheint
+    ein Hinweis „⚠ Bereits im Inventar vorhanden" mit Link zur Kartenseite (z. B. wenn die Karte inzwischen erworben,
+    aber der Wunschlisten-Eintrag noch nicht abgehakt wurde).</p>
   <p>Zusätzlich läuft im Hintergrund automatisch (ca. einmal täglich je Eintrag) dieselbe Preisprüfung – der
     günstigste gefundene Treffer erscheint direkt in der Spalte „Sourcing", ohne dass man jeden Eintrag einzeln
     aufklappen muss (✓-Markierung, wenn er auf/unter dem Wunschpreis liegt, mit Direktlink zum Angebot). Die
@@ -511,7 +521,8 @@ if ("serviceWorker" in navigator) {
     welcher Reihenfolge (Checkbox zum Ein-/Ausblenden, Pfeile zum Verschieben) – die Auswahl wird je Browser
     gemerkt.</p>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
-    Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote oder ungewöhnlich lange Liegedauer. Die
+    Fortschrittsbalken sowie Hinweisen auf hängengebliebene eBay-Angebote, ungewöhnlich lange Liegedauer oder
+    Karten seit langem im Bestand ohne eBay-Angebot (sowohl für Karten mit als auch ohne Kaufzuordnung). Die
     Kachel „Preis-Alarme (eBay)" zählt veröffentlichte Angebote, deren Preis um mehr als die in den Einstellungen
     festgelegte Schwelle (Standard 20&nbsp;%) vom Preisrecherche-Marktdurchschnitt abweicht, und verlinkt zur
     eBay-Übersicht. Ein
@@ -599,7 +610,12 @@ if ("serviceWorker" in navigator) {
     das automatische Neu-Einstellen unverkaufter eBay-Angebote (siehe eBay) – zusätzlich muss pro Angebot eine
     Tagesanzahl eingetragen sein, damit die Automation tatsächlich greift. Die Preis-Alarm-Schwelle legt fest, ab
     welcher prozentualen Abweichung vom Preisrecherche-Marktdurchschnitt ein Preis-Alarm ausgelöst wird (Standard
-    20&nbsp;%, siehe Kartenseite/eBay-Übersicht/Dashboard). Der Bereich „Login" bietet einen
+    20&nbsp;%, siehe Kartenseite/eBay-Übersicht/Dashboard). Der „Urlaubs-/Pausenmodus" pausiert mit einem Schalter
+    die automatische Preisprüfung (eBay-Angebote und Wunschliste), das automatische Re-Listing sowie die E-Mail-/
+    Push-Benachrichtigungen bei neuen Verkäufen – z. B. für eine längere Abwesenheit; ein optionales Enddatum
+    schaltet den Modus danach automatisch wieder ab, ohne dass man daran denken muss. Bereits eingehende Verkäufe/
+    Retouren werden währenddessen weiterhin erkannt, nur eben ohne Benachrichtigung; ist der Modus aktiv, erscheint
+    auf dem Dashboard unter „Was jetzt tun?" ein entsprechender Hinweis. Der Bereich „Login" bietet einen
     „Abmelden"-Button – nur relevant, wenn ein Login eingerichtet wurde (optionales gemeinsames Passwort, siehe
     README.md), ansonsten bleibt das Tool wie bisher ohne Anmeldung erreichbar. Nach 5 falschen Passwörtern von
     derselben Quelle sperrt das Tool weitere Versuche für 60 Sekunden; die letzten fehlgeschlagenen

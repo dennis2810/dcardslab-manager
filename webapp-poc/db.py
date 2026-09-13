@@ -977,6 +977,35 @@ def record_failed_login(ip, at):
     return response.data[0]
 
 
+def set_vacation_mode(enabled, until):
+    # Gleiches Singleton-Row-Muster wie set_auto_relist_enabled() unten -
+    # "until" (optionales Datum, ISO-String) laesst den Modus automatisch
+    # nach Rueckkehr enden, ohne dass jemand daran denken muss, ihn wieder
+    # auszuschalten; None/leer bedeutet "bis auf Weiteres".
+    response = get_client().table("app_status").upsert({
+        "id": True, "vacation_mode_enabled": enabled, "vacation_mode_until": until or None,
+    }).execute()
+    return response.data[0]
+
+
+def is_vacation_mode_active():
+    # Zentrale Pruefung fuer ebay_scheduler.run_forever() (pausiert
+    # automatische Preispruefung/Re-Listing) und main.py's _notify_new_sales()
+    # (pausiert E-Mail-/Push-Benachrichtigungen bei neuen Verkaeufen) - beide
+    # sollen den gleichen Schalter respektieren, statt ihn getrennt zu pruefen.
+    status = get_app_status() or {}
+    if not status.get("vacation_mode_enabled"):
+        return False
+    until = status.get("vacation_mode_until")
+    if not until:
+        return True
+    try:
+        until_date = datetime.fromisoformat(until).date()
+    except (TypeError, ValueError):
+        return True
+    return datetime.now(timezone.utc).date() <= until_date
+
+
 def set_auto_relist_enabled(enabled):
     # Globaler An/Aus-Schalter fuer das automatische Re-Listing - zusaetzlich
     # zum per-Angebot-Schalter (ebay_listings.auto_relist_after_days, siehe

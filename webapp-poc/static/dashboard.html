@@ -370,7 +370,7 @@ async function load() {
     renderGoal();
     renderKleinunternehmerStatus(stats, appStatus);
     renderSummary(stats, inventory, published.listings || [], wishlist.items || []);
-    renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus, reminders);
+    renderActions(stats, cardsBody.cards || [], geplant.listings || [], published.listings || [], sheets, ebayStatus, reminders, appStatus);
     activityClearedAt = appStatus.activity_cleared_at || null;
     lastActivityCards = cardsBody.cards || [];
     renderActivity(stats, lastActivityCards);
@@ -709,10 +709,19 @@ function renderLastUpdates(sheets, appStatus) {
   el.textContent = parts.join(" · ");
 }
 
-function renderActions(stats, cards, geplantListings, publishedListings, sheets, ebayStatus, reminders) {
+function renderActions(stats, cards, geplantListings, publishedListings, sheets, ebayStatus, reminders, appStatus) {
   const list = document.getElementById("action-list");
   list.innerHTML = "";
   let count = 0;
+
+  // Kein "count++" hier - der Urlaubsmodus ist kein zu erledigender Punkt,
+  // sondern nur eine Erklaerung dafuer, warum gerade nichts automatisch
+  // passiert (siehe settings.html/db.is_vacation_mode_active()).
+  if (appStatus && appStatus.vacation_mode_enabled) {
+    const until = appStatus.vacation_mode_until;
+    const untilText = until ? ` bis ${formatDate(until)}` : "";
+    addAction(list, `🏖 Urlaubsmodus aktiv${untilText} – automatische Preisprüfung/Re-Listing/Benachrichtigungen pausiert – <a href="settings.html">zu den Einstellungen &rarr;</a>`);
+  }
 
   const unshipped = cards.filter((c) => (c.ebay_status === "Verkauft" || c.manual_sale_channel) && !c.shipped && !c.picked_up);
   if (unshipped.length) {
@@ -741,6 +750,21 @@ function renderActions(stats, cards, geplantListings, publishedListings, sheets,
   if (noListingYet.length) {
     count++;
     addAction(list, `🏷️ ${noListingYet.length} Karte(n) seit über ${LONG_HOLDING_DAYS} Tagen im Bestand, aber noch ohne eBay-Angebot – <a href="cards.html">zu den Karten &rarr;</a>`);
+  }
+
+  // Gleiche Warnung wie oben, aber fuer Karten OHNE Kaufzuordnung (z.B. per
+  // Handyscan/manuell angelegt) - die tauchen in stats.rows gar nicht auf,
+  // da diese Zeilen einen verknuepften Kauf voraussetzen, und wuerden sonst
+  // nie vom obigen Check erfasst.
+  const noListingYetNoPurchase = cards.filter((c) => {
+    if (c.has_purchase || c.ebay_status || c.manual_sale_channel || c.private_collection) return false;
+    if (!c.created_at) return false;
+    const days = daysSince(c.created_at);
+    return days != null && days > LONG_HOLDING_DAYS;
+  });
+  if (noListingYetNoPurchase.length) {
+    count++;
+    addAction(list, `🏷️ ${noListingYetNoPurchase.length} Karte(n) ohne Kaufzuordnung seit über ${LONG_HOLDING_DAYS} Tagen im Bestand, aber noch ohne eBay-Angebot – <a href="cards.html">zu den Karten &rarr;</a>`);
   }
 
   const staleGeplant = geplantListings.filter((l) => {

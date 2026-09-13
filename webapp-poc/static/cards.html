@@ -101,6 +101,10 @@ if ("serviceWorker" in navigator) {
   #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
+  .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
+  .shortcuts-panel ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+  .shortcuts-panel li { margin: 0.15rem 0; }
+  .shortcuts-panel kbd { background: var(--hover-bg); border: 1px solid #999; border-radius: 3px; padding: 0.05rem 0.4rem; font-family: inherit; font-size: 0.85em; }
   .lot-sale-panel { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 1.5rem; }
   .lot-sale-panel strong { flex-basis: 100%; }
   .lot-sale-panel label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -283,8 +287,18 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="column-toggle-btn" class="no-print">⚙ Spalten</button>
+    <button type="button" id="shortcuts-btn" class="no-print">⌨ Kürzel</button>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
+  <div id="shortcuts-panel" class="shortcuts-panel no-print" hidden>
+    <strong>Tastenkürzel</strong>
+    <ul>
+      <li><kbd>/</kbd> – Suchfeld fokussieren</li>
+      <li><kbd>&uarr;</kbd> / <kbd>&darr;</kbd> – in der Tabelle navigieren</li>
+      <li><kbd>Enter</kbd> – markierte Zeile öffnen</li>
+      <li><kbd>?</kbd> – dieses Fenster ein-/ausblenden</li>
+    </ul>
+  </div>
 
 <script src="vendor/qrcode.js"></script>
 <script>
@@ -429,6 +443,21 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault();
   qInput.focus();
   qInput.select();
+});
+
+// "?" blendet die Tastenkuerzel-Uebersicht ein/aus - gleiche Eingabefeld-
+// Ausnahme wie beim "/"-Kuerzel oben, damit ein "?" im Suchfeld nicht das
+// Fenster oeffnet.
+const shortcutsPanel = document.getElementById("shortcuts-panel");
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "?" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  shortcutsPanel.hidden = !shortcutsPanel.hidden;
+});
+document.getElementById("shortcuts-btn").addEventListener("click", () => {
+  shortcutsPanel.hidden = !shortcutsPanel.hidden;
 });
 const statusSelect = document.getElementById("status");
 const ebayFilterSelect = document.getElementById("ebay-filter");

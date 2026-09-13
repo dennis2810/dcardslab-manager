@@ -296,6 +296,18 @@ if ("serviceWorker" in navigator) {
     <p class="status" id="auto-relist-enabled-status"></p>
   </section>
 
+  <section id="vacation-mode-section">
+    <h2>Urlaubs-/Pausenmodus</h2>
+    <p>Pausiert die automatische Preisprüfung (eBay-Angebote und Wunschliste) und das automatische Re-Listing sowie
+      E-Mail-/Push-Benachrichtigungen bei neuen Verkäufen – z. B. während einer längeren Abwesenheit. Bereits
+      eingehende Verkäufe/Retouren werden weiterhin erkannt, nur eben ohne Benachrichtigung; nach dem optionalen
+      Enddatum schaltet sich der Modus von selbst wieder ab, ohne dass man daran denken muss.</p>
+    <label><input type="checkbox" id="vacation-mode-enabled-input"> Urlaubsmodus aktivieren</label>
+    <label>Bis (optional) <input type="date" id="vacation-mode-until-input"></label>
+    <button type="button" id="save-vacation-mode-btn">Speichern</button>
+    <p class="status" id="vacation-mode-status"></p>
+  </section>
+
   <section id="description-templates-section">
     <h2>Angebots-Textbausteine</h2>
     <p>Wiederverwendbare Textbausteine für eBay-Beschreibungen (z. B. ein Hinweis für eine ganze Kartenserie) –
@@ -424,6 +436,8 @@ async function loadBackupStatus() {
     document.getElementById("kleinunternehmer-current-year-input").value = body.kleinunternehmer_current_year_threshold ?? 50000;
     document.getElementById("kleinunternehmer-hint-enabled-input").checked = body.kleinunternehmer_hint_enabled !== false;
     document.getElementById("auto-relist-enabled-input").checked = Boolean(body.auto_relist_enabled);
+    document.getElementById("vacation-mode-enabled-input").checked = Boolean(body.vacation_mode_enabled);
+    document.getElementById("vacation-mode-until-input").value = body.vacation_mode_until || "";
     document.getElementById("smtp-host-input").value = body.smtp_host || "";
     document.getElementById("smtp-port-input").value = body.smtp_port || "";
     document.getElementById("smtp-use-tls-input").checked = body.smtp_use_tls !== false;
@@ -903,6 +917,33 @@ document.getElementById("save-auto-relist-enabled-btn").addEventListener("click"
     statusEl.textContent = "Gespeichert.";
     statusEl.className = "status";
     showToast("Automatisches Re-Listing " + (enabled ? "aktiviert." : "deaktiviert."));
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("save-vacation-mode-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("vacation-mode-status");
+  const enabled = document.getElementById("vacation-mode-enabled-input").checked;
+  const until = document.getElementById("vacation-mode-until-input").value || null;
+  try {
+    const res = await fetch("/api/vacation-mode", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, until }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    statusEl.textContent = "Gespeichert.";
+    statusEl.className = "status";
+    showToast("Urlaubsmodus " + (enabled ? "aktiviert." : "deaktiviert."));
   } catch (err) {
     statusEl.textContent = "Fehler: " + err;
     statusEl.className = "error";

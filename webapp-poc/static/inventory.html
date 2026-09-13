@@ -69,6 +69,10 @@ if ("serviceWorker" in navigator) {
   #inventory-table.hide-col-7 th:nth-child(7), #inventory-table.hide-col-7 td:nth-child(7) { display: none; }
   #inventory-table.hide-col-8 th:nth-child(8), #inventory-table.hide-col-8 td:nth-child(8) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+  .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
+  .shortcuts-panel ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+  .shortcuts-panel li { margin: 0.15rem 0; }
+  .shortcuts-panel kbd { background: var(--hover-bg); border: 1px solid #999; border-radius: 3px; padding: 0.05rem 0.4rem; font-family: inherit; font-size: 0.85em; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   th { cursor: pointer; user-select: none; white-space: nowrap; }
   th .sort-arrow { color: #888; font-size: 0.8em; }
@@ -234,9 +238,20 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="next-page">Weiter &rarr;</button>
     <button type="button" id="print-btn">🖨 Drucken</button>
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
+    <button type="button" id="catalog-pdf-btn" class="no-print">📇 Katalog-PDF</button>
     <button type="button" id="column-toggle-btn">⚙ Spalten</button>
+    <button type="button" id="shortcuts-btn" class="no-print">⌨ Kürzel</button>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
+  <div id="shortcuts-panel" class="shortcuts-panel no-print" hidden>
+    <strong>Tastenkürzel</strong>
+    <ul>
+      <li><kbd>/</kbd> – Suchfeld fokussieren</li>
+      <li><kbd>&uarr;</kbd> / <kbd>&darr;</kbd> – in der Tabelle navigieren</li>
+      <li><kbd>Enter</kbd> – markierte Zeile öffnen</li>
+      <li><kbd>?</kbd> – dieses Fenster ein-/ausblenden</li>
+    </ul>
+  </div>
 
 <script src="vendor/qrcode.js"></script>
 <script>
@@ -354,6 +369,21 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault();
   qInput.focus();
   qInput.select();
+});
+
+// "?" blendet die Tastenkuerzel-Uebersicht ein/aus - gleiche Eingabefeld-
+// Ausnahme wie beim "/"-Kuerzel oben, damit ein "?" im Suchfeld nicht das
+// Fenster oeffnet.
+const shortcutsPanel = document.getElementById("shortcuts-panel");
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "?" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  ev.preventDefault();
+  shortcutsPanel.hidden = !shortcutsPanel.hidden;
+});
+document.getElementById("shortcuts-btn").addEventListener("click", () => {
+  shortcutsPanel.hidden = !shortcutsPanel.hidden;
 });
 
 // de-DE liefert Tausenderpunkt + Dezimalkomma (z.B. "1.709,10"), was fuer
@@ -655,6 +685,52 @@ document.getElementById("bulk-print-labels-btn").addEventListener("click", () =>
   const selected = items.filter((item) => selectedIds.has(item.id));
   if (!selected.length) return;
   printItemLabels(selected);
+});
+
+// Druckbarer Katalog (Foto + Titel + Wert je Karte) fuer Boersen oder als
+// Beleg fuer eine Versicherung - "PDF-Export" bedeutet hier wie bei der
+// Jahresuebersicht (statistics.html) ganz bewusst nur eine Druckansicht,
+// die der Browser per "Als PDF speichern" sichern kann, statt eine echte
+// PDF-Bibliothek einzubinden.
+function printCatalog(catalogItems) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Popup wurde blockiert - bitte Popups für diese Seite erlauben.");
+    return;
+  }
+  const rows = catalogItems.map((item) => `
+    <div class="catalog-tile">
+      ${item.card?.front_image_url ? `<img src="${item.card.front_image_url}" alt="">` : `<div class="catalog-noimg"></div>`}
+      <div class="catalog-title">${escapeHtml(item.card_title || "(ohne Titel)")}</div>
+      <div class="catalog-value">${item.value != null ? fmtEuro(item.value) : "–"}</div>
+    </div>
+  `).join("");
+  win.document.write(`<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Sammlungs-Katalog</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; }
+  h1 { font-size: 1.2rem; }
+  .catalog { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
+  .catalog-tile { border: 1px solid #999; border-radius: 6px; padding: 0.5rem; text-align: center; page-break-inside: avoid; }
+  .catalog-tile img, .catalog-noimg { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #eee; }
+  .catalog-title { font-size: 0.8rem; font-weight: 600; margin-top: 0.3rem; }
+  .catalog-value { font-size: 0.8rem; color: #555; }
+</style></head>
+<body>
+  <h1>Sammlungs-Katalog</h1>
+  <div class="catalog">${rows}</div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+document.getElementById("catalog-pdf-btn").addEventListener("click", () => {
+  const inStock = sortedFilteredItems().filter((item) => (item.quantity ?? 0) > 0);
+  if (!inStock.length) {
+    alert("Keine vorrätigen Karten in der aktuellen Ansicht gefunden.");
+    return;
+  }
+  printCatalog(inStock);
 });
 
 function filteredItems() {
