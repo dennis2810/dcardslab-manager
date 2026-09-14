@@ -212,13 +212,14 @@ def trim_final_fringe(card, base_px=6, max_extra=10):
 
     cropped=card[base_px:h-base_px, base_px:w-base_px]
 
-    # Bright + low-chroma mask. White/very light gray sleeve/scanner fringe
-    # is neutral; saturated card artwork is not.
+    # Bright or dark, low-chroma mask. White/very light gray sleeve fringe is
+    # neutral, and so is a black inlay-tray steg bleeding into the crop;
+    # saturated card artwork is neither.
     b,g,r=cv2.split(cropped)
     mx=np.maximum(np.maximum(b,g),r).astype(np.int16)
     mn=np.minimum(np.minimum(b,g),r).astype(np.int16)
     chroma=mx-mn
-    neutral=(mx >= 200) & (chroma <= 35)
+    neutral=((mx >= 200) | (mx <= 60)) & (chroma <= 35)
 
     def side_score(side, k):
         if side=='top':
@@ -271,7 +272,7 @@ v9.4.2: ultra-conservative final cosmetic pass.
     mx=np.maximum(np.maximum(b,g),r).astype(np.int16)
     mn=np.minimum(np.minimum(b,g),r).astype(np.int16)
     chroma=mx-mn
-    neutral=(mx >= 205) & (chroma <= 28)
+    neutral=((mx >= 205) | (mx <= 55)) & (chroma <= 28)
 
     def score(side, idx):
         if side=='top':

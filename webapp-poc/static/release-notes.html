@@ -83,6 +83,16 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Scan-Fixes &amp; Prüf-Schritt vor Übernahme <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix 3×3-Scan: schwarze Inlay-Stege des Kartenhalters wurden teils fälschlich als zusätzliche Karten
+      gezählt bzw. als Rand mit ausgeschnitten – Zuschnitt-Erkennung robuster gemacht.</li>
+    <li>Bugfix: Kartenausschnitte aus dem 3×3-Scan wurden fälschlich um 180° gedreht, obwohl der Scanbogen
+      richtig herum eingelegt war.</li>
+    <li>Neuer Zwischenschritt beim Scannen: Zuschnitte und die von der KI erkannten Felder werden erst zur
+      Prüfung angezeigt (mit Bild pro Karte) – erst nach Bestätigung landen die Karten in der Datenbank.</li>
+  </ul>
+
   <h2>Tastenkürzel, Urlaubsmodus &amp; Katalog-PDF <span class="date">September 2026</span></h2>
   <ul>
     <li>Neue Tastenkürzel-Übersicht (Button „⌨ Kürzel" bzw. Taste <code>?</code>) auf Karten, eBay, Inventar,

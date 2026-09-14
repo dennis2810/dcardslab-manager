@@ -241,9 +241,12 @@ async def _run_reminder_digest_forever():
         _send_reminder_digest_if_due()
         await asyncio.sleep(_REMINDER_DIGEST_CHECK_INTERVAL_SECONDS)
 
-# Matches the desktop app's defaults (start_dcardlabs.bat / dcardlabs_manager.py).
+# JPEG_QUALITY matches the desktop app's default. ROTATE (an extra forced
+# 180deg flip after cropping) is off: it assumed a fixed physical scan
+# orientation left over from the old fixed-template scanner, so a
+# correctly-placed 9-up sheet came out upside down.
 JPEG_QUALITY = 97
-ROTATE = True
+ROTATE = False
 
 
 def _crop_side(upload_path, out_dir):
@@ -357,29 +360,23 @@ async def scan(
         batch_id = db.create_batch(card_count=len(front_files))
 
         def process_one(fp):
-            # Every branch below must return a result dict and must never let
-            # an exception escape - a single card's Supabase hiccup (upload,
-            # insert, or signed-URL lookup) may not abort the whole batch
-            # (see design spec's Fehlerbehandlung section). Failures are
-            # reported via the "image_error" field instead, using an explicit
-            # None sentinel (never gated on message truthiness, since
-            # str(exc) can be "") and naming which step/side failed.
+            # Preview only - crops+recognizes+uploads the images so they can be
+            # reviewed, but never writes a cards/inventory row yet (see
+            # POST /api/scan/confirm below, which does that once the user has
+            # seen the crops and confirmed them). Every branch below must
+            # return a result dict and must never let an exception escape - a
+            # single card's Supabase hiccup (upload or signed-URL lookup) may
+            # not abort the whole batch preview. Failures are reported via the
+            # "image_error" field instead, using an explicit None sentinel
+            # (never gated on message truthiness, since str(exc) can be "")
+            # and naming which step/side failed.
             number = int(fp.stem)
             bp = back_map.get(number)
             if bp is None:
                 fields = dict(EMPTY_FIELDS, status=f"Rückseite für Karte {number:03d} fehlt.")
                 if private_collection:
                     fields["private_collection"] = True
-                try:
-                    card_row = db.insert_card(batch_id, number, fields, None, None)
-                except Exception as exc:
-                    return {
-                        "number": number,
-                        **fields,
-                        "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
-                    }
-                _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
-                return {"number": number, **fields, "id": card_row["id"]}
+                return {"number": number, **fields}
 
             fields = recognize_card(front_path=fp, back_path=bp)
             if private_collection:
@@ -403,21 +400,13 @@ async def scan(
                 stage = "front-Bild-Upload" if front_image_path is None else "Rückseiten-Bild-Upload"
                 image_error = f"{stage} fehlgeschlagen: {type(exc).__name__}: {exc}"
 
-            result = {"number": number, **fields}
+            result = {
+                "number": number, **fields,
+                "front_image_path": front_image_path, "back_image_path": back_image_path,
+                "front_image_hash": front_hash,
+            }
             if duplicate:
                 result["possible_duplicate"] = duplicate
-            try:
-                card_row = db.insert_card(
-                    batch_id, number, fields, front_image_path, back_image_path, front_image_hash=front_hash,
-                )
-                result["id"] = card_row["id"]
-            except Exception as exc:
-                if image_error is None:
-                    image_error = f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}"
-                result["image_error"] = image_error
-                return result
-            _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
-
             if front_image_path:
                 try:
                     result["front_image_url"] = storage.signed_url(front_image_path)
@@ -441,25 +430,54 @@ async def scan(
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(process_one, front_files))
 
-    # The scan_batches row was created above with status="pending" - it must
-    # never be left stuck there. Default to "failed" so that even if the
-    # status computation itself blows up unexpectedly, update_batch_status
-    # still runs (in finally) with a safe, non-pending value before the
-    # exception is allowed to propagate.
-    batch_status = "failed"
-    try:
-        results.sort(key=lambda r: r["number"])
-        success_count = sum(
-            1 for r in results if r.get("status") == "ok" and "image_error" not in r
-        )
-        if success_count == len(results):
-            batch_status = "ok"
-        elif success_count == 0:
-            batch_status = "failed"
-        else:
-            batch_status = "partial"
-    finally:
-        db.update_batch_status(batch_id, batch_status)
+    results.sort(key=lambda r: r["number"])
+    return JSONResponse({"batch_id": batch_id, "cards": results})
+
+
+@app.post("/api/scan/confirm")
+async def scan_confirm(payload: dict = Body(...)):
+    # Zweiter Schritt nach der Sichtprüfung der Zuschnitte/KI-Felder aus
+    # POST /api/scan: erst hier werden die Karten (und ihre Inventar-Zeilen)
+    # tatsaechlich angelegt. Jede Karte wird einzeln abgesichert, damit ein
+    # einzelner Insert-Fehler nicht die restliche Uebernahme abbricht (siehe
+    # process_one()'s gleiches Prinzip in POST /api/scan).
+    batch_id = payload.get("batch_id")
+    if not batch_id:
+        raise HTTPException(status_code=400, detail="batch_id fehlt.")
+    location = payload.get("location", "")
+    notes = payload.get("notes", "")
+    private_collection = bool(payload.get("private_collection"))
+
+    results = []
+    for card in payload.get("cards", []):
+        number = card.get("number")
+        fields = {k: v for k, v in card.items() if k not in (
+            "number", "front_image_path", "back_image_path", "front_image_hash",
+            "front_image_url", "back_image_url", "possible_duplicate", "image_error",
+        )}
+        try:
+            card_row = db.insert_card(
+                batch_id, number, fields,
+                card.get("front_image_path"), card.get("back_image_path"),
+                front_image_hash=card.get("front_image_hash"),
+            )
+        except Exception as exc:
+            results.append({
+                "number": number,
+                "image_error": f"Datenbank-Insert fehlgeschlagen: {type(exc).__name__}: {exc}",
+            })
+            continue
+        _create_default_inventory_item(card_row["id"], location, notes, private=private_collection)
+        results.append({"number": number, "id": card_row["id"]})
+
+    success_count = sum(1 for r in results if "id" in r)
+    if success_count == len(results) and results:
+        batch_status = "ok"
+    elif success_count == 0:
+        batch_status = "failed"
+    else:
+        batch_status = "partial"
+    db.update_batch_status(batch_id, batch_status)
 
     return JSONResponse({"batch_id": batch_id, "cards": results})
 
