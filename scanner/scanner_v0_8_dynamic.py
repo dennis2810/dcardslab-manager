@@ -384,6 +384,9 @@ def _find_grid_components(image):
             best = candidates
 
     if best is None or len(best) != 9:
+        fallback = _find_grid_components_by_cells(image)
+        if fallback is not None:
+            return fallback
         raise RuntimeError(
             "Die dynamische 3x3-Erkennung konnte nicht genau 9 Karten finden. "
             "Bitte den kompletten Scan mit allen 9 Karten verwenden."
@@ -398,6 +401,157 @@ def _find_grid_components(image):
             key=lambda b: b[0] + b[2] / 2
         )
         ordered.extend(row)
+
+    return ordered
+
+
+def _estimate_grid_extent(image):
+    """
+    Estimate the pixel rectangle spanned by all 9 cards, using whatever
+    saturation-based candidate contours can be found - even if that is
+    fewer than nine (e.g. because a black inlay steg was mistaken for a
+    card, or a dark-bordered card was missed). Falls back to the full
+    image (minus a small margin) if too few candidates are found at all.
+    """
+    H, W = image.shape[:2]
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1]
+    min_dim = min(H, W)
+    kernel_size = max(3, int(round(min_dim * 0.0035)))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+
+    boxes = []
+    for sat_thr in (20, 25, 30, 35, 40):
+        mask = (sat > sat_thr).astype(np.uint8) * 255
+        cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(
+            cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            area = cv2.contourArea(c)
+            if w < W * 0.10 or h < H * 0.10:
+                continue
+            if area < 0.25 * w * h:
+                continue
+            ratio = w / float(h)
+            if not 0.35 <= ratio <= 2.4:
+                continue
+            boxes.append((x, y, x + w, y + h))
+
+    if len(boxes) < 3:
+        mx, my = W * 0.02, H * 0.02
+        return mx, my, W - mx, H - my
+
+    x1 = min(b[0] for b in boxes)
+    y1 = min(b[1] for b in boxes)
+    x2 = max(b[2] for b in boxes)
+    y2 = max(b[3] for b in boxes)
+    pad_x = (x2 - x1) * 0.06
+    pad_y = (y2 - y1) * 0.06
+    return (
+        max(0, x1 - pad_x), max(0, y1 - pad_y),
+        min(W, x2 + pad_x), min(H, y2 + pad_y)
+    )
+
+
+def _cell_card_contour(cell_img):
+    """
+    Locate the single card region inside one 3x3 grid cell. Tries the same
+    saturation-based approach as the whole-scan detector first (colored
+    artwork). If that finds nothing plausible - which is what happens for
+    cards with a dark/black border or largely desaturated artwork - falls
+    back to brightness-contrast (Otsu) and edge-based masks, so dark
+    inlay steges are never mistaken for the card itself (they never form a
+    contour filling most of the cell) while dark-bordered cards still are.
+    """
+    ch, cw = cell_img.shape[:2]
+    cell_area = float(ch * cw)
+    min_dim = min(ch, cw)
+    kernel_size = max(3, int(round(min_dim * 0.02)))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+
+    def best_from_mask(mask):
+        cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel)
+        contours, _ = cv2.findContours(
+            cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        best, best_area = None, 0.0
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            area = cv2.contourArea(c)
+            # A real card fills a large, but not the entire, share of its
+            # cell; this range excludes both inlay-steg slivers and a mask
+            # that (wrongly) covers the whole cell including its border.
+            if area < 0.30 * cell_area or area > 0.98 * cell_area:
+                continue
+            ratio = w / float(h) if h else 0
+            if not 0.35 <= ratio <= 2.4:
+                continue
+            if area > best_area:
+                best_area, best = area, (x, y, w, h, area, c)
+        return best
+
+    hsv = cv2.cvtColor(cell_img, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1]
+    for sat_thr in (20, 25, 30, 35, 40):
+        found = best_from_mask((sat > sat_thr).astype(np.uint8) * 255)
+        if found:
+            return found
+
+    gray = cv2.cvtColor(cell_img, cv2.COLOR_BGR2GRAY)
+    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    for mask in (otsu, cv2.bitwise_not(otsu)):
+        found = best_from_mask(mask)
+        if found:
+            return found
+
+    edges = cv2.dilate(
+        cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 0), 25, 90), kernel
+    )
+    return best_from_mask(edges)
+
+
+def _find_grid_components_by_cells(image):
+    """
+    Robust fallback for the 3x3 layout: split the estimated card area into
+    a 3x3 grid of cells first, then look for exactly one card region per
+    cell. This never counts a black inlay steg as an extra card, because
+    each cell can only ever contribute one component, and cards with a
+    dark/black border are still found via the per-cell contrast fallback.
+    Returns 9 components (in the usual x, y, w, h, area, contour form,
+    row-major order) or None if any cell yields no plausible card.
+    """
+    H, W = image.shape[:2]
+    ex1, ey1, ex2, ey2 = _estimate_grid_extent(image)
+    cell_w = (ex2 - ex1) / 3.0
+    cell_h = (ey2 - ey1) / 3.0
+    pad_x = cell_w * 0.12
+    pad_y = cell_h * 0.12
+
+    ordered = []
+    for row in range(3):
+        for col in range(3):
+            cx0 = ex1 + col * cell_w
+            cy0 = ey1 + row * cell_h
+            x1 = max(0, int(round(cx0 - pad_x)))
+            y1 = max(0, int(round(cy0 - pad_y)))
+            x2 = min(W, int(round(cx0 + cell_w + pad_x)))
+            y2 = min(H, int(round(cy0 + cell_h + pad_y)))
+            cell = image[y1:y2, x1:x2]
+            found = _cell_card_contour(cell)
+            if found is None:
+                return None
+            x, y, w, h, area, contour = found
+            shifted = contour.copy()
+            shifted[:, 0, 0] += x1
+            shifted[:, 0, 1] += y1
+            ordered.append((x + x1, y + y1, w, h, area, shifted))
 
     return ordered
 
