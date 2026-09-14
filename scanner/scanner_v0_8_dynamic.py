@@ -313,26 +313,31 @@ v9.4.2: ultra-conservative final cosmetic pass.
 def _find_grid_components(image):
     """
     Find the nine actual card regions from the scan itself.
-    The method uses the colored card artwork rather than the white sleeve.
-    It is therefore independent of scan resolution and does not need a
-    1448x2048 reference template.
+    Tries two independent ways to separate a card from the background: its
+    colored/saturated artwork (works against a light/white sleeve), and
+    simply not being as dark as a black inlay tray (works for holo/foil
+    cards, whose glare and prismatic pattern make saturation unreliable and
+    would otherwise leave a black tray sliver - or a neighboring card's
+    corner - in the crop). Independent of scan resolution, no fixed
+    1448x2048 reference template needed.
     """
     H, W = image.shape[:2]
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
 
     best = None
     min_dim = min(H, W)
     kernel_size = max(3, int(round(min_dim * 0.0035)))
     if kernel_size % 2 == 0:
         kernel_size += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
 
-    for sat_thr in (20, 25, 30, 35, 40):
-        mask = (sat > sat_thr).astype(np.uint8) * 255
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_RECT, (kernel_size, kernel_size)
-        )
-        cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    masks = [sat > t for t in (20, 25, 30, 35, 40)]
+    masks += [val > t for t in (35, 50, 65)]
+
+    for mask in masks:
+        cleaned = cv2.morphologyEx(mask.astype(np.uint8) * 255, cv2.MORPH_CLOSE, kernel)
 
         contours, _ = cv2.findContours(
             cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -417,16 +422,17 @@ def _estimate_grid_extent(image):
     H, W = image.shape[:2]
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
     min_dim = min(H, W)
     kernel_size = max(3, int(round(min_dim * 0.0035)))
     if kernel_size % 2 == 0:
         kernel_size += 1
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
 
+    masks = [sat > t for t in (20, 25, 30, 35, 40)] + [val > t for t in (35, 50, 65)]
     boxes = []
-    for sat_thr in (20, 25, 30, 35, 40):
-        mask = (sat > sat_thr).astype(np.uint8) * 255
-        cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    for mask in masks:
+        cleaned = cv2.morphologyEx(mask.astype(np.uint8) * 255, cv2.MORPH_CLOSE, kernel)
         contours, _ = cv2.findContours(
             cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
