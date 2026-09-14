@@ -338,12 +338,33 @@ function renderPreview(cards) {
   }
   resultEl.appendChild(table);
 
+  const actions = document.createElement("div");
+  actions.style.cssText = "margin-top: 0.75rem; display: flex; gap: 0.5rem;";
+
   const confirmBtn = document.createElement("button");
   confirmBtn.type = "button";
-  confirmBtn.style.marginTop = "0.75rem";
   confirmBtn.textContent = "✓ Geprüft – in Datenbank übernehmen";
   confirmBtn.addEventListener("click", () => confirmScan(confirmBtn));
-  resultEl.appendChild(confirmBtn);
+  actions.appendChild(confirmBtn);
+
+  const discardBtn = document.createElement("button");
+  discardBtn.type = "button";
+  discardBtn.textContent = "✗ Verwerfen";
+  discardBtn.addEventListener("click", () => discardScan());
+  actions.appendChild(discardBtn);
+
+  resultEl.appendChild(actions);
+}
+
+function discardScan() {
+  // Verwirft nur die Vorschau - die zugehörigen Bilder liegen zwar bereits
+  // im Storage (siehe POST /api/scan), aber ohne DB-Zeile/Inventar-Eintrag
+  // dazu bleiben es verwaiste, nie verlinkte Objekte statt sichtbarer Daten.
+  pendingScan = null;
+  resultEl.innerHTML = "";
+  statusEl.textContent = "Verworfen – keine Karten wurden übernommen.";
+  statusEl.className = "";
+  showToast("Scan verworfen.");
 }
 
 async function confirmScan(button) {
