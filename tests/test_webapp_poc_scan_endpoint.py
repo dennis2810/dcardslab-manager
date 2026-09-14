@@ -84,6 +84,22 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             data["private_collection"] = "true" if private_collection else "false"
         return client.post("/api/scan", files=files, data=data)
 
+    def _confirm(self, preview_body, location=None, notes=None, private_collection=None):
+        # Mirrors index.html's confirmScan(): resends POST /api/scan's own
+        # response (batch_id + the previewed cards, unedited) once the user
+        # has reviewed the crops - this is the step that actually persists.
+        return client.post("/api/scan/confirm", json={
+            "batch_id": preview_body["batch_id"],
+            "location": location or "",
+            "notes": notes or "",
+            "private_collection": bool(private_collection),
+            "cards": preview_body["cards"],
+        })
+
+    def _post_scan_and_confirm(self, location=None, notes=None, private_collection=None):
+        preview = self._post_scan(location=location, notes=notes, private_collection=private_collection)
+        return self._confirm(preview.json(), location=location, notes=notes, private_collection=private_collection)
+
     def test_creates_one_batch_for_the_scan(self):
         self._post_scan()
         self.mocks["main.db.create_batch"].assert_called_once_with(card_count=9)
@@ -93,14 +109,14 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self.assertEqual(self.mocks["main.storage.upload_image"].call_count, 18)
 
     def test_inserts_nine_cards(self):
-        self._post_scan()
+        self._post_scan_and_confirm()
         self.assertEqual(self.mocks["main.db.insert_card"].call_count, 9)
 
     def test_creates_a_default_inventory_item_for_every_scanned_card(self):
         # The seller physically has the card in hand at scan time - a
         # quantity-1 "NM" inventory row is created automatically instead of
         # requiring a separate manual step for the common case.
-        self._post_scan()
+        self._post_scan_and_confirm()
         self.assertEqual(self.mocks["main.db.create_inventory_item"].call_count, 9)
         self.mocks["main.db.create_inventory_item"].assert_any_call(
             "card-1", {"quantity": 1, "location": "", "notes": ""}
@@ -109,38 +125,39 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
     def test_passes_location_and_notes_from_the_scan_form_to_every_card(self):
         # One shared storage spot/note for the whole 9-up batch - asking per
         # card would be tedious, and a batch usually ends up in one place.
-        self._post_scan(location="Regal A", notes="Aus Sammlung X")
+        self._post_scan_and_confirm(location="Regal A", notes="Aus Sammlung X")
         self.mocks["main.db.create_inventory_item"].assert_any_call(
             "card-1", {"quantity": 1, "location": "Regal A", "notes": "Aus Sammlung X"}
         )
 
     def test_private_collection_flag_defaults_to_false_on_inserted_cards(self):
-        self._post_scan()
+        self._post_scan_and_confirm()
         fields = self.mocks["main.db.insert_card"].call_args_list[0].args[2]
         self.assertNotIn("private_collection", fields)
 
     def test_private_collection_flag_marks_all_inserted_cards(self):
-        self._post_scan(private_collection=True)
+        self._post_scan_and_confirm(private_collection=True)
+        self.assertEqual(self.mocks["main.db.insert_card"].call_count, 9)
         for call in self.mocks["main.db.insert_card"].call_args_list:
             fields = call.args[2]
             self.assertIs(fields["private_collection"], True)
 
     def test_private_collection_flag_creates_zero_quantity_inventory(self):
-        self._post_scan(private_collection=True)
+        self._post_scan_and_confirm(private_collection=True)
         self.mocks["main.db.create_inventory_item"].assert_any_call(
             "card-1", {"quantity": 0, "location": "", "notes": ""}
         )
 
     def test_inventory_item_creation_failure_does_not_fail_the_card(self):
         self.mocks["main.db.create_inventory_item"].side_effect = RuntimeError("inventory table down")
-        response = self._post_scan()
+        response = self._post_scan_and_confirm()
         body = response.json()
         ok_card = next(c for c in body["cards"] if c["number"] == 1)
         self.assertNotIn("image_error", ok_card)
         self.assertEqual(ok_card["id"], "card-1")
 
     def test_marks_batch_ok_when_all_cards_succeed(self):
-        self._post_scan()
+        self._post_scan_and_confirm()
         self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "ok")
 
     def test_flags_possible_duplicate_when_db_finds_a_matching_card(self):
@@ -170,9 +187,10 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         photo_duplicate = {"id": "card-photo-match", "title": "Andere Schreibweise", "card_no": 4}
         with patch("main.image_hash.compute_hash", return_value="abc123abc123abc1"), \
              patch("main.db.find_duplicate_card_by_image_hash", return_value=photo_duplicate) as mock_photo:
-            response = self._post_scan()
-        body = response.json()
-        card = next(c for c in body["cards"] if c["number"] == 1)
+            preview = self._post_scan()
+            preview_body = preview.json()
+            self._confirm(preview_body)
+        card = next(c for c in preview_body["cards"] if c["number"] == 1)
         self.assertEqual(card["possible_duplicate"], {**photo_duplicate, "matched_by": "photo"})
         # /api/scan verarbeitet alle 9 Karten des Batches parallel, daher wird
         # die Foto-Duplikat-Pruefung pro Karte einmal aufgerufen (nicht nur einmal
@@ -197,14 +215,17 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self.assertNotIn("possible_duplicate", ok_card)
 
     def test_response_includes_batch_id_and_card_ids_and_urls(self):
-        response = self._post_scan()
-        body = response.json()
-        self.assertEqual(body["batch_id"], "batch-1")
-        self.assertEqual(len(body["cards"]), 9)
-        first = body["cards"][0]
-        self.assertEqual(first["id"], "card-1")
-        self.assertEqual(first["front_image_url"], "https://signed/batch-1/1_front.jpg")
-        self.assertEqual(first["title"], "Max Mustermann")
+        preview = self._post_scan()
+        preview_body = preview.json()
+        self.assertEqual(preview_body["batch_id"], "batch-1")
+        self.assertEqual(len(preview_body["cards"]), 9)
+        first_preview = preview_body["cards"][0]
+        self.assertNotIn("id", first_preview)
+        self.assertEqual(first_preview["front_image_url"], "https://signed/batch-1/1_front.jpg")
+        self.assertEqual(first_preview["title"], "Max Mustermann")
+
+        confirm_body = self._confirm(preview_body).json()
+        self.assertEqual(confirm_body["cards"][0]["id"], "card-1")
 
     def test_image_upload_failure_marks_only_that_card(self):
         def upload_side_effect(batch_id, pos, side, path):
@@ -213,15 +234,18 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             return f"{batch_id}/{pos}_{side}.jpg"
         self.mocks["main.storage.upload_image"].side_effect = upload_side_effect
 
-        response = self._post_scan()
-
-        body = response.json()
-        self.assertEqual(self.mocks["main.db.insert_card"].call_count, 9)
-        failed_card = next(c for c in body["cards"] if c["number"] == 5)
+        preview_body = self._post_scan().json()
+        failed_card = next(c for c in preview_body["cards"] if c["number"] == 5)
         self.assertIn("bucket down", failed_card["image_error"])
-        ok_card = next(c for c in body["cards"] if c["number"] == 1)
+        ok_card = next(c for c in preview_body["cards"] if c["number"] == 1)
         self.assertNotIn("image_error", ok_card)
-        self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "partial")
+
+        # A failed image upload still lets the card row itself be created
+        # (same as before the preview/confirm split) - only the image is
+        # missing/flagged, the recognized fields are not lost.
+        self._confirm(preview_body)
+        self.assertEqual(self.mocks["main.db.insert_card"].call_count, 9)
+        self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "ok")
 
     def test_missing_back_image_is_persisted_with_german_status(self):
         def crop_with_missing_back(upload_path, out_dir, quality, rotate):
@@ -243,12 +267,12 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             return files
         self.mocks["main.scanner.process"].side_effect = crop_with_missing_back
 
-        response = self._post_scan()
-
-        body = response.json()
-        self.assertEqual(len(body["cards"]), 9)
-        missing_card = next(c for c in body["cards"] if c["number"] == 4)
+        preview_body = self._post_scan().json()
+        self.assertEqual(len(preview_body["cards"]), 9)
+        missing_card = next(c for c in preview_body["cards"] if c["number"] == 4)
         self.assertIn("fehlt", missing_card["status"])
+
+        self._confirm(preview_body)
 
         insert_calls_for_4 = [
             call for call in self.mocks["main.db.insert_card"].call_args_list
@@ -259,9 +283,13 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self.assertIsNone(insert_calls_for_4[0].args[4])  # back_image_path
 
     def test_batch_marked_failed_when_every_card_fails(self):
-        self.mocks["main.storage.upload_image"].side_effect = RuntimeError("network down")
+        # Batch status now reflects the confirm step's DB persistence (an
+        # image-upload failure alone no longer fails the batch, see
+        # test_image_upload_failure_marks_only_that_card).
+        self.mocks["main.db.insert_card"].side_effect = RuntimeError("db down")
 
-        self._post_scan()
+        preview_body = self._post_scan().json()
+        self._confirm(preview_body)
 
         self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
 
