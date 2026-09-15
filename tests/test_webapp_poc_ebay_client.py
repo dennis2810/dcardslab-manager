@@ -485,6 +485,59 @@ class GetOfferTests(unittest.TestCase):
         self.assertEqual(offer["offerId"], "offer-1")
 
 
+class UpdateOfferBestOfferTermsTests(unittest.TestCase):
+    def _existing_offer(self):
+        return {
+            "offerId": "offer-1",
+            "sku": "sku-1",
+            "pricingSummary": {"price": {"value": "20.00", "currency": "EUR"}},
+            "listingPolicies": {"paymentPolicyId": "p1", "bestOfferTerms": {"bestOfferEnabled": False}},
+            "listing": {"listingId": "L1"},
+        }
+
+    def test_gets_then_puts_with_custom_accept_and_decline_prices(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            mock_request.side_effect = [
+                _response(200, self._existing_offer()),
+                _response(200, {}),
+            ]
+            ebay_client.update_offer_best_offer_terms(
+                "tok", "offer-1", enabled=True, auto_accept_price=18, auto_decline_price=12
+            )
+        get_args, get_kwargs = mock_request.call_args_list[0]
+        self.assertEqual(get_args[0], "GET")
+        put_args, put_kwargs = mock_request.call_args_list[1]
+        self.assertEqual(put_args[0], "PUT")
+        self.assertIn("/offer/offer-1", put_args[1])
+        body = put_kwargs["json"]
+        terms = body["listingPolicies"]["bestOfferTerms"]
+        self.assertEqual(terms, {
+            "bestOfferEnabled": True,
+            "autoAcceptPrice": {"value": "18.00", "currency": "EUR"},
+            "autoDeclinePrice": {"value": "12.00", "currency": "EUR"},
+        })
+
+    def test_preserves_other_listing_policies_and_fields(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            mock_request.side_effect = [_response(200, self._existing_offer()), _response(200, {})]
+            ebay_client.update_offer_best_offer_terms("tok", "offer-1", enabled=True)
+        _, put_kwargs = mock_request.call_args_list[1]
+        body = put_kwargs["json"]
+        self.assertEqual(body["listingPolicies"]["paymentPolicyId"], "p1")
+        self.assertEqual(body["sku"], "sku-1")
+        self.assertNotIn("offerId", body)
+        self.assertNotIn("listing", body)
+
+    def test_disabling_sends_best_offer_enabled_false_only(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            mock_request.side_effect = [_response(200, self._existing_offer()), _response(200, {})]
+            ebay_client.update_offer_best_offer_terms("tok", "offer-1", enabled=False)
+        _, put_kwargs = mock_request.call_args_list[1]
+        self.assertEqual(
+            put_kwargs["json"]["listingPolicies"]["bestOfferTerms"], {"bestOfferEnabled": False}
+        )
+
+
 class WithdrawOfferTests(unittest.TestCase):
     def test_posts_to_withdraw_path(self):
         with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:

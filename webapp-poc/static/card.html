@@ -3291,6 +3291,74 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
       }
     });
     section.appendChild(endBtn);
+
+    const bestOfferBlock = document.createElement("div");
+    bestOfferBlock.className = "tracking-block";
+
+    const bestOfferLabel = document.createElement("label");
+    bestOfferLabel.style.flexDirection = "row";
+    bestOfferLabel.style.alignItems = "center";
+    bestOfferLabel.style.gap = "0.3rem";
+    const bestOfferCheckbox = document.createElement("input");
+    bestOfferCheckbox.type = "checkbox";
+    bestOfferLabel.appendChild(bestOfferCheckbox);
+    bestOfferLabel.append("Preisvorschläge aktiv");
+    bestOfferBlock.appendChild(bestOfferLabel);
+
+    const autoAcceptLabel = document.createElement("label");
+    autoAcceptLabel.textContent = "Automatisch akzeptieren ab (€)";
+    const autoAcceptInput = document.createElement("input");
+    autoAcceptInput.type = "number";
+    autoAcceptInput.step = "0.01";
+    autoAcceptInput.min = "0";
+    autoAcceptLabel.appendChild(autoAcceptInput);
+    bestOfferBlock.appendChild(autoAcceptLabel);
+
+    const autoDeclineLabel = document.createElement("label");
+    autoDeclineLabel.textContent = "Automatisch ablehnen unter (€)";
+    const autoDeclineInput = document.createElement("input");
+    autoDeclineInput.type = "number";
+    autoDeclineInput.step = "0.01";
+    autoDeclineInput.min = "0";
+    autoDeclineLabel.appendChild(autoDeclineInput);
+    bestOfferBlock.appendChild(autoDeclineLabel);
+
+    const bestOfferBtn = document.createElement("button");
+    bestOfferBtn.type = "button";
+    bestOfferBtn.textContent = "Preisvorschläge aktualisieren";
+    const bestOfferStatus = document.createElement("span");
+    bestOfferBtn.addEventListener("click", async () => {
+      bestOfferBtn.disabled = true;
+      bestOfferStatus.textContent = "";
+      try {
+        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: bestOfferCheckbox.checked,
+            auto_accept_price: autoAcceptInput.value || null,
+            auto_decline_price: autoDeclineInput.value || null,
+          }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          bestOfferStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+          bestOfferStatus.className = "error";
+          return;
+        }
+        bestOfferStatus.textContent = "Aktualisiert.";
+        bestOfferStatus.className = "";
+        showToast("Preisvorschläge aktualisiert.");
+      } catch (err) {
+        bestOfferStatus.textContent = "Fehler: " + err;
+        bestOfferStatus.className = "error";
+      } finally {
+        bestOfferBtn.disabled = false;
+      }
+    });
+    bestOfferBlock.appendChild(bestOfferBtn);
+    bestOfferBlock.appendChild(bestOfferStatus);
+    section.appendChild(bestOfferBlock);
   }
 }
 

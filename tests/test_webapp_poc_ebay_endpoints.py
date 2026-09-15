@@ -679,6 +679,42 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(updates["scheduling_mode"], "app")
 
 
+class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.put("/api/ebay/listings/does-not-exist/best-offer", json={"enabled": True})
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_409_when_not_yet_published(self):
+        with patch("main.db.get_ebay_listing", return_value=_listing(ebay_offer_id="")):
+            response = client.put("/api/ebay/listings/listing-1/best-offer", json={"enabled": True})
+        self.assertEqual(response.status_code, 409)
+
+    def test_updates_best_offer_terms_on_the_existing_offer(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.update_offer_best_offer_terms") as mock_update:
+            response = client.put(
+                "/api/ebay/listings/listing-1/best-offer",
+                json={"enabled": True, "auto_accept_price": "18", "auto_decline_price": "12"},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_called_once_with(
+            "tok", "offer-1", enabled=True, auto_accept_price="18", auto_decline_price="12"
+        )
+
+    def test_relays_ebay_api_error_as_502(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.update_offer_best_offer_terms",
+                   side_effect=ebay_client.EbayApiError("Best Offer wird für diese Kategorie nicht unterstützt")):
+            response = client.put("/api/ebay/listings/listing-1/best-offer", json={"enabled": True})
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Best Offer", response.json()["detail"])
+
+
 class UnscheduleEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_ebay_listing", return_value=None):
