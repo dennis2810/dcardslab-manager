@@ -2408,6 +2408,37 @@ async def publish_ebay_listing(listing_id: str, body: dict = Body(default={})):
     return JSONResponse(_listing_with_card(updated))
 
 
+@app.put("/api/ebay/listings/{listing_id}/best-offer")
+async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(default={})):
+    # Aendert nur die Best-Offer-Einstellungen eines schon veroeffentlichten
+    # Angebots (siehe ebay_client.update_offer_best_offer_terms) - bewusst
+    # nicht in der DB gespeichert, da eBay hierfuer bereits die Quelle der
+    # Wahrheit ist (per GET Offer jederzeit abrufbar) und keine neue Spalte
+    # fuer dieses kleine Feature angelegt werden soll.
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    offer_id = listing.get("ebay_offer_id")
+    if not offer_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Das Angebot muss zuerst veröffentlicht werden, bevor Preisvorschläge geändert werden können.",
+        )
+    try:
+        token = ebay_client.get_access_token()
+        ebay_client.update_offer_best_offer_terms(
+            token, offer_id,
+            enabled=bool(body.get("enabled")),
+            auto_accept_price=body.get("auto_accept_price"),
+            auto_decline_price=body.get("auto_decline_price"),
+        )
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/ebay/listings/{listing_id}/unschedule")
 async def unschedule_ebay_listing(listing_id: str):
     listing = db.get_ebay_listing(listing_id)

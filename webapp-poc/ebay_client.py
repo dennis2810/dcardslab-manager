@@ -473,6 +473,34 @@ def get_offer(token, offer_id):
     return _request("GET", token, f"/sell/inventory/v1/offer/{offer_id}").json()
 
 
+def _custom_best_offer_terms(enabled, auto_accept_price=None, auto_decline_price=None):
+    if not enabled:
+        return {"bestOfferEnabled": False}
+    terms = {"bestOfferEnabled": True}
+    if auto_accept_price not in (None, ""):
+        terms["autoAcceptPrice"] = {"value": f"{float(auto_accept_price):.2f}", "currency": "EUR"}
+    if auto_decline_price not in (None, ""):
+        terms["autoDeclinePrice"] = {"value": f"{float(auto_decline_price):.2f}", "currency": "EUR"}
+    return terms
+
+
+def update_offer_best_offer_terms(token, offer_id, enabled, auto_accept_price=None, auto_decline_price=None):
+    """Aendert nachtraeglich nur die Best-Offer-Einstellungen (Preisvorschlaege)
+    eines schon bei eBay angelegten Offers. updateOffer ersetzt das Offer
+    komplett - deshalb wird es zuerst per GET geladen und praktisch
+    unveraendert wieder zurueckgeschickt, nur listingPolicies.bestOfferTerms
+    wird ersetzt. offerId (steht schon in der URL) und der nur lesbare
+    "listing"-Veroeffentlichungsstatus werden vor dem PUT entfernt, da sie
+    nicht Teil des Update-Request-Bodys sind."""
+    offer = get_offer(token, offer_id)
+    offer.pop("offerId", None)
+    offer.pop("listing", None)
+    policies = dict(offer.get("listingPolicies") or {})
+    policies["bestOfferTerms"] = _custom_best_offer_terms(enabled, auto_accept_price, auto_decline_price)
+    offer["listingPolicies"] = policies
+    _request("PUT", token, f"/sell/inventory/v1/offer/{offer_id}", offer)
+
+
 def withdraw_offer(token, offer_id):
     _request("POST", token, f"/sell/inventory/v1/offer/{offer_id}/withdraw", {})
 
