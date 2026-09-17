@@ -4,6 +4,7 @@ links, and sales-sync matching. No HTTP, no DB - easy to unit test.
 """
 import csv
 import html
+import re
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -43,29 +44,66 @@ def _region_label(card):
     return set_name or category
 
 
+# Kartentyp/Variante nennen Autogramm/Rookie oft ausgeschrieben ("Autograph",
+# "Rookie Card") statt in der im Hobby ueblichen Kurzform - im (Platz-
+# begrenzten) Titel wird trotzdem einheitlich abgekuerzt. Laengere Phrase
+# zuerst, damit "Rookie Card" nicht schon durch die "Rookie"-Regel verstuemmelt
+# wird, bevor "Card" separat stehen bleibt.
+_TITLE_ABBREVIATIONS = [
+    (re.compile(r"\brookie\s*card\b", re.IGNORECASE), "RC"),
+    (re.compile(r"\brookie\b", re.IGNORECASE), "RC"),
+    (re.compile(r"\bautographs?\b", re.IGNORECASE), "Auto"),
+]
+
+
+def _abbreviate_title_term(value):
+    for pattern, replacement in _TITLE_ABBREVIATIONS:
+        value = pattern.sub(replacement, value)
+    return value
+
+
 def generate_title(card, max_len=80):
     # Reihenfolge (mit dem Nutzer abgestimmt): Jahr, Hersteller, Set/
     # Kategorie, Spieler/Charakter, Team, Typ, Variante, dann RC/Auto/
-    # Auflage. Jahr/Hersteller/Titel sind Pflichtbestandteile (garantiert
-    # im Titel, notfalls ueber die Kuerzung am Ende); alles andere wird nur
-    # angehaengt, soweit noch Platz bis max_len (eBays 80-Zeichen-Limit)
-    # ist, damit ein zu langer Titel nicht die wichtigsten Angaben verdraengt.
+    # Auflage. Jahr/Titel sind Pflichtbestandteile (garantiert im Titel,
+    # notfalls ueber die Kuerzung am Ende); alles andere wird nur angehaengt,
+    # soweit noch Platz bis max_len (eBays 80-Zeichen-Limit) ist, damit ein
+    # zu langer Titel nicht die wichtigsten Angaben verdraengt.
+    manufacturer = (card.get("manufacturer") or "").strip()
+    region_label = _region_label(card)
+    # Der Hersteller steht oft schon selbst im Set-Namen (z.B. "Topps" in
+    # "Topps Finest UEFA Club Competitions") - dann nicht zusaetzlich separat
+    # zeigen, um "Topps Topps Finest..." zu vermeiden.
+    if manufacturer and region_label and manufacturer.lower() in region_label.lower():
+        manufacturer = ""
     parts = [
         (card.get("season_year", ""), True),
-        (card.get("manufacturer", ""), True),
-        (_region_label(card), False),
+        (manufacturer, False),
+        (region_label, False),
         (card.get("title", ""), True),
         (card.get("team", ""), False),
-        (card.get("card_type", ""), False),
-        (card.get("variant", ""), False),
+        (_abbreviate_title_term(card.get("card_type") or ""), False),
+        (_abbreviate_title_term(card.get("variant") or ""), False),
         ("RC" if card.get("is_rookie") else "", False),
         ("Auto" if card.get("is_autograph") else "", False),
         (f"/{card['print_run']}" if card.get("print_run") else "", False),
     ]
+    # Bei Non-Sport-Karten (TCG-Stil, z.B. One Piece/Pokemon) ist die
+    # Kartennummer fuer Kaeufer deutlich identifizierender als bei Sport-
+    # Karten (wo Team/Saison/Set meist schon reichen) - deshalb dort
+    # zusaetzlich ans Titelende, soweit noch Platz ist.
+    if derive_listing_type(card) == "non_sport" and card.get("card_number"):
+        parts.append((f"#{card['card_number']}", False))
     title = ""
     for value, mandatory in parts:
         value = (value or "").strip()
         if not value:
+            continue
+        # Ueberspringt einen optionalen Teil, der (z.B. nach der RC/Auto-
+        # Abkuerzung oben) schon woanders im Titel steckt - etwa wenn die
+        # Variante schon "Auto" abgekuerzt wurde und zusaetzlich das
+        # Autogramm-Kaestchen gesetzt ist.
+        if not mandatory and value.lower() in title.lower():
             continue
         candidate = f"{title} {value}".strip()
         if mandatory or len(candidate) <= max_len:
