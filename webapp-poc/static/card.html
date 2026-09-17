@@ -735,7 +735,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderTargetPriceCalculator(card.purchase, card.team_avg_holding_days, card.ebay_sale, card.manual_sale);
     renderInventorySection(card.inventory);
-    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection);
+    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection, card.title);
     renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title, card.lot_siblings);
     renderPriceResearchSection(
       card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
@@ -2579,12 +2579,12 @@ function renderRemindersSection(reminders) {
   section.appendChild(form);
 }
 
-async function renderEbaySection(listing, purchase, sale, manualSale, privateCollection) {
+async function renderEbaySection(listing, purchase, sale, manualSale, privateCollection, cardTitle) {
   const section = document.getElementById("ebay-section");
   section.innerHTML = "<h2>eBay</h2>";
 
   if (!listing) {
-    renderEbayCreateForm(section);
+    renderEbayCreateForm(section, cardTitle);
     return;
   }
 
@@ -2620,7 +2620,20 @@ async function renderEbaySection(listing, purchase, sale, manualSale, privateCol
   }
 }
 
-function renderEbayCreateForm(section) {
+function renderEbayCreateForm(section, cardTitle) {
+  // Titel schon vor der Anlage sichtbar/anpassbar machen - vorher sah man
+  // den generierten Titel erst NACH dem Erstellen (im Bearbeiten-Formular).
+  const titleLabel = document.createElement("label");
+  titleLabel.textContent = "Titel ";
+  titleLabel.style.display = "block";
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.value = cardTitle || "";
+  titleInput.style.width = "100%";
+  titleInput.style.maxWidth = "30rem";
+  titleLabel.appendChild(titleInput);
+  section.appendChild(titleLabel);
+
   const templateLabel = document.createElement("label");
   templateLabel.textContent = "Textbaustein ";
   templateLabel.style.marginRight = "0.6rem";
@@ -2655,7 +2668,7 @@ function renderEbayCreateForm(section) {
       const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/ebay-listing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extra_note: templateSelect.value }),
+        body: JSON.stringify({ extra_note: templateSelect.value, title: titleInput.value }),
       });
       const body = await res.json();
       if (!res.ok) {
