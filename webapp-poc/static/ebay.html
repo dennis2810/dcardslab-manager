@@ -140,6 +140,10 @@ if ("serviceWorker" in navigator) {
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   /* Kachelansicht - gleiches Prinzip wie cards.html's grid/list-Umschalter:
      zusaetzlich zur Tabelle, nicht als Ersatz (Bulk-Aktionen/Sortierung
      bleiben tabellenspezifisch). */
@@ -266,6 +270,11 @@ if ("serviceWorker" in navigator) {
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
   <div id="listings-grid" hidden></div>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page-top">&larr; Zurück</button>
+    <span id="page-info-top"></span>
+    <button type="button" id="next-page-top">Weiter &rarr;</button>
+  </div>
   <div class="table-scroll">
     <table id="listings-table" style="display: none;">
         <thead>
@@ -879,9 +888,13 @@ function render(listings) {
   currentPage = Math.min(currentPage, pageCount - 1);
   const pageItems = listings.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   currentPageItems = pageItems;
-  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${listings.length} Angebot(e), max. ${PAGE_SIZE}/Seite)`;
+  const pageInfoText = `Seite ${currentPage + 1} von ${pageCount} (${listings.length} Angebot(e), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("page-info").textContent = pageInfoText;
+  document.getElementById("page-info-top").textContent = pageInfoText;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  document.getElementById("prev-page-top").disabled = currentPage === 0;
+  document.getElementById("next-page-top").disabled = currentPage >= pageCount - 1;
   selectAllCheckbox.checked = pageItems.length > 0 && pageItems.every((l) => selectedIds.has(l.id));
 
   body.innerHTML = "";
@@ -1339,14 +1352,18 @@ document.getElementById("load-best-offer-btn").addEventListener("click", async (
   }
 });
 
-document.getElementById("prev-page").addEventListener("click", () => {
+function goToPrevPage() {
   currentPage = Math.max(0, currentPage - 1);
   render(sortedListings());
-});
-document.getElementById("next-page").addEventListener("click", () => {
+}
+function goToNextPage() {
   currentPage += 1;
   render(sortedListings());
-});
+}
+document.getElementById("prev-page").addEventListener("click", goToPrevPage);
+document.getElementById("next-page").addEventListener("click", goToNextPage);
+document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
+document.getElementById("next-page-top").addEventListener("click", goToNextPage);
 document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei

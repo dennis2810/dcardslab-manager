@@ -52,6 +52,10 @@ if ("serviceWorker" in navigator) {
   th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   .template-body-cell { max-width: 340px; white-space: pre-wrap; font-size: 0.85rem; color: #555; }
   .status { font-style: italic; color: #555; margin-top: 0.5rem; }
   .error { color: #b00020; font-weight: 600; }

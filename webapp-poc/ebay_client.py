@@ -426,6 +426,29 @@ def _best_offer_terms(price):
     }
 
 
+def _offer_best_offer_terms(listing):
+    # create_offer()/update_offer() rufen beide _offer_payload() auf - ohne
+    # diese Unterscheidung wuerde jede Aktualisierung eines schon
+    # veroeffentlichten Angebots (Preisaenderung, Foto-Ersatz, jede
+    # Kartenbearbeitung, die _publish_listing() erneut anstoesst) die vom
+    # Nutzer per PUT .../best-offer oder Massenaktion gesetzten
+    # Preisvorschlaege stillschweigend durch die prozentualen Standardwerte
+    # ersetzen (Bugreport des Nutzers: "vorher gesetzter Preisvorschlag wird
+    # geleert"). best_offer_updated_at (siehe schema.sql-Migration) wird nur
+    # von genau diesen beiden Endpunkten gesetzt - ist es vorhanden, war der
+    # Nutzer schon einmal aktiv am Preisvorschlag beteiligt, und der zuletzt
+    # gecachte Stand wird 1:1 uebernommen statt neu berechnet zu werden. Ganz
+    # neue Angebote (best_offer_updated_at noch nie gesetzt) bekommen weiter
+    # die bisherigen prozentualen Vorschlaege als sinnvollen Startwert.
+    if listing.get("best_offer_updated_at"):
+        return _custom_best_offer_terms(
+            listing.get("best_offer_enabled"),
+            listing.get("auto_accept_price"),
+            listing.get("auto_decline_price"),
+        )
+    return _best_offer_terms(listing.get("price"))
+
+
 def _offer_payload(sku, listing):
     return {
         "sku": sku,
@@ -444,7 +467,7 @@ def _offer_payload(sku, listing):
         },
         "listingPolicies": {
             **listing.get("policies", {}),
-            "bestOfferTerms": _best_offer_terms(listing.get("price")),
+            "bestOfferTerms": _offer_best_offer_terms(listing),
         },
         # eBay defaults this to true and tries to auto-match the offer to an
         # EPID catalog product at publish time - unreliable for niche

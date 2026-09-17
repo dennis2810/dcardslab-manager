@@ -467,6 +467,61 @@ class CreateOfferTests(unittest.TestCase):
         self.assertIs(kwargs["json"]["includeCatalogProductDetails"], False)
 
 
+class UpdateOfferPreservesCustomBestOfferTermsTests(unittest.TestCase):
+    """Regression tests for the user-reported bug: editing/republishing a
+    listing (price change, photo change, any card edit that triggers
+    _publish_listing() -> update_offer()) silently reset previously set
+    Preisvorschlaege back to the percent-of-price defaults, because
+    _offer_payload() always recomputed bestOfferTerms from scratch. Fixed by
+    only recomputing when best_offer_updated_at (schema.sql-Migration) has
+    never been set - i.e. the seller never touched Best Offer for this
+    listing - and otherwise passing the cached best_offer_enabled/
+    auto_accept_price/auto_decline_price through unchanged."""
+
+    def test_update_offer_keeps_previously_set_custom_terms_on_price_change(self):
+        listing = {
+            "category_id": "261328", "price": 30, "quantity": 1, "description": "desc", "sku": "sku-1",
+            "best_offer_updated_at": "2026-09-17T10:00:00+00:00",
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+        }
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.update_offer("tok", "offer-1", listing)
+        _, kwargs = mock_request.call_args
+        terms = kwargs["json"]["listingPolicies"]["bestOfferTerms"]
+        self.assertEqual(terms, {
+            "bestOfferEnabled": True,
+            "autoAcceptPrice": {"value": "18.00", "currency": "EUR"},
+            "autoDeclinePrice": {"value": "12.00", "currency": "EUR"},
+        })
+
+    def test_update_offer_keeps_previously_disabled_best_offer(self):
+        listing = {
+            "category_id": "261328", "price": 30, "quantity": 1, "description": "desc", "sku": "sku-1",
+            "best_offer_updated_at": "2026-09-17T10:00:00+00:00", "best_offer_enabled": False,
+        }
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.update_offer("tok", "offer-1", listing)
+        _, kwargs = mock_request.call_args
+        self.assertEqual(kwargs["json"]["listingPolicies"]["bestOfferTerms"], {"bestOfferEnabled": False})
+
+    def test_update_offer_still_applies_percent_defaults_when_never_customized(self):
+        # best_offer_updated_at is only set once the seller has actually
+        # changed Best Offer at least once (PUT .../best-offer or the bulk
+        # endpoint) - a listing that was never touched keeps getting the
+        # existing percent-of-price suggestion on every republish, same as
+        # a brand new listing via create_offer().
+        listing = {"category_id": "261328", "price": 20, "quantity": 1, "description": "desc", "sku": "sku-1"}
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})) as mock_request:
+            ebay_client.update_offer("tok", "offer-1", listing)
+        _, kwargs = mock_request.call_args
+        terms = kwargs["json"]["listingPolicies"]["bestOfferTerms"]
+        self.assertEqual(terms, {
+            "bestOfferEnabled": True,
+            "autoAcceptPrice": {"value": "15.00", "currency": "EUR"},
+            "autoDeclinePrice": {"value": "10.00", "currency": "EUR"},
+        })
+
+
 class PublishOfferTests(unittest.TestCase):
     def test_publishes_without_scheduling_by_default(self):
         with patch("ebay_client.httpx.request", return_value=_response(200, {"listingId": "L1"})) as mock_request:

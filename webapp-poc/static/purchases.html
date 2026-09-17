@@ -97,6 +97,10 @@ if ("serviceWorker" in navigator) {
     .no-print { display: none !important; }
   }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   /* Feste, gleiche Spaltenbreiten fuer Plattform-Auswertung und
      Verkaeufer-Historie - beide 4-spaltig (Name/Anzahl/Betrag/Betrag),
      sonst sizen sich table-layout: auto's Spalten unabhaengig auf den
