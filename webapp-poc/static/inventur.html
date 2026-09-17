@@ -598,7 +598,17 @@ document.getElementById("prev-page").addEventListener("click", goToPrevPage);
 document.getElementById("next-page").addEventListener("click", goToNextPage);
 document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
 document.getElementById("next-page-top").addEventListener("click", goToNextPage);
-document.getElementById("print-btn").addEventListener("click", () => window.print());
+document.getElementById("print-btn").addEventListener("click", () => {
+  // Ohne diesen Umweg wuerde nur die aktuell angezeigte Seite (PAGE_SIZE
+  // Zeilen) gedruckt statt der gesamten gefilterten Liste (Bugreport des
+  // Nutzers: Druck zeigt nur einen Ausschnitt).
+  const savedPageSize = PAGE_SIZE;
+  PAGE_SIZE = Infinity;
+  render();
+  window.print();
+  PAGE_SIZE = savedPageSize;
+  render();
+});
 document.getElementById("report-print-btn").addEventListener("click", () => window.print());
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
