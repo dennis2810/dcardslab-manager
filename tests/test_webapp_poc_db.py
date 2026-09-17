@@ -125,6 +125,34 @@ class InsertCardTests(unittest.TestCase):
         row = mock_client.table.return_value.insert.call_args[0][0]
         self.assertIs(row["private_collection"], True)
 
+    def test_is_rookie_and_is_autograph_passed_through(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        fields["is_rookie"] = 1
+        fields["is_autograph"] = 1
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, None, None)
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIs(row["is_rookie"], True)
+        self.assertIs(row["is_autograph"], True)
+
+    def test_is_rookie_and_is_autograph_default_to_false(self):
+        mock_client = MagicMock()
+        _mock_table(mock_client, "cards", [{"id": "card-1"}])
+        fields = dict.fromkeys(db.CARD_FIELDS, "")
+        fields["is_numbered"] = 0
+        fields["confidence"] = 0
+        fields["status"] = "ok"
+        with patch("db.get_client", return_value=mock_client):
+            db.insert_card("batch-1", 1, fields, None, None)
+        row = mock_client.table.return_value.insert.call_args[0][0]
+        self.assertIs(row["is_rookie"], False)
+        self.assertIs(row["is_autograph"], False)
+
     def test_private_collection_defaults_to_false(self):
         mock_client = MagicMock()
         _mock_table(mock_client, "cards", [{"id": "card-1"}])
@@ -223,6 +251,28 @@ class UpdateCardTests(unittest.TestCase):
             db.update_card("card-1", {"tags": "Rookie, Investment"})
         row = mock_client.table.return_value.update.call_args[0][0]
         self.assertEqual(row, {"tags": "Rookie, Investment"})
+
+    def test_is_numbered_is_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "is_numbered": True}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"is_numbered": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"is_numbered": True})
+
+    def test_is_rookie_and_is_autograph_are_writable(self):
+        mock_client = MagicMock()
+        saved_row = {"id": "card-1", "is_rookie": True, "is_autograph": True}
+        response = MagicMock()
+        response.data = [saved_row]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.update_card("card-1", {"is_rookie": True, "is_autograph": True})
+        row = mock_client.table.return_value.update.call_args[0][0]
+        self.assertEqual(row, {"is_rookie": True, "is_autograph": True})
 
     def test_grading_fields_are_writable(self):
         mock_client = MagicMock()

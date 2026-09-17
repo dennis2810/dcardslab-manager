@@ -1132,6 +1132,39 @@ function render(card) {
   pickedUpWrapper.append(pickedUpCheckbox, " Abgeholt (Selbstabholer)");
   form.appendChild(pickedUpWrapper);
 
+  // Kennzeichnungen, die is_numbered normalerweise aus serial_number/print_run
+  // ableitet (siehe ai_card_recognition.py) bzw. die die KI-Erkennung an
+  // Rookie-Logo/Unterschrift auf der Karte erkennen soll - hier manuell
+  // korrigierbar, falls die Erkennung sie uebersieht. Fliessen zusaetzlich in
+  // den eBay-Titel (ebay_listing.generate_title()) und die
+  // Preisrecherche-Standardsuche (priceResearchSearchDefault()) ein.
+  const isNumberedWrapper = document.createElement("label");
+  isNumberedWrapper.className = "checkbox-field";
+  const isNumberedCheckbox = document.createElement("input");
+  isNumberedCheckbox.type = "checkbox";
+  isNumberedCheckbox.name = "is_numbered";
+  isNumberedCheckbox.checked = Boolean(card.is_numbered);
+  isNumberedWrapper.append(isNumberedCheckbox, " Nummeriert (Numbered)");
+  form.appendChild(isNumberedWrapper);
+
+  const isRookieWrapper = document.createElement("label");
+  isRookieWrapper.className = "checkbox-field";
+  const isRookieCheckbox = document.createElement("input");
+  isRookieCheckbox.type = "checkbox";
+  isRookieCheckbox.name = "is_rookie";
+  isRookieCheckbox.checked = Boolean(card.is_rookie);
+  isRookieWrapper.append(isRookieCheckbox, " Rookie-Karte (RC)");
+  form.appendChild(isRookieWrapper);
+
+  const isAutographWrapper = document.createElement("label");
+  isAutographWrapper.className = "checkbox-field";
+  const isAutographCheckbox = document.createElement("input");
+  isAutographCheckbox.type = "checkbox";
+  isAutographCheckbox.name = "is_autograph";
+  isAutographCheckbox.checked = Boolean(card.is_autograph);
+  isAutographWrapper.append(isAutographCheckbox, " Autogramm (Auto)");
+  form.appendChild(isAutographWrapper);
+
   const tagsWrapper = document.createElement("label");
   tagsWrapper.textContent = "Tags";
   tagsWrapper.title = "Kommagetrennt, z. B. Rookie, PSA-würdig, Investment";
@@ -1313,6 +1346,9 @@ form.addEventListener("submit", async (ev) => {
   fields.recognition_status = form.elements["recognition_status"].value;
   fields.shipped = form.elements["shipped"].checked;
   fields.picked_up = form.elements["picked_up"].checked;
+  fields.is_numbered = form.elements["is_numbered"].checked;
+  fields.is_rookie = form.elements["is_rookie"].checked;
+  fields.is_autograph = form.elements["is_autograph"].checked;
   fields.tags = form.elements["tags"].value;
   fields.grading_company = form.elements["grading_company"].value;
   fields.grading_status = form.elements["grading_status"].value;
@@ -1685,16 +1721,16 @@ function renderSaleStatusBadges(card) {
 // Baut die Standard-Suchanfrage fuer die automatische eBay-Preisrecherche
 // (renderPriceResearchSection() unten) - nur der (kurze) Titel allein
 // findet oft auch andere Parallelen/Varianten derselben Karte, die
-// preislich ganz anders liegen. Set/Typ/Variante sowie eine Nummerierung
-// grenzen den Treffer genauer ein; main.py's _filter_price_research_results()
-// erkennt "Auto"/eine Auflagenangabe (z.B. "/99") direkt aus dem Text dieser
-// Suchanfrage, daher reicht es, die vorhandenen Merkmale hier mit
-// aufzunehmen statt ein eigenes Autogramm-Feld zu pflegen.
+// preislich ganz anders liegen. Set/Typ/Variante, Nummerierung sowie
+// RC/Auto grenzen den Treffer genauer ein; main.py's
+// _filter_price_research_results() erkennt "Auto"/eine Auflagenangabe
+// (z.B. "/99") zusaetzlich direkt aus dem Text dieser Suchanfrage.
 function priceResearchSearchDefault(card) {
   const parts = [
     card.ebay_listing?.title || card.title,
     card.set_name, card.card_type, card.variant,
     card.serial_number || (card.print_run ? `/${card.print_run}` : ""),
+    card.is_rookie ? "RC" : "", card.is_autograph ? "Auto" : "",
   ];
   return parts.filter(Boolean).join(" ");
 }

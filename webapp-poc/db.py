@@ -45,6 +45,8 @@ def insert_card(batch_id, position_in_batch, fields, front_image_path, back_imag
         "batch_id": batch_id,
         "position_in_batch": position_in_batch,
         "is_numbered": bool(fields.get("is_numbered")),
+        "is_rookie": bool(fields.get("is_rookie")),
+        "is_autograph": bool(fields.get("is_autograph")),
         "confidence": fields.get("confidence"),
         "recognition_status": fields.get("status", ""),
         "front_image_path": front_image_path,
@@ -161,7 +163,8 @@ def get_card(card_id):
 def update_card(card_id, fields):
     row = {
         name: value for name, value in fields.items()
-        if name in CARD_FIELDS or name in ("recognition_status", "shipped", "picked_up", "tags")
+        if name in CARD_FIELDS
+        or name in ("recognition_status", "shipped", "picked_up", "tags", "is_numbered", "is_rookie", "is_autograph")
         or name in GRADING_FIELDS
     }
     if "grading_cost" in row:

@@ -29,7 +29,8 @@ EMPTY_FIELDS = {
     "set_name": "", "season_year": "", "card_type": "", "variant": "",
     "team": "", "position": "", "squad_number": "", "club_debut_season": "",
     "card_number": "", "serial_number": "", "print_run": "",
-    "is_numbered": 0, "confidence": 0, "raw": "",
+    "is_numbered": 0, "is_rookie": 0, "is_autograph": 0,
+    "confidence": 0, "raw": "",
 }
 
 _MEDIA_TYPES = {
@@ -62,10 +63,15 @@ PROMPT = (
     "vorangestelltes Wort wie \"Saison\". Nimm NICHT ein Copyright-/"
     "Herausgabejahr des Herstellers (oft bei ©, meist im allerkleinsten "
     "Fließtext zusammen mit Firmennamen/Lizenzhinweisen).\n"
-    "card_type = Parallel-/Variantenbezeichnung (z.B. Gold, Silver, Base, "
-    "Insert).\n"
-    "variant = weitere Variantenangabe, falls vorhanden und von card_type "
-    "verschieden.\n"
+    "card_type = Parallel-/Variantenbezeichnung, so wie sie auf der Karte "
+    "steht (z.B. \"Gold\", \"Silver\", \"Base\", \"Insert\", \"Refractor\", "
+    "\"Prizm\"). Ist nur EIN solcher Begriff auf der Karte zu sehen, trage "
+    "ihn HIER ein, nicht in variant.\n"
+    "variant = ein ZWEITER, davon verschiedener Zusatzbegriff, NUR falls er "
+    "zusaetzlich zu card_type auf derselben Karte steht (z.B. card_type= "
+    "\"Prizm\", variant=\"Blue\" fuer eine \"Blue Prizm\"-Parallele). Steht "
+    "nur ein einzelner Begriff auf der Karte, lass variant leer statt "
+    "denselben Begriff wie card_type einzutragen.\n"
     "team = Team/Verein, so wie er auf der Karte steht (Vereinsname, "
     "Vereinslogo-Beschriftung oder Vereinswappen-Text) - unabhängig davon, "
     "ob eine Liga (theme) erkennbar ist oder nicht.\n"
@@ -85,17 +91,26 @@ PROMPT = (
     "serial_number und print_run = bei nummerierten/limitierten Karten die "
     "zwei Zahlen aus einem Bruch wie 123/199 (serial_number=123, "
     "print_run=199).\n"
+    "is_rookie = true, NUR wenn auf der Karte explizit \"RC\", \"Rookie "
+    "Card\" oder \"Rookie\" aufgedruckt ist - nicht aus Season/Debütjahr "
+    "erschliessen.\n"
+    "is_autograph = true, NUR wenn auf der Karte explizit \"AUTO\", "
+    "\"Autograph\" o.ä. aufgedruckt ist ODER eine echte, handschriftliche "
+    "Unterschrift auf der Karte selbst zu sehen ist (nicht nur ein "
+    "gedrucktes Foto/Logo).\n"
     "confidence = deine ehrliche Einschätzung (0-100), wie sicher du dir "
     "beim Namen (title) insgesamt bist.\n\n"
     "Antworte AUSSCHLIESSLICH mit einem einzigen JSON-Objekt, ohne "
     "Markdown-Codeblock und ohne weiteren Text davor oder danach, mit "
     "genau diesen Schlüsseln (alles Strings ausser confidence, das eine "
-    "Zahl ist; unbekannte Felder als leerer String \"\"):\n"
+    "Zahl ist, sowie is_rookie/is_autograph, die jeweils true/false sind; "
+    "unbekannte Textfelder als leerer String \"\"):\n"
     '{{"title": "", "category": "", "theme": "", "manufacturer": "", '
     '"set_name": "", "season_year": "", "card_type": "", "variant": "", '
     '"team": "", "position": "", "squad_number": "", '
     '"club_debut_season": "", "card_number": "", "serial_number": "", '
-    '"print_run": "", "confidence": 0}}'
+    '"print_run": "", "is_rookie": false, "is_autograph": false, '
+    '"confidence": 0}}'
 )
 
 
@@ -190,6 +205,8 @@ def recognize_card(front_path=None, back_path=None):
         card_number: str = ""
         serial_number: str = ""
         print_run: str = ""
+        is_rookie: bool = False
+        is_autograph: bool = False
         confidence: float = 0
 
     sides = []
@@ -231,6 +248,8 @@ def recognize_card(front_path=None, back_path=None):
 
     data = parsed.model_dump()
     data["is_numbered"] = 1 if data.get("serial_number") and data.get("print_run") else 0
+    data["is_rookie"] = 1 if data.get("is_rookie") else 0
+    data["is_autograph"] = 1 if data.get("is_autograph") else 0
     data["raw"] = ""
     if data.get("confidence", 0) >= 65:
         data["status"] = "ok"

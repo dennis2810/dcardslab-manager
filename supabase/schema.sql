@@ -637,3 +637,11 @@ alter table wishlist_items add column if not exists card_type text not null defa
 -- automatisch, ohne dass jemand daran denken muss, ihn wieder auszuschalten.
 alter table app_status add column if not exists vacation_mode_enabled boolean not null default false;
 alter table app_status add column if not exists vacation_mode_until date;
+
+-- Migration (2026-09-17): Rookie-(RC-)/Autogramm-Kennzeichnung je Karte -
+-- bisher gab es dafuer kein eigenes Feld (siehe ai_card_recognition.py's
+-- fruehere Doku "Karten kein eigenes Autogramm-Feld"), Auto wurde nur
+-- textbasiert aus einem Titel/einer Suchanfrage erkannt. Beide Flags sind
+-- direkt auf card.html editierbar, falls die KI-Erkennung sie uebersieht.
+alter table cards add column if not exists is_rookie boolean not null default false;
+alter table cards add column if not exists is_autograph boolean not null default false;

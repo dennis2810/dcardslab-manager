@@ -100,6 +100,7 @@ if ("serviceWorker" in navigator) {
       <li><a href="#karten-anlegen">Karte manuell anlegen</a></li>
       <li><a href="#karten">Kartenübersicht</a></li>
       <li><a href="#kartendetail">Kartendetail</a></li>
+      <li><a href="#kartenfelder">Kartenfelder erklärt</a></li>
       <li><a href="#kaeufe">Käufe</a></li>
       <li><a href="#ebay">eBay</a></li>
       <li><a href="#inventar">Inventar</a></li>
@@ -189,8 +190,15 @@ if ("serviceWorker" in navigator) {
   <p>Auf der Detailseite einer Karte lassen sich Fotos in 90°-Schritten drehen, komplett ersetzen (z. B. bei einem
     unscharfen Bild) oder über „Zuschneiden/Drehen" frei zuschneiden und in beliebigem Winkel (nicht nur 90°)
     gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
-    wegzuschneiden. Außerdem lassen sich alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt, mit
-    Vorschlagsliste aus bereits vergebenen Tags beim Tippen) und das „Versendet"-Kästchen umschalten.
+    wegzuschneiden (beim Zuschneiden zeigt der Mauszeiger über den Eckpunkten passend Größenänderungs-Pfeile, der
+    Drehwinkel lässt sich sowohl per Schieberegler als auch direkt als Zahl mit Nachkommastelle eintragen).
+    Außerdem lassen sich alle erkannten Felder bearbeiten (siehe „Kartenfelder erklärt" unten für die genaue
+    Bedeutung jedes Felds), Tags setzen (kommagetrennt, mit
+    Vorschlagsliste aus bereits vergebenen Tags beim Tippen) und das „Versendet"-Kästchen umschalten. Drei weitere
+    Kästchen „Nummeriert (Numbered)", „Rookie-Karte (RC)" und „Autogramm (Auto)" lassen sich unabhängig von der
+    KI-Erkennung jederzeit von Hand setzen oder korrigieren – sie fließen automatisch sowohl in den eBay-Titel
+    (als Zusatz „RC"/„Auto"/„/Auflage" am Ende, sofern der Platz bis 80 Zeichen reicht) als auch in die
+    Standard-Suchanfrage der Preisrecherche mit ein.
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -208,7 +216,8 @@ if ("serviceWorker" in navigator) {
     Statistiken (siehe unten).</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
     Menge, Zustand und Lagerort. Über „eBay-Preise suchen (aktive Angebote)" im Preisrecherche-Bereich ist die
-    Suchanfrage bereits mit Set, Typ, Variante und Nummerierung/Auflage vorbelegt (nicht nur dem Titel) – so werden
+    Suchanfrage bereits mit Set, Typ, Variante, Nummerierung/Auflage sowie „RC"/„Auto" (falls die entsprechenden
+    Kästchen gesetzt sind) vorbelegt (nicht nur dem Titel) – so werden
     eher wirklich vergleichbare Treffer gefunden statt anderer Parallelen/Varianten derselben Karte, die preislich
     ganz anders liegen können; die Anfrage lässt sich vor dem Suchen weiter anpassen. Im Preisrecherche-Verlauf
     lassen sich außerdem manuell beobachtete Marktpreise eintragen; der
@@ -311,6 +320,45 @@ if ("serviceWorker" in navigator) {
     Einschicken eine freiwillige Zustands-Einschätzung notieren (z. B. „Ecken minimal touched, Zentrierung 55/45") –
     unabhängig vom späteren offiziellen Grade, als eigene Gedächtnisstütze. Die Felder sind rein
     informativ und werden zusammen mit den übrigen Kartendaten über „Speichern" abgelegt.</p>
+
+  <h2 id="kartenfelder">Kartenfelder erklärt</h2>
+  <p>Die von der KI-Erkennung bzw. manuell befüllten Felder überschneiden sich auf den ersten Blick – hier die
+    genaue Bedeutung jedes Felds (Begriffe wie üblich im Sammelkarten-Hobby verwendet):</p>
+  <ul>
+    <li><strong>Kategorie</strong>: die grobe Sparte, z. B. „Fußball", „Basketball" oder bei Non-Sport-Karten ein
+      Franchise wie „Marvel" oder „Pokémon". Bestimmt u. a. die eBay-Kategorie (Sport/Non-Sport) und dient bei
+      Non-Sport-Karten im eBay-Titel als Ersatz fürs fehlende Team.</li>
+    <li><strong>Thema</strong>: ein optionales Unterthema/Motto des Sets, z. B. „Champions League" oder
+      „Rookie-Serie" – oft deckungsgleich mit dem Set-Namen, aber nicht immer (ein Set kann mehrere Themen
+      bedienen).</li>
+    <li><strong>Hersteller</strong>: die Marke/der Kartenhersteller, z. B. „Topps", „Panini" oder „Upper Deck".</li>
+    <li><strong>Set</strong>: der konkrete Produktname der Kartenserie, z. B. „Bundesliga 2024" oder
+      „Chrome Update". Mehrere Sets pro Hersteller/Saison sind normal.</li>
+    <li><strong>Saison/Jahr</strong>: das Erscheinungs- bzw. Saisonjahr, z. B. „2024" oder „2023/24".</li>
+    <li><strong>Typ</strong>: die Produktionsart der Karte im engeren Sinn – die drei gängigsten Werte sind
+      „Base" (reguläre Grundkarte), „Insert" (ein Einschub-/Themen-Set innerhalb des Hauptsets, meist mit eigenem
+      Design) und „Parallel" (dieselbe Kartennummer wie eine Base-/Insert-Karte, aber in einer limitierten
+      Farb-/Effektvariante). Ist auf der Karte ein einzelner solcher Begriff aufgedruckt, gehört er hierher.</li>
+    <li><strong>Variante</strong>: die konkrete Farb-/Effektbezeichnung einer Parallel-Karte, z. B. „Blue Prizm",
+      „Gold Refractor" oder „Silver" – wird zusätzlich zum Typ angegeben, wenn beide getrennt aufgedruckt sind
+      (z. B. „Parallel" + „Blue Prizm"). Ist nur ein einzelner Begriff aufgedruckt (z. B. nur „Silver" ohne
+      separates „Parallel"), landet er im Feld Typ statt hier.</li>
+    <li><strong>Team</strong>: der Verein/die Mannschaft bei Sport-Karten, z. B. „FC Bayern München". Bei
+      Non-Sport-Karten meist leer (siehe Kategorie).</li>
+    <li><strong>Kartennummer</strong>: die im Set aufgedruckte Katalognummer, z. B. „12" oder „RC-5" – kein
+      Hinweis auf die Auflage.</li>
+    <li><strong>Nummerierung</strong>: die tatsächlich aufgedruckte Auflagen-Bruchzahl einer limitierten Karte,
+      z. B. „23/99" (23. von insgesamt 99 gedruckten Exemplaren). Wird zusammen mit der Gesamtauflage im Feld
+      „Auflage" (z. B. „99") verwendet, um „Nummeriert" automatisch zu setzen.</li>
+    <li><strong>Nummeriert (Numbered)</strong>: Kästchen, das anzeigt, ob die Karte eine limitierte Auflage trägt.
+      Wird automatisch gesetzt, sobald sowohl Nummerierung als auch Auflage erkannt/eingetragen sind, lässt sich
+      aber auch von Hand umschalten, falls die Erkennung eines der beiden Felder übersieht.</li>
+    <li><strong>Rookie-Karte (RC)</strong>: Kästchen für Karten, die als „Rookie Card" gekennzeichnet sind (meist
+      mit einem „RC"-Logo auf der Karte) – die erste offizielle Karte eines Spielers/einer Spielerin, oft
+      besonders wertvoll.</li>
+    <li><strong>Autogramm (Auto)</strong>: Kästchen für Karten mit einer echten, direkt auf der Karte
+      angebrachten Unterschrift (nicht zu verwechseln mit einem aufgedruckten Faksimile).</li>
+  </ul>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Cardmarket, COMC, Sonstiges), Verkäufer,

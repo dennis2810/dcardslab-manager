@@ -39,7 +39,22 @@ def generate_title(card, max_len=80):
         card.get("season_year", ""), card.get("manufacturer", ""),
         card.get("title", ""), card.get("team") or card.get("category", ""),
     ]
-    return " ".join(p for p in parts if p).strip()[:max_len]
+    title = " ".join(p for p in parts if p).strip()
+    # RC/Auto/Auflage sind fuer Kaeufer stark preisrelevant - als Suffix
+    # anhaengen, aber nur soweit max_len (eBays 80-Zeichen-Limit) das noch
+    # zulaesst, ohne den bestehenden Basistitel zu kuerzen.
+    suffixes = []
+    if card.get("is_rookie"):
+        suffixes.append("RC")
+    if card.get("is_autograph"):
+        suffixes.append("Auto")
+    if card.get("print_run"):
+        suffixes.append(f"/{card['print_run']}")
+    for suffix in suffixes:
+        candidate = f"{title} {suffix}"
+        if len(candidate) <= max_len:
+            title = candidate
+    return title[:max_len]
 
 
 # The seller's fixed link to their own other eBay listings, used unchanged
