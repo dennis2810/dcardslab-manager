@@ -2472,6 +2472,8 @@ async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(defa
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    if _is_externally_managed(listing):
+        raise HTTPException(status_code=409, detail=_EXTERNALLY_MANAGED_DETAIL)
     offer_id = listing.get("ebay_offer_id")
     if not offer_id:
         raise HTTPException(

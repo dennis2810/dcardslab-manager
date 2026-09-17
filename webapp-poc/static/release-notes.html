@@ -84,6 +84,24 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Karten-Export erweitert, Titel-Refresh &amp; zwei Bugfixes <span class="date">September 2026</span></h2>
+  <ul>
+    <li>CSV-Export und Google-Sheets-Sync der Karten enthalten jetzt zusätzlich Set, Typ, Variante, Kartennummer
+      sowie RC/Nummeriert/Autogramm (als Ja/Nein).</li>
+    <li>Karten-Übersicht (Listenansicht) um die gleichen vier Spalten (Set/Typ/Variante/Kartennr.) erweitert –
+      über „⚙ Spalten" wie gewohnt einzeln ein-/ausblendbar.</li>
+    <li>Neuer Button „Titel neu vorschlagen" im eBay-Bearbeiten-Formular bereits veröffentlichter Angebote –
+      erzeugt den Titel frisch aus den aktuellen Kartenfeldern, falls sich z. B. Set/Typ/Variante/RC nachträglich
+      geändert haben und der Titel von Hand nachgezogen werden müsste.</li>
+    <li>Bugfix: Bei importierten, extern verwalteten eBay-Angeboten (eigene SKU stimmt nicht mit der eBay-SKU
+      überein) wurde der Abschnitt „Preisvorschläge" (Best Offer) fälschlich trotzdem angezeigt – ein Update
+      lief aber ins Leere, da das Tool solche Angebote nicht über die eBay-API verwalten kann. Die Sektion
+      erscheint jetzt nur noch bei selbst verwalteten Angeboten, wie bei Bearbeiten/Beenden auch.</li>
+    <li>Bugfix: Beim manuellen Fotoimport (z. B. beim Kartenanlegen) konnten Handyfotos nach dem Speichern um 90°
+      gedreht erscheinen – die im Foto gespeicherte Ausrichtung (EXIF) wurde beim Komprimieren nicht
+      berücksichtigt. Wird jetzt vor dem Speichern korrekt angewendet.</li>
+  </ul>
+
   <h2>Titel-Feinschliff: Hersteller-Dopplung &amp; Auto/RC-Abkürzung <span class="date">September 2026</span></h2>
   <ul>
     <li>Bugfix: Stand der Hersteller bereits im Set-Namen (z. B. „Topps" in „Topps Finest UEFA Club

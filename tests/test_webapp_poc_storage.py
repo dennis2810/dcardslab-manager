@@ -38,6 +38,28 @@ class CompressImageTests(unittest.TestCase):
         result_img = Image.open(io.BytesIO(data))
         self.assertEqual(result_img.size, (400, 300))
 
+    def test_applies_exif_orientation_instead_of_saving_raw_pixels(self):
+        # Handyfotos speichern die aufrechte Ausrichtung oft nur als EXIF-
+        # Orientation-Tag (Pixel liegen z.B. quer vor) - ohne exif_transpose()
+        # in compress_image() wuerde das neu encodierte JPEG (das den Tag
+        # nicht mitnimmt) dauerhaft in der rohen, gedrehten Ausrichtung
+        # landen (siehe Bugreport: Fotos nach dem Speichern um 90° gedreht).
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_path = Path(tmp) / "fixture_exif.jpg"
+            # Orientation 6 = "rotate 90° CW to display upright" - Pixel
+            # selbst sind quer (landscape) gespeichert.
+            img = Image.new("RGB", (300, 200), color=(200, 50, 50))
+            exif = img.getexif()
+            exif[0x0112] = 6
+            img.save(fixture_path, format="JPEG", exif=exif)
+
+            data = storage.compress_image(fixture_path)
+        result_img = Image.open(io.BytesIO(data))
+        # Nach exif_transpose() muss das Ergebnis hochkant sein (200x300),
+        # nicht mehr quer (300x200).
+        self.assertEqual(result_img.size, (200, 300))
+
 
 class UploadImageTests(unittest.TestCase):
     def test_uploads_compressed_bytes_to_expected_path(self):

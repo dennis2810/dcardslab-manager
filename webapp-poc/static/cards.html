@@ -100,6 +100,10 @@ if ("serviceWorker" in navigator) {
   #list.hide-col-6 th:nth-child(6), #list.hide-col-6 td:nth-child(6) { display: none; }
   #list.hide-col-7 th:nth-child(7), #list.hide-col-7 td:nth-child(7) { display: none; }
   #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
+  #list.hide-col-11 th:nth-child(11), #list.hide-col-11 td:nth-child(11) { display: none; }
+  #list.hide-col-12 th:nth-child(12), #list.hide-col-12 td:nth-child(12) { display: none; }
+  #list.hide-col-13 th:nth-child(13), #list.hide-col-13 td:nth-child(13) { display: none; }
+  #list.hide-col-14 th:nth-child(14), #list.hide-col-14 td:nth-child(14) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
@@ -278,6 +282,10 @@ if ("serviceWorker" in navigator) {
             <th data-key="ebay_status">Verkauf <span class="sort-arrow"></span></th>
             <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
             <th data-key="tags">Tags <span class="sort-arrow"></span></th>
+            <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+            <th data-key="card_type">Typ <span class="sort-arrow"></span></th>
+            <th data-key="variant">Variante <span class="sort-arrow"></span></th>
+            <th data-key="card_number">Kartennr. <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
@@ -391,6 +399,10 @@ const COLUMN_TOGGLES = [
   { key: "season_year", label: "Saison", index: 6 },
   { key: "recognition_status", label: "Erkennung", index: 7 },
   { key: "tags", label: "Tags", index: 10 },
+  { key: "set_name", label: "Set", index: 11 },
+  { key: "card_type", label: "Typ", index: 12 },
+  { key: "variant", label: "Variante", index: 13 },
+  { key: "card_number", label: "Kartennr.", index: 14 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
 let hiddenColumns = new Set();
@@ -978,6 +990,22 @@ function renderList(cards) {
     const tagsTd = document.createElement("td");
     tagsTd.textContent = card.tags || "";
     tr.appendChild(tagsTd);
+
+    const setTd = document.createElement("td");
+    setTd.textContent = card.set_name || "";
+    tr.appendChild(setTd);
+
+    const typeTd = document.createElement("td");
+    typeTd.textContent = card.card_type || "";
+    tr.appendChild(typeTd);
+
+    const variantTd = document.createElement("td");
+    variantTd.textContent = card.variant || "";
+    tr.appendChild(variantTd);
+
+    const cardNumberTd = document.createElement("td");
+    cardNumberTd.textContent = card.card_number || "";
+    tr.appendChild(cardNumberTd);
 
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;

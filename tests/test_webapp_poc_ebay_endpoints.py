@@ -734,6 +734,16 @@ class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
             response = client.put("/api/ebay/listings/listing-1/best-offer", json={"enabled": True})
         self.assertEqual(response.status_code, 409)
 
+    def test_returns_409_for_externally_managed_listing(self):
+        # Veroeffentlicht + kein ebay_offer_id = importiertes Angebot (siehe
+        # _is_externally_managed()) - Preisvorschlaege koennen dafuer nicht
+        # ueber die Inventory API geaendert werden.
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported):
+            response = client.put("/api/ebay/listings/listing-1/best-offer", json={"enabled": True})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("importiert", response.json()["detail"])
+
     def test_updates_best_offer_terms_on_the_existing_offer(self):
         published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
         with patch("main.db.get_ebay_listing", return_value=published), \
