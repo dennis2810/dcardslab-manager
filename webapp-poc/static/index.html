@@ -117,6 +117,7 @@ if ("serviceWorker" in navigator) {
       <div id="front-rotate" class="rotate-buttons">
         <button type="button" data-side="front" data-dir="left">&#8634; Links drehen</button>
         <button type="button" data-side="front" data-dir="right">&#8635; Rechts drehen</button>
+        <button type="button" class="discard-side-btn" data-side="front">✕ Verwerfen</button>
       </div>
     </div>
     <div class="side">
@@ -126,6 +127,7 @@ if ("serviceWorker" in navigator) {
       <div id="back-rotate" class="rotate-buttons">
         <button type="button" data-side="back" data-dir="left">&#8634; Links drehen</button>
         <button type="button" data-side="back" data-dir="right">&#8635; Rechts drehen</button>
+        <button type="button" class="discard-side-btn" data-side="back">✕ Verwerfen</button>
       </div>
     </div>
     <label for="location">Lagerort (für alle Karten dieses Scans)</label>
@@ -242,7 +244,7 @@ for (const side of ["front", "back"]) {
   });
 }
 
-document.querySelectorAll(".rotate-buttons button").forEach((button) => {
+document.querySelectorAll(".rotate-buttons button[data-dir]").forEach((button) => {
   button.addEventListener("click", async () => {
     const { side, dir } = button.dataset;
     if (!sideBlobs[side]) return;
@@ -256,6 +258,31 @@ document.querySelectorAll(".rotate-buttons button").forEach((button) => {
     }
   });
 });
+
+// Erlaubt es, ein bereits ausgewaehltes Vorder-/Rueckseitenbild wieder zu
+// verwerfen (z.B. falsches Foto erwischt), ohne die ganze Seite neu laden zu
+// muessen - vorher liess sich ein einmal gewaehltes Bild nur durch Auswahl
+// eines ANDEREN Bildes ersetzen.
+document.querySelectorAll(".discard-side-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const { side } = button.dataset;
+    sideBlobs[side] = null;
+    document.getElementById(side).value = "";
+    updatePreview(side);
+  });
+});
+
+// Setzt das Scan-Formular komplett zurueck (Datei-Auswahl, Vorschauen,
+// Lagerort/Notiz/Privatentnahme) - ohne das blieben nach einer Uebernahme
+// die vorherigen Bilder ausgewaehlt/sichtbar, obwohl der Scan bereits
+// abgeschlossen ist.
+function resetScanForm() {
+  sideBlobs.front = null;
+  sideBlobs.back = null;
+  form.reset();
+  updatePreview("front");
+  updatePreview("back");
+}
 
 // Haelt die noch nicht in die DB uebernommene Vorschau (Zuschnitte + KI-
 // Felder) zwischen dem POST /api/scan (Zuschnitt+Erkennung) und dem
@@ -304,6 +331,17 @@ form.addEventListener("submit", async (ev) => {
 
 function renderPreview(cards) {
   resultEl.innerHTML = "";
+  if (!cards.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "Keine Karten mehr in der Vorschau.";
+    resultEl.appendChild(empty);
+    const discardBtn = document.createElement("button");
+    discardBtn.type = "button";
+    discardBtn.textContent = "✗ Verwerfen";
+    discardBtn.addEventListener("click", () => discardScan());
+    resultEl.appendChild(discardBtn);
+    return;
+  }
   const table = document.createElement("table");
   const thead = document.createElement("tr");
   const thumbTh = document.createElement("th");
@@ -314,6 +352,8 @@ function renderPreview(cards) {
     th.textContent = label;
     thead.appendChild(th);
   }
+  const removeTh = document.createElement("th");
+  thead.appendChild(removeTh);
   table.appendChild(thead);
 
   for (const card of cards) {
@@ -331,9 +371,31 @@ function renderPreview(cards) {
     tr.appendChild(thumbTd);
     for (const [key] of COLUMNS) {
       const td = document.createElement("td");
-      td.textContent = card[key] ?? "";
+      // Titel bleibt vor der Uebernahme editierbar - falls die KI-Erkennung
+      // bei einer einzelnen Karte danebenliegt, muss dafuer nicht extra
+      // card.html nach der Uebernahme bemueht werden.
+      if (key === "title") {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = card.title ?? "";
+        input.addEventListener("input", () => { card.title = input.value; });
+        td.appendChild(input);
+      } else {
+        td.textContent = card[key] ?? "";
+      }
       tr.appendChild(td);
     }
+    const removeTd = document.createElement("td");
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "✕";
+    removeBtn.title = "Diese Karte nicht übernehmen";
+    removeBtn.addEventListener("click", () => {
+      pendingScan.cards = pendingScan.cards.filter((c) => c !== card);
+      renderPreview(pendingScan.cards);
+    });
+    removeTd.appendChild(removeBtn);
+    tr.appendChild(removeTd);
     table.appendChild(tr);
   }
   resultEl.appendChild(table);
@@ -362,6 +424,7 @@ function discardScan() {
   // dazu bleiben es verwaiste, nie verlinkte Objekte statt sichtbarer Daten.
   pendingScan = null;
   resultEl.innerHTML = "";
+  resetScanForm();
   statusEl.textContent = "Verworfen – keine Karten wurden übernommen.";
   statusEl.className = "";
   showToast("Scan verworfen.");
@@ -396,6 +459,7 @@ async function confirmScan(button) {
     const byNumber = new Map(body.cards.map((c) => [c.number, c]));
     const finalCards = pendingScan.cards.map((c) => ({ ...c, ...(byNumber.get(c.number) || {}) }));
     pendingScan = null;
+    resetScanForm();
     statusEl.textContent = `Fertig – ${finalCards.length} Karten gespeichert.`;
     showToast(`Fertig – ${finalCards.length} Karten gespeichert.`);
     renderTable(finalCards);

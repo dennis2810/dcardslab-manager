@@ -228,6 +228,8 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="bulk-add-to-purchase-btn">Verknüpfen</button>
     <button type="button" id="bulk-lot-sale-toggle">📦 Als Lot verkaufen</button>
     <button type="button" id="bulk-private-collection">In private Sammlung überführen</button>
+    <button type="button" id="bulk-delete-btn">Löschen</button>
+    <button type="button" id="bulk-delete-undo" hidden>↩ Rückgängig</button>
     <button type="button" id="bulk-clear-selection">Auswahl aufheben</button>
     <span id="bulk-status"></span>
   </div>
@@ -1091,6 +1093,69 @@ document.getElementById("bulk-clear-selection").addEventListener("click", () => 
   updateBulkBar();
   renderCurrentView();
 });
+
+// Verzoegertes Loeschen mit Gnadenfrist statt confirm()-Dialog + Undo danach -
+// ein geloeschter Karten-Datensatz (inkl. Bildern) laesst sich nicht einfach
+// wiederherstellen, daher hier dasselbe Prinzip wie purchases.html's
+// Bulk-Loeschen: erst nach Ablauf der Frist wird tatsaechlich geloescht.
+const BULK_DELETE_GRACE_SECONDS = 6;
+const bulkDeleteUndoBtn = document.getElementById("bulk-delete-undo");
+let pendingBulkDelete = null;
+
+document.getElementById("bulk-delete-btn").addEventListener("click", () => {
+  const ids = [...selectedIds];
+  if (!ids.length || pendingBulkDelete) return;
+
+  let remaining = BULK_DELETE_GRACE_SECONDS;
+  const updateStatus = () => {
+    bulkStatusEl.textContent = `${ids.length} Karte(n) werden in ${remaining}s gelöscht … `;
+  };
+  bulkStatusEl.className = "";
+  updateStatus();
+  bulkDeleteUndoBtn.hidden = false;
+
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) updateStatus();
+  }, 1000);
+
+  const timeout = setTimeout(() => runBulkDeleteCards(ids), BULK_DELETE_GRACE_SECONDS * 1000);
+  pendingBulkDelete = { timeout, tick };
+});
+
+bulkDeleteUndoBtn.addEventListener("click", () => {
+  if (!pendingBulkDelete) return;
+  clearTimeout(pendingBulkDelete.timeout);
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkStatusEl.textContent = "Löschen abgebrochen.";
+});
+
+async function runBulkDeleteCards(ids) {
+  clearInterval(pendingBulkDelete.tick);
+  pendingBulkDelete = null;
+  bulkDeleteUndoBtn.hidden = true;
+  bulkStatusEl.textContent = "Löscht …";
+  try {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}`, { method: "DELETE" })
+    ));
+    const okCount = results.filter((r) => r.ok || r.status === 204).length;
+    const failed = results.length - okCount;
+    let message = `${okCount} Karte(n) gelöscht.`;
+    if (failed) message += ` ${failed} fehlgeschlagen.`;
+    bulkStatusEl.textContent = message;
+    showToast(message, failed > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+    bulkStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+}
 
 // Erzeugt ein leeres eBay-Angebot ("Entwurf") pro ausgewaehlter Karte, die
 // noch keins hat - main.py's POST .../ebay-listing befuellt Titel/
