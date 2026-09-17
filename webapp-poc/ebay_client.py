@@ -94,13 +94,19 @@ class EbayApiError(Exception):
 def get_access_token():
     try:
         response = httpx.get(f"{EBAY_OAUTH_SERVER_URL}/api/internal/access-token", timeout=30)
+        if response.status_code == 401:
+            raise EbayNotAuthorizedError(
+                "eBay ist nicht verbunden — bitte zuerst den OAuth-Flow abschließen."
+            )
+        response.raise_for_status()
     except httpx.HTTPError as exc:
+        # raise_for_status() faellt sonst als rohe httpx.HTTPStatusError durch
+        # (z.B. bei einem 500 des oauth-servers) statt als EbayApiError, die
+        # einzige Exception, auf die main.py's Endpunkte pruefen - eine
+        # ungefangene httpx.HTTPStatusError haette dort einen generischen,
+        # nicht als JSON lesbaren 500-Fehler zur Folge (Bugreport des
+        # Nutzers zum "Preisvorschlaege laden"-Button).
         raise EbayApiError(f"eBay-OAuth-Server nicht erreichbar: {exc}") from exc
-    if response.status_code == 401:
-        raise EbayNotAuthorizedError(
-            "eBay ist nicht verbunden — bitte zuerst den OAuth-Flow abschließen."
-        )
-    response.raise_for_status()
     return response.json()["access_token"]
 
 

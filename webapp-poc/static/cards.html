@@ -46,7 +46,12 @@ if ("serviceWorker" in navigator) {
       --danger-bg: #3a1f1d; --danger-fg: #f28b82;
       --neutral-bg: #333; --neutral-fg: #ccc; }
   :root[data-theme="light"] { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  /* 900px war fuer eine schmale Kartenliste gedacht - mit inzwischen ~30
+     Spalten (Klaerung mit dem Nutzer: auf grossen Bildschirmen bleibt viel
+     Platz ungenutzt) deutlich breiter, damit mehr Spalten ohne horizontales
+     Scrollen sichtbar sind. Auf schmalen Bildschirmen wirkt max-width nur
+     als Obergrenze, dort bleibt die Seite wie zuvor volle Breite. */
+  body { font-family: system-ui, sans-serif; max-width: 1600px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
@@ -562,17 +567,32 @@ function renderColumnTogglePanel() {
     label.append(" " + (COLUMN_LABELS[key] || key));
     row.appendChild(label);
 
+    // Verschiebt Spalte i an eine neue Position - fuer die Einzelschritte
+    // (▲/▼) ist das nur ein Tausch mit dem Nachbarn, fuer "an den Anfang/
+    // ans Ende" (⏮/⏭) muessen alle dazwischenliegenden Spalten mitruecken,
+    // daher hier einheitlich per splice() statt Array-Destructuring-Swap.
+    function moveTo(newIndex) {
+      const [moved] = columnOrder.splice(i, 1);
+      columnOrder.splice(newIndex, 0, moved);
+      saveColumnOrder();
+      applyColumnOrder();
+      renderColumnTogglePanel();
+    }
+
+    const startBtn = document.createElement("button");
+    startBtn.type = "button";
+    startBtn.textContent = "⏮";
+    startBtn.title = "An den Anfang";
+    startBtn.disabled = i === 0;
+    startBtn.addEventListener("click", () => moveTo(0));
+    row.appendChild(startBtn);
+
     const upBtn = document.createElement("button");
     upBtn.type = "button";
     upBtn.textContent = "▲";
     upBtn.title = "Nach links";
     upBtn.disabled = i === 0;
-    upBtn.addEventListener("click", () => {
-      [columnOrder[i - 1], columnOrder[i]] = [columnOrder[i], columnOrder[i - 1]];
-      saveColumnOrder();
-      applyColumnOrder();
-      renderColumnTogglePanel();
-    });
+    upBtn.addEventListener("click", () => moveTo(i - 1));
     row.appendChild(upBtn);
 
     const downBtn = document.createElement("button");
@@ -580,13 +600,16 @@ function renderColumnTogglePanel() {
     downBtn.textContent = "▼";
     downBtn.title = "Nach rechts";
     downBtn.disabled = i === columnOrder.length - 1;
-    downBtn.addEventListener("click", () => {
-      [columnOrder[i], columnOrder[i + 1]] = [columnOrder[i + 1], columnOrder[i]];
-      saveColumnOrder();
-      applyColumnOrder();
-      renderColumnTogglePanel();
-    });
+    downBtn.addEventListener("click", () => moveTo(i + 1));
     row.appendChild(downBtn);
+
+    const endBtn = document.createElement("button");
+    endBtn.type = "button";
+    endBtn.textContent = "⏭";
+    endBtn.title = "Ans Ende";
+    endBtn.disabled = i === columnOrder.length - 1;
+    endBtn.addEventListener("click", () => moveTo(columnOrder.length - 1));
+    row.appendChild(endBtn);
 
     panel.appendChild(row);
   }
