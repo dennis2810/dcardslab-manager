@@ -359,6 +359,23 @@ async def scan(
         back_map = {int(p.stem): p for p in back_files}
         batch_id = db.create_batch(card_count=len(front_files))
 
+        # Das Web-Tool laeuft (anders als das Standalone-Scanner-Tool) in
+        # einem tempfile.TemporaryDirectory(), das mit diesem Request wieder
+        # verschwindet - ohne diesen Upload waere DEBUG_Erkennung.png (das
+        # von scanner.process() annotierte Zuschnitt-Debugbild) fuer den
+        # Nutzer nie einsehbar. Best effort: ein fehlender Upload darf den
+        # eigentlichen Scan nicht scheitern lassen.
+        debug_urls = {}
+        for side, side_dir in (("front", front_dir), ("back", back_dir)):
+            debug_path = side_dir / "DEBUG_Erkennung.png"
+            if not debug_path.exists():
+                continue
+            try:
+                object_path = storage.upload_debug_image(batch_id, side, debug_path)
+                debug_urls[f"debug_{side}_url"] = storage.signed_url(object_path)
+            except Exception:
+                logger.exception("Debug-Bild-Upload (%s) fehlgeschlagen", side)
+
         def process_one(fp):
             # Preview only - crops+recognizes+uploads the images so they can be
             # reviewed, but never writes a cards/inventory row yet (see
@@ -431,7 +448,7 @@ async def scan(
             results = list(pool.map(process_one, front_files))
 
     results.sort(key=lambda r: r["number"])
-    return JSONResponse({"batch_id": batch_id, "cards": results})
+    return JSONResponse({"batch_id": batch_id, "cards": results, **debug_urls})
 
 
 @app.post("/api/scan/confirm")

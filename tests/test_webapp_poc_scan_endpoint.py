@@ -63,6 +63,7 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
             "main.db.find_duplicate_card": MagicMock(return_value=None),
             "main.storage.upload_image": MagicMock(side_effect=lambda batch_id, pos, side, path: f"{batch_id}/{pos}_{side}.jpg"),
             "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
+            "main.storage.upload_debug_image": MagicMock(side_effect=lambda batch_id, side, path: f"{batch_id}/debug_{side}.jpg"),
         }
         self._patchers = [patch(target, new) for target, new in patches.items()]
         self.mocks = {}
@@ -292,6 +293,72 @@ class ScanEndpointPersistenceTests(unittest.TestCase):
         self._confirm(preview_body)
 
         self.mocks["main.db.update_batch_status"].assert_called_once_with("batch-1", "failed")
+
+
+def _fake_crop_with_debug_image(upload_path, out_dir, quality, rotate):
+    """Mirrors scanner.process() also writing DEBUG_Erkennung.png (the
+    annotated contour-detection image) into out_dir alongside the 9 crops -
+    needed to test that /api/scan uploads and links it, since the real web
+    flow's tempdir is deleted before the caller could ever see it otherwise."""
+    files = _fake_crop(upload_path, out_dir, quality, rotate)
+    (Path(out_dir) / "DEBUG_Erkennung.png").write_bytes(b"\x89PNGfake-debug-image")
+    return files
+
+
+class ScanEndpointDebugImageTests(unittest.TestCase):
+    """POST /api/scan runs entirely inside a tempfile.TemporaryDirectory()
+    that's deleted once the request finishes - without uploading
+    DEBUG_Erkennung.png before that, the user has no way to inspect the
+    detected crop quality for the web scan flow (unlike the standalone
+    desktop tool, whose debug files stay on disk next to the input scan)."""
+
+    def setUp(self):
+        patches = {
+            "main.scanner.process": MagicMock(side_effect=_fake_crop_with_debug_image),
+            "main.recognize_card": MagicMock(side_effect=_fake_recognize),
+            "main.db.create_batch": MagicMock(return_value="batch-1"),
+            "main.db.find_duplicate_card": MagicMock(return_value=None),
+            "main.storage.upload_image": MagicMock(side_effect=lambda batch_id, pos, side, path: f"{batch_id}/{pos}_{side}.jpg"),
+            "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
+            "main.storage.upload_debug_image": MagicMock(side_effect=lambda batch_id, side, path: f"{batch_id}/debug_{side}.jpg"),
+        }
+        self._patchers = [patch(target, new) for target, new in patches.items()]
+        self.mocks = {}
+        for target, p in zip(patches, self._patchers):
+            self.mocks[target] = p.start()
+            self.addCleanup(p.stop)
+
+    def _post_scan(self):
+        files = {
+            "front": ("front.jpg", b"fake-front-bytes", "image/jpeg"),
+            "back": ("back.jpg", b"fake-back-bytes", "image/jpeg"),
+        }
+        return client.post("/api/scan", files=files, data={})
+
+    def test_uploads_debug_image_for_each_side(self):
+        self._post_scan()
+        self.assertEqual(self.mocks["main.storage.upload_debug_image"].call_count, 2)
+        sides = {call.args[1] for call in self.mocks["main.storage.upload_debug_image"].call_args_list}
+        self.assertEqual(sides, {"front", "back"})
+
+    def test_response_includes_signed_debug_urls(self):
+        body = self._post_scan().json()
+        self.assertEqual(body["debug_front_url"], "https://signed/batch-1/debug_front.jpg")
+        self.assertEqual(body["debug_back_url"], "https://signed/batch-1/debug_back.jpg")
+
+    def test_no_debug_url_keys_when_scanner_did_not_write_one(self):
+        self.mocks["main.scanner.process"].side_effect = _fake_crop
+        body = self._post_scan().json()
+        self.assertNotIn("debug_front_url", body)
+        self.assertNotIn("debug_back_url", body)
+
+    def test_debug_image_upload_failure_does_not_fail_the_scan(self):
+        self.mocks["main.storage.upload_debug_image"].side_effect = RuntimeError("bucket down")
+        response = self._post_scan()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("debug_front_url", body)
+        self.assertEqual(len(body["cards"]), 9)
 
 
 if __name__ == "__main__":

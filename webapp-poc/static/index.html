@@ -319,6 +319,8 @@ form.addEventListener("submit", async (ev) => {
       notes: document.getElementById("notes").value,
       privateCollection: document.getElementById("private-collection").checked,
       cards: body.cards,
+      debugFrontUrl: body.debug_front_url || null,
+      debugBackUrl: body.debug_back_url || null,
     };
     statusEl.textContent = `Zuschnitt fertig – ${body.cards.length} Karten. Bitte prüfen und übernehmen.`;
     showToast(`Zuschnitt fertig – ${body.cards.length} Karten. Bitte prüfen.`);
@@ -332,6 +334,20 @@ form.addEventListener("submit", async (ev) => {
 
 function renderPreview(cards) {
   resultEl.innerHTML = "";
+  // Debug-Zuschnittbilder (annotierte Konturen) - direkt hier verlinkt, da
+  // sie serverseitig nur fuer die Dauer dieses Requests existieren (siehe
+  // /api/scan) und sonst nirgends einsehbar waeren, weder auf dem NAS noch
+  // sonstwo. Wird bei schlechten Zuschnitten (abgeschnittene Kanten,
+  // fehlerhaft erkannte Rueckseiten) fuer die Fehlersuche gebraucht.
+  if (pendingScan && (pendingScan.debugFrontUrl || pendingScan.debugBackUrl)) {
+    const debugBox = document.createElement("p");
+    debugBox.style.cssText = "font-size: 0.85rem;";
+    const links = [];
+    if (pendingScan.debugFrontUrl) links.push(`<a href="${pendingScan.debugFrontUrl}" target="_blank" rel="noopener">Debug-Bild Vorderseite</a>`);
+    if (pendingScan.debugBackUrl) links.push(`<a href="${pendingScan.debugBackUrl}" target="_blank" rel="noopener">Debug-Bild Rückseite</a>`);
+    debugBox.innerHTML = "Erkennung prüfen: " + links.join(" · ");
+    resultEl.appendChild(debugBox);
+  }
   if (!cards.length) {
     const empty = document.createElement("p");
     empty.textContent = "Keine Karten mehr in der Vorschau.";
