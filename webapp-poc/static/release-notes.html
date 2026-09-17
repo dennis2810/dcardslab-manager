@@ -84,6 +84,28 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Spalten umsortierbar, Foto-Bugfix &amp; mehrere Verbesserungen an Karten-/eBay-Übersicht
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix: Bearbeitungen an Fotos (drehen, zuschneiden, ersetzen), insbesondere an weiteren Fotos neben
+      Vorder-/Rückseite, wurden bei einem bereits veröffentlichten eBay-Angebot nicht übernommen, solange nicht
+      zusätzlich noch etwas anderes am Angebot geändert wurde. Jede Foto-Änderung stößt jetzt selbst eine
+      Aktualisierung bei eBay an; ein Cache-Buster sorgt zusätzlich dafür, dass eBay das neue Bild auch wirklich
+      neu lädt statt eine alte, unter derselben Adresse zwischengespeicherte Version zu behalten.</li>
+    <li>eBay-Übersicht &amp; Karten-Übersicht: Spalten lassen sich jetzt über „⚙ Spalten" per Pfeile (▲/▼) in eine
+      beliebige eigene Reihenfolge bringen, nicht nur aus-/einblenden – die Reihenfolge wird je Browser
+      gemerkt.</li>
+    <li>eBay-Übersicht: neuer Button „💰 Preisvorschläge laden" behebt, dass Auto-Annahme/-Ablehnung für
+      Angebote, deren Preisvorschläge-Formular noch nie einzeln geöffnet wurde, leer blieben. Die
+      Summenzeile erlaubt jetzt außerdem, den Zeitraum-Filter statt auf „Verkauft am" auch auf „Eingestellt am"
+      oder „Zuletzt aktualisiert" zu beziehen.</li>
+    <li>Karten-Übersicht: Spalte „Verkauf" zeigt jetzt nur noch den eigentlichen eBay-/Verkaufsstatus – RC/
+      Nummeriert/Auto sowie Importiert/Neu eingestellt/Lange gelistet stehen bereits in den eigenen Spalten
+      „Merkmale" bzw. „Angebots-Hinweise" und wurden hier als Dopplung entfernt. Die Spalte „Kauf-Plattform"
+      ist bei verknüpften Käufen jetzt anklickbar und führt direkt zum jeweiligen Kauf. „Lfd. Nr." steht in der
+      Standard-Spaltenreihenfolge jetzt ganz vorne.</li>
+  </ul>
+
   <h2>Weitere Fotos bearbeitbar, eBay-Preisvorschläge in der Liste &amp; Karten-Übersicht deutlich erweitert
     <span class="date">September 2026</span></h2>
   <ul>

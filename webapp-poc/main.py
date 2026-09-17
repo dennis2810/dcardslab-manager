@@ -708,6 +708,28 @@ def _split_extra_image_paths(card):
     return [p for p in (card.get("extra_image_paths") or "").split(",") if p]
 
 
+def _republish_images_if_live(card_id):
+    # Bugreport des Nutzers: Foto-Bearbeitungen (Drehen/Zuschneiden/Ersetzen,
+    # auch fuer weitere Fotos neben Vorder-/Rueckseite) wurden bei einem
+    # bereits veroeffentlichten Angebot erst durch eine ZUSAETZLICHE, davon
+    # unabhaengige Aenderung (z.B. eine Preisanpassung) an eBay
+    # weitergegeben, da nur diese _publish_listing() erneut aufruft - eine
+    # reine Foto-Aenderung loeste bisher gar keine Aktualisierung aus. Wird
+    # jetzt direkt nach jeder Foto-Aenderung aufgerufen, damit sie sofort auf
+    # eBay ankommt (siehe auch den Cache-Buster in _publish_listing() fuer den
+    # Fall, dass sich nur der Bildinhalt am selben Storage-Pfad aendert).
+    # Bewusst best-effort: ein eBay-Fehler hier darf die eigentliche
+    # Foto-Bearbeitung nicht scheitern lassen, das Foto ist bereits
+    # erfolgreich gespeichert.
+    listing = db.get_ebay_listing_for_card(card_id)
+    if not listing or listing.get("status") != "Veroeffentlicht" or _is_externally_managed(listing):
+        return
+    try:
+        _publish_listing(listing)
+    except Exception:
+        logger.exception("Republish nach Foto-Änderung fehlgeschlagen für Karte %s", card_id)
+
+
 def _compute_portfolio_value():
     """Summe des geschaetzten Bestandswerts ueber alle vorraetigen Inventar-
     Eintraege - dieselbe Bewertung wie inventory.html's "Wert"-Spalte
@@ -743,6 +765,7 @@ async def list_cards(q: str | None = None, status: str | None = None):
         # Fuer die Karten-Uebersicht (cards.html) als eigene Spalten, statt
         # dass man dafuer jede Karte einzeln oeffnen muesste.
         purchase = purchase_info.get(c["id"]) or {}
+        c["purchase_id"] = purchase.get("id") or ""
         c["purchase_platform"] = purchase.get("platform") or ""
         c["purchase_seller"] = purchase.get("seller") or ""
         c["inventory_location"] = inventory_locations.get(c["id"], "")
@@ -1036,6 +1059,7 @@ async def rotate_card_image(card_id: str, body: dict = Body(...)):
         raise HTTPException(status_code=404, detail=f"Kein Bild für {side} vorhanden.")
 
     rotated_bytes = storage.rotate_image(object_path, degrees)
+    _republish_images_if_live(card_id)
 
     result = _attach_signed_urls(card)
     # Not relying on a freshly signed URL for the just-rotated side here:
@@ -1074,6 +1098,7 @@ async def replace_card_image(card_id: str, side: str = Form(...), file: UploadFi
             ) from exc
 
     updated = db.set_card_image_path(card_id, side, object_path)
+    _republish_images_if_live(card_id)
     result = _attach_signed_urls(updated)
     # Gleiche Begruendung wie beim Dreh-Endpunkt: Supabase Storage's CDN kann
     # kurz nach dem Ueberschreiben noch eine veraltete Kopie ausliefern, selbst
@@ -1104,6 +1129,7 @@ async def add_card_extra_image(card_id: str, file: UploadFile = File(...)):
             ) from exc
 
     updated = db.add_card_extra_image(card_id, object_path)
+    _republish_images_if_live(card_id)
     return JSONResponse(_attach_signed_urls(updated))
 
 
@@ -1121,6 +1147,7 @@ async def rotate_card_extra_image(card_id: str, index: int, body: dict = Body(..
         raise HTTPException(status_code=404, detail="Foto nicht gefunden.")
 
     rotated_bytes = storage.rotate_image(paths[index], degrees)
+    _republish_images_if_live(card_id)
 
     result = _attach_signed_urls(card)
     # Gleiche Begruendung wie beim Dreh-Endpunkt fuer Vorder-/Rueckseite: die
@@ -1153,6 +1180,7 @@ async def replace_card_extra_image(card_id: str, index: int, file: UploadFile = 
             raise HTTPException(
                 status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
             ) from exc
+    _republish_images_if_live(card_id)
 
     result = _attach_signed_urls(card)
     result["replaced_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(compressed).decode("ascii")
@@ -1170,6 +1198,7 @@ async def delete_card_extra_image(card_id: str, index: int):
             storage.delete_images([removed_path])
         except Exception:
             logger.exception("Bild-Löschung fehlgeschlagen für Karte %s, Pfad %s", card_id, removed_path)
+    _republish_images_if_live(card_id)
     return Response(status_code=204)
 
 
@@ -2167,7 +2196,17 @@ def _publish_listing(listing, scheduled_at=None, relist=False):
         # stillschweigend abgeschnitten statt die Veroeffentlichung
         # abzubrechen.
         image_paths = [card.get("front_image_path"), card.get("back_image_path"), *_split_extra_image_paths(card)]
-        image_urls = [storage.public_url(path) for path in image_paths if path][:12]
+        # Cache-Buster (Bugreport des Nutzers: Dreh-/Zuschneide-/Ersetzen-
+        # Bearbeitungen an Fotos wurden bei einer Angebots-Aktualisierung
+        # nicht uebernommen) - rotate_image()/replace_image_at_path()
+        # ueberschreiben denselben Storage-Pfad, die URL bleibt also
+        # unveraendert. eBay laedt ein Bild aber offenbar nur einmal pro URL
+        # herunter und cached es selbst dann, wenn genau diese URL erneut per
+        # put_inventory_item gesendet wird - ohne einen sich aendernden
+        # Query-Parameter sieht eBay nie, dass sich der Bildinhalt geaendert
+        # hat.
+        cache_bust = int(datetime.now(timezone.utc).timestamp())
+        image_urls = [f"{storage.public_url(path)}?v={cache_bust}" for path in image_paths if path][:12]
 
         step = "put_inventory_item"
         logger.info("Publish %s: %s ...", listing["id"], step)
@@ -2609,6 +2648,37 @@ async def update_ebay_listings_best_offer_bulk(body: dict = Body(...)):
             })
             results.append({"listing_id": listing_id, "ok": True})
         except Exception as exc:
+            results.append({"listing_id": listing_id, "error": str(exc)})
+    return JSONResponse({"results": results})
+
+
+@app.get("/api/ebay/listings/best-offer-sync")
+async def sync_ebay_listings_best_offer(listing_ids: str):
+    # Behebt, dass Auto-Annahme/-Ablehnung in der Uebersicht (ebay.html) fuer
+    # bereits bestehende Angebote leer bleiben: der lokale Cache (siehe
+    # get_ebay_listing_best_offer()/update_ebay_listing_best_offer() oben)
+    # wird nur befuellt, wenn jemand das Preisvorschlaege-Formular eines
+    # EINZELNEN Angebots in card.html geoeffnet/geaendert hat. Fuer alle
+    # anderen Angebote blieb er nach der Migration leer. Gleiches Muster wie
+    # /api/ebay/listings/views oben - eigener, nur per Klick ausgeloester
+    # Aufruf statt bei jedem GET /api/ebay/listings mitgeladen (ein eBay-
+    # API-Aufruf pro Angebot waere bei jedem Listen-Laden zu teuer/langsam).
+    ids = [v for v in listing_ids.split(",") if v]
+    results = []
+    token = None
+    for listing_id in ids:
+        listing = db.get_ebay_listing(listing_id)
+        if listing is None or _is_externally_managed(listing) or not listing.get("ebay_offer_id"):
+            continue
+        try:
+            if token is None:
+                token = ebay_client.get_access_token()
+            terms = ebay_client.get_best_offer_terms(token, listing["ebay_offer_id"])
+            db.update_ebay_listing(listing_id, terms)
+            results.append({"listing_id": listing_id, "ok": True, **terms})
+        except ebay_client.EbayNotAuthorizedError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except ebay_client.EbayApiError as exc:
             results.append({"listing_id": listing_id, "error": str(exc)})
     return JSONResponse({"results": results})
 
