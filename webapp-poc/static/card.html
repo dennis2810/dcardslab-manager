@@ -3502,9 +3502,10 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   form.appendChild(aspectsWrapper);
 
   // Preisvorschlaege (Best Offer) schon vor der Veroeffentlichung setzbar -
-  // wird nicht mit dem Entwurf gespeichert (kein DB-Feld dafuer, siehe
-  // PUT .../best-offer), sondern erst nach erfolgreichem Veroeffentlichen
-  // per eigenem Request angewendet (s.u. im publishBtn-Handler).
+  // wird nicht mit dem Entwurf gespeichert (saveDraft()/collectFields()
+  // lassen diese Felder bewusst aussen vor, siehe PUT .../best-offer),
+  // sondern erst nach erfolgreichem Veroeffentlichen per eigenem Request
+  // angewendet (s.u. im publishBtn-Handler).
   const bestOfferBlock = document.createElement("div");
   bestOfferBlock.className = "tracking-block";
   const bestOfferLabel = document.createElement("label");
@@ -3532,6 +3533,28 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   autoDeclineLabel.appendChild(autoDeclineInput);
   bestOfferBlock.appendChild(autoDeclineLabel);
   form.appendChild(bestOfferBlock);
+
+  // Beim Bearbeiten eines schon veroeffentlichten Angebots (nicht bei einem
+  // ganz neuen Entwurf ohne ebay_offer_id) hier den aktuellen Stand laden
+  // und vorbelegen - sonst zeigt das Formular die Felder immer leer/
+  // unchecked, obwohl schon ein Preisvorschlag aktiv ist. Ohne diese
+  // Vorbelegung wuerde ein Nutzer, der die Checkbox faelschlich fuer "aus"
+  // haelt und sie zum "Reaktivieren" ankreuzt (ohne die alten Werte zu
+  // kennen), beim Veroeffentlichen versehentlich die bisherigen
+  // Akzeptieren/Ablehnen-Schwellen loeschen (Bugreport des Nutzers: "ein
+  // vorher gesetzter Preisvorschlag wird geleert" - gleiches Prinzip wie die
+  // Vorbelegung in renderEbayPublishedView() unten).
+  if (listing.id && listing.ebay_offer_id) {
+    fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((current) => {
+        if (!current) return;
+        bestOfferCheckbox.checked = Boolean(current.best_offer_enabled);
+        if (current.auto_accept_price != null) autoAcceptInput.value = current.auto_accept_price;
+        if (current.auto_decline_price != null) autoDeclineInput.value = current.auto_decline_price;
+      })
+      .catch(() => {});
+  }
 
   const scheduleWrapper = document.createElement("label");
   scheduleWrapper.textContent = "Veröffentlichen am (optional)";

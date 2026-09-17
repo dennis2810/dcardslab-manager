@@ -139,7 +139,14 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
-  .table-scroll { overflow-x: auto; }
+  /* overflow-y muss explizit "visible" bleiben, sonst erzwingt der Browser
+     laut Spec (overflow-x != visible, overflow-y nicht gesetzt) automatisch
+     overflow-y: auto - .table-scroll wuerde dann selbst zum Sticky-Bezugs-
+     rahmen statt der Seite, dessen Scrollbereich aber exakt tabellenhoch ist
+     und nie intern scrollt, wodurch "position: sticky" unten nie ausgeloest
+     wird (Bugreport des Nutzers: Kopfzeile blieb trotz Sticky-Regel nicht
+     stehen). */
+  .table-scroll { overflow-x: auto; overflow-y: visible; }
   /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
      Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
      Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
@@ -149,8 +156,12 @@ if ("serviceWorker" in navigator) {
      bleiben tabellenspezifisch). */
   #listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
   /* Oben rechts neben dem Sport/Non-Sport-Filter statt unten bei der
-     Pagination - schiebt sich selbst und alles danach in der Controls-Zeile
-     nach rechts (gleiches Prinzip wie .seller-hub-link). */
+     Pagination - schiebt sich selbst nach rechts (gleiches Prinzip wie
+     .seller-hub-link). Sync-/Lade-Buttons stehen bewusst in einer eigenen
+     .controls-Zeile darunter (statt in dieser), damit sie beim Umbruch nicht
+     durch Fensterbreite mal zusammen, mal einzeln landen (Bugreport des
+     Nutzers: "Verkäufe synchronisieren" wirkte von "Aufrufe laden"/
+     "Preisvorschläge laden" getrennt). */
   #view-toggle { margin-left: auto; }
   .listing-tile { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; cursor: pointer; }
   .listing-tile:hover { background: var(--hover-bg); }
@@ -224,6 +235,8 @@ if ("serviceWorker" in navigator) {
     <label>Preis von (€) <input type="number" id="price-min" step="0.01" min="0" style="width: 5.5rem;"></label>
     <label>bis (€) <input type="number" id="price-max" step="0.01" min="0" style="width: 5.5rem;"></label>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
+  </div>
+  <div class="controls no-print">
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
     <button type="button" id="load-best-offer-btn">💰 Preisvorschläge laden</button>
@@ -655,11 +668,14 @@ async function loadListings() {
   bulkResults.innerHTML = "";
   // Neue Suche/Status-Filter aendert die zugrundeliegende Angebotsmenge -
   // ein stehen gebliebener "Aufrufe/Preisvorschlaege fuer X von Y geladen"-
-  // Text waere dann irrefuehrend, weil er sich auf die vorherige Auswahl
-  // bezieht (Bugreport des Nutzers: Status blieb bis zum Seiten-Neuladen
-  // sichtbar stehen).
+  // bzw. "X neue/aktualisierte Verkaeufe"-Text waere dann irrefuehrend, weil
+  // er sich auf die vorherige Auswahl bezieht (Bugreport des Nutzers: Status
+  // blieb bis zum Seiten-Neuladen sichtbar stehen - sync-status fehlte hier
+  // urspruenglich noch, obwohl "Verkaeufe synchronisieren" derselben
+  // Buttongruppe angehoert).
   document.getElementById("views-status").textContent = "";
   document.getElementById("best-offer-sync-status").textContent = "";
+  document.getElementById("sync-status").textContent = "";
   try {
     const res = await fetch("/api/ebay/listings?" + params.toString());
     const data = await res.json();
@@ -1906,6 +1922,7 @@ cardTypeFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   document.getElementById("views-status").textContent = "";
   document.getElementById("best-offer-sync-status").textContent = "";
+  document.getElementById("sync-status").textContent = "";
   render(sortedListings());
 });
 
@@ -1913,6 +1930,7 @@ function onPriceRangeFilterChange() {
   currentPage = 0;
   document.getElementById("views-status").textContent = "";
   document.getElementById("best-offer-sync-status").textContent = "";
+  document.getElementById("sync-status").textContent = "";
   render(sortedListings());
 }
 priceMinInput.addEventListener("input", onPriceRangeFilterChange);

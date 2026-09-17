@@ -84,6 +84,24 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Nachbesserungen: Sticky-Kopfzeile, Preisvorschläge im Bearbeiten-Formular &amp; Status-Zeilen
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix (Sticky-Kopfzeile): Die zuvor eingeführte Regel, damit die Tabellenkopfzeile beim Scrollen sichtbar
+      bleibt, griff wegen einer CSS-Eigenheit gar nicht (ein Container mit „overflow-x: auto" erzwingt automatisch
+      auch „overflow-y: auto", was die Kopfzeile an den eigenen, nie scrollenden Tabellen-Container statt an die
+      Seite bindet). Jetzt tatsächlich auf allen Listenseiten wirksam.</li>
+    <li>Bugfix (Preisvorschläge beim Bearbeiten): Das Bearbeiten-Formular für ein bereits veröffentlichtes
+      eBay-Angebot zeigte die Felder „Preisvorschläge aktiv"/„Automatisch akzeptieren/ablehnen" immer leer, obwohl
+      schon Werte gesetzt waren – wer die Checkbox darum erneut ankreuzte, ohne die alten Schwellen zu kennen,
+      löschte sie beim Veröffentlichen versehentlich. Das Formular lädt den aktuellen Stand jetzt vor, genau wie
+      die Ansicht eines schon veröffentlichten Angebots.</li>
+    <li>Bugfix (Status-Zeilen): Das Ergebnis von „Verkäufe synchronisieren" blieb bei einer Such-/Filteränderung auf
+      der eBay-Übersicht stehen, obwohl die anderen beiden Status-Zeilen dort schon geleert wurden.</li>
+    <li>eBay-Übersicht: „Verkäufe synchronisieren" steht jetzt in einer eigenen Zeile zusammen mit „Aufrufe laden"
+      und „Preisvorschläge laden", statt je nach Fensterbreite mal zusammen, mal getrennt zu erscheinen.</li>
+  </ul>
+
   <h2>Bugfix: Preisvorschläge blieben beim Bearbeiten nicht erhalten &amp; UI-Politur
     <span class="date">September 2026</span></h2>
   <ul>
