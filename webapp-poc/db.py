@@ -661,6 +661,7 @@ EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "status", "scheduled_at", "scheduling_mode",
     "ebay_offer_id", "ebay_listing_id", "last_error", "published_at",
     "last_auto_relisted_at", "listing_since", "last_known_views",
+    "best_offer_updated_at",
 }
 EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity", "auto_relist_after_days"}
 EBAY_LISTING_MONEY_FIELDS = {"price"}

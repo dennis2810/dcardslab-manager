@@ -439,7 +439,8 @@ if ("serviceWorker" in navigator) {
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
-    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung) aus-/einblenden und über die Pfeile
+    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung, Preisvorschläge geändert) aus-/einblenden
+    und über die Pfeile
     ▲/▼ (einen Schritt) bzw. ⏮/⏭ (an den Anfang/ans Ende) auch in eine beliebige eigene Reihenfolge bringen –
     die Auswahl wird je Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
     sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
@@ -447,6 +448,10 @@ if ("serviceWorker" in navigator) {
     Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
     (gilt genauso für „👁 Aufrufe laden" unten). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
+    Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
+    (einzeln auf der Kartenseite oder per Massenaktion) – unabhängig von „Zuletzt aktualisiert", das sich nur auf
+    das eigentliche Angebot (Preis, Fotos, Veröffentlichung) bezieht; ein reines Nachladen per „💰 Preisvorschläge
+    laden" zählt nicht als Änderung und aktualisiert diese Spalte daher nicht.
     In der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
     aktiv"-Kästchen) für mehrere ausgewählte Angebote auf einmal setzen, analog zur prozentualen
     Preisanpassung; ein eingetragener Preis aktiviert das Kästchen automatisch, damit die Werte nicht durch ein

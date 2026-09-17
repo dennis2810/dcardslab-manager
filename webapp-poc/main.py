@@ -2656,6 +2656,7 @@ async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(defa
         "best_offer_enabled": enabled,
         "auto_accept_price": auto_accept_price or "",
         "auto_decline_price": auto_decline_price or "",
+        "best_offer_updated_at": datetime.now(timezone.utc).isoformat(),
     })
     return JSONResponse({"ok": True})
 
@@ -2694,6 +2695,7 @@ async def update_ebay_listings_best_offer_bulk(body: dict = Body(...)):
                 "best_offer_enabled": enabled,
                 "auto_accept_price": auto_accept_price or "",
                 "auto_decline_price": auto_decline_price or "",
+                "best_offer_updated_at": datetime.now(timezone.utc).isoformat(),
             })
             results.append({"listing_id": listing_id, "ok": True})
         except Exception as exc:

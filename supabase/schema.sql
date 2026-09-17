@@ -657,3 +657,12 @@ alter table cards add column if not exists is_autograph boolean not null default
 alter table ebay_listings add column if not exists best_offer_enabled boolean not null default false;
 alter table ebay_listings add column if not exists auto_accept_price text default '';
 alter table ebay_listings add column if not exists auto_decline_price text default '';
+
+-- Migration (2026-09-17): eigener Zeitstempel fuer "Preisvorschlaege zuletzt
+-- geaendert", getrennt von published_at ("Zuletzt aktualisiert") - Preis-
+-- vorschlaege sind eine unabhaengige Einstellung, die published_at bewusst
+-- NICHT beruehrt (siehe update_ebay_listing_best_offer()/
+-- update_ebay_listings_best_offer_bulk() in main.py), ein reines Nachladen
+-- vom eBay-Stand (GET .../best-offer, best-offer-sync) zaehlt nicht als
+-- "geaendert" und schreibt hier bewusst nichts.
+alter table ebay_listings add column if not exists best_offer_updated_at timestamptz;
