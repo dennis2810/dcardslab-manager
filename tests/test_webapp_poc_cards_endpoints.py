@@ -1228,6 +1228,24 @@ class CreateCardManualEndpointTests(unittest.TestCase):
         self._post_create()
         mocks["main.db.create_batch"].assert_called_once_with(card_count=1)
 
+    def test_defaults_recognition_status_to_manuell_when_not_set(self):
+        # Ohne KI-Erkennung (Nutzer hat nie "Erkennen" geklickt) blieb
+        # recognition_status bisher leer statt zu zeigen, dass die Karte
+        # manuell erfasst wurde.
+        mocks = self._patch_all()
+        self._post_create(fields={"title": "Max Mustermann"})
+        fields_arg = mocks["main.db.insert_card"].call_args.args[2]
+        self.assertEqual(fields_arg["status"], "Manuell")
+
+    def test_keeps_existing_status_when_already_set(self):
+        # Wurde die Karte doch per KI erkannt (z.B. ueber /api/cards/recognize
+        # vorab) und der Status kam im fields-JSON mit, darf er nicht
+        # ueberschrieben werden.
+        mocks = self._patch_all()
+        self._post_create(fields={"title": "Max Mustermann", "status": "ok"})
+        fields_arg = mocks["main.db.insert_card"].call_args.args[2]
+        self.assertEqual(fields_arg["status"], "ok")
+
     def test_uploads_both_images_at_position_one(self):
         mocks = self._patch_all()
         self._post_create()

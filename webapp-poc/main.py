@@ -503,6 +503,10 @@ async def create_card_manual(
         parsed_fields = json.loads(fields)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="fields muss gueltiges JSON sein.") from exc
+    # Ohne KI-Erkennung (Nutzer hat "Erkennen" nie geklickt oder das Ergebnis
+    # bewusst verworfen und alles selbst eingetippt) bliebe recognition_status
+    # sonst leer statt erkennen zu lassen, dass die Karte manuell erfasst wurde.
+    parsed_fields.setdefault("status", "Manuell")
 
     with tempfile.TemporaryDirectory(prefix="dcardslab_manual_") as tmp_str:
         tmp = Path(tmp_str)
