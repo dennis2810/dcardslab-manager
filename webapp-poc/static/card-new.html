@@ -184,7 +184,7 @@ function showToast(message, isError) {
 
 const FIELDS = [
   ["title", "Titel"], ["category", "Kategorie"], ["theme", "Thema"],
-  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set"],
+  ["team", "Team"], ["manufacturer", "Hersteller"], ["set_name", "Set / Serie"],
   ["season_year", "Saison / Jahr"], ["card_type", "Typ"], ["variant", "Variante"],
   ["position", "Position"], ["squad_number", "Trikotnummer"],
   ["club_debut_season", "Debütsaison"], ["card_number", "Kartennr."],
@@ -385,7 +385,7 @@ function showDuplicateWarning(newCardId, duplicate) {
   box.hidden = false;
 
   const text = document.createElement("p");
-  text.textContent = `⚠ Evtl. bereits vorhanden: Karte #${duplicate.card_no ?? "?"} mit gleichem Titel/Set/Kartennummer.`;
+  text.textContent = `⚠ Evtl. bereits vorhanden: Karte #${duplicate.card_no ?? "?"} mit gleichem Titel, Set / Serie und Kartennummer.`;
   box.appendChild(text);
 
   const link = document.createElement("a");

@@ -229,7 +229,7 @@ if ("serviceWorker" in navigator) {
   </nav>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., SKU, Saison, Tags)">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set / Serie, Kartennr., SKU, Saison / Jahr, Tags)">
     <select id="status">
       <option value="">Alle OCR-Status</option>
       <option value="ok">ok</option>
@@ -260,6 +260,9 @@ if ("serviceWorker" in navigator) {
       <option value="">Sport &amp; Non-Sport</option>
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
+    </select>
+    <select id="category-filter">
+      <option value="">Alle Kategorien</option>
     </select>
     <select id="feature-filter">
       <option value="">Alle Merkmale</option>
@@ -386,7 +389,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="ebay_status" data-col="ebay_status">Verkauf <span class="sort-arrow"></span></th>
             <th data-key="shipped" data-col="shipped">Versand <span class="sort-arrow"></span></th>
             <th data-key="tags" data-col="tags">Tags <span class="sort-arrow"></span></th>
-            <th data-key="set_name" data-col="set_name">Set <span class="sort-arrow"></span></th>
+            <th data-key="set_name" data-col="set_name">Set / Serie <span class="sort-arrow"></span></th>
             <th data-key="card_type" data-col="card_type">Typ <span class="sort-arrow"></span></th>
             <th data-key="variant" data-col="variant">Variante <span class="sort-arrow"></span></th>
             <th data-key="card_number" data-col="card_number">Kartennr. <span class="sort-arrow"></span></th>
@@ -522,7 +525,7 @@ const COLUMN_TOGGLES = [
   { key: "season_year", label: "Saison / Jahr" },
   { key: "recognition_status", label: "Erkennung" },
   { key: "tags", label: "Tags" },
-  { key: "set_name", label: "Set" },
+  { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
   { key: "card_number", label: "Kartennr." },
@@ -728,6 +731,7 @@ const ebayFilterSelect = document.getElementById("ebay-filter");
 const shippingFilterSelect = document.getElementById("shipping-filter");
 const tagFilterSelect = document.getElementById("tag-filter");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
+const categoryFilterSelect = document.getElementById("category-filter");
 const featureFilterSelect = document.getElementById("feature-filter");
 const listingHintFilterSelect = document.getElementById("listing-hint-filter");
 const dateRangeFieldSelect = document.getElementById("date-range-field");
@@ -961,6 +965,7 @@ async function loadCards() {
     selectedIds.clear();
     updateBulkBar();
     populateTagFilter();
+    populateCategoryFilter();
     renderCurrentView();
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -1023,6 +1028,9 @@ function visibleCards() {
   if (cardTypeFilterSelect.value) {
     filtered = filtered.filter((c) => c.listing_type === cardTypeFilterSelect.value);
   }
+  if (categoryFilterSelect.value) {
+    filtered = filtered.filter((c) => (c.category || "") === categoryFilterSelect.value);
+  }
   if (featureFilterSelect.value) {
     filtered = filtered.filter((c) => matchesFeatureFilter(c, featureFilterSelect.value));
   }
@@ -1068,6 +1076,20 @@ function populateTagFilter() {
   tagFilterSelect.innerHTML = '<option value="">Alle Tags</option>' +
     sorted.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
   if (sorted.includes(previous)) tagFilterSelect.value = previous;
+}
+
+// Gleiches Prinzip wie populateTagFilter() - Optionen kommen aus den geladenen
+// Karten, keine eigene Kategorien-Tabelle.
+function populateCategoryFilter() {
+  const previous = categoryFilterSelect.value;
+  const categories = new Set();
+  for (const card of currentCards) {
+    if (card.category) categories.add(card.category);
+  }
+  const sorted = [...categories].sort((a, b) => a.localeCompare(b, "de"));
+  categoryFilterSelect.innerHTML = '<option value="">Alle Kategorien</option>' +
+    sorted.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (sorted.includes(previous)) categoryFilterSelect.value = previous;
 }
 
 function renderCurrentView() {
@@ -1471,6 +1493,10 @@ cardTypeFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });
+categoryFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
 featureFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
@@ -1606,7 +1632,7 @@ const BULK_EDIT_FIELDS = [
   { key: "season_year", label: "Saison / Jahr" },
   { key: "theme", label: "Thema" },
   { key: "manufacturer", label: "Hersteller" },
-  { key: "set_name", label: "Set" },
+  { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
   { key: "position", label: "Position" },
@@ -2102,7 +2128,7 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
+    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set / Serie", "Typ", "Variante", "Position",
     "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
     "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Kaufdatum", "Kaufpreis", "Verkaufsdatum", "Verkaufspreis", "Lagerort",
     "Erkennung", "eBay-Status",
@@ -2153,7 +2179,7 @@ function currentFilterState() {
   return {
     q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
     shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
-    cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc,
+    cardTypeFilter: cardTypeFilterSelect.value, categoryFilter: categoryFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc,
     dateRangeField: dateRangeFieldSelect.value, dateRangeFrom: dateRangeFromInput.value, dateRangeTo: dateRangeToInput.value,
     priceRangeField: priceRangeFieldSelect.value, priceRangeMin: priceRangeMinInput.value, priceRangeMax: priceRangeMaxInput.value,
   };
@@ -2171,6 +2197,8 @@ function applyFilterState(state) {
   // sonst stillschweigend auf die erste Option zurueck statt auf "Alle Tags".
   tagFilterSelect.value =
     state.tagFilter && [...tagFilterSelect.options].some((o) => o.value === state.tagFilter) ? state.tagFilter : "";
+  categoryFilterSelect.value =
+    state.categoryFilter && [...categoryFilterSelect.options].some((o) => o.value === state.categoryFilter) ? state.categoryFilter : "";
   sortKey = state.sortKey || sortKey;
   sortAsc = state.sortAsc !== false;
   setSortIndicator(sortKey);
@@ -2241,7 +2269,7 @@ function saveViewState() {
     sessionStorage.setItem("cardsViewState", JSON.stringify({
       q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
       shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
-      cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc, currentPage,
+      cardTypeFilter: cardTypeFilterSelect.value, categoryFilter: categoryFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc, currentPage,
       dateRangeField: dateRangeFieldSelect.value, dateRangeFrom: dateRangeFromInput.value, dateRangeTo: dateRangeToInput.value,
       priceRangeField: priceRangeFieldSelect.value, priceRangeMin: priceRangeMinInput.value, priceRangeMax: priceRangeMaxInput.value,
       scrollY: window.scrollY,
@@ -2284,6 +2312,9 @@ loadCards().then(() => {
   // Option stillschweigend verworfen.
   if (savedViewState.tagFilter && [...tagFilterSelect.options].some((o) => o.value === savedViewState.tagFilter)) {
     tagFilterSelect.value = savedViewState.tagFilter;
+  }
+  if (savedViewState.categoryFilter && [...categoryFilterSelect.options].some((o) => o.value === savedViewState.categoryFilter)) {
+    categoryFilterSelect.value = savedViewState.categoryFilter;
   }
   currentPage = savedViewState.currentPage || 0;
   renderCurrentView();

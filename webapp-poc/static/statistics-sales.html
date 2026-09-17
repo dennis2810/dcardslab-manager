@@ -207,6 +207,11 @@ if ("serviceWorker" in navigator) {
       </select>
     </label>
   </div>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page-top">&larr; Zurück</button>
+    <span id="page-info-top"></span>
+    <button type="button" id="next-page-top">Weiter &rarr;</button>
+  </div>
   <div class="table-scroll">
     <table id="rows-table" style="display: none;">
         <thead>
@@ -696,9 +701,13 @@ function renderRows() {
   const pageCount = Math.max(1, Math.ceil(allFiltered.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const rows = allFiltered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${allFiltered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  const pageInfoText = `Seite ${currentPage + 1} von ${pageCount} (${allFiltered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("page-info").textContent = pageInfoText;
+  document.getElementById("page-info-top").textContent = pageInfoText;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  document.getElementById("prev-page-top").disabled = currentPage === 0;
+  document.getElementById("next-page-top").disabled = currentPage >= pageCount - 1;
 
   body.innerHTML = "";
   table.style.display = allFiltered.length ? "table" : "none";
@@ -787,14 +796,18 @@ document.getElementById("reset-date-filter").addEventListener("click", () => {
   renderRows();
 });
 
-document.getElementById("prev-page").addEventListener("click", () => {
+function goToPrevPage() {
   currentPage = Math.max(0, currentPage - 1);
   renderRows();
-});
-document.getElementById("next-page").addEventListener("click", () => {
+}
+function goToNextPage() {
   currentPage += 1;
   renderRows();
-});
+}
+document.getElementById("prev-page").addEventListener("click", goToPrevPage);
+document.getElementById("next-page").addEventListener("click", goToNextPage);
+document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
+document.getElementById("next-page-top").addEventListener("click", goToNextPage);
 document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 document.getElementById("csv-btn").addEventListener("click", () => {

@@ -198,7 +198,7 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
 
     def test_imports_rows_and_calls_create_wishlist_item_per_row(self):
         csv_text = (
-            "Titel;Team;Set;Wunschpreis;Notiz\r\n"
+            "Titel;Team;Set / Serie;Wunschpreis;Notiz\r\n"
             "Lionel Messi;PSG;Panini;12.5;Auto gesucht\r\n"
             "Kylian Mbappe;PSG;Topps;;\r\n"
         )
@@ -219,7 +219,7 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
 
     def test_imports_sport_non_sport_column(self):
         csv_text = (
-            "Titel;Team;Set;Wunschpreis;Notiz;Sport/Non-Sport\r\n"
+            "Titel;Team;Set / Serie;Wunschpreis;Notiz;Sport/Non-Sport\r\n"
             "Lionel Messi;PSG;Panini;12.5;;sport\r\n"
         )
         with patch("main.db.create_wishlist_item", return_value={"id": "w1"}) as mock_create:
@@ -231,7 +231,7 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
         })
 
     def test_invalid_amount_is_reported_as_error_and_row_skipped(self):
-        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\nLionel Messi;;;zwölf;\r\n"
+        csv_text = "Titel;Team;Set / Serie;Wunschpreis;Notiz\r\nLionel Messi;;;zwölf;\r\n"
         with patch("main.db.create_wishlist_item") as mock_create:
             response = self._upload(csv_text)
         self.assertEqual(response.status_code, 200)
@@ -242,7 +242,7 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
         mock_create.assert_not_called()
 
     def test_row_without_title_is_reported_as_error_and_skipped(self):
-        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\n;PSG;;;\r\n"
+        csv_text = "Titel;Team;Set / Serie;Wunschpreis;Notiz\r\n;PSG;;;\r\n"
         with patch("main.db.create_wishlist_item") as mock_create:
             response = self._upload(csv_text)
         self.assertEqual(response.status_code, 200)
@@ -253,7 +253,7 @@ class ImportWishlistCsvEndpointTests(unittest.TestCase):
         mock_create.assert_not_called()
 
     def test_fully_empty_row_is_skipped_without_error(self):
-        csv_text = "Titel;Team;Set;Wunschpreis;Notiz\r\n;;;;\r\nLionel Messi;;;;\r\n"
+        csv_text = "Titel;Team;Set / Serie;Wunschpreis;Notiz\r\n;;;;\r\nLionel Messi;;;;\r\n"
         with patch("main.db.create_wishlist_item", return_value={"id": "w1"}) as mock_create:
             response = self._upload(csv_text)
         self.assertEqual(response.status_code, 200)
