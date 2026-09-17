@@ -84,6 +84,20 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Sticky-Kopfzeile funktioniert jetzt wirklich, Nach-oben-Button &amp; UI-Politur
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix (Sticky-Kopfzeile, zweiter Anlauf): Auch die vorherige Korrektur hat nicht ausgereicht – „overflow-x:
+      auto" erzwingt browserseitig immer „overflow-y: auto" auf demselben Element, unabhängig davon, was man selbst
+      für overflow-y einträgt. Die Tabellen auf allen Listenseiten scrollen deshalb jetzt in einer eigenen,
+      begrenzten Box (wie ein Tabellenblatt) statt zusammen mit der ganzen Seite – dafür bleibt die Kopfzeile
+      nachweislich sichtbar.</li>
+    <li>Karten-Detailseite: neuer „↑ Nach oben"-Button unten links, erscheint nach etwas Scrollen – die Seite hat
+      durch die vielen Bereiche (Fotos, eBay, Versand, Verkauf, Preisrecherche, …) inzwischen deutlich zugenommen.</li>
+    <li>eBay-Übersicht: „Kachelansicht"-Button steht jetzt direkt neben dem Preisfilter statt am rechten Rand der
+      Zeile.</li>
+  </ul>
+
   <h2>Nachbesserungen: Sticky-Kopfzeile, Preisvorschläge im Bearbeiten-Formular &amp; Status-Zeilen
     <span class="date">September 2026</span></h2>
   <ul>
