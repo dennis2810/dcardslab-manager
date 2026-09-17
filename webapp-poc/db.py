@@ -1805,6 +1805,78 @@ def statistics_rows():
     return rows
 
 
+def team_sold_holding_day_pairs(team):
+    """Kauf-/Verkaufsdatum-Paare aller bereits vollstaendig abgerechneten
+    (Kosten UND Verkaufspreis bekannt) Karten desselben Teams - fuer die
+    Verkaufsprognose (avg_holding_days) auf der einzelnen Kartenseite
+    (siehe GET /api/cards/{card_id} in main.py). Eigene, auf ein Team
+    eingeschraenkte Variante von statistics_rows()'s Kauf/Verkauf-Joins:
+    statistics_rows() laedt dafuer bisher JEDE Karte der gesamten Sammlung
+    (Karten, Kaeufe, eBay-/manuelle Verkaeufe) nur um am Ende einen
+    einzelnen Team-Durchschnitt herauszugreifen - mit wachsender Sammlung
+    zunehmend teuer fuer eine einzelne Kartenseite. Gibt eine Liste von
+    (purchase_date, sale_date)-Tupeln zurueck; main.py uebernimmt die
+    Datums-Parsing/Mittelwert-Logik (dieselbe Trennung wie bei
+    statistics_rows() selbst - reine Datenzusammenstellung hier, keine
+    Business-Logik)."""
+    if not team:
+        return []
+    cards = (
+        get_client().table("cards").select("id")
+        .eq("team", team).eq("private_collection", False).execute().data
+    )
+    if not cards:
+        return []
+    card_ids = [c["id"] for c in cards]
+
+    items = (
+        get_client().table("purchase_items").select("card_id,purchase_id,allocated_cost")
+        .in_("card_id", card_ids).execute().data
+    )
+    item_by_card = {row["card_id"]: row for row in items}
+    purchase_ids = [row["purchase_id"] for row in items]
+    purchase_date_by_id = {}
+    if purchase_ids:
+        purchases = (
+            get_client().table("purchases").select("id,purchase_date")
+            .in_("id", purchase_ids).execute().data
+        )
+        purchase_date_by_id = {row["id"]: row["purchase_date"] for row in purchases}
+
+    # Wie statistics_rows(): eine Karte hat entweder einen eBay- oder einen
+    # manuellen Verkauf, nie beide - eBay wird bevorzugt, falls trotzdem mal
+    # beide vorlaegen.
+    sale_by_card = {}
+    for row in (
+        get_client().table("ebay_sales").select("card_id,sale_date,gross_price")
+        .in_("card_id", card_ids).order("sale_date", desc=True).execute().data
+    ):
+        sale_by_card.setdefault(row["card_id"], row)
+    for row in (
+        get_client().table("manual_sales").select("card_id,sale_date,gross_price")
+        .in_("card_id", card_ids).execute().data
+    ):
+        sale_by_card.setdefault(row["card_id"], row)
+
+    pairs = []
+    for card_id in card_ids:
+        item = item_by_card.get(card_id)
+        sale = sale_by_card.get(card_id)
+        if item is None or sale is None:
+            continue
+        cost = item.get("allocated_cost")
+        sale_price = sale.get("gross_price")
+        # Gleiche Gate wie _rank_statistics_by()'s "profit is not None":
+        # nur vollstaendig abgerechnete Karten zaehlen fuer die Prognose.
+        if cost is None or sale_price is None:
+            continue
+        purchase_date = purchase_date_by_id.get(item.get("purchase_id"))
+        sale_date = sale.get("sale_date")
+        if purchase_date and sale_date:
+            pairs.append((purchase_date, sale_date))
+    return pairs
+
+
 def save_push_subscription(endpoint, p256dh, auth):
     # Upsert-by-endpoint (unique(endpoint) im Schema) - ein wiederholtes
     # Abo desselben Geraets/Browsers (z. B. nach Cache-Loeschen liefert der

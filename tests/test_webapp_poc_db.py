@@ -3660,6 +3660,94 @@ class StatisticsRowsTests(unittest.TestCase):
         )
 
 
+class TeamSoldHoldingDayPairsTests(unittest.TestCase):
+    """team_sold_holding_day_pairs() is the single-team-scoped alternative
+    to statistics_rows() used by GET /api/cards/{id}'s Verkaufsprognose -
+    it must never fetch cards outside the given team (see the performance
+    reasoning in its docstring)."""
+
+    def _wire(self, mock_client, cards, items, purchases, sales, manual_sales):
+        self.builders = {}
+
+        def table(name):
+            builder = MagicMock()
+            self.builders[name] = builder
+            response = MagicMock()
+            if name == "cards":
+                response.data = cards
+                builder.select.return_value.eq.return_value.eq.return_value.execute.return_value = response
+            elif name == "purchase_items":
+                response.data = items
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            elif name == "purchases":
+                response.data = purchases
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            elif name == "ebay_sales":
+                response.data = sales
+                builder.select.return_value.in_.return_value.order.return_value.execute.return_value = response
+            elif name == "manual_sales":
+                response.data = manual_sales
+                builder.select.return_value.in_.return_value.execute.return_value = response
+            return builder
+        mock_client.table.side_effect = table
+
+    def test_returns_empty_list_without_a_team(self):
+        self.assertEqual(db.team_sold_holding_day_pairs(""), [])
+        self.assertEqual(db.team_sold_holding_day_pairs(None), [])
+
+    def test_returns_empty_list_when_team_has_no_cards(self):
+        mock_client = MagicMock()
+        self._wire(mock_client, cards=[], items=[], purchases=[], sales=[], manual_sales=[])
+        with patch("db.get_client", return_value=mock_client):
+            self.assertEqual(db.team_sold_holding_day_pairs("FC Bayern"), [])
+
+    def test_pairs_only_cards_with_both_cost_and_sale_price(self):
+        mock_client = MagicMock()
+        self._wire(
+            mock_client,
+            cards=[{"id": "card-1"}, {"id": "card-2"}, {"id": "card-3"}],
+            items=[
+                {"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 10.0},
+                # card-2 has a purchase but no allocated_cost yet - should
+                # not count as a completed sale for the average.
+                {"card_id": "card-2", "purchase_id": "p2", "allocated_cost": None},
+            ],
+            purchases=[
+                {"id": "p1", "purchase_date": "2026-01-01"},
+                {"id": "p2", "purchase_date": "2026-01-05"},
+            ],
+            sales=[{"card_id": "card-1", "sale_date": "2026-01-11", "gross_price": 15.0}],
+            manual_sales=[{"card_id": "card-2", "sale_date": "2026-01-20", "gross_price": 8.0}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            pairs = db.team_sold_holding_day_pairs("FC Bayern")
+        # card-1 fully qualifies (cost + sale_price + both dates); card-2 has
+        # a sale but no allocated cost; card-3 has neither purchase nor sale.
+        self.assertEqual(pairs, [("2026-01-01", "2026-01-11")])
+
+    def test_prefers_ebay_sale_over_manual_sale_when_both_exist(self):
+        mock_client = MagicMock()
+        self._wire(
+            mock_client,
+            cards=[{"id": "card-1"}],
+            items=[{"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 10.0}],
+            purchases=[{"id": "p1", "purchase_date": "2026-01-01"}],
+            sales=[{"card_id": "card-1", "sale_date": "2026-01-11", "gross_price": 15.0}],
+            manual_sales=[{"card_id": "card-1", "sale_date": "2026-05-01", "gross_price": 12.0}],
+        )
+        with patch("db.get_client", return_value=mock_client):
+            pairs = db.team_sold_holding_day_pairs("FC Bayern")
+        self.assertEqual(pairs, [("2026-01-01", "2026-01-11")])
+
+    def test_scopes_the_cards_query_to_the_given_team(self):
+        mock_client = MagicMock()
+        self._wire(mock_client, cards=[], items=[], purchases=[], sales=[], manual_sales=[])
+        with patch("db.get_client", return_value=mock_client):
+            db.team_sold_holding_day_pairs("FC Bayern")
+        mock_client.table.assert_any_call("cards")
+        self.builders["cards"].select.return_value.eq.assert_called_once_with("team", "FC Bayern")
+
+
 class CreateReminderTests(unittest.TestCase):
     def test_inserts_reminder_row(self):
         mock_client = MagicMock()
