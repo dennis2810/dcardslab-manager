@@ -42,7 +42,11 @@ if ("serviceWorker" in navigator) {
     --danger-bg: #3a1f1d; --danger-fg: #f28b82; --neutral-bg: #333; --neutral-fg: #ccc;
     --info-bg: #1d3358; --info-fg: #9ec3ff; }
   :root[data-theme="light"] { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  /* Tabellenlastige Seite - mehr Platz auf breiten Bildschirmen (Klaerung mit
+     dem Nutzer, einheitlich mit cards.html/ebay.html). Auf schmalen
+     Bildschirmen wirkt max-width nur als Obergrenze, dort bleibt die Seite
+     wie zuvor volle Breite. */
+  body { font-family: system-ui, sans-serif; max-width: 1600px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
