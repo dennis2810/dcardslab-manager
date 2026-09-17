@@ -168,6 +168,59 @@ class SignedUrlTests(unittest.TestCase):
         )
 
 
+class SignedUrlsTests(unittest.TestCase):
+    """Batched signed_url() - one Storage API call for many paths at once,
+    used by list views (see main.py's _attach_signed_urls_many() and the
+    _expand_*() helpers) so their load time no longer scales with how many
+    rows/images they show."""
+
+    def test_returns_a_url_per_resolved_path(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_urls.return_value = [
+            {"path": "b1/1_front.jpg", "signedURL": "https://signed/1", "error": None},
+            {"path": "b1/2_front.jpg", "signedURL": "https://signed/2", "error": None},
+        ]
+        with patch("storage.get_client", return_value=mock_client):
+            urls = storage.signed_urls(["b1/1_front.jpg", "b1/2_front.jpg"])
+        self.assertEqual(urls, {"b1/1_front.jpg": "https://signed/1", "b1/2_front.jpg": "https://signed/2"})
+        mock_client.storage.from_.return_value.create_signed_urls.assert_called_once_with(
+            ["b1/1_front.jpg", "b1/2_front.jpg"], 3600
+        )
+
+    def test_omits_paths_the_api_reports_an_error_for(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_urls.return_value = [
+            {"path": "b1/1_front.jpg", "signedURL": "https://signed/1", "error": None},
+            {"path": "missing.jpg", "signedURL": None, "error": "not_found"},
+        ]
+        with patch("storage.get_client", return_value=mock_client):
+            urls = storage.signed_urls(["b1/1_front.jpg", "missing.jpg"])
+        self.assertEqual(urls, {"b1/1_front.jpg": "https://signed/1"})
+
+    def test_drops_falsy_and_duplicate_paths_before_calling_the_api(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_urls.return_value = [
+            {"path": "b1/1_front.jpg", "signedURL": "https://signed/1", "error": None},
+        ]
+        with patch("storage.get_client", return_value=mock_client):
+            storage.signed_urls(["b1/1_front.jpg", None, "", "b1/1_front.jpg"])
+        mock_client.storage.from_.return_value.create_signed_urls.assert_called_once_with(
+            ["b1/1_front.jpg"], 3600
+        )
+
+    def test_returns_empty_dict_without_calling_the_api_for_no_paths(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            self.assertEqual(storage.signed_urls([]), {})
+        mock_client.storage.from_.assert_not_called()
+
+    def test_whole_request_failure_returns_empty_dict_instead_of_raising(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_urls.side_effect = RuntimeError("bucket down")
+        with patch("storage.get_client", return_value=mock_client):
+            self.assertEqual(storage.signed_urls(["b1/1_front.jpg"]), {})
+
+
 class PublicUrlTests(unittest.TestCase):
     def test_builds_public_storage_url(self):
         mock_client = MagicMock()

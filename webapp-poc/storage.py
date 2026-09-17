@@ -70,6 +70,27 @@ def signed_url(object_path, expires_in=3600):
     return response["signedURL"]
 
 
+def signed_urls(object_paths, expires_in=3600):
+    """Batched version of signed_url() - one Storage API request for many
+    object paths instead of one request per path. List views (cards.html,
+    inventory.html, purchase.html, ebay.html) render a thumbnail per row;
+    calling signed_url() once per row made each of those pages' load time
+    scale directly with how many rows they show, worse the larger the
+    collection got. Returns {object_path: url}, only for paths that
+    actually resolved - a path Storage reports an error for (or the whole
+    request failing, e.g. a transient hiccup) is simply left out, the same
+    "no image available" fallback callers already use for a single
+    signed_url() call raising."""
+    object_paths = list(dict.fromkeys(p for p in object_paths if p))
+    if not object_paths:
+        return {}
+    try:
+        results = get_client().storage.from_(BUCKET).create_signed_urls(object_paths, expires_in)
+    except Exception:
+        return {}
+    return {item["path"]: item["signedURL"] for item in results if not item.get("error")}
+
+
 def public_url(object_path):
     """Builds the permanent, unsigned Storage URL - only meaningful while
     BUCKET is public-read (see supabase/README.md). Used only for handing an
