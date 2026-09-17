@@ -56,10 +56,18 @@ if ("serviceWorker" in navigator) {
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
-  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
-  .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
+     form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
+     Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
+     diese eigentlich unabhaengige Navigations-Suche durchsickern lassen -
+     dieselbe Hoehe wie das Seiten-Auswahlfeld allein reicht dafuer nicht,
+     weil der zusaetzliche Rand die Box im Flex-Layout nach oben/unten
+     verschiebt (Bugreport des Nutzers: Suchfeld nicht auf gleicher Hoehe
+     wie das Feld daneben). */
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -197,6 +205,7 @@ if ("serviceWorker" in navigator) {
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
         <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
@@ -209,7 +218,6 @@ if ("serviceWorker" in navigator) {
         <option value="wishlist.html">Wunschliste</option>
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
-        <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
@@ -373,7 +381,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="ebay_sku" data-col="ebay_sku">SKU <span class="sort-arrow"></span></th>
             <th data-key="title" data-col="title">Titel <span class="sort-arrow"></span></th>
             <th data-key="team" data-col="team">Team <span class="sort-arrow"></span></th>
-            <th data-key="season_year" data-col="season_year">Saison <span class="sort-arrow"></span></th>
+            <th data-key="season_year" data-col="season_year">Saison / Jahr <span class="sort-arrow"></span></th>
             <th data-key="recognition_status" data-col="recognition_status">Erkennung <span class="sort-arrow"></span></th>
             <th data-key="ebay_status" data-col="ebay_status">Verkauf <span class="sort-arrow"></span></th>
             <th data-key="shipped" data-col="shipped">Versand <span class="sort-arrow"></span></th>
@@ -511,7 +519,7 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
 // erster Position - weder aus- noch umsortierbar.
 const COLUMN_TOGGLES = [
   { key: "team", label: "Team" },
-  { key: "season_year", label: "Saison" },
+  { key: "season_year", label: "Saison / Jahr" },
   { key: "recognition_status", label: "Erkennung" },
   { key: "tags", label: "Tags" },
   { key: "set_name", label: "Set" },
@@ -1595,7 +1603,7 @@ document.getElementById("bulk-unmark-shipped").addEventListener("click", () => b
 // daher absichtlich in der Auswahl.
 const BULK_EDIT_FIELDS = [
   { key: "team", label: "Team" },
-  { key: "season_year", label: "Saison" },
+  { key: "season_year", label: "Saison / Jahr" },
   { key: "theme", label: "Thema" },
   { key: "manufacturer", label: "Hersteller" },
   { key: "set_name", label: "Set" },
@@ -2094,7 +2102,7 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
+    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
     "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
     "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Kaufdatum", "Kaufpreis", "Verkaufsdatum", "Verkaufspreis", "Lagerort",
     "Erkennung", "eBay-Status",

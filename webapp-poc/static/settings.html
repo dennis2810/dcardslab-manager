@@ -24,15 +24,27 @@ if ("serviceWorker" in navigator) {
   :root { color-scheme: light dark; }
   :root[data-theme="dark"] { color-scheme: dark; }
   :root[data-theme="light"] { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  /* Breiter als die urspruenglichen 700px (Bugreport des Nutzers: Seite
+     wirkte zu schmal) - die vielen Abschnitte/Formulare und die
+     Textbaustein-Tabelle profitieren von mehr Platz, ohne die volle Breite
+     der Tabellenseiten (ebay.html/cards.html) zu brauchen. */
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
-  .page-nav label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
-  .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
+     form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
+     Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
+     diese eigentlich unabhaengige Navigations-Suche durchsickern lassen -
+     dieselbe Hoehe wie das Seiten-Auswahlfeld allein reicht dafuer nicht,
+     weil der zusaetzliche Rand die Box im Flex-Layout nach oben/unten
+     verschiebt (Bugreport des Nutzers: Suchfeld nicht auf gleicher Hoehe
+     wie das Feld daneben). */
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -85,9 +97,18 @@ if ("serviceWorker" in navigator) {
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  /* Springt an den Seitenanfang - bei der Menge an Abschnitten wird diese
+     Seite ziemlich lang (gleiches Prinzip wie auf card.html). Links unten
+     statt rechts unten, damit er sich nicht mit #toast-container
+     ueberschneidet; erscheint erst nach ein wenig Scrollen. */
+  #back-to-top-btn { position: fixed; bottom: 1rem; left: 1rem; z-index: 900; padding: 0.5rem 0.9rem; border-radius: 999px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
+  @media print {
+    #back-to-top-btn { display: none !important; }
+  }
 </style>
 </head>
 <body>
+  <button type="button" id="back-to-top-btn" class="no-print" aria-label="Nach oben" hidden>↑ Nach oben</button>
   <div class="page-header">
     <h1>Einstellungen</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
@@ -96,6 +117,7 @@ if ("serviceWorker" in navigator) {
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
         <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
@@ -108,7 +130,6 @@ if ("serviceWorker" in navigator) {
         <option value="wishlist.html">Wunschliste</option>
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
-        <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
@@ -1307,6 +1328,15 @@ templateFormCancel.addEventListener("click", resetTemplateForm);
 loadSheetsStatus();
 loadBackupStatus();
 loadTemplates();
+
+(function initBackToTop() {
+  const btn = document.getElementById("back-to-top-btn");
+  if (!btn) return;
+  window.addEventListener("scroll", () => {
+    btn.hidden = window.scrollY < 400;
+  });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+})();
 </script>
 </body>
 </html>

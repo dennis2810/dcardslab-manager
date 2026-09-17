@@ -36,10 +36,18 @@ if ("serviceWorker" in navigator) {
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
-  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
-  .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
+     form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
+     Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
+     diese eigentlich unabhaengige Navigations-Suche durchsickern lassen -
+     dieselbe Hoehe wie das Seiten-Auswahlfeld allein reicht dafuer nicht,
+     weil der zusaetzliche Rand die Box im Flex-Layout nach oben/unten
+     verschiebt (Bugreport des Nutzers: Suchfeld nicht auf gleicher Hoehe
+     wie das Feld daneben). */
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -112,6 +120,7 @@ if ("serviceWorker" in navigator) {
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
         <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
@@ -124,7 +133,6 @@ if ("serviceWorker" in navigator) {
         <option value="wishlist.html">Wunschliste</option>
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
-        <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
@@ -156,6 +164,11 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <p id="status-msg">Lädt …</p>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page-top">&larr; Zurück</button>
+    <span id="page-info-top"></span>
+    <button type="button" id="next-page-top">Weiter &rarr;</button>
+  </div>
   <div class="table-scroll">
     <table id="items-table" style="display: none;">
       <thead>
@@ -221,6 +234,7 @@ const body = document.getElementById("items-body");
 const empty = document.getElementById("items-empty");
 const qInput = document.getElementById("q");
 const pageInfo = document.getElementById("page-info");
+const pageInfoTop = document.getElementById("page-info-top");
 
 let PAGE_SIZE = 40;
 let CSV_DELIMITER = ";";
@@ -433,9 +447,13 @@ function render() {
   const visible = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   currentPageCards = visible;
   selectAllCheckbox.checked = visible.length > 0 && visible.every((c) => selectedIds.has(c.id));
-  pageInfo.textContent = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
+  const pageInfoText = sorted.length ? `Seite ${currentPage + 1} von ${pageCount} (${sorted.length} Einträge)` : "";
+  pageInfo.textContent = pageInfoText;
+  pageInfoTop.textContent = pageInfoText;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  document.getElementById("prev-page-top").disabled = currentPage === 0;
+  document.getElementById("next-page-top").disabled = currentPage >= pageCount - 1;
 
   for (const th of document.querySelectorAll("th[data-key]")) {
     const arrow = th.querySelector(".sort-arrow");
@@ -520,14 +538,18 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(loadCards, 300);
 });
 
-document.getElementById("prev-page").addEventListener("click", () => {
+function goToPrevPage() {
   currentPage = Math.max(0, currentPage - 1);
   render();
-});
-document.getElementById("next-page").addEventListener("click", () => {
+}
+function goToNextPage() {
   currentPage += 1;
   render();
-});
+}
+document.getElementById("prev-page").addEventListener("click", goToPrevPage);
+document.getElementById("next-page").addEventListener("click", goToNextPage);
+document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
+document.getElementById("next-page-top").addEventListener("click", goToNextPage);
 document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
