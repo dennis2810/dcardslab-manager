@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DCardLabs – Karten</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="assets/icon-192.png">
@@ -885,7 +886,10 @@ function renderList(cards) {
     tr.appendChild(titleTd);
 
     const teamTd = document.createElement("td");
-    teamTd.textContent = card.team || "";
+    // Non-Sport-Karten (Marvel, Pokemon, ...) haben kein Team - category
+    // traegt dort das Franchise (siehe ai_card_recognition.py), sonst
+    // bliebe die Spalte fuer diese Karten einfach leer.
+    teamTd.textContent = card.team || card.category || "";
     tr.appendChild(teamTd);
 
     const seasonTd = document.createElement("td");
