@@ -67,6 +67,30 @@ class GenerateTitleTests(unittest.TestCase):
         self.assertIn("Parallel", title)
         self.assertIn("Blue Prizm", title)
 
+    def test_drops_manufacturer_when_already_in_set_name(self):
+        # Der Hersteller steht manchmal schon selbst im Set-Namen (z.B.
+        # "Topps" in "Topps Finest UEFA Club Competitions") - dann nicht
+        # zusaetzlich separat zeigen (keine Dopplung "Topps Topps Finest...").
+        title = ebay_listing.generate_title(
+            _card(manufacturer="Topps", set_name="Topps Finest UEFA Club Competitions", category="Fußball")
+        )
+        self.assertIn("Topps Finest UEFA Club Competitions", title)
+        self.assertEqual(title.count("Topps"), 1)
+
+    def test_abbreviates_autograph_in_variant_to_auto(self):
+        title = ebay_listing.generate_title(_card(variant="Autograph"))
+        self.assertIn("Auto", title)
+        self.assertNotIn("Autograph", title)
+
+    def test_abbreviates_rookie_card_in_card_type_to_rc(self):
+        title = ebay_listing.generate_title(_card(card_type="Rookie Card"))
+        self.assertIn("RC", title)
+        self.assertNotIn("Rookie", title)
+
+    def test_does_not_duplicate_auto_when_variant_already_says_autograph(self):
+        title = ebay_listing.generate_title(_card(variant="Autograph", is_autograph=True))
+        self.assertEqual(title.count("Auto"), 1)
+
     def test_skips_empty_fields(self):
         title = ebay_listing.generate_title(_card(manufacturer=""))
         self.assertNotIn("  ", title)
