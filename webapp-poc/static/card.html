@@ -209,12 +209,21 @@ if ("serviceWorker" in navigator) {
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  /* Springt an den Seitenanfang - bei der Menge an Bereichen (Fotos, eBay,
+     Tracking, Verkauf, Preisrecherche, ...) wird diese Seite pro Karte
+     ziemlich lang (Bugreport des Nutzers: "gibt es eine Moeglichkeit, wie
+     man schnell nach oben kommt?"). Links unten statt rechts unten, damit er
+     sich nicht mit #toast-container ueberschneidet; erscheint erst nach ein
+     wenig Scrollen (siehe initBackToTop()), statt dauerhaft die Kopfzeile zu
+     ueberlagern. */
+  #back-to-top-btn { position: fixed; bottom: 1rem; left: 1rem; z-index: 900; padding: 0.5rem 0.9rem; border-radius: 999px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
   @media print {
-    .page-nav, #back-to-cards, #back-to-ebay, #prev-next-nav, #toast-container, button, input[type="file"] { display: none !important; }
+    .page-nav, #back-to-cards, #back-to-ebay, #prev-next-nav, #toast-container, #back-to-top-btn, button, input[type="file"] { display: none !important; }
   }
 </style>
 </head>
 <body>
+  <button type="button" id="back-to-top-btn" class="no-print" aria-label="Nach oben" hidden>↑ Nach oben</button>
   <div class="page-header">
     <h1>Karte bearbeiten</h1>
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
@@ -4472,6 +4481,15 @@ function renderSaleStats(purchase, sale) {
 
   return wrapper;
 }
+
+(function initBackToTop() {
+  const btn = document.getElementById("back-to-top-btn");
+  if (!btn) return;
+  window.addEventListener("scroll", () => {
+    btn.hidden = window.scrollY < 400;
+  });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+})();
 </script>
 </body>
 </html>

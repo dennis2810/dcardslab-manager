@@ -94,7 +94,13 @@ if ("serviceWorker" in navigator) {
   .manual-sale-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .shipped-badge { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; margin-top: 0.2rem; background: var(--info-bg); color: var(--info-fg); }
   .imported-badge { display: inline-block; font-size: 0.8rem; margin-top: 0.2rem; margin-left: 0.15rem; cursor: help; }
-  .list { width: 100%; border-collapse: collapse; }
+  /* border-collapse: collapse verhindert "position: sticky" auf <th>-Zellen
+     in allen gaengigen Browsern (dokumentierte CSS-Einschraenkung) - deshalb
+     separate statt collapse; border-spacing: 0 verhindert Luecken zwischen
+     Zellen, und da th/td ohnehin nur border-bottom setzen (keine seitlichen
+     Rahmen), sieht das Ergebnis identisch aus (Bugreport des Nutzers:
+     Kopfzeile blieb trotz overflow-y-Fix weiterhin nicht stehen). */
+  .list { width: 100%; border-collapse: separate; border-spacing: 0; }
   .list th, .list td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; }
   body.compact .list th, body.compact .list td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   body.compact .list img { width: 32px; height: 32px; }
@@ -156,14 +162,22 @@ if ("serviceWorker" in navigator) {
   @media print {
     .no-print { display: none !important; }
   }
-  /* overflow-y muss explizit "visible" bleiben, sonst erzwingt der Browser
-     laut Spec (overflow-x != visible, overflow-y nicht gesetzt) automatisch
-     overflow-y: auto - .table-scroll wuerde dann selbst zum Sticky-Bezugs-
-     rahmen statt der Seite, dessen Scrollbereich aber exakt tabellenhoch ist
-     und nie intern scrollt, wodurch "position: sticky" unten nie ausgeloest
-     wird (Bugreport des Nutzers: Kopfzeile blieb trotz Sticky-Regel nicht
-     stehen). */
-  .table-scroll { overflow-x: auto; overflow-y: visible; }
+  /* overflow-x: auto erzwingt laut CSS-Spec automatisch auch overflow-y:
+     auto als BENUTZTEN Wert, sobald overflow-x nicht "visible" ist - ein
+     explizites overflow-y: visible aendert daran nichts (per
+     getComputedStyle verifiziert, das war der Fehler im ersten Versuch
+     dieses Fixes). .table-scroll wird dadurch ohnehin zum Sticky-
+     Bezugsrahmen - ohne eigene Hoehe waechst die Box aber immer exakt auf
+     Tabellenhoehe mit und scrollt nie intern, wodurch "position: sticky"
+     nie ausgeloest wird. Deshalb hier eine echte, begrenzte Scroll-Box:
+     die Tabelle bekommt bei vielen Zeilen einen eigenen Scrollbalken statt
+     die ganze Seite scrollen zu lassen, dafuer bleibt die Kopfzeile beim
+     Scrollen tatsaechlich sichtbar (mit Playwright verifiziert; siehe auch
+     die border-collapse-Regel auf .list oben - collapse verhindert Sticky
+     auf <th> zusaetzlich, unabhaengig hiervon). Bugreport des Nutzers:
+     Kopfzeile blieb trotz vorheriger overflow-y-Aenderung weiterhin nicht
+     stehen. */
+  .table-scroll { overflow-x: auto; overflow-y: auto; max-height: 70vh; }
   /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
      Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
      Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */

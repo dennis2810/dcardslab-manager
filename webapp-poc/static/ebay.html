@@ -86,7 +86,13 @@ if ("serviceWorker" in navigator) {
      farbe (passt sich automatisch an Dark Mode an, ohne eigene Variable). */
   #bulk-actions:not([hidden]) { position: sticky; top: 0; z-index: 10; background: Canvas; padding: 0.5rem 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
   input, select { padding: 0.4rem 0.6rem; font-size: 1rem; }
-  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+  /* border-collapse: collapse verhindert "position: sticky" auf <th>-
+     Zellen in allen gaengigen Browsern (dokumentierte CSS-Einschraenkung) -
+     deshalb separate statt collapse; border-spacing: 0 verhindert Luecken
+     zwischen Zellen, und da th/td ohnehin nur border-bottom setzen (keine
+     seitlichen Rahmen), sieht das Ergebnis identisch aus (Bugreport des
+     Nutzers: Kopfzeile blieb trotz overflow-y-Fix weiterhin nicht stehen). */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
   /* Kompakt-Ansicht (Einstellungen) - dichtere Zeilen, kein gemeinsames CSS
      ueber alle Seiten hinweg, daher pro Seite einzeln ergaenzt. */
@@ -139,14 +145,21 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   #bulk-results, #sync-status { margin-top: 0.75rem; font-size: 0.9rem; }
   #bulk-results ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
-  /* overflow-y muss explizit "visible" bleiben, sonst erzwingt der Browser
-     laut Spec (overflow-x != visible, overflow-y nicht gesetzt) automatisch
-     overflow-y: auto - .table-scroll wuerde dann selbst zum Sticky-Bezugs-
-     rahmen statt der Seite, dessen Scrollbereich aber exakt tabellenhoch ist
-     und nie intern scrollt, wodurch "position: sticky" unten nie ausgeloest
-     wird (Bugreport des Nutzers: Kopfzeile blieb trotz Sticky-Regel nicht
-     stehen). */
-  .table-scroll { overflow-x: auto; overflow-y: visible; }
+  /* overflow-x: auto erzwingt laut CSS-Spec automatisch auch overflow-y:
+     auto als BENUTZTEN Wert, sobald overflow-x nicht "visible" ist - ein
+     explizites overflow-y: visible aendert daran nichts (per
+     getComputedStyle verifiziert, das war der Fehler im ersten Versuch
+     dieses Fixes). .table-scroll wird dadurch ohnehin zum Sticky-
+     Bezugsrahmen - ohne eigene Hoehe waechst die Box aber immer exakt auf
+     Tabellenhoehe mit und scrollt nie intern, wodurch "position: sticky"
+     nie ausgeloest wird. Deshalb hier eine echte, begrenzte Scroll-Box:
+     die Tabelle bekommt bei vielen Zeilen einen eigenen Scrollbalken statt
+     die ganze Seite scrollen zu lassen, dafuer bleibt die Kopfzeile beim
+     Scrollen tatsaechlich sichtbar (mit Playwright verifiziert; siehe auch
+     die border-collapse-Regel unten - collapse verhindert Sticky auf <th>
+     zusaetzlich, unabhaengig hiervon). Bugreport des Nutzers: Kopfzeile
+     blieb trotz vorheriger overflow-y-Aenderung weiterhin nicht stehen. */
+  .table-scroll { overflow-x: auto; overflow-y: auto; max-height: 70vh; }
   /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
      Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
      Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
@@ -155,14 +168,13 @@ if ("serviceWorker" in navigator) {
      zusaetzlich zur Tabelle, nicht als Ersatz (Bulk-Aktionen/Sortierung
      bleiben tabellenspezifisch). */
   #listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
-  /* Oben rechts neben dem Sport/Non-Sport-Filter statt unten bei der
-     Pagination - schiebt sich selbst nach rechts (gleiches Prinzip wie
-     .seller-hub-link). Sync-/Lade-Buttons stehen bewusst in einer eigenen
-     .controls-Zeile darunter (statt in dieser), damit sie beim Umbruch nicht
-     durch Fensterbreite mal zusammen, mal einzeln landen (Bugreport des
-     Nutzers: "Verkäufe synchronisieren" wirkte von "Aufrufe laden"/
-     "Preisvorschläge laden" getrennt). */
-  #view-toggle { margin-left: auto; }
+  /* Direkt neben dem Preisfilter statt an den rechten Rand der Controls-
+     Zeile geschoben (Bugreport des Nutzers: Button sollte naeher an "Preis
+     bis" stehen statt weit rechts). Sync-/Lade-Buttons stehen bewusst in
+     einer eigenen .controls-Zeile darunter (statt in dieser), damit sie
+     beim Umbruch nicht durch Fensterbreite mal zusammen, mal einzeln landen
+     (Bugreport des Nutzers: "Verkäufe synchronisieren" wirkte von "Aufrufe
+     laden"/"Preisvorschläge laden" getrennt). */
   .listing-tile { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem; cursor: pointer; }
   .listing-tile:hover { background: var(--hover-bg); }
   .listing-tile img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: var(--placeholder-bg); }
