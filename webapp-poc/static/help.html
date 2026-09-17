@@ -31,10 +31,18 @@ if ("serviceWorker" in navigator) {
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
-  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
-  .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
+     form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
+     Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
+     diese eigentlich unabhaengige Navigations-Suche durchsickern lassen -
+     dieselbe Hoehe wie das Seiten-Auswahlfeld allein reicht dafuer nicht,
+     weil der zusaetzliche Rand die Box im Flex-Layout nach oben/unten
+     verschiebt (Bugreport des Nutzers: Suchfeld nicht auf gleicher Hoehe
+     wie das Feld daneben). */
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -64,6 +72,7 @@ if ("serviceWorker" in navigator) {
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
         <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
@@ -76,7 +85,6 @@ if ("serviceWorker" in navigator) {
         <option value="wishlist.html">Wunschliste</option>
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
-        <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
@@ -174,7 +182,7 @@ if ("serviceWorker" in navigator) {
     bzw. ⏮/⏭ (an den Anfang/ans Ende) auch in eine beliebige eigene Reihenfolge bringen – die Auswahl wird je
     Browser gemerkt, unabhängig von den unten beschriebenen benannten Filter-Ansichten. Bei einer
     Mehrfachauswahl steht in der Massenaktionen-Leiste außerdem ein Auswahlfeld „Feld ändern" zur Verfügung (Team,
-    Saison, Thema, Hersteller, Set, Typ, Variante, Position, Kategorie, Trikotnummer, Debütsaison, Tags sowie
+    Saison / Jahr, Thema, Hersteller, Set, Typ, Variante, Position, Kategorie, Trikotnummer, Debütsaison, Tags sowie
     RC/Nummeriert/Auto als Ja/Nein-Auswahl) – Wert eintragen, „Übernehmen" klicken, und alle
     ausgewählten Karten übernehmen ihn (z. B. praktisch, wenn ein größerer Posten Karten derselben Serie/Saison
     gescannt oder manuell angelegt wurde). Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch einer
@@ -756,8 +764,8 @@ if ("serviceWorker" in navigator) {
     <li>Die Tabellenkopfzeile bleibt beim Scrollen sichtbar (die Tabelle scrollt dafür in einer eigenen, begrenzten
       Box statt zusammen mit der ganzen Seite), und die Seiten-vor/-zurück-Buttons gibt es zusätzlich zur Version
       unterhalb der Tabelle auch direkt oberhalb – man muss also nicht erst nach oben scrollen, um zu blättern.</li>
-    <li>Auf der Karten-Detailseite springt ein „↑ Nach oben"-Button unten links (erscheint nach etwas Scrollen)
-      direkt an den Seitenanfang zurück.</li>
+    <li>Auf der Karten-Detailseite und den Einstellungen springt ein „↑ Nach oben"-Button unten links (erscheint
+      nach etwas Scrollen) direkt an den Seitenanfang zurück.</li>
     <li>Das Tool lässt sich als App auf dem Homescreen installieren (PWA) – im Browser-Menü nach „Zum
       Startbildschirm hinzufügen" bzw. „App installieren" suchen.</li>
     <li>Löschen (Karte, Kauf, einzelner Preisrecherche-Eintrag, Massenlöschen bei Käufen) sowie das

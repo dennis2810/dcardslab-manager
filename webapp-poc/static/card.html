@@ -50,10 +50,18 @@ if ("serviceWorker" in navigator) {
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
-  .page-nav label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; }
+  .page-nav label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
-  .nav-search { display: flex; gap: 0.4rem; }
-  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+  /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
+     form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
+     Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
+     diese eigentlich unabhaengige Navigations-Suche durchsickern lassen -
+     dieselbe Hoehe wie das Seiten-Auswahlfeld allein reicht dafuer nicht,
+     weil der zusaetzliche Rand die Box im Flex-Layout nach oben/unten
+     verschiebt (Bugreport des Nutzers: Suchfeld nicht auf gleicher Hoehe
+     wie das Feld daneben). */
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -156,6 +164,17 @@ if ("serviceWorker" in navigator) {
   .ebay-form textarea { grid-column: 1 / -1; min-height: 4rem; }
   .ebay-aspects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .ebay-aspects label { flex: 1 1 160px; }
+  /* Saison/Jahr + Veroeffentlichen-am in einer gemeinsamen, schmaleren Zeile
+     statt eines vollbreiten Aspects-Feldes bzw. einer eigenen Grid-Spalte
+     (Bugreport des Nutzers: beide Felder waren unnoetig breit). */
+  .ebay-schedule-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .ebay-schedule-row label { flex: 0 1 200px; }
+  /* Volle Breite statt einer einzelnen Grid-Spalte, damit die Checkbox oben
+     (per flex-basis: 100% unten) und die beiden Preisfelder darunter genug
+     Platz haben (Bugreport des Nutzers: Preisvorschlaege-Checkbox stand
+     bisher unpassend zwischen den beiden Preisfeldern). */
+  .ebay-best-offer { grid-column: 1 / -1; }
+  .ebay-best-offer > label:first-child { flex-basis: 100%; }
   .ebay-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
   .ebay-readonly dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; margin: 0 0 0.75rem; }
   .ebay-readonly dt { font-weight: 600; }
@@ -236,6 +255,7 @@ if ("serviceWorker" in navigator) {
     <label>Seite
       <select id="page-nav-select">
         <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
         <option value="dashboard.html">Dashboard</option>
         <option value="index.html">Scan</option>
         <option value="cards.html">Karten</option>
@@ -248,7 +268,6 @@ if ("serviceWorker" in navigator) {
         <option value="wishlist.html">Wunschliste</option>
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
-        <option value="search.html">Suche</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
@@ -447,7 +466,7 @@ const FIELDS = [
   ["team", "Team", "Team/Verein, wie auf der Karte angegeben"],
   ["manufacturer", "Hersteller", "Kartenhersteller (z. B. Topps, Panini)"],
   ["set_name", "Set", "Set-/Serienname"],
-  ["season_year", "Saison", "Saison oder Jahr (z. B. \"2024\" oder \"2024/25\")"],
+  ["season_year", "Saison / Jahr", "Saison oder Jahr (z. B. \"2024\" oder \"2024/25\")"],
   ["card_type", "Typ", "Parallel-/Variantenbezeichnung (z. B. Gold, Silver, Base, Insert)"],
   ["variant", "Variante", "Weitere Variantenangabe, falls von Typ verschieden"],
   ["position", "Position", "Spielposition, falls auf der Karte vermerkt"],
@@ -3498,6 +3517,11 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   aspectsTitle.textContent = "Aspects (eBay-Pflichtfelder je Kartentyp)";
   aspectsWrapper.appendChild(aspectsTitle);
   const aspectEntries = Object.entries(listing.aspects || {});
+  // "Saison / Jahr" wird unten aus dem Aspects-Block herausgeloest und
+  // zusammen mit "Veroeffentlichen am" in eine eigene, schmalere Zeile
+  // gepackt (Bugreport des Nutzers: das Feld riss als einzelnes Element in
+  // seiner Flex-Zeile auf volle Breite auf).
+  let seasonAspectWrapper = null;
   for (const [key, values] of aspectEntries) {
     const wrapper = document.createElement("label");
     wrapper.textContent = key;
@@ -3506,17 +3530,36 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
     input.dataset.aspectKey = key;
     input.value = (values || []).join(", ");
     wrapper.appendChild(input);
-    aspectsWrapper.appendChild(wrapper);
+    if (key === "Saison / Jahr") {
+      seasonAspectWrapper = wrapper;
+    } else {
+      aspectsWrapper.appendChild(wrapper);
+    }
   }
   form.appendChild(aspectsWrapper);
+
+  const scheduleRow = document.createElement("div");
+  scheduleRow.className = "ebay-schedule-row";
+  if (seasonAspectWrapper) scheduleRow.appendChild(seasonAspectWrapper);
+  const scheduleWrapper = document.createElement("label");
+  scheduleWrapper.textContent = "Veröffentlichen am (optional)";
+  const scheduleInput = document.createElement("input");
+  scheduleInput.type = "datetime-local";
+  scheduleInput.id = "ebay-schedule-at";
+  scheduleWrapper.appendChild(scheduleInput);
+  scheduleRow.appendChild(scheduleWrapper);
+  form.appendChild(scheduleRow);
 
   // Preisvorschlaege (Best Offer) schon vor der Veroeffentlichung setzbar -
   // wird nicht mit dem Entwurf gespeichert (saveDraft()/collectFields()
   // lassen diese Felder bewusst aussen vor, siehe PUT .../best-offer),
   // sondern erst nach erfolgreichem Veroeffentlichen per eigenem Request
-  // angewendet (s.u. im publishBtn-Handler).
+  // angewendet (s.u. im publishBtn-Handler). ebay-best-offer statt eines
+  // reinen Grid-Feldes, damit der Block die volle Breite bekommt und die
+  // Checkbox oben, die beiden Preisfelder darunter stehen (Bugreport des
+  // Nutzers: Checkbox stand bisher unpassend zwischen den Preisfeldern).
   const bestOfferBlock = document.createElement("div");
-  bestOfferBlock.className = "tracking-block";
+  bestOfferBlock.className = "tracking-block ebay-best-offer";
   const bestOfferLabel = document.createElement("label");
   bestOfferLabel.style.flexDirection = "row";
   bestOfferLabel.style.alignItems = "center";
@@ -3564,14 +3607,6 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
       })
       .catch(() => {});
   }
-
-  const scheduleWrapper = document.createElement("label");
-  scheduleWrapper.textContent = "Veröffentlichen am (optional)";
-  const scheduleInput = document.createElement("input");
-  scheduleInput.type = "datetime-local";
-  scheduleInput.id = "ebay-schedule-at";
-  scheduleWrapper.appendChild(scheduleInput);
-  form.appendChild(scheduleWrapper);
 
   const actions = document.createElement("div");
   actions.className = "ebay-actions";

@@ -136,7 +136,7 @@ def generate_description(card, extra_note=""):
     lines = [f"<p><strong>{html.escape(generate_title(card, max_len=200))}</strong></p>"]
     items = []
     for label, key in (
-        ("Set", "set_name"), ("Saison", "season_year"),
+        ("Set", "set_name"), ("Saison / Jahr", "season_year"),
         ("Team", "team"), ("Kartennummer", "card_number"),
     ):
         value = card.get(key)
