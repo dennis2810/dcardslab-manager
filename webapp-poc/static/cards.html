@@ -100,6 +100,13 @@ if ("serviceWorker" in navigator) {
   #list.hide-col-6 th:nth-child(6), #list.hide-col-6 td:nth-child(6) { display: none; }
   #list.hide-col-7 th:nth-child(7), #list.hide-col-7 td:nth-child(7) { display: none; }
   #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
+  #list.hide-col-11 th:nth-child(11), #list.hide-col-11 td:nth-child(11) { display: none; }
+  #list.hide-col-12 th:nth-child(12), #list.hide-col-12 td:nth-child(12) { display: none; }
+  #list.hide-col-13 th:nth-child(13), #list.hide-col-13 td:nth-child(13) { display: none; }
+  #list.hide-col-14 th:nth-child(14), #list.hide-col-14 td:nth-child(14) { display: none; }
+  #list.hide-col-15 th:nth-child(15), #list.hide-col-15 td:nth-child(15) { display: none; }
+  #list.hide-col-16 th:nth-child(16), #list.hide-col-16 td:nth-child(16) { display: none; }
+  #list.hide-col-17 th:nth-child(17), #list.hide-col-17 td:nth-child(17) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
@@ -228,6 +235,11 @@ if ("serviceWorker" in navigator) {
     </label>
     <button type="button" id="bulk-add-to-purchase-btn">Verknüpfen</button>
     <button type="button" id="bulk-lot-sale-toggle">📦 Als Lot verkaufen</button>
+    <label>Feld ändern
+      <select id="bulk-edit-field"></select>
+    </label>
+    <input type="text" id="bulk-edit-value" placeholder="Neuer Wert" style="width: 8rem;">
+    <button type="button" id="bulk-edit-apply-btn">Übernehmen</button>
     <button type="button" id="bulk-private-collection">In private Sammlung überführen</button>
     <button type="button" id="bulk-delete-btn">Löschen</button>
     <button type="button" id="bulk-delete-undo" hidden>↩ Rückgängig</button>
@@ -278,6 +290,13 @@ if ("serviceWorker" in navigator) {
             <th data-key="ebay_status">Verkauf <span class="sort-arrow"></span></th>
             <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
             <th data-key="tags">Tags <span class="sort-arrow"></span></th>
+            <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+            <th data-key="card_type">Typ <span class="sort-arrow"></span></th>
+            <th data-key="variant">Variante <span class="sort-arrow"></span></th>
+            <th data-key="card_number">Kartennr. <span class="sort-arrow"></span></th>
+            <th data-key="theme">Thema <span class="sort-arrow"></span></th>
+            <th data-key="manufacturer">Hersteller <span class="sort-arrow"></span></th>
+            <th data-key="position">Position <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
@@ -391,6 +410,13 @@ const COLUMN_TOGGLES = [
   { key: "season_year", label: "Saison", index: 6 },
   { key: "recognition_status", label: "Erkennung", index: 7 },
   { key: "tags", label: "Tags", index: 10 },
+  { key: "set_name", label: "Set", index: 11 },
+  { key: "card_type", label: "Typ", index: 12 },
+  { key: "variant", label: "Variante", index: 13 },
+  { key: "card_number", label: "Kartennr.", index: 14 },
+  { key: "theme", label: "Thema", index: 15 },
+  { key: "manufacturer", label: "Hersteller", index: 16 },
+  { key: "position", label: "Position", index: 17 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
 let hiddenColumns = new Set();
@@ -728,7 +754,7 @@ function visibleCards() {
     filtered = filtered.filter((c) => cardTags(c).includes(tagFilterSelect.value));
   }
   if (cardTypeFilterSelect.value) {
-    filtered = filtered.filter((c) => c.card_type === cardTypeFilterSelect.value);
+    filtered = filtered.filter((c) => c.listing_type === cardTypeFilterSelect.value);
   }
   return filtered;
 }
@@ -979,6 +1005,34 @@ function renderList(cards) {
     tagsTd.textContent = card.tags || "";
     tr.appendChild(tagsTd);
 
+    const setTd = document.createElement("td");
+    setTd.textContent = card.set_name || "";
+    tr.appendChild(setTd);
+
+    const typeTd = document.createElement("td");
+    typeTd.textContent = card.card_type || "";
+    tr.appendChild(typeTd);
+
+    const variantTd = document.createElement("td");
+    variantTd.textContent = card.variant || "";
+    tr.appendChild(variantTd);
+
+    const cardNumberTd = document.createElement("td");
+    cardNumberTd.textContent = card.card_number || "";
+    tr.appendChild(cardNumberTd);
+
+    const themeTd = document.createElement("td");
+    themeTd.textContent = card.theme || "";
+    tr.appendChild(themeTd);
+
+    const manufacturerTd = document.createElement("td");
+    manufacturerTd.textContent = card.manufacturer || "";
+    tr.appendChild(manufacturerTd);
+
+    const positionTd = document.createElement("td");
+    positionTd.textContent = card.position || "";
+    tr.appendChild(positionTd);
+
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;
     });
@@ -1055,6 +1109,14 @@ async function undoLastBulkAction() {
       await Promise.all(action.ids.map((id) =>
         fetch(`/api/ebay/listings/${encodeURIComponent(id)}`, { method: "DELETE" })
       ));
+    } else if (action.type === "field-edit") {
+      await Promise.all(action.entries.map(({ id, field, prevValue }) =>
+        fetch(`/api/cards/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: prevValue }),
+        })
+      ));
     } else if (action.type === "private-collection") {
       // DELETE macht sowohl das Flag als auch die Inventar-Nullung
       // rueckgaengig (setzt die Menge auf 1 zurueck - siehe
@@ -1106,6 +1168,62 @@ async function bulkSetShipped(shipped) {
 
 document.getElementById("bulk-mark-shipped").addEventListener("click", () => bulkSetShipped(true));
 document.getElementById("bulk-unmark-shipped").addEventListener("click", () => bulkSetShipped(false));
+
+// Frei waehlbares Feld fuer die Massenbearbeitung - z.B. um bei einem groesseren
+// Posten Karten derselben Serie (gescannt oder manuell angelegt) Team, Saison,
+// Hersteller etc. in einem Rutsch statt Karte fuer Karte zu setzen. Bewusst nur
+// die Felder, die bei mehreren Karten sinnvoll denselben Wert haben koennen -
+// Titel/Kartennr./Seriennr./Auflage sind pro Karte individuell und fehlen
+// daher absichtlich in der Auswahl.
+const BULK_EDIT_FIELDS = [
+  { key: "team", label: "Team" },
+  { key: "season_year", label: "Saison" },
+  { key: "theme", label: "Thema" },
+  { key: "manufacturer", label: "Hersteller" },
+  { key: "set_name", label: "Set" },
+  { key: "card_type", label: "Typ" },
+  { key: "variant", label: "Variante" },
+  { key: "position", label: "Position" },
+  { key: "tags", label: "Tags" },
+];
+const bulkEditFieldSelect = document.getElementById("bulk-edit-field");
+for (const f of BULK_EDIT_FIELDS) {
+  const opt = document.createElement("option");
+  opt.value = f.key;
+  opt.textContent = f.label;
+  bulkEditFieldSelect.appendChild(opt);
+}
+
+async function bulkEditField() {
+  const field = bulkEditFieldSelect.value;
+  const value = document.getElementById("bulk-edit-value").value;
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  const cardsById = new Map(currentCards.map((c) => [c.id, c]));
+  const entries = ids.map((id) => ({ id, field, prevValue: cardsById.get(id)?.[field] ?? "" }));
+  bulkStatusEl.textContent = "Speichert …";
+  try {
+    await Promise.all(ids.map((id) =>
+      fetch(`/api/cards/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+    ));
+    bulkStatusEl.textContent = "";
+    selectedIds.clear();
+    updateBulkBar();
+    const fieldLabel = BULK_EDIT_FIELDS.find((f) => f.key === field)?.label || field;
+    setUndo({ type: "field-edit", entries }, `${fieldLabel} von ${entries.length} Karte(n) geändert.`);
+    showToast(`${fieldLabel} von ${entries.length} Karte(n) geändert.`);
+    loadCards();
+  } catch (err) {
+    bulkStatusEl.textContent = "Fehler: " + err;
+    showToast("Fehler: " + err, true);
+  }
+}
+
+document.getElementById("bulk-edit-apply-btn").addEventListener("click", bulkEditField);
 
 // Massen-Privatentnahme - ein POST pro ausgewaehlter Karte (setzt Flag +
 // Inventar auf 0, siehe db.set_card_private_collection()). Karten, die
@@ -1507,15 +1625,21 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status",
-    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung", "Tags",
+    "SKU", "Titel", "Team", "Saison", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
+    "Kartennr.", "Erkennung", "eBay-Status",
+    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung",
+    "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Tags",
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
+    c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.position || "",
+    c.card_number || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
     c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein",
-    c.private_collection ? "Ja" : "Nein", c.tags || "",
+    c.private_collection ? "Ja" : "Nein",
+    c.is_numbered ? "Ja" : "Nein", c.is_rookie ? "Ja" : "Nein", c.is_autograph ? "Ja" : "Nein",
+    c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
 });

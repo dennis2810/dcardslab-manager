@@ -175,6 +175,32 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
         self.assertIn("title", headers)
         self.assertEqual(rows[0][headers.index("title")], "Lionel Messi")
 
+    def test_karten_tab_includes_rc_numbered_auto_as_ja_nein(self):
+        settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
+        patchers = self._patch_sheets_data_sources()
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+        card = {
+            "id": "c1", "title": "Ibrahima Konaté", "card_type": "Refractor",
+            "variant": "Autograph", "is_numbered": True, "is_rookie": False,
+            "is_autograph": True,
+        }
+        with patch("main.db.get_google_sheets_settings", return_value=settings), \
+             patch("main.db.save_google_sheets_settings"), \
+             patch("main.db.all_cards", return_value=[card]), \
+             patch("main.google_sheets_client.refresh_access_token", return_value="access-tok"), \
+             patch("main.google_sheets_client.sync_to_sheets") as mock_sync:
+            response = client.post("/api/sheets/sync")
+        self.assertEqual(response.status_code, 200)
+        headers, rows = mock_sync.call_args[0][2]["Karten"]
+        row = rows[0]
+        self.assertEqual(row[headers.index("card_type")], "Refractor")
+        self.assertEqual(row[headers.index("variant")], "Autograph")
+        self.assertEqual(row[headers.index("is_numbered")], "Ja")
+        self.assertEqual(row[headers.index("is_rookie")], "Nein")
+        self.assertEqual(row[headers.index("is_autograph")], "Ja")
+
     def test_private_sammlung_tab_lists_cards(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
         patchers = self._patch_sheets_data_sources()

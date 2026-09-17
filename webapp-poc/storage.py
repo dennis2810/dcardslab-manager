@@ -6,7 +6,7 @@ import io
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from supabase_client import get_client
 
@@ -16,7 +16,12 @@ _JPEG_QUALITY = 85
 
 
 def compress_image(path):
-    img = Image.open(path).convert("RGB")
+    img = Image.open(path)
+    # Handyfotos tragen die aufrechte Ausrichtung oft nur als EXIF-
+    # Orientation-Tag, die Pixel selbst liegen z.B. um 90 Grad gedreht vor -
+    # ohne exif_transpose() wuerde das re-encodierte JPEG (das den Tag nicht
+    # mitnimmt) diese rohe, gedrehte Ausrichtung dauerhaft festschreiben.
+    img = ImageOps.exif_transpose(img).convert("RGB")
     if max(img.size) > _MAX_EDGE:
         img.thumbnail((_MAX_EDGE, _MAX_EDGE), Image.LANCZOS)
     buf = io.BytesIO()

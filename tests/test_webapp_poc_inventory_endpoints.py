@@ -62,8 +62,8 @@ class ListInventoryEndpointTests(unittest.TestCase):
              patch("main.db.purchase_cost_by_card_id", return_value={}):
             response = client.get("/api/inventory")
         inventory = response.json()["inventory"]
-        self.assertEqual(inventory[0]["card_type"], "sport")
-        self.assertEqual(inventory[1]["card_type"], "non_sport")
+        self.assertEqual(inventory[0]["listing_type"], "sport")
+        self.assertEqual(inventory[1]["listing_type"], "non_sport")
 
     def test_attaches_the_ebay_status_as_sold_flag(self):
         rows = [{"id": "inv-1", "card_id": "card-1", "quantity": 0}]

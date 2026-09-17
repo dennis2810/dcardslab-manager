@@ -740,7 +740,7 @@ function filteredItems() {
   const q = qInput.value.trim().toLowerCase();
   return items.filter((item) => {
     if (status && statusInfo(item)[0] !== status) return false;
-    if (cardType && item.card_type !== cardType) return false;
+    if (cardType && item.listing_type !== cardType) return false;
     if (q) {
       const haystack = `${item.card_title || ""} ${item.sku || ""} ${item.location || ""}`.toLowerCase();
       if (!haystack.includes(q)) return false;

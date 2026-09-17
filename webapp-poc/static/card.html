@@ -517,6 +517,12 @@ const form = document.getElementById("edit-form");
 // Mini-Formulare (Preisrecherche, eBay-Gebuehren, ...), die keine
 // "ungespeicherten Aenderungen" im gleichen Sinn haben.
 let formIsDirty = false;
+
+// Wird in loadCard() gesetzt und von renderEbayEditForm() gelesen, damit der
+// "Titel neu vorschlagen"-Button dort auch fuer bereits veroeffentlichte
+// Angebote Zugriff auf die aktuellen Kartenfelder hat, ohne die gesamte
+// renderEbaySection()/renderEbayEditForm()-Signaturkette umzubauen.
+let currentCard = null;
 form.addEventListener("input", () => { formIsDirty = true; });
 window.addEventListener("beforeunload", (ev) => {
   if (!formIsDirty) return;
@@ -1062,6 +1068,7 @@ async function loadCard() {
       showError(form, "Fehler: " + (card.detail || res.statusText));
       return;
     }
+    currentCard = card;
     render(card);
     renderExtraImages(card.extra_image_urls);
     renderPurchaseSection(card.purchase);
@@ -3243,6 +3250,21 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
 
   const titleInput = field("Titel", "title", listing.title);
   titleInput.parentNode.appendChild(attachCharCounter(titleInput, 80));
+  if (currentCard) {
+    // Der Titel wird nur bei der Erstanlage automatisch vorgeschlagen -
+    // aendert man danach z.B. Set/Typ/Variante/RC, muss man ihn bisher von
+    // Hand nachziehen. Der Button generiert ihn hier auf Basis der
+    // aktuellen Kartenfelder frisch neu.
+    const suggestBtn = document.createElement("button");
+    suggestBtn.type = "button";
+    suggestBtn.textContent = "Titel neu vorschlagen";
+    suggestBtn.style.marginLeft = "0.6rem";
+    suggestBtn.addEventListener("click", () => {
+      titleInput.value = generateEbayTitle(currentCard);
+      titleInput.dispatchEvent(new Event("input"));
+    });
+    titleInput.parentNode.appendChild(suggestBtn);
+  }
   field("Beschreibung (HTML)", "description", listing.description, "textarea");
   // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
   // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
@@ -3886,86 +3908,93 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     });
     section.appendChild(endBtn);
 
-    const bestOfferBlock = document.createElement("div");
-    bestOfferBlock.className = "tracking-block";
+    // Preisvorschlaege (Best Offer) sind nur fuer selbst per Inventory API
+    // verwaltete Angebote moeglich - fuer importierte/extern verwaltete
+    // Angebote (kein ebay_offer_id, siehe _is_externally_managed() in
+    // main.py) lehnt das Backend das ohnehin mit 409 ab, ohne diesen Check
+    // wuerde die Sektion trotzdem angezeigt und liefe ins Leere.
+    if (listing.ebay_offer_id) {
+      const bestOfferBlock = document.createElement("div");
+      bestOfferBlock.className = "tracking-block";
 
-    const bestOfferLabel = document.createElement("label");
-    bestOfferLabel.style.flexDirection = "row";
-    bestOfferLabel.style.alignItems = "center";
-    bestOfferLabel.style.gap = "0.3rem";
-    const bestOfferCheckbox = document.createElement("input");
-    bestOfferCheckbox.type = "checkbox";
-    bestOfferLabel.appendChild(bestOfferCheckbox);
-    bestOfferLabel.append("Preisvorschläge aktiv");
-    bestOfferBlock.appendChild(bestOfferLabel);
+      const bestOfferLabel = document.createElement("label");
+      bestOfferLabel.style.flexDirection = "row";
+      bestOfferLabel.style.alignItems = "center";
+      bestOfferLabel.style.gap = "0.3rem";
+      const bestOfferCheckbox = document.createElement("input");
+      bestOfferCheckbox.type = "checkbox";
+      bestOfferLabel.appendChild(bestOfferCheckbox);
+      bestOfferLabel.append("Preisvorschläge aktiv");
+      bestOfferBlock.appendChild(bestOfferLabel);
 
-    const autoAcceptLabel = document.createElement("label");
-    autoAcceptLabel.textContent = "Automatisch akzeptieren ab (€)";
-    const autoAcceptInput = document.createElement("input");
-    autoAcceptInput.type = "number";
-    autoAcceptInput.step = "0.01";
-    autoAcceptInput.min = "0";
-    autoAcceptLabel.appendChild(autoAcceptInput);
-    bestOfferBlock.appendChild(autoAcceptLabel);
+      const autoAcceptLabel = document.createElement("label");
+      autoAcceptLabel.textContent = "Automatisch akzeptieren ab (€)";
+      const autoAcceptInput = document.createElement("input");
+      autoAcceptInput.type = "number";
+      autoAcceptInput.step = "0.01";
+      autoAcceptInput.min = "0";
+      autoAcceptLabel.appendChild(autoAcceptInput);
+      bestOfferBlock.appendChild(autoAcceptLabel);
 
-    const autoDeclineLabel = document.createElement("label");
-    autoDeclineLabel.textContent = "Automatisch ablehnen unter (€)";
-    const autoDeclineInput = document.createElement("input");
-    autoDeclineInput.type = "number";
-    autoDeclineInput.step = "0.01";
-    autoDeclineInput.min = "0";
-    autoDeclineLabel.appendChild(autoDeclineInput);
-    bestOfferBlock.appendChild(autoDeclineLabel);
+      const autoDeclineLabel = document.createElement("label");
+      autoDeclineLabel.textContent = "Automatisch ablehnen unter (€)";
+      const autoDeclineInput = document.createElement("input");
+      autoDeclineInput.type = "number";
+      autoDeclineInput.step = "0.01";
+      autoDeclineInput.min = "0";
+      autoDeclineLabel.appendChild(autoDeclineInput);
+      bestOfferBlock.appendChild(autoDeclineLabel);
 
-    const bestOfferBtn = document.createElement("button");
-    bestOfferBtn.type = "button";
-    bestOfferBtn.textContent = "Preisvorschläge aktualisieren";
-    const bestOfferStatus = document.createElement("span");
-    bestOfferBtn.addEventListener("click", async () => {
-      bestOfferBtn.disabled = true;
-      bestOfferStatus.textContent = "";
-      try {
-        const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            enabled: bestOfferCheckbox.checked,
-            auto_accept_price: autoAcceptInput.value || null,
-            auto_decline_price: autoDeclineInput.value || null,
-          }),
-        });
-        const body = await res.json();
-        if (!res.ok) {
-          bestOfferStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+      const bestOfferBtn = document.createElement("button");
+      bestOfferBtn.type = "button";
+      bestOfferBtn.textContent = "Preisvorschläge aktualisieren";
+      const bestOfferStatus = document.createElement("span");
+      bestOfferBtn.addEventListener("click", async () => {
+        bestOfferBtn.disabled = true;
+        bestOfferStatus.textContent = "";
+        try {
+          const res = await fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              enabled: bestOfferCheckbox.checked,
+              auto_accept_price: autoAcceptInput.value || null,
+              auto_decline_price: autoDeclineInput.value || null,
+            }),
+          });
+          const body = await res.json();
+          if (!res.ok) {
+            bestOfferStatus.textContent = "Fehler: " + (body.detail || res.statusText);
+            bestOfferStatus.className = "error";
+            return;
+          }
+          bestOfferStatus.textContent = "Aktualisiert.";
+          bestOfferStatus.className = "";
+          showToast("Preisvorschläge aktualisiert.");
+        } catch (err) {
+          bestOfferStatus.textContent = "Fehler: " + err;
           bestOfferStatus.className = "error";
-          return;
+        } finally {
+          bestOfferBtn.disabled = false;
         }
-        bestOfferStatus.textContent = "Aktualisiert.";
-        bestOfferStatus.className = "";
-        showToast("Preisvorschläge aktualisiert.");
-      } catch (err) {
-        bestOfferStatus.textContent = "Fehler: " + err;
-        bestOfferStatus.className = "error";
-      } finally {
-        bestOfferBtn.disabled = false;
-      }
-    });
-    bestOfferBlock.appendChild(bestOfferBtn);
-    bestOfferBlock.appendChild(bestOfferStatus);
-    section.appendChild(bestOfferBlock);
+      });
+      bestOfferBlock.appendChild(bestOfferBtn);
+      bestOfferBlock.appendChild(bestOfferStatus);
+      section.appendChild(bestOfferBlock);
 
-    // Aktuellen Stand von eBay laden und vorbelegen - eBay bleibt die
-    // alleinige Quelle der Wahrheit dafuer (siehe PUT .../best-offer),
-    // ohne das saehe man beim erneuten Aufruf der Karte immer leere Felder.
-    fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((current) => {
-        if (!current) return;
-        bestOfferCheckbox.checked = Boolean(current.best_offer_enabled);
-        if (current.auto_accept_price != null) autoAcceptInput.value = current.auto_accept_price;
-        if (current.auto_decline_price != null) autoDeclineInput.value = current.auto_decline_price;
-      })
-      .catch(() => {});
+      // Aktuellen Stand von eBay laden und vorbelegen - eBay bleibt die
+      // alleinige Quelle der Wahrheit dafuer (siehe PUT .../best-offer),
+      // ohne das saehe man beim erneuten Aufruf der Karte immer leere Felder.
+      fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((current) => {
+          if (!current) return;
+          bestOfferCheckbox.checked = Boolean(current.best_offer_enabled);
+          if (current.auto_accept_price != null) autoAcceptInput.value = current.auto_accept_price;
+          if (current.auto_decline_price != null) autoDeclineInput.value = current.auto_decline_price;
+        })
+        .catch(() => {});
+    }
   }
 }
 
