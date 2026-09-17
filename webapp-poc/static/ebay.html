@@ -631,6 +631,13 @@ async function loadListings() {
   statusMsg.textContent = "Lädt …";
   table.style.display = "none";
   bulkResults.innerHTML = "";
+  // Neue Suche/Status-Filter aendert die zugrundeliegende Angebotsmenge -
+  // ein stehen gebliebener "Aufrufe/Preisvorschlaege fuer X von Y geladen"-
+  // Text waere dann irrefuehrend, weil er sich auf die vorherige Auswahl
+  // bezieht (Bugreport des Nutzers: Status blieb bis zum Seiten-Neuladen
+  // sichtbar stehen).
+  document.getElementById("views-status").textContent = "";
+  document.getElementById("best-offer-sync-status").textContent = "";
   try {
     const res = await fetch("/api/ebay/listings?" + params.toString());
     const data = await res.json();
@@ -1268,10 +1275,10 @@ document.getElementById("reset-date-filter").addEventListener("click", () => {
 document.getElementById("load-best-offer-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("best-offer-sync-status");
   const ids = [...new Set(
-    currentPageItems.filter((l) => l.ebay_offer_id).map((l) => l.id)
+    filteredListings().filter((l) => l.ebay_offer_id).map((l) => l.id)
   )];
   if (ids.length === 0) {
-    statusEl.textContent = "Keine selbst verwalteten, veröffentlichten Angebote auf dieser Seite.";
+    statusEl.textContent = "Keine selbst verwalteten, veröffentlichten Angebote in der aktuellen Auswahl.";
     statusEl.className = "";
     return;
   }
@@ -1289,7 +1296,7 @@ document.getElementById("load-best-offer-btn").addEventListener("click", async (
     const byId = {};
     for (const r of data.results) byId[r.listing_id] = r;
     let hitCount = 0;
-    for (const listing of currentPageItems) {
+    for (const listing of currentListings) {
       const result = byId[listing.id];
       if (result && result.ok) {
         listing.best_offer_enabled = result.best_offer_enabled;
@@ -1474,6 +1481,21 @@ const bestOfferBulkBtn = document.getElementById("best-offer-bulk-btn");
 const bestOfferBulkEnabled = document.getElementById("best-offer-bulk-enabled");
 const bestOfferBulkAccept = document.getElementById("best-offer-bulk-accept");
 const bestOfferBulkDecline = document.getElementById("best-offer-bulk-decline");
+
+// Ohne das haktes die Checkbox "Preisvorschlaege aktiv" zu leicht vergessen:
+// Preis eintragen, uebernehmen klicken, aber die Checkbox blieb unangeklickt
+// -> best_offer_enabled=false wird mitgespeichert und die gerade gesetzten
+// Auto-Annahme/-Ablehnung-Preise werden in der Tabelle wieder ausgeblendet
+// (Spalten zeigen nur etwas an, wenn best_offer_enabled true ist - siehe
+// render() unten). Ein eingetragener Preis aktiviert die Checkbox darum
+// automatisch (Bugreport des Nutzers: "Preisvorschlaege verschwinden").
+function autoCheckBestOfferEnabled() {
+  if (bestOfferBulkAccept.value || bestOfferBulkDecline.value) {
+    bestOfferBulkEnabled.checked = true;
+  }
+}
+bestOfferBulkAccept.addEventListener("input", autoCheckBestOfferEnabled);
+bestOfferBulkDecline.addEventListener("input", autoCheckBestOfferEnabled);
 
 bestOfferBulkBtn.addEventListener("click", async () => {
   const listingIds = Array.from(selectedIds);
@@ -1748,12 +1770,12 @@ document.getElementById("sync-sales-btn").addEventListener("click", async () => 
 document.getElementById("load-views-btn").addEventListener("click", async () => {
   const viewsStatus = document.getElementById("views-status");
   const ids = [...new Set(
-    currentPageItems
+    filteredListings()
       .filter((l) => l.ebay_listing_id && (l.status === "Veroeffentlicht" || l.status === "Verkauft"))
       .map((l) => l.ebay_listing_id)
   )];
   if (ids.length === 0) {
-    viewsStatus.textContent = "Keine veröffentlichten Angebote auf dieser Seite.";
+    viewsStatus.textContent = "Keine veröffentlichten Angebote in der aktuellen Auswahl.";
     viewsStatus.className = "";
     return;
   }
@@ -1774,7 +1796,7 @@ document.getElementById("load-views-btn").addEventListener("click", async () => 
     // Zahlen liefern als das eBay-eigene Verkaeufer-Cockpit, oder ein
     // Angebot ganz auslassen - eigene API-Einschraenkung, siehe README.md.
     viewsStatus.textContent = hitCount === 0
-      ? "Für keines der Angebote auf dieser Seite liegen Aufrufe vor. Hinweis: eBays Report-API lässt ältere, noch aktive Angebote teils aus (siehe README.md) - das eBay-Verkäufer-Cockpit kann trotzdem Besucher zeigen."
+      ? "Für keines der Angebote in der aktuellen Auswahl liegen Aufrufe vor. Hinweis: eBays Report-API lässt ältere, noch aktive Angebote teils aus (siehe README.md) - das eBay-Verkäufer-Cockpit kann trotzdem Besucher zeigen."
       : `Aufrufe für ${hitCount} von ${ids.length} Angebot(en) geladen.` + (hitCount < ids.length ? " (fehlende Angebote: siehe Hinweis zu eBays Report-API in README.md)" : "");
     viewsStatus.className = "";
     render(sortedListings());
@@ -1840,6 +1862,8 @@ qInput.addEventListener("input", () => {
 statusSelect.addEventListener("change", loadListings);
 cardTypeFilterSelect.addEventListener("change", () => {
   currentPage = 0;
+  document.getElementById("views-status").textContent = "";
+  document.getElementById("best-offer-sync-status").textContent = "";
   render(sortedListings());
 });
 
