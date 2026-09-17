@@ -45,6 +45,7 @@ if ("serviceWorker" in navigator) {
   body { font-family: system-ui, sans-serif; max-width: 1600px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  h2 button { font-size: 0.85rem; margin-left: 0.75rem; vertical-align: middle; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
@@ -180,6 +181,11 @@ if ("serviceWorker" in navigator) {
   <p id="status-msg">Lädt …</p>
   <div class="progress-block" id="progress-block" style="display: none;"></div>
 
+  <div class="pagination no-print">
+    <button type="button" id="prev-page-top">&larr; Zurück</button>
+    <span id="page-info-top"></span>
+    <button type="button" id="next-page-top">Weiter &rarr;</button>
+  </div>
   <div class="table-scroll">
     <table id="items-table" style="display: none;">
       <thead>
@@ -215,7 +221,7 @@ if ("serviceWorker" in navigator) {
   </div>
   <ul id="unexpected-list"></ul>
 
-  <h2>Abschlussbericht</h2>
+  <h2>Abschlussbericht <button type="button" id="report-print-btn" class="no-print">🖨 Drucken</button></h2>
   <div id="report"></div>
 
 <script>
@@ -358,6 +364,7 @@ const unexpectedInput = document.getElementById("unexpected-input");
 const unexpectedList = document.getElementById("unexpected-list");
 const report = document.getElementById("report");
 const pageInfo = document.getElementById("page-info");
+const pageInfoTop = document.getElementById("page-info-top");
 
 function populateLocationFilter() {
   const locations = [...new Set(items.map((i) => (i.location || "").trim()).filter(Boolean))].sort();
@@ -495,9 +502,13 @@ function render() {
   const pageCount = Math.max(1, Math.ceil(allVisible.length / PAGE_SIZE));
   currentPage = Math.min(currentPage, pageCount - 1);
   const visible = allVisible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  pageInfo.textContent = allVisible.length ? `Seite ${currentPage + 1} von ${pageCount} (${allVisible.length} Karten)` : "";
+  const pageInfoText = allVisible.length ? `Seite ${currentPage + 1} von ${pageCount} (${allVisible.length} Karten)` : "";
+  pageInfo.textContent = pageInfoText;
+  pageInfoTop.textContent = pageInfoText;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  document.getElementById("prev-page-top").disabled = currentPage === 0;
+  document.getElementById("next-page-top").disabled = currentPage >= pageCount - 1;
 
   for (const th of document.querySelectorAll("th[data-key]")) {
     const arrow = th.querySelector(".sort-arrow");
@@ -575,15 +586,20 @@ scanInput.addEventListener("keydown", (ev) => {
 locationFilter.addEventListener("change", () => { currentPage = 0; render(); });
 openOnlyFilter.addEventListener("change", () => { currentPage = 0; render(); });
 
-document.getElementById("prev-page").addEventListener("click", () => {
+function goToPrevPage() {
   currentPage = Math.max(0, currentPage - 1);
   render();
-});
-document.getElementById("next-page").addEventListener("click", () => {
+}
+function goToNextPage() {
   currentPage += 1;
   render();
-});
+}
+document.getElementById("prev-page").addEventListener("click", goToPrevPage);
+document.getElementById("next-page").addEventListener("click", goToNextPage);
+document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
+document.getElementById("next-page-top").addEventListener("click", goToNextPage);
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+document.getElementById("report-print-btn").addEventListener("click", () => window.print());
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
 // Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.

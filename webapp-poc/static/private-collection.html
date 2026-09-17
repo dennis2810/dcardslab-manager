@@ -147,7 +147,7 @@ if ("serviceWorker" in navigator) {
     dadurch nicht automatisch beendet.</p>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., Tags)">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set / Serie, Kartennr., Tags)">
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
@@ -176,7 +176,7 @@ if ("serviceWorker" in navigator) {
           <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
-          <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+          <th data-key="set_name">Set / Serie <span class="sort-arrow"></span></th>
           <th data-key="card_number">Kartennr. <span class="sort-arrow"></span></th>
           <th>Tags</th>
           <th class="no-print"></th>
@@ -249,7 +249,7 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
 // der Tabelle aus-/einblenden statt bedingt zu rendern.
 const COLUMN_TOGGLES = [
   { key: "team", label: "Team", index: 3 },
-  { key: "set_name", label: "Set", index: 4 },
+  { key: "set_name", label: "Set / Serie", index: 4 },
   { key: "card_number", label: "Kartennr.", index: 5 },
   { key: "tags", label: "Tags", index: 6 },
 ];
@@ -573,7 +573,7 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["Titel", "Team", "Set", "Kartennummer", "Tags"];
+  const headers = ["Titel", "Team", "Set / Serie", "Kartennummer", "Tags"];
   const rows = sortedCards().map((card) => [
     card.title || "", card.team || "", card.set_name || "", card.card_number || "", card.tags || "",
   ]);

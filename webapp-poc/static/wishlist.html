@@ -193,7 +193,7 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="controls no-print">
-    <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Notiz)">
+    <input type="text" id="q" placeholder="Suche (Titel, Team, Set / Serie, Notiz)">
     <label><input type="checkbox" id="sourcing-only-filter"> Nur Sourcing-Treffer anzeigen</label>
     <button type="button" id="toggle-form">+ Eintrag hinzufügen</button>
     <button type="button" id="toggle-import">⭱ CSV importieren</button>
@@ -203,7 +203,7 @@ if ("serviceWorker" in navigator) {
     <input type="hidden" id="item-id">
     <label>Titel <input type="text" id="item-title" required></label>
     <label>Team <input type="text" id="item-team"></label>
-    <label>Set <input type="text" id="item-set"></label>
+    <label>Set / Serie <input type="text" id="item-set"></label>
     <label>Wunschpreis <input type="number" id="item-target-price" step="0.01"></label>
     <label>Sport/Non-Sport
       <select id="item-card-type">
@@ -221,7 +221,7 @@ if ("serviceWorker" in navigator) {
   </form>
 
   <form id="import-form" class="no-print">
-    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set;Wunschpreis;Notiz;Sport/Non-Sport, Semikolon-getrennt).</p>
+    <p class="import-hint">CSV-Datei im Format des CSV-Exports (Spalten: Titel;Team;Set / Serie;Wunschpreis;Notiz;Sport/Non-Sport, Semikolon-getrennt).</p>
     <label>CSV-Datei <input type="file" name="file" accept=".csv,text/csv" required></label>
     <div class="actions">
       <button type="submit">Importieren</button>
@@ -253,7 +253,7 @@ if ("serviceWorker" in navigator) {
           <th></th>
           <th data-key="title">Titel <span class="sort-arrow"></span></th>
           <th data-key="team">Team <span class="sort-arrow"></span></th>
-          <th data-key="set_name">Set <span class="sort-arrow"></span></th>
+          <th data-key="set_name">Set / Serie <span class="sort-arrow"></span></th>
           <th data-key="target_price">Wunschpreis <span class="sort-arrow"></span></th>
           <th>Sourcing</th>
           <th>Notiz</th>
@@ -345,7 +345,7 @@ let currentPage = 0;
 // der Tabelle aus-/einblenden statt bedingt zu rendern.
 const COLUMN_TOGGLES = [
   { key: "team", label: "Team", index: 5 },
-  { key: "set_name", label: "Set", index: 6 },
+  { key: "set_name", label: "Set / Serie", index: 6 },
   { key: "note", label: "Notiz", index: 9 },
   { key: "card_type", label: "Typ", index: 10 },
 ];
@@ -1161,7 +1161,7 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["Titel", "Team", "Set", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz", "Sport/Non-Sport"];
+  const headers = ["Titel", "Team", "Set / Serie", "Wunschpreis", "Sourcing-Treffer", "Zuletzt geprüft", "Notiz", "Sport/Non-Sport"];
   const rows = sortedItems().map((item) => [
     item.title || "", item.team || "", item.set_name || "", item.target_price ?? "",
     item.last_match_price ?? "", formatDate(item.last_price_check_at), item.notes || "",
