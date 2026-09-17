@@ -26,8 +26,26 @@ def _stub(name):
     return module
 
 
-_stub("cv2")
-_stub("numpy")
+def _stub_if_missing(name):
+    # Unlike _stub(), this prefers a real install when one is present -
+    # cv2/numpy are heavy but harmless to import for real, and other test
+    # modules elsewhere in the suite (e.g. scanner_v0_8_dynamic's own
+    # tests) actually exercise their real behaviour. Unconditionally
+    # stubbing them here would poison sys.modules for the rest of the
+    # pytest session (whichever test module imports them first wins, since
+    # both _stub() and this helper only act when the name isn't cached
+    # yet), leaving every later test with a fake numpy/cv2 that has no
+    # attributes at all.
+    if name in sys.modules:
+        return sys.modules[name]
+    try:
+        return __import__(name)
+    except ImportError:
+        return _stub(name)
+
+
+_stub_if_missing("cv2")
+_stub_if_missing("numpy")
 _tkinter = _stub("tkinter")
 for _sub in ("ttk", "filedialog", "messagebox", "simpledialog"):
     setattr(_tkinter, _sub, _stub(f"tkinter.{_sub}"))

@@ -524,6 +524,87 @@ def _cell_card_contour(cell_img):
     return best_from_mask(edges)
 
 
+def _find_grid_dividers(profile, total):
+    """
+    Locates the two boundaries that split a 1D edge-density profile (a row-
+    or column-sum of Canny edges) into three bands, by searching for the
+    weakest-edge position near the expected 1/3 and 2/3 marks instead of
+    assuming the bands are exactly equal. A gap between two cards is close
+    to edge-free (bare paper/scanner bed), while the inside of a card -
+    even a plain white card back - almost always has at least a border
+    rule or text nearby, so the minimum within each search window reliably
+    falls in the real gap rather than inside a card. Returns None if the
+    profile is too short to search meaningfully, or if the two candidate
+    dividers end up implausibly close together (bands would collapse) -
+    callers should fall back to a uniform three-way split in that case.
+    """
+    if total < 30:
+        return None
+    window = max(3, (total // 60) | 1)
+    kernel = np.ones(window, np.float64) / window
+    smoothed = np.convolve(profile, kernel, mode="same")
+    peak = float(np.max(smoothed))
+    if peak <= 0:
+        return None
+
+    dividers = []
+    span = total * 0.15
+    for frac in (1 / 3, 2 / 3):
+        center = frac * total
+        lo = max(0, int(center - span))
+        hi = min(total, int(center + span))
+        if hi <= lo:
+            return None
+        window_vals = smoothed[lo:hi]
+        # A real gap between cards is close to edge-free; if even the
+        # weakest point in the search window still carries a large share of
+        # the profile's peak edge density, there's no gap here - just
+        # generic low-contrast noise - and picking its minimum anyway would
+        # cut into a card instead of the space between two of them.
+        if float(window_vals.min()) > peak * 0.3:
+            return None
+        dividers.append(lo + int(np.argmin(window_vals)))
+
+    if dividers[1] - dividers[0] < total * 0.15:
+        return None
+    return dividers
+
+
+def _grid_cell_bounds(gray, ex1, ey1, ex2, ey2):
+    """
+    Finds the actual row/column boundaries between the 9 cards within the
+    estimated grid extent, instead of assuming the cards are spaced evenly
+    across it. A uniform three-way split works only when the physical scan
+    places all 9 cards with identical gaps - in practice (e.g. a sleeve
+    protector sheet with wider gaps in one direction) that assumption cuts
+    into a card's own edge on one side of a row/column and leaves a strip
+    of background paper on the other, which is what produced the skewed/
+    edge-bleeding crops seen on plain white card backs (too little color
+    saturation for _find_grid_components() to separate the 9 cards
+    directly, so this cell-based fallback runs instead). Returns
+    (row_bounds, col_bounds), each a list of 4 increasing pixel positions
+    (outer edge, 2 dividers, outer edge) in the full image's coordinates.
+    """
+    ex1, ey1, ex2, ey2 = float(ex1), float(ey1), float(ex2), float(ey2)
+    uniform_rows = [ey1, ey1 + (ey2 - ey1) / 3, ey1 + 2 * (ey2 - ey1) / 3, ey2]
+    uniform_cols = [ex1, ex1 + (ex2 - ex1) / 3, ex1 + 2 * (ex2 - ex1) / 3, ex2]
+
+    x1i, y1i, x2i, y2i = int(ex1), int(ey1), int(ex2), int(ey2)
+    ext = gray[y1i:y2i, x1i:x2i]
+    if ext.size == 0:
+        return uniform_rows, uniform_cols
+
+    edges = cv2.Canny(cv2.GaussianBlur(ext, (3, 3), 0), 30, 90)
+    h, w = edges.shape
+
+    row_div = _find_grid_dividers(edges.sum(axis=1).astype(np.float64), h)
+    col_div = _find_grid_dividers(edges.sum(axis=0).astype(np.float64), w)
+
+    rows = uniform_rows if row_div is None else [ey1, ey1 + row_div[0], ey1 + row_div[1], ey2]
+    cols = uniform_cols if col_div is None else [ex1, ex1 + col_div[0], ex1 + col_div[1], ex2]
+    return rows, cols
+
+
 def _find_grid_components_by_cells(image):
     """
     Robust fallback for the 3x3 layout: split the estimated card area into
@@ -531,25 +612,28 @@ def _find_grid_components_by_cells(image):
     cell. This never counts a black inlay steg as an extra card, because
     each cell can only ever contribute one component, and cards with a
     dark/black border are still found via the per-cell contrast fallback.
-    Returns 9 components (in the usual x, y, w, h, area, contour form,
-    row-major order) or None if any cell yields no plausible card.
+    Cell boundaries come from _grid_cell_bounds() (real gaps between cards,
+    not an even three-way split) so unevenly spaced cards don't get cut
+    into a neighboring cell. Returns 9 components (in the usual x, y, w, h,
+    area, contour form, row-major order) or None if any cell yields no
+    plausible card.
     """
     H, W = image.shape[:2]
     ex1, ey1, ex2, ey2 = _estimate_grid_extent(image)
-    cell_w = (ex2 - ex1) / 3.0
-    cell_h = (ey2 - ey1) / 3.0
-    pad_x = cell_w * 0.12
-    pad_y = cell_h * 0.12
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    row_bounds, col_bounds = _grid_cell_bounds(gray, ex1, ey1, ex2, ey2)
 
     ordered = []
     for row in range(3):
+        ry1, ry2 = row_bounds[row], row_bounds[row + 1]
+        pad_y = (ry2 - ry1) * 0.12
         for col in range(3):
-            cx0 = ex1 + col * cell_w
-            cy0 = ey1 + row * cell_h
-            x1 = max(0, int(round(cx0 - pad_x)))
-            y1 = max(0, int(round(cy0 - pad_y)))
-            x2 = min(W, int(round(cx0 + cell_w + pad_x)))
-            y2 = min(H, int(round(cy0 + cell_h + pad_y)))
+            cx1, cx2 = col_bounds[col], col_bounds[col + 1]
+            pad_x = (cx2 - cx1) * 0.12
+            x1 = max(0, int(round(cx1 - pad_x)))
+            y1 = max(0, int(round(ry1 - pad_y)))
+            x2 = min(W, int(round(cx2 + pad_x)))
+            y2 = min(H, int(round(ry2 + pad_y)))
             cell = image[y1:y2, x1:x2]
             found = _cell_card_contour(cell)
             if found is None:
