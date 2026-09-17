@@ -441,9 +441,13 @@ if ("serviceWorker" in navigator) {
     die Auswahl wird je Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
     sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
     Karte aktualisiert werden, lädt der Button „💰 Preisvorschläge laden" sie für alle Angebote der aktuellen
-    Seite auf einmal nach. In der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
+    Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
+    (gilt genauso für „👁 Aufrufe laden" unten). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
+    Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
+    In der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
     aktiv"-Kästchen) für mehrere ausgewählte Angebote auf einmal setzen, analog zur prozentualen
-    Preisanpassung. Die Summenzeile unten zeigt neben der Summe der sichtbaren Angebotspreise auch eine Summe für
+    Preisanpassung; ein eingetragener Preis aktiviert das Kästchen automatisch, damit die Werte nicht durch ein
+    vergessenes Häkchen in der Tabelle wieder ausgeblendet werden. Die Summenzeile unten zeigt neben der Summe der sichtbaren Angebotspreise auch eine Summe für
     einen wählbaren Zeitraum – per Auswahlfeld lässt sich umschalten, ob sich „von/bis" auf das Verkaufs-, das
     Einstell- oder das letzte Aktualisierungsdatum bezieht. Der Button „Kachelansicht"
     oben rechts neben dem Sport/Non-Sport-Filter zeigt dieselbe Liste stattdessen als Foto-Kacheln (Titel, Preis,
@@ -485,7 +489,7 @@ if ("serviceWorker" in navigator) {
     wird das auf der eBay-Seite (Spalte „Eingestellt am"), in der Kartenübersicht (⏳-Symbol) und im Dashboard
     unter „Was jetzt tun?" hervorgehoben.</p>
   <p>Der Button „👁 Aufrufe laden" zeigt die Aufrufzahlen der letzten 30 Tage je veröffentlichtem Angebot der
-    aktuell sichtbaren Seite (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
+    aktuellen Suche/Filterauswahl, über alle Seiten der Tabelle hinweg (eBay Sell Analytics API) – bewusst nicht automatisch mitgeladen, da das ein eigener
     API-Aufruf mit eigenem Tageslimit ist und einen zusätzlichen, separat einzurichtenden Berechtigungs-Scope
     braucht (siehe README.md). Eine Beobachter-/Watcher-Anzahl bietet eBay über die moderne API nicht mehr
     zuverlässig an. Auf der Kartenseite gibt es denselben Button auch einzeln im eBay-Abschnitt eines

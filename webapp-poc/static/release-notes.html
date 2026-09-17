@@ -84,6 +84,21 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Weitere Bugfixes rund um „Preisvorschläge laden"
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix (eigentliche Ursache): „💰 Preisvorschläge laden" scheiterte weiterhin mit einem Serverfehler, weil
+      die Route intern von einer anderen, allgemeineren Route abgefangen wurde, bevor die eigentliche Verarbeitung
+      überhaupt lief.</li>
+    <li>„💰 Preisvorschläge laden" und „👁 Aufrufe laden" beziehen sich jetzt auf die gesamte aktuelle Suche/
+      Filterauswahl statt nur auf die gerade sichtbare Tabellenseite.</li>
+    <li>Die Status-Meldungen dieser beiden Buttons werden jetzt geleert, sobald Suche/Filter geändert werden, statt
+      veraltet stehen zu bleiben.</li>
+    <li>Bugfix: In der Massenaktionen-Leiste gesetzte Preisvorschläge verschwanden wieder aus der Tabelle, wenn das
+      Kästchen „Preisvorschläge aktiv" dabei vergessen wurde – ein eingetragener Preis aktiviert es jetzt
+      automatisch.</li>
+  </ul>
+
   <h2>Bugfix "Preisvorschläge laden", Spalten an Anfang/Ende verschieben &amp; breitere Tabellen
     <span class="date">September 2026</span></h2>
   <ul>
