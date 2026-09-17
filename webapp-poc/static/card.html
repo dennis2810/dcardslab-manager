@@ -78,6 +78,7 @@ if ("serviceWorker" in navigator) {
   .crop-modal canvas { background: #444; border-radius: 4px; touch-action: none; align-self: center; }
   .crop-modal-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; }
   .crop-modal-row input[type="range"] { flex: 1; }
+  .crop-modal-row .crop-rotation-number { width: 4.5rem; font-weight: normal; padding: 0.3rem; margin: 0; }
   .crop-modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
   .crop-modal-hint { font-size: 0.8rem; color: #666; margin: 0; }
   .extra-images { margin-bottom: 1.5rem; }
@@ -277,7 +278,8 @@ if ("serviceWorker" in navigator) {
       <div class="crop-modal-row">
         <label for="crop-rotation-range" style="flex: none;">Drehung</label>
         <input type="range" id="crop-rotation-range" min="-180" max="180" step="0.5" value="0">
-        <span id="crop-rotation-value">0°</span>
+        <input type="number" id="crop-rotation-number" min="-180" max="180" step="0.1" value="0" class="crop-rotation-number">
+        <span>°</span>
       </div>
       <div class="crop-modal-actions">
         <button type="button" id="crop-reset-btn">Zurücksetzen</button>
@@ -665,7 +667,7 @@ const cropModal = {
   backdrop: document.getElementById("crop-modal-backdrop"),
   canvas: document.getElementById("crop-canvas"),
   rotationRange: document.getElementById("crop-rotation-range"),
-  rotationValue: document.getElementById("crop-rotation-value"),
+  rotationNumber: document.getElementById("crop-rotation-number"),
   statusEl: document.getElementById("crop-modal-status"),
   side: null,
   img: null, // per Blob/Object-URL geladen, siehe cropLoadImage()
@@ -750,11 +752,29 @@ function cropHandleAt(px, py) {
   return null;
 }
 
+// Zeigt per Mauszeiger-Form an, was ein Klick an dieser Stelle bewirken
+// wuerde (Ecke ziehen, Rahmen verschieben, neuen Rahmen aufziehen) - sonst
+// ist ohne sichtbaren Rahmen-Rand nicht erkennbar, dass die Ecken ueberhaupt
+// separat greifbar sind.
+function cropCursorForHandle(handle) {
+  if (handle === "nw" || handle === "se") return "nwse-resize";
+  if (handle === "ne" || handle === "sw") return "nesw-resize";
+  if (handle === "move") return "move";
+  return "crosshair";
+}
+
+cropModal.canvas.addEventListener("pointermove", (ev) => {
+  if (!cropModal.img || cropModal.drag) return;
+  const pos = cropPointerPos(ev);
+  cropModal.canvas.style.cursor = cropCursorForHandle(cropHandleAt(pos.x, pos.y));
+});
+
 cropModal.canvas.addEventListener("pointerdown", (ev) => {
   if (!cropModal.img) return;
   const pos = cropPointerPos(ev);
   const canvas = cropModal.canvas;
   const handle = cropHandleAt(pos.x, pos.y);
+  canvas.style.cursor = cropCursorForHandle(handle);
   canvas.setPointerCapture(ev.pointerId);
   const crop = cropModal.crop;
   if (handle === "move") {
@@ -807,10 +827,18 @@ cropModal.canvas.addEventListener("pointerup", (ev) => {
   try { cropModal.canvas.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
 });
 
-cropModal.rotationRange.addEventListener("input", () => {
-  cropModal.rotationValue.textContent = `${cropModal.rotationRange.value}°`;
+// Regler und Zahlenfeld zeigen denselben Wert - der Regler ist grob/schnell,
+// das Zahlenfeld erlaubt eine exakte Gradzahl mit Nachkommastelle fuer die
+// Feinausrichtung (z.B. "1.5" statt nur die 0.5°-Schrittweite des Reglers).
+function cropSetRotation(deg) {
+  deg = Math.max(-180, Math.min(180, parseFloat(deg) || 0));
+  cropModal.rotationRange.value = deg;
+  cropModal.rotationNumber.value = deg;
   cropRedraw();
-});
+}
+
+cropModal.rotationRange.addEventListener("input", () => cropSetRotation(cropModal.rotationRange.value));
+cropModal.rotationNumber.addEventListener("input", () => cropSetRotation(cropModal.rotationNumber.value));
 
 // Ueber einen Blob/Object-URL statt direkt img.src = signierte Storage-URL:
 // eine per <img crossorigin> geladene cross-origin signierte URL wuerde den
@@ -842,10 +870,8 @@ async function openCropModal(side) {
   cropModal.backdrop.hidden = false;
   try {
     cropModal.img = await cropLoadImage(imgEl.src);
-    cropModal.rotationRange.value = "0";
-    cropModal.rotationValue.textContent = "0°";
     cropModal.crop = { x: 0, y: 0, w: 1, h: 1 };
-    cropRedraw();
+    cropSetRotation(0);
     cropModal.statusEl.textContent = "";
   } catch (err) {
     cropModal.backdrop.hidden = true;
@@ -882,10 +908,8 @@ function cropBuildResultBlob() {
 }
 
 document.getElementById("crop-reset-btn").addEventListener("click", () => {
-  cropModal.rotationRange.value = "0";
-  cropModal.rotationValue.textContent = "0°";
   cropModal.crop = { x: 0, y: 0, w: 1, h: 1 };
-  cropRedraw();
+  cropSetRotation(0);
 });
 
 document.getElementById("crop-cancel-btn").addEventListener("click", () => {
