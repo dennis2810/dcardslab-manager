@@ -201,6 +201,31 @@ class SyncToSheetsEndpointTests(unittest.TestCase):
         self.assertEqual(row[headers.index("is_rookie")], "Nein")
         self.assertEqual(row[headers.index("is_autograph")], "Ja")
 
+    def test_ebay_tab_includes_condition_and_best_offer_terms(self):
+        settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
+        patchers = self._patch_sheets_data_sources()
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+        listing = {
+            "id": "l1", "title": "Musterkarte", "price": 9.99, "condition": "NM",
+            "status": "Veroeffentlicht", "scheduled_at": None,
+            "best_offer_enabled": True, "auto_accept_price": "18.00", "auto_decline_price": "12.00",
+        }
+        with patch("main.db.get_google_sheets_settings", return_value=settings), \
+             patch("main.db.save_google_sheets_settings"), \
+             patch("main.db.all_ebay_listings", return_value=[listing]), \
+             patch("main.google_sheets_client.refresh_access_token", return_value="access-tok"), \
+             patch("main.google_sheets_client.sync_to_sheets") as mock_sync:
+            response = client.post("/api/sheets/sync")
+        self.assertEqual(response.status_code, 200)
+        headers, rows = mock_sync.call_args[0][2]["eBay"]
+        row = rows[0]
+        self.assertEqual(row[headers.index("condition")], "NM")
+        self.assertEqual(row[headers.index("best_offer_enabled")], "Ja")
+        self.assertEqual(row[headers.index("auto_accept_price")], "18.00")
+        self.assertEqual(row[headers.index("auto_decline_price")], "12.00")
+
     def test_private_sammlung_tab_lists_cards(self):
         settings = {"refresh_token": "r1", "spreadsheet_id": "sheet-1"}
         patchers = self._patch_sheets_data_sources()

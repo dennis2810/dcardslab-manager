@@ -717,10 +717,17 @@ class GetEbayListingBestOfferEndpointTests(unittest.TestCase):
              patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_best_offer_terms", return_value={
                  "best_offer_enabled": True, "auto_accept_price": "18.00", "auto_decline_price": "12.00",
-             }):
+             }), \
+             patch("main.db.update_ebay_listing") as mock_db_update:
             response = client.get("/api/ebay/listings/listing-1/best-offer")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["auto_accept_price"], "18.00")
+        # Haelt den lokalen Cache aktuell (siehe schema.sql-Migration), damit
+        # die eBay-Uebersichtsliste die Werte anzeigen kann, ohne dafuer
+        # selbst einen eBay-Aufruf pro Zeile zu machen.
+        mock_db_update.assert_called_once_with("listing-1", {
+            "best_offer_enabled": True, "auto_accept_price": "18.00", "auto_decline_price": "12.00",
+        })
 
 
 class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
@@ -748,7 +755,8 @@ class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
         published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
         with patch("main.db.get_ebay_listing", return_value=published), \
              patch("main.ebay_client.get_access_token", return_value="tok"), \
-             patch("main.ebay_client.update_offer_best_offer_terms") as mock_update:
+             patch("main.ebay_client.update_offer_best_offer_terms") as mock_update, \
+             patch("main.db.update_ebay_listing") as mock_db_update:
             response = client.put(
                 "/api/ebay/listings/listing-1/best-offer",
                 json={"enabled": True, "auto_accept_price": "18", "auto_decline_price": "12"},
@@ -757,6 +765,9 @@ class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
         mock_update.assert_called_once_with(
             "tok", "offer-1", enabled=True, auto_accept_price="18", auto_decline_price="12"
         )
+        mock_db_update.assert_called_once_with("listing-1", {
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+        })
 
     def test_relays_ebay_api_error_as_502(self):
         published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
@@ -1103,6 +1114,79 @@ class PriceBulkEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("error", response.json()["results"][0])
         mock_update.assert_not_called()
+
+
+class BestOfferBulkEndpointTests(unittest.TestCase):
+    def test_updates_terms_for_each_listing_and_caches_in_db(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.update_offer_best_offer_terms") as mock_update, \
+             patch("main.db.update_ebay_listing") as mock_db_update:
+            response = client.post(
+                "/api/ebay/listings/best-offer-bulk",
+                json={
+                    "listing_ids": ["listing-1"],
+                    "enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [{"listing_id": "listing-1", "ok": True}])
+        mock_update.assert_called_once_with(
+            "tok", "offer-1", enabled=True, auto_accept_price="18", auto_decline_price="12"
+        )
+        mock_db_update.assert_called_once_with("listing-1", {
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+        })
+
+    def test_unknown_listing_id_reports_error_without_raising(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.post(
+                "/api/ebay/listings/best-offer-bulk",
+                json={"listing_ids": ["does-not-exist"], "enabled": True},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.json()["results"][0])
+
+    def test_reports_error_for_imported_listing_without_updating(self):
+        imported = _listing(status="Veroeffentlicht", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=imported), \
+             patch("main.db.update_ebay_listing") as mock_db_update:
+            response = client.post(
+                "/api/ebay/listings/best-offer-bulk",
+                json={"listing_ids": ["listing-1"], "enabled": True},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.json()["results"][0])
+        mock_db_update.assert_not_called()
+
+    def test_reports_error_for_not_yet_published_listing(self):
+        draft = _listing(status="Entwurf", ebay_offer_id="")
+        with patch("main.db.get_ebay_listing", return_value=draft):
+            response = client.post(
+                "/api/ebay/listings/best-offer-bulk",
+                json={"listing_ids": ["listing-1"], "enabled": True},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.json()["results"][0])
+
+    def test_one_failure_does_not_abort_the_rest(self):
+        def get_listing(listing_id):
+            if listing_id == "bad":
+                return None
+            return _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+
+        with patch("main.db.get_ebay_listing", side_effect=get_listing), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.update_offer_best_offer_terms"), \
+             patch("main.db.update_ebay_listing"):
+            response = client.post(
+                "/api/ebay/listings/best-offer-bulk",
+                json={"listing_ids": ["bad", "listing-1"], "enabled": True},
+            )
+        results = response.json()["results"]
+        self.assertIn("error", results[0])
+        self.assertEqual(results[1], {"listing_id": "listing-1", "ok": True})
 
 
 class OauthStatusEndpointTests(unittest.TestCase):

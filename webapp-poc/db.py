@@ -560,6 +560,57 @@ def purchase_cost_by_card_id(card_ids):
     return {row["card_id"]: row["allocated_cost"] for row in response.data}
 
 
+def purchase_info_by_card_ids(card_ids):
+    # Bulk-lookup companion to get_purchase_for_card() fuer Plattform/
+    # Verkaeufer vieler Karten auf einmal (Karten-Uebersicht) - zwei
+    # Anfragen statt eines direkten Joins, gleiches Prinzip wie sonst in
+    # diesem Modul (der Supabase-Client unterstuetzt keine beliebigen
+    # SQL-Joins).
+    if not card_ids:
+        return {}
+    items_response = (
+        get_client().table("purchase_items").select("card_id,purchase_id")
+        .in_("card_id", card_ids).execute()
+    )
+    items = items_response.data
+    if not items:
+        return {}
+    purchase_ids = list({item["purchase_id"] for item in items})
+    purchases_response = (
+        get_client().table("purchases").select("id,platform,seller")
+        .in_("id", purchase_ids).execute()
+    )
+    purchases_by_id = {p["id"]: p for p in purchases_response.data}
+    result = {}
+    for item in items:
+        purchase = purchases_by_id.get(item["purchase_id"])
+        if purchase:
+            result[item["card_id"]] = {"platform": purchase.get("platform") or "", "seller": purchase.get("seller") or ""}
+    return result
+
+
+def inventory_location_by_card_ids(card_ids):
+    # Fuer die Karten-Uebersicht - eine Karte kann mehrere Inventar-Eintraege
+    # haben (z.B. nach einem Duplikat-Zusammenfuehren mit unterschiedlichen
+    # Lagerorten), daher werden mehrere Lagerorte kommagetrennt
+    # zusammengefasst statt nur den ersten zu zeigen.
+    if not card_ids:
+        return {}
+    response = (
+        get_client().table("inventory").select("card_id,location")
+        .in_("card_id", card_ids).execute()
+    )
+    locations_by_card = {}
+    for row in response.data:
+        location = (row.get("location") or "").strip()
+        if not location:
+            continue
+        locations_by_card.setdefault(row["card_id"], [])
+        if location not in locations_by_card[row["card_id"]]:
+            locations_by_card[row["card_id"]].append(location)
+    return {card_id: ", ".join(locations) for card_id, locations in locations_by_card.items()}
+
+
 def get_cards_by_ids(card_ids):
     if not card_ids:
         return []
@@ -574,6 +625,7 @@ EBAY_LISTING_FIELDS = [
     "title", "description", "condition", "condition_id",
     "listing_type", "category_id", "aspects", "price", "quantity",
     "grader", "grade", "auto_relist_after_days",
+    "best_offer_enabled", "auto_accept_price", "auto_decline_price",
 ]
 EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "status", "scheduled_at", "scheduling_mode",

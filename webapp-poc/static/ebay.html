@@ -94,6 +94,9 @@ if ("serviceWorker" in navigator) {
   #listings-table.hide-col-11 th:nth-child(11), #listings-table.hide-col-11 td:nth-child(11) { display: none; }
   #listings-table.hide-col-12 th:nth-child(12), #listings-table.hide-col-12 td:nth-child(12) { display: none; }
   #listings-table.hide-col-13 th:nth-child(13), #listings-table.hide-col-13 td:nth-child(13) { display: none; }
+  #listings-table.hide-col-15 th:nth-child(15), #listings-table.hide-col-15 td:nth-child(15) { display: none; }
+  #listings-table.hide-col-16 th:nth-child(16), #listings-table.hide-col-16 td:nth-child(16) { display: none; }
+  #listings-table.hide-col-17 th:nth-child(17), #listings-table.hide-col-17 td:nth-child(17) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
   .shortcuts-panel ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
@@ -224,6 +227,10 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="publish-selected-btn">Ausgewählte veröffentlichen</button>
     <label>Preis anpassen um <input type="number" id="price-bulk-percent" step="1" style="width: 4.5rem;" placeholder="-10"> %</label>
     <button type="button" id="price-bulk-btn">Anwenden</button>
+    <label><input type="checkbox" id="best-offer-bulk-enabled"> Preisvorschläge aktiv</label>
+    <label>Automatisch akzeptieren ab (€) <input type="number" id="best-offer-bulk-accept" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <label>Automatisch ablehnen unter (€) <input type="number" id="best-offer-bulk-decline" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <button type="button" id="best-offer-bulk-btn">Preisvorschläge übernehmen</button>
     <button type="button" id="end-selected-btn">Ausgewählte beenden</button>
     <button type="button" id="end-selected-undo" hidden>↩ Rückgängig</button>
     <button type="button" id="relist-selected-btn">Ausgewählte neu einstellen</button>
@@ -253,6 +260,9 @@ if ("serviceWorker" in navigator) {
             <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
             <th>Aufrufe</th>
             <th>eBay</th>
+            <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
+            <th data-key="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
+            <th data-key="auto_decline_price">Auto-Ablehnung <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="listings-body"></tbody>
@@ -417,6 +427,9 @@ const STATUS_LABELS = {
   Entwurf: "Entwurf", Geplant: "Geplant", Veroeffentlicht: "Veröffentlicht",
   Verkauft: "Verkauft", Fehler: "Fehler", Beendet: "Beendet",
 };
+
+// Gleiche Codes wie im Zustand-Auswahlfeld auf card.html.
+const CONDITION_LABELS = { NM: "Neuwertig (NM)", EX: "Sehr gut (EX)", VG: "Gut (VG)", G: "Befriedigend (G)" };
 
 // Gleicher Schwellwert wie main.py's _sheets_tabs()/Dashboard-Kennzahl
 // ("'Geplant' seit ueber X Tagen ohne Veroeffentlichung").
@@ -649,6 +662,9 @@ const COLUMN_TOGGLES = [
   { key: "sale_price", label: "Verkaufspreis", index: 11 },
   { key: "published_at", label: "Zuletzt aktualisiert", index: 12 },
   { key: "views", label: "Aufrufe", index: 13 },
+  { key: "condition", label: "Zustand", index: 15 },
+  { key: "auto_accept_price", label: "Auto-Annahme", index: 16 },
+  { key: "auto_decline_price", label: "Auto-Ablehnung", index: 17 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "ebay_hidden_columns";
 let hiddenColumns = new Set();
@@ -896,6 +912,20 @@ function render(listings) {
     }
     tr.appendChild(ebayLinkTd);
 
+    const conditionTd = document.createElement("td");
+    conditionTd.textContent = CONDITION_LABELS[listing.condition] || listing.condition || "";
+    tr.appendChild(conditionTd);
+
+    const autoAcceptTd = document.createElement("td");
+    autoAcceptTd.textContent = listing.best_offer_enabled && listing.auto_accept_price
+      ? fmtEuro(listing.auto_accept_price) : "";
+    tr.appendChild(autoAcceptTd);
+
+    const autoDeclineTd = document.createElement("td");
+    autoDeclineTd.textContent = listing.best_offer_enabled && listing.auto_decline_price
+      ? fmtEuro(listing.auto_decline_price) : "";
+    tr.appendChild(autoDeclineTd);
+
     tr.classList.add("row-link");
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
@@ -1090,10 +1120,16 @@ function downloadCsv(filename, headers, rows) {
 }
 
 document.getElementById("csv-btn").addEventListener("click", () => {
-  const headers = ["SKU", "Titel", "Preis", "Status", "Eingestellt am", "Geplant für", "Verkauft am", "Verkaufspreis", "Zuletzt aktualisiert"];
+  const headers = [
+    "SKU", "Titel", "Preis", "Zustand", "Status", "Eingestellt am", "Geplant für", "Verkauft am", "Verkaufspreis",
+    "Zuletzt aktualisiert", "Auto-Annahme", "Auto-Ablehnung",
+  ];
   const rows = sortedListings().map((l) => [
-    l.sku || "", l.title || "", l.price ?? "", STATUS_LABELS[l.status] || l.status || "", formatDateTime(l.listing_since),
+    l.sku || "", l.title || "", l.price ?? "", CONDITION_LABELS[l.condition] || l.condition || "",
+    STATUS_LABELS[l.status] || l.status || "", formatDateTime(l.listing_since),
     formatDateTime(l.scheduled_at), formatDate(l.sale_date), l.sale_price ?? "", formatDateTime(l.published_at),
+    l.best_offer_enabled && l.auto_accept_price ? l.auto_accept_price : "",
+    l.best_offer_enabled && l.auto_decline_price ? l.auto_decline_price : "",
   ]);
   downloadCsv("ebay.csv", headers, rows);
 });
@@ -1209,6 +1245,62 @@ priceBulkBtn.addEventListener("click", async () => {
     showToast("Fehler: " + err, true);
   } finally {
     priceBulkBtn.disabled = false;
+  }
+});
+
+// Preisvorschlaege (Best Offer) fuer mehrere Angebote auf einmal setzen -
+// gleiches Isolationsprinzip wie price-bulk oben (main.py's best-offer-bulk
+// Endpoint ueberspringt fehlgeschlagene Angebote statt abzubrechen).
+const bestOfferBulkBtn = document.getElementById("best-offer-bulk-btn");
+const bestOfferBulkEnabled = document.getElementById("best-offer-bulk-enabled");
+const bestOfferBulkAccept = document.getElementById("best-offer-bulk-accept");
+const bestOfferBulkDecline = document.getElementById("best-offer-bulk-decline");
+
+bestOfferBulkBtn.addEventListener("click", async () => {
+  const listingIds = Array.from(selectedIds);
+  if (!listingIds.length) return;
+
+  bestOfferBulkBtn.disabled = true;
+  bulkResults.textContent = "Übernehme Preisvorschläge …";
+  bulkResults.className = "";
+  try {
+    const res = await fetch("/api/ebay/listings/best-offer-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listing_ids: listingIds,
+        enabled: bestOfferBulkEnabled.checked,
+        auto_accept_price: bestOfferBulkAccept.value || null,
+        auto_decline_price: bestOfferBulkDecline.value || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      bulkResults.textContent = "Fehler: " + (data.detail || res.statusText);
+      bulkResults.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
+      return;
+    }
+    const list = document.createElement("ul");
+    for (const r of data.results) {
+      const li = document.createElement("li");
+      li.textContent = r.error ? `✗ ${r.listing_id}: ${r.error}` : `✓ ${r.listing_id}: aktualisiert`;
+      list.appendChild(li);
+    }
+    bulkResults.innerHTML = "";
+    bulkResults.appendChild(list);
+    const okCount = data.results.filter((r) => !r.error).length;
+    const failedCount = data.results.length - okCount;
+    showToast(`Preisvorschläge für ${okCount} Angebot(e) übernommen.` + (failedCount ? ` ${failedCount} fehlgeschlagen.` : ""), failedCount > 0 && okCount === 0);
+    selectedIds.clear();
+    updateBulkBar();
+    loadListings();
+  } catch (err) {
+    bulkResults.textContent = "Fehler: " + err;
+    bulkResults.className = "error";
+    showToast("Fehler: " + err, true);
+  } finally {
+    bestOfferBulkBtn.disabled = false;
   }
 });
 
