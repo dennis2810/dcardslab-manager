@@ -2667,10 +2667,10 @@ async def sync_ebay_listings_best_offer(listing_ids: str):
     results = []
     token = None
     for listing_id in ids:
-        listing = db.get_ebay_listing(listing_id)
-        if listing is None or _is_externally_managed(listing) or not listing.get("ebay_offer_id"):
-            continue
         try:
+            listing = db.get_ebay_listing(listing_id)
+            if listing is None or _is_externally_managed(listing) or not listing.get("ebay_offer_id"):
+                continue
             if token is None:
                 token = ebay_client.get_access_token()
             terms = ebay_client.get_best_offer_terms(token, listing["ebay_offer_id"])
