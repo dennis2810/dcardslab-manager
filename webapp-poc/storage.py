@@ -36,6 +36,21 @@ def upload_image(batch_id, position, side, path):
     return object_path
 
 
+def upload_debug_image(batch_id, side, path):
+    """DEBUG_Erkennung.png (das mit erkannten Konturen annotierte Scanbild)
+    aus scanner.process() - fuer die Fehlersuche bei schlechten Zuschnitten
+    (siehe /api/scan), damit der Nutzer es direkt in der Vorschau sieht statt
+    es auf dem Scan-Rechner suchen zu muessen. Eigener fester Pfad statt
+    upload_image()'s Positions-Schema, da es pro Seite nur ein Debug-Bild
+    je Batch gibt, keins pro Karte."""
+    data = compress_image(Path(path))
+    object_path = f"{batch_id}/debug_{side}.jpg"
+    get_client().storage.from_(BUCKET).upload(
+        object_path, data, file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
+    return object_path
+
+
 def upload_extra_image(batch_id, position, path):
     """Additional photo beyond front/back (e.g. a close-up of a defect).
     Unlike upload_image()'s fixed front/back path, each extra photo needs
