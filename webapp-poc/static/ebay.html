@@ -105,7 +105,8 @@ if ("serviceWorker" in navigator) {
   #listings-table.hide-views [data-col="views"],
   #listings-table.hide-condition [data-col="condition"],
   #listings-table.hide-auto_accept_price [data-col="auto_accept_price"],
-  #listings-table.hide-auto_decline_price [data-col="auto_decline_price"] { display: none; }
+  #listings-table.hide-auto_decline_price [data-col="auto_decline_price"],
+  #listings-table.hide-best_offer_updated_at [data-col="best_offer_updated_at"] { display: none; }
   .column-toggle-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; max-width: 22rem; }
   .column-toggle-panel .col-row { display: flex; align-items: center; gap: 0.5rem; }
   .column-toggle-panel .col-row label { display: flex; align-items: center; gap: 0.4rem; flex: 1; }
@@ -216,6 +217,8 @@ if ("serviceWorker" in navigator) {
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
     </select>
+    <label>Preis von (€) <input type="number" id="price-min" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <label>bis (€) <input type="number" id="price-max" step="0.01" min="0" style="width: 5.5rem;"></label>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
@@ -284,6 +287,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="condition" data-col="condition">Zustand <span class="sort-arrow"></span></th>
             <th data-key="auto_accept_price" data-col="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
             <th data-key="auto_decline_price" data-col="auto_decline_price">Auto-Ablehnung <span class="sort-arrow"></span></th>
+            <th data-key="best_offer_updated_at" data-col="best_offer_updated_at">Preisvorschläge geändert <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="listings-body"></tbody>
@@ -429,6 +433,8 @@ document.getElementById("shortcuts-btn").addEventListener("click", () => {
 });
 const statusSelect = document.getElementById("status");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
+const priceMinInput = document.getElementById("price-min");
+const priceMaxInput = document.getElementById("price-max");
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
@@ -526,8 +532,15 @@ function ebayListingUrl(listing) {
 }
 
 function filteredListings() {
-  if (!cardTypeFilterSelect.value) return currentListings;
-  return currentListings.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+  let list = currentListings;
+  if (cardTypeFilterSelect.value) {
+    list = list.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+  }
+  const min = parseFloat(priceMinInput.value);
+  const max = parseFloat(priceMaxInput.value);
+  if (!Number.isNaN(min)) list = list.filter((l) => (l.price ?? 0) >= min);
+  if (!Number.isNaN(max)) list = list.filter((l) => (l.price ?? 0) <= max);
+  return list;
 }
 
 function sortedListings() {
@@ -696,6 +709,7 @@ const COLUMN_TOGGLES = [
   { key: "condition", label: "Zustand" },
   { key: "auto_accept_price", label: "Auto-Annahme" },
   { key: "auto_decline_price", label: "Auto-Ablehnung" },
+  { key: "best_offer_updated_at", label: "Preisvorschläge geändert" },
 ];
 const COLUMN_LABELS = {
   sku: "SKU", title: "Titel", price: "Preis", status: "Status", ebay_link: "eBay",
@@ -707,7 +721,7 @@ const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
 const DEFAULT_COLUMN_ORDER = [
   "sku", "title", "price", "price_check", "status", "listing_since", "scheduled_at",
   "sale_date", "sale_price", "published_at", "views", "ebay_link", "condition",
-  "auto_accept_price", "auto_decline_price",
+  "auto_accept_price", "auto_decline_price", "best_offer_updated_at",
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "ebay_hidden_columns";
 const COLUMN_ORDER_STORAGE_KEY = "ebay_column_order";
@@ -1077,6 +1091,16 @@ function render(listings) {
       ? fmtEuro(listing.auto_decline_price) : "";
     tr.appendChild(autoDeclineTd);
 
+    // Eigener Zeitstempel, getrennt von "Zuletzt aktualisiert" (published_at) -
+    // wird nur bei einer tatsaechlichen Preisvorschlaege-Aenderung gesetzt
+    // (PUT .../best-offer, best-offer-bulk), nicht beim reinen Nachladen vom
+    // eBay-Stand (Preisvorschlaege laden/best-offer-sync) - Klaerung mit dem
+    // Nutzer, der die beiden Zeitstempel bisher faelschlich fuer identisch hielt.
+    const bestOfferUpdatedTd = document.createElement("td");
+    bestOfferUpdatedTd.dataset.col = "best_offer_updated_at";
+    bestOfferUpdatedTd.textContent = formatDateTime(listing.best_offer_updated_at);
+    tr.appendChild(bestOfferUpdatedTd);
+
     tr.classList.add("row-link");
     tr.addEventListener("click", () => {
       location.href = `card.html?id=${encodeURIComponent(listing.card_id)}`;
@@ -1348,7 +1372,7 @@ function downloadCsv(filename, headers, rows) {
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Titel", "Preis", "Zustand", "Status", "Eingestellt am", "Geplant für", "Verkauft am", "Verkaufspreis",
-    "Zuletzt aktualisiert", "Auto-Annahme", "Auto-Ablehnung",
+    "Zuletzt aktualisiert", "Auto-Annahme", "Auto-Ablehnung", "Preisvorschläge geändert",
   ];
   const rows = sortedListings().map((l) => [
     l.sku || "", l.title || "", l.price ?? "", CONDITION_LABELS[l.condition] || l.condition || "",
@@ -1356,6 +1380,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     formatDateTime(l.scheduled_at), formatDate(l.sale_date), l.sale_price ?? "", formatDateTime(l.published_at),
     l.best_offer_enabled && l.auto_accept_price ? l.auto_accept_price : "",
     l.best_offer_enabled && l.auto_decline_price ? l.auto_decline_price : "",
+    formatDateTime(l.best_offer_updated_at),
   ]);
   downloadCsv("ebay.csv", headers, rows);
 });
@@ -1866,6 +1891,15 @@ cardTypeFilterSelect.addEventListener("change", () => {
   document.getElementById("best-offer-sync-status").textContent = "";
   render(sortedListings());
 });
+
+function onPriceRangeFilterChange() {
+  currentPage = 0;
+  document.getElementById("views-status").textContent = "";
+  document.getElementById("best-offer-sync-status").textContent = "";
+  render(sortedListings());
+}
+priceMinInput.addEventListener("input", onPriceRangeFilterChange);
+priceMaxInput.addEventListener("input", onPriceRangeFilterChange);
 
 loadOauthStatus();
 loadListings();

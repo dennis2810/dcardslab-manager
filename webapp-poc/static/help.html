@@ -158,8 +158,11 @@ if ("serviceWorker" in navigator) {
     Käufe- und Alle-Verkäufe-Seite.
     In der Listenansicht sind die Spalten sortierbar und decken praktisch alle Kartenfelder ab (inkl. Kategorie,
     Trikotnummer, Debütsaison, Seriennummer, Auflage, laufende Nummer, Grading-Status sowie verknüpfter
-    Kauf-Plattform/-Verkäufer und Lagerort). Die Spalte „Kauf-Plattform" ist bei verknüpften Käufen anklickbar
-    und führt direkt zum betreffenden Kauf. Die Spalte „Verkauf" zeigt ausschließlich den eBay-/Verkaufsstatus
+    Kauf-Plattform/-Verkäufer, Kaufdatum, Kaufpreis, Verkaufsdatum, Verkaufspreis und Lagerort). Die Spalte
+    „Kauf-Plattform" ist bei verknüpften Käufen anklickbar
+    und führt direkt zum betreffenden Kauf. Über „Zeitraum für" (Kaufdatum/Verkaufsdatum) bzw. „Preis für"
+    (Kaufpreis/Verkaufspreis) oberhalb der Tabelle lässt sich zusätzlich nach einem Datums- bzw. Preisbereich
+    filtern. Die Spalte „Verkauf" zeigt ausschließlich den eBay-/Verkaufsstatus
     (inkl. Warnungen bei Doppel-Verkauf oder Privatentnahme) – ein kleines 📥-Symbol markiert Karten mit einem
     manuell importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot
     und ein ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft – diese drei
@@ -436,7 +439,8 @@ if ("serviceWorker" in navigator) {
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
-    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung) aus-/einblenden und über die Pfeile
+    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung, Preisvorschläge geändert) aus-/einblenden
+    und über die Pfeile
     ▲/▼ (einen Schritt) bzw. ⏮/⏭ (an den Anfang/ans Ende) auch in eine beliebige eigene Reihenfolge bringen –
     die Auswahl wird je Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
     sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
@@ -444,6 +448,10 @@ if ("serviceWorker" in navigator) {
     Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
     (gilt genauso für „👁 Aufrufe laden" unten). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
+    Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
+    (einzeln auf der Kartenseite oder per Massenaktion) – unabhängig von „Zuletzt aktualisiert", das sich nur auf
+    das eigentliche Angebot (Preis, Fotos, Veröffentlichung) bezieht; ein reines Nachladen per „💰 Preisvorschläge
+    laden" zählt nicht als Änderung und aktualisiert diese Spalte daher nicht.
     In der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
     aktiv"-Kästchen) für mehrere ausgewählte Angebote auf einmal setzen, analog zur prozentualen
     Preisanpassung; ein eingetragener Preis aktiviert das Kästchen automatisch, damit die Werte nicht durch ein
@@ -471,7 +479,8 @@ if ("serviceWorker" in navigator) {
   <p>Rückerstattungen/Retouren zu bereits synchronisierten Verkäufen werden ebenfalls automatisch im Hintergrund
     (alle 15 Minuten) erkannt und markiert – ein manuelles Nachtragen ist normalerweise nicht mehr nötig. Unter Einstellungen lässt
     sich außerdem eine E-Mail-Benachrichtigung einrichten, die bei neuen eBay-Verkäufen automatisch verschickt wird.
-    Der Filter „Sport &amp; Non-Sport" grenzt die Angebotsliste nach Kartentyp ein.</p>
+    Der Filter „Sport &amp; Non-Sport" grenzt die Angebotsliste nach Kartentyp ein, die Felder „Preis von"/„bis"
+    daneben zusätzlich nach einem Preisbereich.</p>
   <p>Der Button „Neu einstellen" auf der Kartenseite beendet ein veröffentlichtes Angebot und veröffentlicht es
     sofort wieder neu (eBay vergibt dabei ein frisches Angebot) – praktisch, um ein lange unverkauftes Angebot
     nochmal nach oben zu holen. Dieselbe Aktion

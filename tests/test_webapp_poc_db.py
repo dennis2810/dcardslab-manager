@@ -1324,9 +1324,11 @@ class PurchaseInfoByCardIdsTests(unittest.TestCase):
     def test_joins_purchase_items_and_purchases(self):
         mock_client = MagicMock()
         items_response = MagicMock()
-        items_response.data = [{"card_id": "card-1", "purchase_id": "p1"}]
+        items_response.data = [{"card_id": "card-1", "purchase_id": "p1", "allocated_cost": 12.5}]
         purchases_response = MagicMock()
-        purchases_response.data = [{"id": "p1", "platform": "eBay", "seller": "cardking"}]
+        purchases_response.data = [
+            {"id": "p1", "platform": "eBay", "seller": "cardking", "purchase_date": "2024-05-01"}
+        ]
 
         def table_side_effect(name):
             m = MagicMock()
@@ -1339,7 +1341,12 @@ class PurchaseInfoByCardIdsTests(unittest.TestCase):
         mock_client.table.side_effect = table_side_effect
         with patch("db.get_client", return_value=mock_client):
             result = db.purchase_info_by_card_ids(["card-1"])
-        self.assertEqual(result, {"card-1": {"id": "p1", "platform": "eBay", "seller": "cardking"}})
+        self.assertEqual(result, {
+            "card-1": {
+                "id": "p1", "platform": "eBay", "seller": "cardking",
+                "purchase_date": "2024-05-01", "cost": 12.5,
+            }
+        })
 
     def test_empty_input_skips_query(self):
         mock_client = MagicMock()
@@ -1356,6 +1363,38 @@ class PurchaseInfoByCardIdsTests(unittest.TestCase):
         with patch("db.get_client", return_value=mock_client):
             result = db.purchase_info_by_card_ids(["card-1"])
         self.assertEqual(result, {})
+
+
+class SaleSummaryByCardIdsTests(unittest.TestCase):
+    def test_prefers_ebay_sale_over_manual_sale(self):
+        mock_client = MagicMock()
+        ebay_response = MagicMock()
+        ebay_response.data = [{"card_id": "card-1", "sale_date": "2024-06-01", "gross_price": 25.0}]
+        manual_response = MagicMock()
+        manual_response.data = [{"card_id": "card-2", "sale_date": "2024-06-05", "gross_price": 9.5}]
+
+        def table_side_effect(name):
+            m = MagicMock()
+            if name == "ebay_sales":
+                m.select.return_value.in_.return_value.order.return_value.execute.return_value = ebay_response
+            elif name == "manual_sales":
+                m.select.return_value.in_.return_value.order.return_value.execute.return_value = manual_response
+            return m
+
+        mock_client.table.side_effect = table_side_effect
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sale_summary_by_card_ids(["card-1", "card-2"])
+        self.assertEqual(result, {
+            "card-1": {"sale_date": "2024-06-01", "sale_price": 25.0},
+            "card-2": {"sale_date": "2024-06-05", "sale_price": 9.5},
+        })
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.sale_summary_by_card_ids([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
 
 
 class InventoryLocationByCardIdsTests(unittest.TestCase):

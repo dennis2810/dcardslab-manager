@@ -3,7 +3,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 for _name in ("tkinter", "tkinter.filedialog", "tkinter.messagebox", "tkinter.ttk"):
     if _name not in sys.modules:
@@ -773,6 +773,26 @@ class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
         )
         mock_db_update.assert_called_once_with("listing-1", {
             "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+            "best_offer_updated_at": ANY,
+        })
+
+    def test_get_best_offer_does_not_touch_best_offer_updated_at(self):
+        # Abgrenzung zum obigen Test: das reine Nachladen der aktuellen
+        # eBay-Werte (GET .../best-offer, siehe GetEbayListingBestOfferEndpointTests
+        # oben) ist keine Aenderung und darf "Preisvorschlaege geaendert"
+        # daher nicht anfassen - nur die beiden PUT/POST-Endpunkte, die eine
+        # tatsaechliche Aenderung an eBay senden, tun das.
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_best_offer_terms", return_value={
+                 "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+             }), \
+             patch("main.db.update_ebay_listing") as mock_db_update:
+            response = client.get("/api/ebay/listings/listing-1/best-offer")
+        self.assertEqual(response.status_code, 200)
+        mock_db_update.assert_called_once_with("listing-1", {
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
         })
 
     def test_relays_ebay_api_error_as_502(self):
@@ -1143,6 +1163,7 @@ class BestOfferBulkEndpointTests(unittest.TestCase):
         )
         mock_db_update.assert_called_once_with("listing-1", {
             "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+            "best_offer_updated_at": ANY,
         })
 
     def test_unknown_listing_id_reports_error_without_raising(self):
