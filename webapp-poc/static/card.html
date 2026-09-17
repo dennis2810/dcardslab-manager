@@ -70,6 +70,16 @@ if ("serviceWorker" in navigator) {
   .rotate-buttons button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
   .rotate-buttons button:disabled { opacity: 0.5; cursor: default; }
   .rotate-status { font-size: 0.8rem; color: #555; font-style: italic; }
+  .crop-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex;
+    align-items: center; justify-content: center; z-index: 1000; padding: 1rem; box-sizing: border-box; }
+  .crop-modal { background: var(--bg, #fff); color: var(--fg, #111); border-radius: 8px; padding: 1rem;
+    max-width: 95vw; max-height: 95vh; overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; }
+  .crop-modal h2 { margin: 0; font-size: 1.05rem; }
+  .crop-modal canvas { background: #444; border-radius: 4px; touch-action: none; align-self: center; }
+  .crop-modal-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; }
+  .crop-modal-row input[type="range"] { flex: 1; }
+  .crop-modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  .crop-modal-hint { font-size: 0.8rem; color: #666; margin: 0; }
   .extra-images { margin-bottom: 1.5rem; }
   .extra-images h2 { font-size: 1rem; margin: 0 0 0.5rem; }
   .extra-images-gallery { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; }
@@ -242,6 +252,7 @@ if ("serviceWorker" in navigator) {
         <button type="button" id="front-rotate-right">&#8635; Rechts</button>
         <button type="button" id="front-replace-btn">Foto ersetzen</button>
         <input type="file" id="front-replace-file" accept="image/*" hidden>
+        <button type="button" id="front-crop-btn">Zuschneiden/Drehen</button>
         <span class="rotate-status" id="front-rotate-status"></span>
       </div>
     </div>
@@ -252,8 +263,28 @@ if ("serviceWorker" in navigator) {
         <button type="button" id="back-rotate-right">&#8635; Rechts</button>
         <button type="button" id="back-replace-btn">Foto ersetzen</button>
         <input type="file" id="back-replace-file" accept="image/*" hidden>
+        <button type="button" id="back-crop-btn">Zuschneiden/Drehen</button>
         <span class="rotate-status" id="back-rotate-status"></span>
       </div>
+    </div>
+  </div>
+
+  <div class="crop-modal-backdrop" id="crop-modal-backdrop" hidden>
+    <div class="crop-modal">
+      <h2>Bild zuschneiden/drehen</h2>
+      <canvas id="crop-canvas" width="480" height="640"></canvas>
+      <p class="crop-modal-hint">Rahmen ziehen/an den Ecken anpassen, um zuzuschneiden. Feinausrichtung per Regler.</p>
+      <div class="crop-modal-row">
+        <label for="crop-rotation-range" style="flex: none;">Drehung</label>
+        <input type="range" id="crop-rotation-range" min="-180" max="180" step="0.5" value="0">
+        <span id="crop-rotation-value">0°</span>
+      </div>
+      <div class="crop-modal-actions">
+        <button type="button" id="crop-reset-btn">Zurücksetzen</button>
+        <button type="button" id="crop-cancel-btn">Abbrechen</button>
+        <button type="button" id="crop-apply-btn">Übernehmen</button>
+      </div>
+      <span class="rotate-status" id="crop-modal-status"></span>
     </div>
   </div>
 
@@ -622,6 +653,267 @@ for (const side of ["front", "back"]) {
     if (file) replaceImage(side, file);
   });
 }
+
+// Zuschneiden/Drehen (freier Winkel, nicht nur 90°-Schritte): baut aus dem
+// aktuell angezeigten Foto (Data-URI oder signierte Storage-URL) client-
+// seitig ein neues, gedrehtes+zugeschnittenes JPEG und schickt es ueber
+// denselben Weg wie "Foto ersetzen" hoch - kein eigener Backend-Endpunkt
+// noetig, storage.upload_image() ueberschreibt per upsert ohnehin denselben
+// Objekt-Pfad. Gedacht fuer leicht schief gescannte Karten (gerade ziehen)
+// und zu grosszuegige Scan-Zuschnitte (Rand wegschneiden).
+const cropModal = {
+  backdrop: document.getElementById("crop-modal-backdrop"),
+  canvas: document.getElementById("crop-canvas"),
+  rotationRange: document.getElementById("crop-rotation-range"),
+  rotationValue: document.getElementById("crop-rotation-value"),
+  statusEl: document.getElementById("crop-modal-status"),
+  side: null,
+  img: null, // per Blob/Object-URL geladen, siehe cropLoadImage()
+  crop: { x: 0, y: 0, w: 1, h: 1 }, // Anteile (0..1) der gedrehten Bounding-Box
+  drag: null,
+};
+
+function cropRotationRad() {
+  return (parseFloat(cropModal.rotationRange.value) || 0) * Math.PI / 180;
+}
+
+// Bounding-Box des um `rad` gedrehten Originalbilds - groesser als das
+// Original ausser bei 0°/90°-Vielfachen, damit beim Drehen keine Ecke
+// abgeschnitten wird.
+function cropComputeBounds() {
+  const rad = cropRotationRad();
+  const w = cropModal.img.naturalWidth, h = cropModal.img.naturalHeight;
+  return {
+    w: Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad)),
+    h: Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad)),
+  };
+}
+
+function cropRedraw() {
+  if (!cropModal.img) return;
+  const bounds = cropComputeBounds();
+  const maxDim = 520;
+  const scale = Math.min(maxDim / bounds.w, maxDim / bounds.h, 1);
+  const canvas = cropModal.canvas;
+  canvas.width = Math.max(1, Math.round(bounds.w * scale));
+  canvas.height = Math.max(1, Math.round(bounds.h * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(cropRotationRad());
+  ctx.drawImage(
+    cropModal.img,
+    -cropModal.img.naturalWidth * scale / 2,
+    -cropModal.img.naturalHeight * scale / 2,
+    cropModal.img.naturalWidth * scale,
+    cropModal.img.naturalHeight * scale
+  );
+  ctx.restore();
+
+  // Zuschnittrahmen: abgedunkelter Bereich ausserhalb, heller Rahmen +
+  // Eckgriffe innerhalb - dieselbe Optik wie uebliche Foto-Zuschnittwerkzeuge.
+  const cx = cropModal.crop.x * canvas.width, cy = cropModal.crop.y * canvas.height;
+  const cw = cropModal.crop.w * canvas.width, ch = cropModal.crop.h * canvas.height;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.fillRect(0, 0, canvas.width, cy);
+  ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch);
+  ctx.fillRect(0, cy, cx, ch);
+  ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx, cy, cw, ch);
+  const handle = 9;
+  ctx.fillStyle = "#fff";
+  for (const [hx, hy] of [[cx, cy], [cx + cw, cy], [cx, cy + ch], [cx + cw, cy + ch]]) {
+    ctx.fillRect(hx - handle / 2, hy - handle / 2, handle, handle);
+  }
+}
+
+function cropPointerPos(ev) {
+  const rect = cropModal.canvas.getBoundingClientRect();
+  return {
+    x: (ev.clientX - rect.left) * (cropModal.canvas.width / rect.width),
+    y: (ev.clientY - rect.top) * (cropModal.canvas.height / rect.height),
+  };
+}
+
+function cropHandleAt(px, py) {
+  const canvas = cropModal.canvas;
+  const cx = cropModal.crop.x * canvas.width, cy = cropModal.crop.y * canvas.height;
+  const cw = cropModal.crop.w * canvas.width, ch = cropModal.crop.h * canvas.height;
+  const near = 16;
+  const corners = { nw: [cx, cy], ne: [cx + cw, cy], sw: [cx, cy + ch], se: [cx + cw, cy + ch] };
+  for (const [name, [hx, hy]] of Object.entries(corners)) {
+    if (Math.hypot(px - hx, py - hy) <= near) return name;
+  }
+  if (px >= cx && px <= cx + cw && py >= cy && py <= cy + ch) return "move";
+  return null;
+}
+
+cropModal.canvas.addEventListener("pointerdown", (ev) => {
+  if (!cropModal.img) return;
+  const pos = cropPointerPos(ev);
+  const canvas = cropModal.canvas;
+  const handle = cropHandleAt(pos.x, pos.y);
+  canvas.setPointerCapture(ev.pointerId);
+  const crop = cropModal.crop;
+  if (handle === "move") {
+    cropModal.drag = { mode: "move", startPos: pos, startCrop: { ...crop } };
+    return;
+  }
+  // Sowohl das Ziehen einer bestehenden Ecke als auch ein neuer Rahmen
+  // (Klick ausserhalb) spannen den Rahmen von einem festen Ankerpunkt (der
+  // gegenueberliegenden Ecke) bis zur aktuellen Zeigerposition auf.
+  let anchorX, anchorY;
+  if (handle === "nw") { anchorX = crop.x + crop.w; anchorY = crop.y + crop.h; }
+  else if (handle === "ne") { anchorX = crop.x; anchorY = crop.y + crop.h; }
+  else if (handle === "sw") { anchorX = crop.x + crop.w; anchorY = crop.y; }
+  else if (handle === "se") { anchorX = crop.x; anchorY = crop.y; }
+  else { anchorX = pos.x / canvas.width; anchorY = pos.y / canvas.height; }
+  cropModal.drag = { mode: "resize", anchorX, anchorY };
+});
+
+cropModal.canvas.addEventListener("pointermove", (ev) => {
+  if (!cropModal.drag) return;
+  const pos = cropPointerPos(ev);
+  const canvas = cropModal.canvas;
+  if (cropModal.drag.mode === "move") {
+    const dxFrac = (pos.x - cropModal.drag.startPos.x) / canvas.width;
+    const dyFrac = (pos.y - cropModal.drag.startPos.y) / canvas.height;
+    const start = cropModal.drag.startCrop;
+    const w = start.w, h = start.h;
+    cropModal.crop = {
+      x: Math.max(0, Math.min(start.x + dxFrac, 1 - w)),
+      y: Math.max(0, Math.min(start.y + dyFrac, 1 - h)),
+      w, h,
+    };
+  } else {
+    const fx = Math.max(0, Math.min(pos.x / canvas.width, 1));
+    const fy = Math.max(0, Math.min(pos.y / canvas.height, 1));
+    const { anchorX, anchorY } = cropModal.drag;
+    const w = Math.max(0.03, Math.abs(fx - anchorX));
+    const h = Math.max(0.03, Math.abs(fy - anchorY));
+    cropModal.crop = {
+      x: Math.min(Math.min(anchorX, fx), 1 - w),
+      y: Math.min(Math.min(anchorY, fy), 1 - h),
+      w, h,
+    };
+  }
+  cropRedraw();
+});
+
+cropModal.canvas.addEventListener("pointerup", (ev) => {
+  cropModal.drag = null;
+  try { cropModal.canvas.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
+});
+
+cropModal.rotationRange.addEventListener("input", () => {
+  cropModal.rotationValue.textContent = `${cropModal.rotationRange.value}°`;
+  cropRedraw();
+});
+
+// Ueber einen Blob/Object-URL statt direkt img.src = signierte Storage-URL:
+// eine per <img crossorigin> geladene cross-origin signierte URL wuerde den
+// Canvas "taintieren" (kein toBlob()/getImageData() mehr moeglich), sobald
+// die Antwort keine CORS-Header traegt. Ein per fetch() geladener Blob ist
+// dagegen als blob:-URL immer same-origin fuer den Canvas, sofern der fetch
+// selbst gelingt (Supabase Storage sendet dafuer CORS-Header); eine bereits
+// angezeigte Data-URI (nach vorherigem Drehen/Ersetzen) funktioniert genauso.
+function cropLoadImage(src) {
+  return fetch(src)
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText);
+      return res.blob();
+    })
+    .then((blob) => new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("ungültiges Bildformat"));
+      img.src = objectUrl;
+    }));
+}
+
+async function openCropModal(side) {
+  const imgEl = document.getElementById(side === "front" ? "front-img" : "back-img");
+  if (!imgEl || !imgEl.src) return;
+  cropModal.side = side;
+  cropModal.statusEl.textContent = "Bild wird geladen …";
+  cropModal.backdrop.hidden = false;
+  try {
+    cropModal.img = await cropLoadImage(imgEl.src);
+    cropModal.rotationRange.value = "0";
+    cropModal.rotationValue.textContent = "0°";
+    cropModal.crop = { x: 0, y: 0, w: 1, h: 1 };
+    cropRedraw();
+    cropModal.statusEl.textContent = "";
+  } catch (err) {
+    cropModal.backdrop.hidden = true;
+    alert("Bild konnte nicht zum Bearbeiten geladen werden: " + err);
+  }
+}
+
+function cropBuildResultBlob() {
+  // Volle Aufloesung (nicht die auf maxDim herunterskalierte Vorschau) -
+  // rotiert das Originalbild zunaechst in eine bounding-box-grosse
+  // Zwischen-Canvas, schneidet dann den gewaehlten Ausschnitt in
+  // Originalpixeln heraus.
+  const bounds = cropComputeBounds();
+  const rotated = document.createElement("canvas");
+  rotated.width = Math.max(1, Math.round(bounds.w));
+  rotated.height = Math.max(1, Math.round(bounds.h));
+  const rctx = rotated.getContext("2d");
+  rctx.translate(rotated.width / 2, rotated.height / 2);
+  rctx.rotate(cropRotationRad());
+  rctx.drawImage(cropModal.img, -cropModal.img.naturalWidth / 2, -cropModal.img.naturalHeight / 2);
+
+  const sx = cropModal.crop.x * rotated.width, sy = cropModal.crop.y * rotated.height;
+  const sw = cropModal.crop.w * rotated.width, sh = cropModal.crop.h * rotated.height;
+  const result = document.createElement("canvas");
+  result.width = Math.max(1, Math.round(sw));
+  result.height = Math.max(1, Math.round(sh));
+  result.getContext("2d").drawImage(rotated, sx, sy, sw, sh, 0, 0, result.width, result.height);
+
+  return new Promise((resolve, reject) => {
+    result.toBlob((blob) => {
+      if (blob) resolve(blob); else reject(new Error("Canvas-Export fehlgeschlagen"));
+    }, "image/jpeg", 0.92);
+  });
+}
+
+document.getElementById("crop-reset-btn").addEventListener("click", () => {
+  cropModal.rotationRange.value = "0";
+  cropModal.rotationValue.textContent = "0°";
+  cropModal.crop = { x: 0, y: 0, w: 1, h: 1 };
+  cropRedraw();
+});
+
+document.getElementById("crop-cancel-btn").addEventListener("click", () => {
+  cropModal.backdrop.hidden = true;
+  cropModal.img = null;
+});
+
+document.getElementById("crop-apply-btn").addEventListener("click", async () => {
+  const applyBtn = document.getElementById("crop-apply-btn");
+  applyBtn.disabled = true;
+  cropModal.statusEl.textContent = "Wird verarbeitet …";
+  try {
+    const blob = await cropBuildResultBlob();
+    const file = new File([blob], `${cropModal.side}.jpg`, { type: "image/jpeg" });
+    const side = cropModal.side;
+    cropModal.backdrop.hidden = true;
+    cropModal.img = null;
+    await replaceImage(side, file);
+  } catch (err) {
+    alert("Zuschneiden fehlgeschlagen: " + err);
+  } finally {
+    applyBtn.disabled = false;
+    cropModal.statusEl.textContent = "";
+  }
+});
+
+document.getElementById("front-crop-btn").addEventListener("click", () => openCropModal("front"));
+document.getElementById("back-crop-btn").addEventListener("click", () => openCropModal("back"));
 
 // Weitere Fotos neben Vorder-/Rueckseite (z.B. Detailaufnahmen bei
 // Beschaedigungen) - werden beim eBay-Veroeffentlichen mit hochgeladen
