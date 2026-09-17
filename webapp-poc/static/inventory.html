@@ -108,7 +108,14 @@ if ("serviceWorker" in navigator) {
   .error { color: #b00020; font-weight: 600; }
   .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: var(--warn-bg); color: var(--warn-fg); }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
-  .table-scroll { overflow-x: auto; }
+  /* overflow-y muss explizit "visible" bleiben, sonst erzwingt der Browser
+     laut Spec (overflow-x != visible, overflow-y nicht gesetzt) automatisch
+     overflow-y: auto - .table-scroll wuerde dann selbst zum Sticky-Bezugs-
+     rahmen statt der Seite, dessen Scrollbereich aber exakt tabellenhoch ist
+     und nie intern scrollt, wodurch "position: sticky" unten nie ausgeloest
+     wird (Bugreport des Nutzers: Kopfzeile blieb trotz Sticky-Regel nicht
+     stehen). */
+  .table-scroll { overflow-x: auto; overflow-y: visible; }
   /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
      Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
      Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
