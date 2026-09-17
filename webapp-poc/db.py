@@ -562,14 +562,14 @@ def purchase_cost_by_card_id(card_ids):
 
 def purchase_info_by_card_ids(card_ids):
     # Bulk-lookup companion to get_purchase_for_card() fuer Plattform/
-    # Verkaeufer vieler Karten auf einmal (Karten-Uebersicht) - zwei
-    # Anfragen statt eines direkten Joins, gleiches Prinzip wie sonst in
-    # diesem Modul (der Supabase-Client unterstuetzt keine beliebigen
-    # SQL-Joins).
+    # Verkaeufer/Kaufdatum/Kaufpreis vieler Karten auf einmal (Karten-
+    # Uebersicht) - zwei Anfragen statt eines direkten Joins, gleiches
+    # Prinzip wie sonst in diesem Modul (der Supabase-Client unterstuetzt
+    # keine beliebigen SQL-Joins).
     if not card_ids:
         return {}
     items_response = (
-        get_client().table("purchase_items").select("card_id,purchase_id")
+        get_client().table("purchase_items").select("card_id,purchase_id,allocated_cost")
         .in_("card_id", card_ids).execute()
     )
     items = items_response.data
@@ -577,7 +577,7 @@ def purchase_info_by_card_ids(card_ids):
         return {}
     purchase_ids = list({item["purchase_id"] for item in items})
     purchases_response = (
-        get_client().table("purchases").select("id,platform,seller")
+        get_client().table("purchases").select("id,platform,seller,purchase_date")
         .in_("id", purchase_ids).execute()
     )
     purchases_by_id = {p["id"]: p for p in purchases_response.data}
@@ -589,7 +589,33 @@ def purchase_info_by_card_ids(card_ids):
                 "id": purchase["id"],
                 "platform": purchase.get("platform") or "",
                 "seller": purchase.get("seller") or "",
+                "purchase_date": purchase.get("purchase_date"),
+                "cost": item.get("allocated_cost"),
             }
+    return result
+
+
+def sale_summary_by_card_ids(card_ids):
+    # Bulk-Companion zu purchase_info_by_card_ids() fuer die Karten-Uebersicht
+    # (Spalten "Verkaufsdatum"/"Verkaufspreis") - gleiches Zusammenfuehren von
+    # ebay_sales und manual_sales wie in statistics_rows() oben, hier aber nur
+    # die zwei fuer die Liste noetigen Felder statt der vollen Gewinn-/
+    # Marge-Aufstellung.
+    if not card_ids:
+        return {}
+    ebay_response = (
+        get_client().table("ebay_sales").select("card_id,sale_date,gross_price")
+        .in_("card_id", card_ids).order("sale_date", desc=True).execute()
+    )
+    result = {}
+    for row in ebay_response.data:
+        result.setdefault(row["card_id"], {"sale_date": row.get("sale_date"), "sale_price": row.get("gross_price")})
+    manual_response = (
+        get_client().table("manual_sales").select("card_id,sale_date,gross_price")
+        .in_("card_id", card_ids).order("sale_date", desc=True).execute()
+    )
+    for row in manual_response.data:
+        result.setdefault(row["card_id"], {"sale_date": row.get("sale_date"), "sale_price": row.get("gross_price")})
     return result
 
 

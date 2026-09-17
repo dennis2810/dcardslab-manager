@@ -123,6 +123,10 @@ if ("serviceWorker" in navigator) {
   #list.hide-grading_summary [data-col="grading_summary"],
   #list.hide-purchase_platform [data-col="purchase_platform"],
   #list.hide-purchase_seller [data-col="purchase_seller"],
+  #list.hide-purchase_date [data-col="purchase_date"],
+  #list.hide-purchase_price [data-col="purchase_price"],
+  #list.hide-sale_date [data-col="sale_date"],
+  #list.hide-sale_price [data-col="sale_price"],
   #list.hide-inventory_location [data-col="inventory_location"],
   #list.hide-features [data-col="features"],
   #list.hide-listing_hints [data-col="listing_hints"] { display: none; }
@@ -240,6 +244,27 @@ if ("serviceWorker" in navigator) {
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
   </div>
 
+  <div class="controls no-print">
+    <label>Zeitraum für
+      <select id="date-range-field">
+        <option value="">Kein Datumsfilter</option>
+        <option value="purchase_date">Kaufdatum</option>
+        <option value="sale_date">Verkaufsdatum</option>
+      </select>
+    </label>
+    <label>von <input type="date" id="date-range-from"></label>
+    <label>bis <input type="date" id="date-range-to"></label>
+    <label>Preis für
+      <select id="price-range-field">
+        <option value="">Kein Preisfilter</option>
+        <option value="purchase_price">Kaufpreis</option>
+        <option value="sale_price">Verkaufspreis</option>
+      </select>
+    </label>
+    <label>von (€) <input type="number" id="price-range-min" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <label>bis (€) <input type="number" id="price-range-max" step="0.01" min="0" style="width: 5.5rem;"></label>
+  </div>
+
   <div class="controls no-print filter-presets">
     <select id="preset-select">
       <option value="">Gespeicherte Ansicht wählen…</option>
@@ -339,6 +364,10 @@ if ("serviceWorker" in navigator) {
             <th data-key="grading_summary" data-col="grading_summary">Grading <span class="sort-arrow"></span></th>
             <th data-key="purchase_platform" data-col="purchase_platform">Kauf-Plattform <span class="sort-arrow"></span></th>
             <th data-key="purchase_seller" data-col="purchase_seller">Kauf-Verkäufer <span class="sort-arrow"></span></th>
+            <th data-key="purchase_date" data-col="purchase_date">Kaufdatum <span class="sort-arrow"></span></th>
+            <th data-key="purchase_price" data-col="purchase_price">Kaufpreis <span class="sort-arrow"></span></th>
+            <th data-key="sale_date" data-col="sale_date">Verkaufsdatum <span class="sort-arrow"></span></th>
+            <th data-key="sale_price" data-col="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="inventory_location" data-col="inventory_location">Lagerort <span class="sort-arrow"></span></th>
             <th data-col="features">Merkmale</th>
             <th data-col="listing_hints">Angebots-Hinweise</th>
@@ -471,6 +500,10 @@ const COLUMN_TOGGLES = [
   { key: "grading_summary", label: "Grading" },
   { key: "purchase_platform", label: "Kauf-Plattform" },
   { key: "purchase_seller", label: "Kauf-Verkäufer" },
+  { key: "purchase_date", label: "Kaufdatum" },
+  { key: "purchase_price", label: "Kaufpreis" },
+  { key: "sale_date", label: "Verkaufsdatum" },
+  { key: "sale_price", label: "Verkaufspreis" },
   { key: "inventory_location", label: "Lagerort" },
   { key: "features", label: "Merkmale" },
   { key: "listing_hints", label: "Angebots-Hinweise" },
@@ -488,6 +521,7 @@ const DEFAULT_COLUMN_ORDER = [
   "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "card_number",
   "theme", "manufacturer", "position", "category", "squad_number", "club_debut_season",
   "serial_number", "print_run", "grading_summary", "purchase_platform", "purchase_seller",
+  "purchase_date", "purchase_price", "sale_date", "sale_price",
   "inventory_location", "features", "listing_hints",
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
@@ -658,6 +692,12 @@ const tagFilterSelect = document.getElementById("tag-filter");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
 const featureFilterSelect = document.getElementById("feature-filter");
 const listingHintFilterSelect = document.getElementById("listing-hint-filter");
+const dateRangeFieldSelect = document.getElementById("date-range-field");
+const dateRangeFromInput = document.getElementById("date-range-from");
+const dateRangeToInput = document.getElementById("date-range-to");
+const priceRangeFieldSelect = document.getElementById("price-range-field");
+const priceRangeMinInput = document.getElementById("price-range-min");
+const priceRangeMaxInput = document.getElementById("price-range-max");
 
 function matchesFeatureFilter(card, value) {
   if (value === "rc") return !!card.is_rookie;
@@ -903,6 +943,10 @@ function sortedCards() {
   return [...currentCards].sort((a, b) => {
     const av = a[sortKey] ?? "";
     const bv = b[sortKey] ?? "";
+    // Kaufpreis/Verkaufspreis sind echte Zahlen (anders als alle bisherigen
+    // Spalten hier) - ein reiner String-Vergleich saehe "10" vor "9" (siehe
+    // gleiche Unterscheidung in ebay.html's sortedListings()).
+    if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
     return sortAsc
       ? String(av).localeCompare(String(bv), "de")
       : String(bv).localeCompare(String(av), "de");
@@ -946,6 +990,22 @@ function visibleCards() {
   }
   if (listingHintFilterSelect.value) {
     filtered = filtered.filter((c) => matchesListingHintFilter(c, listingHintFilterSelect.value));
+  }
+  if (dateRangeFieldSelect.value) {
+    const field = dateRangeFieldSelect.value;
+    const from = dateRangeFromInput.value;
+    const to = dateRangeToInput.value;
+    // ISO-Datumsstrings (YYYY-MM-DD) sortieren/vergleichen sich lexikografisch
+    // korrekt - kein Date-Parsing noetig, gleiches Prinzip wie beim Sortieren.
+    if (from) filtered = filtered.filter((c) => c[field] && c[field] >= from);
+    if (to) filtered = filtered.filter((c) => c[field] && c[field] <= to);
+  }
+  if (priceRangeFieldSelect.value) {
+    const field = priceRangeFieldSelect.value;
+    const min = parseFloat(priceRangeMinInput.value);
+    const max = parseFloat(priceRangeMaxInput.value);
+    if (!Number.isNaN(min)) filtered = filtered.filter((c) => c[field] != null && c[field] >= min);
+    if (!Number.isNaN(max)) filtered = filtered.filter((c) => c[field] != null && c[field] <= max);
   }
   return filtered;
 }
@@ -1286,6 +1346,26 @@ function renderList(cards) {
     purchaseSellerTd.textContent = card.purchase_seller || "";
     tr.appendChild(purchaseSellerTd);
 
+    const purchaseDateTd = document.createElement("td");
+    purchaseDateTd.dataset.col = "purchase_date";
+    purchaseDateTd.textContent = formatDate(card.purchase_date);
+    tr.appendChild(purchaseDateTd);
+
+    const purchasePriceTd = document.createElement("td");
+    purchasePriceTd.dataset.col = "purchase_price";
+    purchasePriceTd.textContent = fmtEuro(card.purchase_price);
+    tr.appendChild(purchasePriceTd);
+
+    const saleDateTd = document.createElement("td");
+    saleDateTd.dataset.col = "sale_date";
+    saleDateTd.textContent = formatDate(card.sale_date);
+    tr.appendChild(saleDateTd);
+
+    const salePriceTd = document.createElement("td");
+    salePriceTd.dataset.col = "sale_price";
+    salePriceTd.textContent = fmtEuro(card.sale_price);
+    tr.appendChild(salePriceTd);
+
     const inventoryLocationTd = document.createElement("td");
     inventoryLocationTd.dataset.col = "inventory_location";
     inventoryLocationTd.textContent = card.inventory_location || "";
@@ -1351,6 +1431,17 @@ listingHintFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });
+
+function onValueRangeFilterChange() {
+  currentPage = 0;
+  renderCurrentView();
+}
+dateRangeFieldSelect.addEventListener("change", onValueRangeFilterChange);
+dateRangeFromInput.addEventListener("change", onValueRangeFilterChange);
+dateRangeToInput.addEventListener("change", onValueRangeFilterChange);
+priceRangeFieldSelect.addEventListener("change", onValueRangeFilterChange);
+priceRangeMinInput.addEventListener("input", onValueRangeFilterChange);
+priceRangeMaxInput.addEventListener("input", onValueRangeFilterChange);
 
 selectAllCheckbox.addEventListener("change", () => {
   for (const card of currentPageItems) {
@@ -1686,6 +1777,14 @@ async function bulkCreateEbayDrafts() {
 
 document.getElementById("bulk-create-ebay-draft").addEventListener("click", bulkCreateEbayDrafts);
 
+// Gleiches Format wie ebay.html - fuer die neuen Spalten Kaufpreis/
+// Verkaufspreis.
+function fmtEuro(value) {
+  return value != null && value !== ""
+    ? `${Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : "";
+}
+
 // Gleiches Datumsformat wie purchases.html/purchase.html (DD.MM.YYYY, per
 // String-Split statt new Date(), um Zeitzonen-Verschiebungen zu vermeiden).
 function formatDate(value) {
@@ -1941,7 +2040,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Titel", "Team", "Saison", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
     "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
-    "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Lagerort",
+    "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Kaufdatum", "Kaufpreis", "Verkaufsdatum", "Verkaufspreis", "Lagerort",
     "Erkennung", "eBay-Status",
     "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung",
     "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Importiert", "Neu eingestellt",
@@ -1952,7 +2051,9 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.position || "",
     c.category || "", c.squad_number || "", c.club_debut_season || "", c.card_number || "",
     c.serial_number || "", c.print_run || "", c.card_no || "",
-    c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "", c.inventory_location || "",
+    c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "",
+    formatDate(c.purchase_date), c.purchase_price ?? "", formatDate(c.sale_date), c.sale_price ?? "",
+    c.inventory_location || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
     c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein",
@@ -1989,6 +2090,8 @@ function currentFilterState() {
     q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
     shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
     cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc,
+    dateRangeField: dateRangeFieldSelect.value, dateRangeFrom: dateRangeFromInput.value, dateRangeTo: dateRangeToInput.value,
+    priceRangeField: priceRangeFieldSelect.value, priceRangeMin: priceRangeMinInput.value, priceRangeMax: priceRangeMaxInput.value,
   };
 }
 function applyFilterState(state) {
@@ -1997,6 +2100,8 @@ function applyFilterState(state) {
   ebayFilterSelect.value = state.ebayFilter || "";
   shippingFilterSelect.value = state.shippingFilter || "";
   cardTypeFilterSelect.value = state.cardTypeFilter || ""; featureFilterSelect.value = state.featureFilter || ""; listingHintFilterSelect.value = state.listingHintFilter || "";
+  dateRangeFieldSelect.value = state.dateRangeField || ""; dateRangeFromInput.value = state.dateRangeFrom || ""; dateRangeToInput.value = state.dateRangeTo || "";
+  priceRangeFieldSelect.value = state.priceRangeField || ""; priceRangeMinInput.value = state.priceRangeMin || ""; priceRangeMaxInput.value = state.priceRangeMax || "";
   // Gleiche Vorsicht wie beim Laden der "letzten Ansicht" unten - ein
   // gespeicherter Tag, der inzwischen an keiner Karte mehr haengt, faellt
   // sonst stillschweigend auf die erste Option zurueck statt auf "Alle Tags".
@@ -2073,6 +2178,8 @@ function saveViewState() {
       q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
       shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
       cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc, currentPage,
+      dateRangeField: dateRangeFieldSelect.value, dateRangeFrom: dateRangeFromInput.value, dateRangeTo: dateRangeToInput.value,
+      priceRangeField: priceRangeFieldSelect.value, priceRangeMin: priceRangeMinInput.value, priceRangeMax: priceRangeMaxInput.value,
       scrollY: window.scrollY,
     }));
   } catch (err) {
@@ -2105,6 +2212,8 @@ loadCards().then(() => {
   ebayFilterSelect.value = savedViewState.ebayFilter || "";
   shippingFilterSelect.value = savedViewState.shippingFilter || "";
   cardTypeFilterSelect.value = savedViewState.cardTypeFilter || ""; featureFilterSelect.value = savedViewState.featureFilter || ""; listingHintFilterSelect.value = savedViewState.listingHintFilter || "";
+  dateRangeFieldSelect.value = savedViewState.dateRangeField || ""; dateRangeFromInput.value = savedViewState.dateRangeFrom || ""; dateRangeToInput.value = savedViewState.dateRangeTo || "";
+  priceRangeFieldSelect.value = savedViewState.priceRangeField || ""; priceRangeMinInput.value = savedViewState.priceRangeMin || ""; priceRangeMaxInput.value = savedViewState.priceRangeMax || "";
   // tagFilterSelect-Optionen werden erst in loadCards() -> populateTagFilter()
   // aus den geladenen Karten aufgebaut - der gespeicherte Tag kann daher erst
   // jetzt (nicht vorher) gesetzt werden, sonst wuerde er beim Fehlen der

@@ -49,6 +49,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.get("/api/cards")
@@ -75,6 +76,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls) as mock_signed_urls:
             response = client.get("/api/cards")
@@ -100,6 +102,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}), \
              patch("main.storage.signed_urls", side_effect=fake_signed_urls):
             response = client.get("/api/cards")
@@ -228,6 +231,7 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards?q=Bayern&status=pr%C3%BCfen")
         self.assertEqual(response.status_code, 200)
@@ -243,6 +247,7 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards?q=webapp-000002")
         self.assertEqual(response.status_code, 200)
@@ -259,6 +264,7 @@ class ListCardsFilterEndpointTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards?q=Karte")
         ids = [c["id"] for c in response.json()["cards"]]
@@ -1189,6 +1195,7 @@ class ListCardsHasPurchaseFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1205,12 +1212,51 @@ class ListCardsPurchaseInventoryGradingFieldsTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={"card-1": {"platform": "eBay", "seller": "cardking"}}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={"card-1": "Kiste 3, Kiste 7"}):
             response = client.get("/api/cards")
         card = response.json()["cards"][0]
         self.assertEqual(card["purchase_platform"], "eBay")
         self.assertEqual(card["purchase_seller"], "cardking")
         self.assertEqual(card["inventory_location"], "Kiste 3, Kiste 7")
+
+    def test_attaches_purchase_date_price_and_sale_date_price(self):
+        rows = [{"id": "card-1", "front_image_path": None, "back_image_path": None}]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}), \
+             patch("main.db.purchase_info_by_card_ids", return_value={
+                 "card-1": {"purchase_date": "2024-05-01", "cost": 12.5},
+             }), \
+             patch("main.db.sale_summary_by_card_ids", return_value={
+                 "card-1": {"sale_date": "2024-06-01", "sale_price": 25.0},
+             }), \
+             patch("main.db.inventory_location_by_card_ids", return_value={}):
+            response = client.get("/api/cards")
+        card = response.json()["cards"][0]
+        self.assertEqual(card["purchase_date"], "2024-05-01")
+        self.assertEqual(card["purchase_price"], 12.5)
+        self.assertEqual(card["sale_date"], "2024-06-01")
+        self.assertEqual(card["sale_price"], 25.0)
+
+    def test_purchase_and_sale_date_price_are_none_when_missing(self):
+        rows = [{"id": "card-1", "front_image_path": None, "back_image_path": None}]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}), \
+             patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
+             patch("main.db.inventory_location_by_card_ids", return_value={}):
+            response = client.get("/api/cards")
+        card = response.json()["cards"][0]
+        self.assertIsNone(card["purchase_date"])
+        self.assertIsNone(card["purchase_price"])
+        self.assertIsNone(card["sale_date"])
+        self.assertIsNone(card["sale_price"])
 
     def test_defaults_to_empty_strings_when_no_purchase_or_inventory_row(self):
         rows = [{"id": "card-1", "front_image_path": None, "back_image_path": None}]
@@ -1220,6 +1266,7 @@ class ListCardsPurchaseInventoryGradingFieldsTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         card = response.json()["cards"][0]
@@ -1238,6 +1285,7 @@ class ListCardsPurchaseInventoryGradingFieldsTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         card = response.json()["cards"][0]
@@ -1254,6 +1302,7 @@ class ListCardsPurchaseInventoryGradingFieldsTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         card = response.json()["cards"][0]
@@ -1273,6 +1322,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1296,6 +1346,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1313,6 +1364,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1330,6 +1382,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={"card-1": {"channel": "Vinted"}}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1348,6 +1401,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value=flags), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
@@ -1374,6 +1428,7 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
              patch("main.db.purchase_info_by_card_ids", return_value={}), \
+             patch("main.db.sale_summary_by_card_ids", return_value={}), \
              patch("main.db.inventory_location_by_card_ids", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]

@@ -216,6 +216,8 @@ if ("serviceWorker" in navigator) {
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
     </select>
+    <label>Preis von (€) <input type="number" id="price-min" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <label>bis (€) <input type="number" id="price-max" step="0.01" min="0" style="width: 5.5rem;"></label>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
@@ -429,6 +431,8 @@ document.getElementById("shortcuts-btn").addEventListener("click", () => {
 });
 const statusSelect = document.getElementById("status");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
+const priceMinInput = document.getElementById("price-min");
+const priceMaxInput = document.getElementById("price-max");
 const statusMsg = document.getElementById("status-msg");
 const table = document.getElementById("listings-table");
 const body = document.getElementById("listings-body");
@@ -526,8 +530,15 @@ function ebayListingUrl(listing) {
 }
 
 function filteredListings() {
-  if (!cardTypeFilterSelect.value) return currentListings;
-  return currentListings.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+  let list = currentListings;
+  if (cardTypeFilterSelect.value) {
+    list = list.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+  }
+  const min = parseFloat(priceMinInput.value);
+  const max = parseFloat(priceMaxInput.value);
+  if (!Number.isNaN(min)) list = list.filter((l) => (l.price ?? 0) >= min);
+  if (!Number.isNaN(max)) list = list.filter((l) => (l.price ?? 0) <= max);
+  return list;
 }
 
 function sortedListings() {
@@ -1866,6 +1877,15 @@ cardTypeFilterSelect.addEventListener("change", () => {
   document.getElementById("best-offer-sync-status").textContent = "";
   render(sortedListings());
 });
+
+function onPriceRangeFilterChange() {
+  currentPage = 0;
+  document.getElementById("views-status").textContent = "";
+  document.getElementById("best-offer-sync-status").textContent = "";
+  render(sortedListings());
+}
+priceMinInput.addEventListener("input", onPriceRangeFilterChange);
+priceMaxInput.addEventListener("input", onPriceRangeFilterChange);
 
 loadOauthStatus();
 loadListings();

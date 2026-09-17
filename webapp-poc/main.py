@@ -759,6 +759,7 @@ async def list_cards(q: str | None = None, status: str | None = None):
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     sale_flags = db.sale_flags_by_card_id(card_ids)
     purchase_info = db.purchase_info_by_card_ids(card_ids)
+    sale_info = db.sale_summary_by_card_ids(card_ids)
     inventory_locations = db.inventory_location_by_card_ids(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
@@ -768,6 +769,11 @@ async def list_cards(q: str | None = None, status: str | None = None):
         c["purchase_id"] = purchase.get("id") or ""
         c["purchase_platform"] = purchase.get("platform") or ""
         c["purchase_seller"] = purchase.get("seller") or ""
+        c["purchase_date"] = purchase.get("purchase_date")
+        c["purchase_price"] = purchase.get("cost")
+        sale = sale_info.get(c["id"]) or {}
+        c["sale_date"] = sale.get("sale_date")
+        c["sale_price"] = sale.get("sale_price")
         c["inventory_location"] = inventory_locations.get(c["id"], "")
         c["grading_summary"] = (
             f"{c['grading_company']} {c['grading_grade']}".strip()
