@@ -80,6 +80,10 @@ if ("serviceWorker" in navigator) {
   tr:hover { background: var(--hover-bg); }
   tr.checked:hover { background: var(--success-bg); }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   [hidden] { display: none !important; }
   .pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
   @media print {

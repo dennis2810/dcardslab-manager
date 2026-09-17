@@ -109,6 +109,10 @@ if ("serviceWorker" in navigator) {
   .warning-box { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0.5rem 0; background: var(--warn-bg); color: var(--warn-fg); }
   h2 { font-size: 1.05rem; margin-top: 1.5rem; }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   [hidden] { display: none !important; }
   /* Bleibt beim Scrollen sichtbar, statt bei einer langen Auswahl aus dem
      Blickfeld zu wandern - Canvas ist die themen-bewusste System-Hintergrund-

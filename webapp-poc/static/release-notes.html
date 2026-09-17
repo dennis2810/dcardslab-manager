@@ -84,6 +84,21 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Bugfix: Preisvorschläge blieben beim Bearbeiten nicht erhalten &amp; UI-Politur
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix (Preisvorschläge): Wurde ein bereits veröffentlichtes Angebot erneut aktualisiert (Preisänderung,
+      Foto-Ersatz oder jede Kartenbearbeitung, die das Angebot neu an eBay sendet), gingen zuvor manuell gesetzte
+      Preisvorschläge verloren – sie wurden bei eBay stillschweigend durch die prozentualen Standardwerte ersetzt.
+      Einmal gesetzte Preisvorschläge bleiben jetzt bei jeder weiteren Bearbeitung erhalten; nur ein komplett neu
+      veröffentlichtes Angebot bekommt weiterhin den prozentualen Vorschlag als Startwert.</li>
+    <li>Bugfix: Die Spalte „Verkaufsdatum" in der Karten-Übersicht zeigte einen unformatierten Rohwert statt
+      DD.MM.YYYY wie auf der eBay-Übersicht.</li>
+    <li>Karten- und eBay-Übersicht: die Seiten-vor/-zurück-Buttons gibt es jetzt zusätzlich auch oberhalb der
+      Tabelle, nicht mehr nur darunter.</li>
+    <li>Die Tabellenkopfzeile bleibt auf allen Listenseiten beim Scrollen sichtbar.</li>
+  </ul>
+
   <h2>Neue Spalte „Preisvorschläge geändert" auf der eBay-Übersicht
     <span class="date">September 2026</span></h2>
   <ul>

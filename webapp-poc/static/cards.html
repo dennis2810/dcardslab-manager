@@ -157,6 +157,10 @@ if ("serviceWorker" in navigator) {
     .no-print { display: none !important; }
   }
   .table-scroll { overflow-x: auto; }
+  /* Kopfzeile bleibt beim vertikalen Scrollen sichtbar (Klaerung mit dem
+     Nutzer) - Canvas ist ein Systemfarb-Keyword, das sich automatisch an
+     Hell-/Dunkelmodus anpasst, gleiches Prinzip wie #bulk-actions oben. */
+  .table-scroll thead th { position: sticky; top: 0; z-index: 1; background: Canvas; }
   #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
   .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
   .toast-error { background: #b00020; }
@@ -334,6 +338,11 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg"></p>
   <div id="grid" class="grid"></div>
+  <div class="pagination no-print">
+    <button type="button" id="prev-page-top">&larr; Zurück</button>
+    <span id="page-info-top"></span>
+    <button type="button" id="next-page-top">Weiter &rarr;</button>
+  </div>
   <div class="table-scroll">
     <table id="list" class="list" hidden>
         <thead>
@@ -997,8 +1006,14 @@ function visibleCards() {
     const to = dateRangeToInput.value;
     // ISO-Datumsstrings (YYYY-MM-DD) sortieren/vergleichen sich lexikografisch
     // korrekt - kein Date-Parsing noetig, gleiches Prinzip wie beim Sortieren.
-    if (from) filtered = filtered.filter((c) => c[field] && c[field] >= from);
-    if (to) filtered = filtered.filter((c) => c[field] && c[field] <= to);
+    // sale_date ist allerdings ein voller Zeitstempel (YYYY-MM-DDTHH:MM:SS...),
+    // die ersten 10 Zeichen liefern trotzdem das reine Datum - ohne das
+    // Abschneiden waere der "bis"-Vergleich am gewaehlten Tag selbst falsch
+    // (ein Zeitstempel mit Uhrzeit ist als String immer "groesser" als das
+    // reine Datum).
+    const dateOnly = (value) => (value ? String(value).slice(0, 10) : "");
+    if (from) filtered = filtered.filter((c) => dateOnly(c[field]) >= from);
+    if (to) filtered = filtered.filter((c) => dateOnly(c[field]) && dateOnly(c[field]) <= to);
   }
   if (priceRangeFieldSelect.value) {
     const field = priceRangeFieldSelect.value;
@@ -1050,9 +1065,13 @@ function renderCurrentView() {
   currentPage = Math.min(currentPage, pageCount - 1);
   const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   currentPageItems = pageItems;
-  document.getElementById("page-info").textContent = `Seite ${currentPage + 1} von ${pageCount} (${filtered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  const pageInfoText = `Seite ${currentPage + 1} von ${pageCount} (${filtered.length} Karte(n), max. ${PAGE_SIZE}/Seite)`;
+  document.getElementById("page-info").textContent = pageInfoText;
+  document.getElementById("page-info-top").textContent = pageInfoText;
   document.getElementById("prev-page").disabled = currentPage === 0;
   document.getElementById("next-page").disabled = currentPage >= pageCount - 1;
+  document.getElementById("prev-page-top").disabled = currentPage === 0;
+  document.getElementById("next-page-top").disabled = currentPage >= pageCount - 1;
 
   render(pageItems);
   renderList(pageItems);
@@ -1358,7 +1377,7 @@ function renderList(cards) {
 
     const saleDateTd = document.createElement("td");
     saleDateTd.dataset.col = "sale_date";
-    saleDateTd.textContent = formatDate(card.sale_date);
+    saleDateTd.textContent = formatTimestampDate(card.sale_date);
     tr.appendChild(saleDateTd);
 
     const salePriceTd = document.createElement("td");
@@ -1793,9 +1812,21 @@ function formatDate(value) {
   return d && m && y ? `${d}.${m}.${y}` : value;
 }
 
-// Fuer last_auto_relisted_at (ein echter Zeitstempel, kein reines Datum wie
-// oben) - formatDate() wuerde beim String-Split auf einem ISO-Zeitstempel
-// falsche Werte liefern, daher hier ueber new Date() wie in settings.html.
+// Fuer echte Zeitstempel (timestamptz) wie sale_date - formatDate() wuerde
+// beim String-Split auf einem ISO-Zeitstempel falsche Werte liefern (Bug-
+// report des Nutzers: Verkaufsdatum zeigte Rohwerte statt DD.MM.YYYY), daher
+// hier ueber new Date() wie in ebay.html/settings.html. Ohne Uhrzeit, gleiche
+// Darstellung wie die "Verkauft am"-Spalte auf ebay.html.
+function formatTimestampDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+// Fuer last_auto_relisted_at (Datum + Uhrzeit) - formatDate() wuerde beim
+// String-Split auf einem ISO-Zeitstempel falsche Werte liefern, daher hier
+// ueber new Date() wie in settings.html.
 function formatDateTime(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -2006,14 +2037,18 @@ document.getElementById("bulk-print-labels").addEventListener("click", () => {
   printLabels(selected);
 });
 
-document.getElementById("prev-page").addEventListener("click", () => {
+function goToPrevPage() {
   currentPage = Math.max(0, currentPage - 1);
   renderCurrentView();
-});
-document.getElementById("next-page").addEventListener("click", () => {
+}
+function goToNextPage() {
   currentPage += 1;
   renderCurrentView();
-});
+}
+document.getElementById("prev-page").addEventListener("click", goToPrevPage);
+document.getElementById("next-page").addEventListener("click", goToNextPage);
+document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
+document.getElementById("next-page-top").addEventListener("click", goToNextPage);
 document.getElementById("print-btn").addEventListener("click", () => window.print());
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
@@ -2052,7 +2087,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     c.category || "", c.squad_number || "", c.club_debut_season || "", c.card_number || "",
     c.serial_number || "", c.print_run || "", c.card_no || "",
     c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "",
-    formatDate(c.purchase_date), c.purchase_price ?? "", formatDate(c.sale_date), c.sale_price ?? "",
+    formatDate(c.purchase_date), c.purchase_price ?? "", formatTimestampDate(c.sale_date), c.sale_price ?? "",
     c.inventory_location || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
