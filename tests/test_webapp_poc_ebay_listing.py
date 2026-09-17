@@ -32,18 +32,40 @@ class SkuForCardTests(unittest.TestCase):
 
 
 class GenerateTitleTests(unittest.TestCase):
-    def test_builds_title_as_season_manufacturer_player_team(self):
-        # Fixed order: Saison/Jahr + Hersteller + Spieler/Charakter (the
-        # "title" field) + Mannschaft/Bereich.
+    def test_builds_title_as_season_manufacturer_set_player_team(self):
+        # Reihenfolge (mit dem Nutzer abgestimmt): Jahr, Hersteller, Set/
+        # Kategorie (hier: Set, da laenger/spezifischer als die Kategorie
+        # "Fußball"), Spieler/Charakter, Team.
         title = ebay_listing.generate_title(_card())
-        self.assertEqual(title, "2024 Topps Musterkarte FC Beispiel")
+        self.assertEqual(title, "2024 Topps Bundesliga 2024 Musterkarte FC Beispiel")
 
-    def test_falls_back_to_category_when_team_is_missing(self):
+    def test_falls_back_to_category_when_set_name_is_missing(self):
         # Non-sport cards have no club - "Bereich" (e.g. a franchise like
         # "Marvel") lives in category instead (see ai_card_recognition.py's
         # field docs, where "Marvel" is the given example for category).
-        title = ebay_listing.generate_title(_card(team="", category="Marvel"))
+        title = ebay_listing.generate_title(_card(team="", category="Marvel", set_name=""))
         self.assertIn("Marvel", title)
+
+    def test_prefers_longer_set_name_over_shorter_category(self):
+        title = ebay_listing.generate_title(_card(category="One Piece", set_name="One Piece Official Trading Card Collection"))
+        self.assertIn("One Piece Official Trading Card Collection", title)
+        # Kategorie und Set sagen hier dasselbe aus - nur einer der beiden
+        # Begriffe soll erscheinen, nicht beide (keine Dopplung "One Piece
+        # One Piece Official...").
+        self.assertEqual(title.count("One Piece"), 1)
+
+    def test_uses_longer_label_even_when_category_and_set_name_are_unrelated(self):
+        # "nur einer von beiden" gilt unabhaengig davon, ob sich die Begriffe
+        # ueberschneiden - Set und Kategorie belegen sonst denselben Titel-
+        # Slot doppelt.
+        title = ebay_listing.generate_title(_card(category="Marvel", set_name="Chrome Update", team=""))
+        self.assertIn("Chrome Update", title)
+        self.assertNotIn("Marvel", title)
+
+    def test_includes_card_type_and_variant(self):
+        title = ebay_listing.generate_title(_card(card_type="Parallel", variant="Blue Prizm"))
+        self.assertIn("Parallel", title)
+        self.assertIn("Blue Prizm", title)
 
     def test_skips_empty_fields(self):
         title = ebay_listing.generate_title(_card(manufacturer=""))
@@ -78,7 +100,7 @@ class GenerateTitleTests(unittest.TestCase):
 
     def test_no_suffix_when_flags_are_falsy(self):
         title = ebay_listing.generate_title(_card(is_rookie=False, is_autograph=False, print_run=""))
-        self.assertEqual(title, "2024 Topps Musterkarte FC Beispiel")
+        self.assertEqual(title, "2024 Topps Bundesliga 2024 Musterkarte FC Beispiel")
 
 
 class GenerateDescriptionTests(unittest.TestCase):

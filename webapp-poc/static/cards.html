@@ -559,6 +559,35 @@ function privateCollectionBadge(privateCollection) {
   return badge;
 }
 
+function rookieBadge(card) {
+  if (!card.is_rookie) return null;
+  const badge = document.createElement("span");
+  badge.className = "shipped-badge";
+  badge.textContent = "RC";
+  badge.title = "Rookie-Karte";
+  return badge;
+}
+
+function numberedBadge(card) {
+  if (!card.is_numbered) return null;
+  const badge = document.createElement("span");
+  badge.className = "shipped-badge";
+  badge.textContent = "Nummeriert";
+  if (card.serial_number || card.print_run) {
+    badge.title = `${card.serial_number || "?"}/${card.print_run || "?"}`;
+  }
+  return badge;
+}
+
+function autographBadge(card) {
+  if (!card.is_autograph) return null;
+  const badge = document.createElement("span");
+  badge.className = "shipped-badge";
+  badge.textContent = "Auto";
+  badge.title = "Autogramm";
+  return badge;
+}
+
 function longListedBadge(card) {
   // Nur fuer aktuell laufende Angebote relevant - bei "Verkauft"/"Beendet"
   // sagt "seit wann laeuft es" nichts mehr ueber Handlungsbedarf aus.
@@ -826,6 +855,15 @@ function render(cards) {
     const refunded = refundedBadge(card.refunded);
     if (refunded) a.appendChild(refunded);
 
+    const rookie = rookieBadge(card);
+    if (rookie) a.appendChild(rookie);
+
+    const numbered = numberedBadge(card);
+    if (numbered) a.appendChild(numbered);
+
+    const autograph = autographBadge(card);
+    if (autograph) a.appendChild(autograph);
+
     const privateBadge = privateCollectionBadge(card.private_collection);
     if (privateBadge) a.appendChild(privateBadge);
 
@@ -918,6 +956,12 @@ function renderList(cards) {
     if (importedBadgeEl) ebayTd.appendChild(importedBadgeEl);
     const privateBadge = privateCollectionBadge(card.private_collection);
     if (privateBadge) ebayTd.appendChild(privateBadge);
+    const rookie = rookieBadge(card);
+    if (rookie) ebayTd.appendChild(rookie);
+    const numbered = numberedBadge(card);
+    if (numbered) ebayTd.appendChild(numbered);
+    const autograph = autographBadge(card);
+    if (autograph) ebayTd.appendChild(autograph);
     tr.appendChild(ebayTd);
 
     const shippedTd = document.createElement("td");

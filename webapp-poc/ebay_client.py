@@ -117,11 +117,18 @@ def get_application_access_token():
     return response.json()["access_token"]
 
 
-def search_active_listings(token, query, limit=5):
+def search_active_listings(token, query, limit=20):
     """Aktive eBay-Angebote zu einer Freitextsuche (Buy/Browse API) - als
     Marktpreis-Referenz fuer die Preisrecherche. KEINE verkauften Artikel:
     die dafuer noetige Marketplace-Insights-API ist nur mit gesonderter,
-    von eBay einzeln zu genehmigender Freigabe nutzbar."""
+    von eBay einzeln zu genehmigender Freigabe nutzbar.
+
+    limit=20 statt vormals 5: seit die Suchanfrage/der eBay-Titel Set/Typ/
+    Variante/RC/Auto mit einschliesst (siehe ebay_listing.generate_title()),
+    liefert eBay selbst schon weniger, dafuer passendere Treffer - ein
+    groesserer Rohtreffer-Pool gleicht aus, dass main.py's
+    _filter_price_research_results() zusaetzlich noch nicht passende
+    Auto-/Auflagen-Treffer aussortiert."""
     try:
         response = httpx.get(
             f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search",

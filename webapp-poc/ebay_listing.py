@@ -28,31 +28,47 @@ def sku_for_card(card_no):
     return f"webapp-{card_no:06d}"
 
 
+def _region_label(card):
+    """Set-Name und Kategorie sagen bei Nicht-Sport-Karten oft dasselbe aus
+    (z.B. Kategorie "One Piece" vs. Set "One Piece Official Trading Card
+    Collection") - im Titel nur EINEN der beiden zeigen statt einer
+    Dopplung, und zwar den laengeren/spezifischeren (deckt sowohl den
+    Ueberschneidungsfall als auch "nur einer der beiden ist gesetzt" ab).
+    Bei Sport-Karten faellt das meist auf den (spezifischeren) Set-Namen,
+    da Team separat dazukommt."""
+    category = (card.get("category") or "").strip()
+    set_name = (card.get("set_name") or "").strip()
+    if category and set_name:
+        return set_name if len(set_name) >= len(category) else category
+    return set_name or category
+
+
 def generate_title(card, max_len=80):
-    # Fixed order requested by the seller: Saison/Jahr + Hersteller +
-    # Spieler/Charakter + Mannschaft/Bereich. Sport cards have a team
-    # (Verein); non-sport cards have no team, so "Bereich" (e.g. a
-    # franchise like "Marvel") falls back to category instead - see
-    # ai_card_recognition.py's field docs, which give "Marvel" as the
-    # example category value.
+    # Reihenfolge (mit dem Nutzer abgestimmt): Jahr, Hersteller, Set/
+    # Kategorie, Spieler/Charakter, Team, Typ, Variante, dann RC/Auto/
+    # Auflage. Jahr/Hersteller/Titel sind Pflichtbestandteile (garantiert
+    # im Titel, notfalls ueber die Kuerzung am Ende); alles andere wird nur
+    # angehaengt, soweit noch Platz bis max_len (eBays 80-Zeichen-Limit)
+    # ist, damit ein zu langer Titel nicht die wichtigsten Angaben verdraengt.
     parts = [
-        card.get("season_year", ""), card.get("manufacturer", ""),
-        card.get("title", ""), card.get("team") or card.get("category", ""),
+        (card.get("season_year", ""), True),
+        (card.get("manufacturer", ""), True),
+        (_region_label(card), False),
+        (card.get("title", ""), True),
+        (card.get("team", ""), False),
+        (card.get("card_type", ""), False),
+        (card.get("variant", ""), False),
+        ("RC" if card.get("is_rookie") else "", False),
+        ("Auto" if card.get("is_autograph") else "", False),
+        (f"/{card['print_run']}" if card.get("print_run") else "", False),
     ]
-    title = " ".join(p for p in parts if p).strip()
-    # RC/Auto/Auflage sind fuer Kaeufer stark preisrelevant - als Suffix
-    # anhaengen, aber nur soweit max_len (eBays 80-Zeichen-Limit) das noch
-    # zulaesst, ohne den bestehenden Basistitel zu kuerzen.
-    suffixes = []
-    if card.get("is_rookie"):
-        suffixes.append("RC")
-    if card.get("is_autograph"):
-        suffixes.append("Auto")
-    if card.get("print_run"):
-        suffixes.append(f"/{card['print_run']}")
-    for suffix in suffixes:
-        candidate = f"{title} {suffix}"
-        if len(candidate) <= max_len:
+    title = ""
+    for value, mandatory in parts:
+        value = (value or "").strip()
+        if not value:
+            continue
+        candidate = f"{title} {value}".strip()
+        if mandatory or len(candidate) <= max_len:
             title = candidate
     return title[:max_len]
 
