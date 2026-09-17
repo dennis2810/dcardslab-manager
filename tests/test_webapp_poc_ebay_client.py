@@ -76,6 +76,16 @@ class SearchActiveListingsTests(unittest.TestCase):
         params = mock_get.call_args.kwargs["params"]
         self.assertEqual(params["q"], "Max Mustermann")
 
+    def test_default_limit_is_generous_enough_for_post_filtering(self):
+        # Die Suchanfrage ist inzwischen deutlich spezifischer (Set/Typ/
+        # Variante/RC/Auto, siehe ebay_listing.generate_title()), und
+        # main.py's _filter_price_research_results() sortiert danach noch
+        # nicht passende Auto-/Auflagen-Treffer aus - ein zu kleiner
+        # Rohtreffer-Pool wuerde sonst leicht auf 0 Ergebnisse schrumpfen.
+        with patch("ebay_client.httpx.get", return_value=_response(200, {})) as mock_get:
+            ebay_client.search_active_listings("app-tok", "q")
+        self.assertGreaterEqual(mock_get.call_args.kwargs["params"]["limit"], 20)
+
     def test_returns_empty_list_when_no_items_found(self):
         with patch("ebay_client.httpx.get", return_value=_response(200, {})):
             results = ebay_client.search_active_listings("app-tok", "nichts-da")

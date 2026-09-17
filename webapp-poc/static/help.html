@@ -192,13 +192,14 @@ if ("serviceWorker" in navigator) {
     gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
     wegzuschneiden (beim Zuschneiden zeigt der Mauszeiger über den Eckpunkten passend Größenänderungs-Pfeile, der
     Drehwinkel lässt sich sowohl per Schieberegler als auch direkt als Zahl mit Nachkommastelle eintragen).
-    Außerdem lassen sich alle erkannten Felder bearbeiten (siehe „Kartenfelder erklärt" unten für die genaue
-    Bedeutung jedes Felds), Tags setzen (kommagetrennt, mit
+    Außerdem lassen sich alle erkannten Felder bearbeiten – ein „ⓘ"-Symbol neben jedem Feldnamen zeigt beim
+    Hovern eine kurze Erklärung (siehe „Kartenfelder erklärt" unten für die ausführliche Version), Tags setzen
+    (kommagetrennt, mit
     Vorschlagsliste aus bereits vergebenen Tags beim Tippen) und das „Versendet"-Kästchen umschalten. Drei weitere
     Kästchen „Nummeriert (Numbered)", „Rookie-Karte (RC)" und „Autogramm (Auto)" lassen sich unabhängig von der
-    KI-Erkennung jederzeit von Hand setzen oder korrigieren – sie fließen automatisch sowohl in den eBay-Titel
-    (als Zusatz „RC"/„Auto"/„/Auflage" am Ende, sofern der Platz bis 80 Zeichen reicht) als auch in die
-    Standard-Suchanfrage der Preisrecherche mit ein.
+    KI-Erkennung jederzeit von Hand setzen oder korrigieren – sie erscheinen zusätzlich als eigene Kennzeichen
+    oben auf der Kartenseite sowie in der Kartenübersicht (Kachel- und Listenansicht), und fließen automatisch
+    sowohl in den eBay-Titel als auch in die Standard-Suchanfrage der Preisrecherche mit ein (siehe unten).
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -216,10 +217,15 @@ if ("serviceWorker" in navigator) {
     Statistiken (siehe unten).</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
     Menge, Zustand und Lagerort. Über „eBay-Preise suchen (aktive Angebote)" im Preisrecherche-Bereich ist die
-    Suchanfrage bereits mit Set, Typ, Variante, Nummerierung/Auflage sowie „RC"/„Auto" (falls die entsprechenden
-    Kästchen gesetzt sind) vorbelegt (nicht nur dem Titel) – so werden
-    eher wirklich vergleichbare Treffer gefunden statt anderer Parallelen/Varianten derselben Karte, die preislich
-    ganz anders liegen können; die Anfrage lässt sich vor dem Suchen weiter anpassen. Im Preisrecherche-Verlauf
+    Suchanfrage bereits vollständig aus allen Karteninfos vorbelegt (Jahr, Hersteller, Set/Kategorie, Titel, Team,
+    Typ, Variante, Nummerierung/Auflage sowie „RC"/„Auto", falls die entsprechenden Kästchen gesetzt sind) – so
+    werden eher wirklich vergleichbare Treffer gefunden statt anderer Parallelen/Varianten derselben Karte, die
+    preislich ganz anders liegen können. Ein Zeichenzähler neben dem Suchfeld zeigt die aktuelle Länge an, die
+    Anfrage lässt sich vor dem Suchen weiter anpassen bzw. kürzen. Set und Kategorie sagen bei Nicht-Sport-Karten
+    oft dasselbe aus (z. B. „One Piece" vs. „One Piece Official Trading Card Collection") – hier erscheint nur der
+    spezifischere der beiden Begriffe, um eine Dopplung in der Suchanfrage zu vermeiden. Findet die automatische
+    eBay-Preisrecherche wegen der jetzt spezifischeren Anfrage zu wenige Treffer, hilft ein Blick in die
+    Preisrecherche-Suche direkt auf der Karte – dort lässt sich die Anfrage bei Bedarf gezielt kürzen. Im Preisrecherche-Verlauf
     lassen sich außerdem manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
     um mehr als die in den Einstellungen festgelegte Schwelle ab (Abschnitt „Preis-Alarm", Standard 20 %), erscheint
@@ -242,6 +248,10 @@ if ("serviceWorker" in navigator) {
     eintragen und auf „Preisvorschläge aktualisieren" klicken – die Änderung wird sofort an eBay übertragen, ohne
     sonst etwas am Angebot zu verändern. Unterstützt eBay das für die jeweilige Kategorie nicht, erscheint eine
     entsprechende Fehlermeldung.</p>
+  <p>Der eBay-Titel wird beim Anlegen automatisch aus allen Karteninfos vorgeschlagen (Jahr, Hersteller,
+    Set/Kategorie, Titel, Team, Typ, Variante sowie RC/Auto/Auflage als Zusatz) und bleibt frei bearbeitbar; ein
+    Zeichenzähler neben dem Titelfeld zeigt die aktuelle Länge und färbt sich rot, sobald eBays 80-Zeichen-Limit
+    überschritten ist, damit sich der Titel vor dem Speichern noch gezielt kürzen lässt.</p>
   <p>Der eBay-Bereich erlaubt das Anlegen, Bearbeiten und Veröffentlichen eines Angebots; „Abbrechen" im
     Bearbeiten-Formular verwirft nicht gespeicherte Änderungen und kehrt zur vorherigen Ansicht zurück. Um einem
     bereits veröffentlichten Angebot nachträglich weitere Fotos hinzuzufügen, genügt es, im Abschnitt „Weitere Fotos"

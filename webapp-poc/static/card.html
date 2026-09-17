@@ -161,6 +161,9 @@ if ("serviceWorker" in navigator) {
   .price-alert { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: var(--warn-bg); color: var(--warn-fg); }
   .price-average { font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; background: var(--info-bg); color: var(--info-fg); }
   .price-research-bulk-bar { display: flex; gap: 0.75rem; align-items: center; margin: 0 0 0.75rem; }
+  .char-counter { font-size: 0.8rem; color: #666; margin-left: 0.5rem; white-space: nowrap; }
+  .char-counter.char-counter-over { color: #b00020; font-weight: 600; }
+  .field-info-icon { cursor: help; color: var(--info-fg); font-size: 0.85em; margin-left: 0.15rem; }
   .workflow-hint { background: var(--warn-bg); color: var(--warn-fg); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.6rem; }
   .sale-stats { font-size: 0.85rem; }
   .fee-input-row { display: flex; align-items: center; gap: 0.4rem; }
@@ -442,6 +445,18 @@ const FIELDS = [
   ["serial_number", "Seriennr.", "Seriennummer bei limitierten Karten (z. B. \"12/99\")"],
   ["print_run", "Auflage", "Gesamtauflage bei limitierten Karten (z. B. \"99\")"],
 ];
+
+// Kleines "ⓘ"-Symbol neben einem Feldlabel, das die Erklaerung als native
+// Tooltip (title-Attribut) beim Hovern zeigt - sichtbarer als ein Tooltip
+// direkt auf dem Labeltext, den man leicht uebersieht. Siehe auch die
+// ausfuehrliche Doku im Anleitungs-Abschnitt "Kartenfelder erklärt".
+function fieldInfoIcon(explanation) {
+  const icon = document.createElement("span");
+  icon.className = "field-info-icon";
+  icon.textContent = "ⓘ";
+  icon.title = explanation;
+  return icon;
+}
 
 // Einheitliches Datumsformat (DD.MM.YYYY) fuer die ganze App - manuell statt
 // ueber toLocaleDateString("de-DE"), da dessen Default-Ausgabe Tag/Monat
@@ -1052,7 +1067,7 @@ async function loadCard() {
     renderPurchaseSection(card.purchase);
     renderTargetPriceCalculator(card.purchase, card.team_avg_holding_days, card.ebay_sale, card.manual_sale);
     renderInventorySection(card.inventory);
-    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection, card.title);
+    renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection, generateEbayTitle(card));
     renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title, card.lot_siblings);
     renderPriceResearchSection(
       card.price_research, priceResearchSearchDefault(card), card.ebay_listing?.price,
@@ -1076,8 +1091,8 @@ function render(card) {
   form.innerHTML = "";
   for (const [key, label, explanation] of FIELDS) {
     const wrapper = document.createElement("label");
-    wrapper.textContent = label;
-    if (explanation) wrapper.title = explanation;
+    wrapper.appendChild(document.createTextNode(label + " "));
+    if (explanation) wrapper.appendChild(fieldInfoIcon(explanation));
     const input = document.createElement("input");
     input.type = "text";
     input.name = key;
@@ -1144,7 +1159,10 @@ function render(card) {
   isNumberedCheckbox.type = "checkbox";
   isNumberedCheckbox.name = "is_numbered";
   isNumberedCheckbox.checked = Boolean(card.is_numbered);
-  isNumberedWrapper.append(isNumberedCheckbox, " Nummeriert (Numbered)");
+  isNumberedWrapper.append(
+    isNumberedCheckbox, " Nummeriert (Numbered)",
+    fieldInfoIcon("Karte traegt eine limitierte Auflagen-Bruchzahl (z. B. \"23/99\") - wird normalerweise automatisch gesetzt, sobald Seriennr. und Auflage erkannt/eingetragen sind.")
+  );
   form.appendChild(isNumberedWrapper);
 
   const isRookieWrapper = document.createElement("label");
@@ -1153,7 +1171,10 @@ function render(card) {
   isRookieCheckbox.type = "checkbox";
   isRookieCheckbox.name = "is_rookie";
   isRookieCheckbox.checked = Boolean(card.is_rookie);
-  isRookieWrapper.append(isRookieCheckbox, " Rookie-Karte (RC)");
+  isRookieWrapper.append(
+    isRookieCheckbox, " Rookie-Karte (RC)",
+    fieldInfoIcon("Karte ist als \"Rookie Card\" gekennzeichnet (meist mit einem RC-Logo) - die erste offizielle Karte einer Person, oft besonders wertvoll.")
+  );
   form.appendChild(isRookieWrapper);
 
   const isAutographWrapper = document.createElement("label");
@@ -1162,7 +1183,10 @@ function render(card) {
   isAutographCheckbox.type = "checkbox";
   isAutographCheckbox.name = "is_autograph";
   isAutographCheckbox.checked = Boolean(card.is_autograph);
-  isAutographWrapper.append(isAutographCheckbox, " Autogramm (Auto)");
+  isAutographWrapper.append(
+    isAutographCheckbox, " Autogramm (Auto)",
+    fieldInfoIcon("Karte traegt eine echte, direkt auf der Karte angebrachte Unterschrift (kein aufgedrucktes Faksimile).")
+  );
   form.appendChild(isAutographWrapper);
 
   const tagsWrapper = document.createElement("label");
@@ -1664,6 +1688,31 @@ const SHIPPING_CARRIERS = {
 function renderSaleStatusBadges(card) {
   const container = document.getElementById("sale-status-badges");
   container.innerHTML = "";
+  // RC/Numbered/Auto sind stark preisrelevant - direkt oben auf einen
+  // Blick sichtbar, ohne erst ins Formular scrollen zu muessen.
+  if (card.is_rookie) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "RC";
+    badge.title = "Rookie-Karte";
+    container.appendChild(badge);
+  }
+  if (card.is_numbered) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Nummeriert";
+    if (card.serial_number || card.print_run) {
+      badge.textContent += ` (${card.serial_number || "?"}/${card.print_run || "?"})`;
+    }
+    container.appendChild(badge);
+  }
+  if (card.is_autograph) {
+    const badge = document.createElement("span");
+    badge.className = "badge badge-info";
+    badge.textContent = "Auto";
+    badge.title = "Autogramm";
+    container.appendChild(badge);
+  }
   if (card.private_collection) {
     const badge = document.createElement("span");
     badge.className = "badge badge-info";
@@ -1718,6 +1767,73 @@ function renderSaleStatusBadges(card) {
   }
 }
 
+// Set-Name und Kategorie sagen bei Nicht-Sport-Karten oft dasselbe aus
+// (z.B. Kategorie "One Piece" vs. Set "One Piece Official Trading Card
+// Collection") - nur EINEN der beiden zeigen statt einer Dopplung, und
+// zwar den laengeren/spezifischeren. Gleiche Logik wie ebay_listing.
+// _region_label() auf dem Backend.
+function cardRegionLabel(card) {
+  const category = (card.category || "").trim();
+  const setName = (card.set_name || "").trim();
+  if (category && setName) return setName.length >= category.length ? setName : category;
+  return setName || category;
+}
+
+// Reihenfolge/Pflichtfeld-Markierung fuer den zusammengesetzten Kartentitel -
+// exakt gleiche Logik wie ebay_listing.generate_title() auf dem Backend
+// (Jahr, Hersteller, Set/Kategorie, Titel, Team, Typ, Variante, RC/Auto/
+// Auflage). Jahr/Hersteller/Titel sind Pflicht (immer im Titel, notfalls per
+// Kuerzung am Ende), alles andere kommt nur dazu, soweit Platz ist.
+function cardTitleParts(card) {
+  return [
+    [card.season_year, true], [card.manufacturer, true],
+    [cardRegionLabel(card), false], [card.title, true], [card.team, false],
+    [card.card_type, false], [card.variant, false],
+    [card.is_rookie ? "RC" : "", false], [card.is_autograph ? "Auto" : "", false],
+    [card.print_run ? `/${card.print_run}` : "", false],
+  ];
+}
+
+// Der tatsaechliche eBay-Titel, wie ihn generate_title() beim
+// Veroeffentlichen serverseitig erzeugen wuerde (inkl. 80-Zeichen-Limit) -
+// hier client-seitig gespiegelt, damit das Anlage-Formular (renderEbay
+// CreateForm()) den Titel schon vor dem Absenden korrekt vorbelegt.
+function generateEbayTitle(card, maxLen = 80) {
+  let title = "";
+  for (const [rawValue, mandatory] of cardTitleParts(card)) {
+    const value = (rawValue || "").trim();
+    if (!value) continue;
+    const candidate = `${title} ${value}`.trim();
+    if (mandatory || candidate.length <= maxLen) title = candidate;
+  }
+  return title.slice(0, maxLen);
+}
+
+// Baut den vollstaendigen, aussagekraeftigen Kartentitel direkt aus den
+// Rohdaten - anders als generateEbayTitle() oben ohne Laengenbeschraenkung,
+// da die Preisrecherche-Suche keine hat.
+function fullCardTitle(card) {
+  return cardTitleParts(card).map(([value]) => (value || "").trim()).filter(Boolean).join(" ");
+}
+
+// Zeigt die Zeichenanzahl eines Text-Inputs live an (aktualisiert bei jedem
+// Tastendruck) - mit limit zusaetzlich rot/fett hervorgehoben, sobald das
+// Limit ueberschritten ist (z.B. eBays 80-Zeichen-Titel-Limit). Damit laesst
+// sich vor dem Veroeffentlichen bzw. der Preisrecherche-Suche noch gezielt
+// kuerzen oder ergaenzen, ohne raten zu muessen, wie lang der Text schon ist.
+function attachCharCounter(input, limit) {
+  const counter = document.createElement("span");
+  counter.className = "char-counter";
+  function update() {
+    const len = input.value.length;
+    counter.textContent = limit ? `${len}/${limit} Zeichen` : `${len} Zeichen`;
+    counter.classList.toggle("char-counter-over", Boolean(limit) && len > limit);
+  }
+  input.addEventListener("input", update);
+  update();
+  return counter;
+}
+
 // Baut die Standard-Suchanfrage fuer die automatische eBay-Preisrecherche
 // (renderPriceResearchSection() unten) - nur der (kurze) Titel allein
 // findet oft auch andere Parallelen/Varianten derselben Karte, die
@@ -1726,13 +1842,7 @@ function renderSaleStatusBadges(card) {
 // _filter_price_research_results() erkennt "Auto"/eine Auflagenangabe
 // (z.B. "/99") zusaetzlich direkt aus dem Text dieser Suchanfrage.
 function priceResearchSearchDefault(card) {
-  const parts = [
-    card.ebay_listing?.title || card.title,
-    card.set_name, card.card_type, card.variant,
-    card.serial_number || (card.print_run ? `/${card.print_run}` : ""),
-    card.is_rookie ? "RC" : "", card.is_autograph ? "Auto" : "",
-  ];
-  return parts.filter(Boolean).join(" ");
+  return fullCardTitle(card);
 }
 
 // Same URL formulas as ebay_listing.price_research_links() on the backend
@@ -2841,7 +2951,7 @@ function renderPriceResearchSection(entries, cardTitle, listingPrice, ownListing
     }
   });
 
-  searchWrapper.append(searchInput, searchBtn, searchStatus, resultsList, adoptSelectedBtn);
+  searchWrapper.append(searchInput, attachCharCounter(searchInput), searchBtn, searchStatus, resultsList, adoptSelectedBtn);
   section.appendChild(searchWrapper);
   section.appendChild(form);
 }
@@ -3004,6 +3114,7 @@ function renderEbayCreateForm(section, cardTitle) {
   titleInput.style.width = "100%";
   titleInput.style.maxWidth = "30rem";
   titleLabel.appendChild(titleInput);
+  titleLabel.appendChild(attachCharCounter(titleInput, 80));
   section.appendChild(titleLabel);
 
   const templateLabel = document.createElement("label");
@@ -3085,6 +3196,7 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   }
 
   const titleInput = field("Titel", "title", listing.title);
+  titleInput.parentNode.appendChild(attachCharCounter(titleInput, 80));
   field("Beschreibung (HTML)", "description", listing.description, "textarea");
   // step="0.01" statt des Zahlen-Defaults (Ganzzahl-Schritte) - sonst
   // lehnen manche Browser Cent-Betraege wie 0,50 als "ungueltigen Wert" ab.
