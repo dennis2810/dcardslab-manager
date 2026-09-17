@@ -82,6 +82,19 @@ class GenerateTitleTests(unittest.TestCase):
         self.assertIn("Auto", title)
         self.assertNotIn("Autograph", title)
 
+    def test_appends_card_number_for_non_sport_cards(self):
+        # Bei Non-Sport-Karten (TCG-Stil) identifiziert die Kartennummer die
+        # Karte deutlich genauer als bei Sport-Karten, wo Team/Saison/Set
+        # meist schon reichen - deshalb dort zusaetzlich ans Titelende.
+        title = ebay_listing.generate_title(
+            _card(category="One Piece", team="", card_number="OP01-049")
+        )
+        self.assertTrue(title.endswith("#OP01-049"))
+
+    def test_omits_card_number_for_sport_cards(self):
+        title = ebay_listing.generate_title(_card(category="Fußball", card_number="12"))
+        self.assertNotIn("#12", title)
+
     def test_abbreviates_rookie_card_in_card_type_to_rc(self):
         title = ebay_listing.generate_title(_card(card_type="Rookie Card"))
         self.assertIn("RC", title)

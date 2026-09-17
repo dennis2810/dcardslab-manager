@@ -88,6 +88,12 @@ def generate_title(card, max_len=80):
         ("Auto" if card.get("is_autograph") else "", False),
         (f"/{card['print_run']}" if card.get("print_run") else "", False),
     ]
+    # Bei Non-Sport-Karten (TCG-Stil, z.B. One Piece/Pokemon) ist die
+    # Kartennummer fuer Kaeufer deutlich identifizierender als bei Sport-
+    # Karten (wo Team/Saison/Set meist schon reichen) - deshalb dort
+    # zusaetzlich ans Titelende, soweit noch Platz ist.
+    if derive_listing_type(card) == "non_sport" and card.get("card_number"):
+        parts.append((f"#{card['card_number']}", False))
     title = ""
     for value, mandatory in parts:
         value = (value or "").strip()
