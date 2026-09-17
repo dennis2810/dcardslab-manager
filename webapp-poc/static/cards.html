@@ -728,7 +728,7 @@ function visibleCards() {
     filtered = filtered.filter((c) => cardTags(c).includes(tagFilterSelect.value));
   }
   if (cardTypeFilterSelect.value) {
-    filtered = filtered.filter((c) => c.card_type === cardTypeFilterSelect.value);
+    filtered = filtered.filter((c) => c.listing_type === cardTypeFilterSelect.value);
   }
   return filtered;
 }
@@ -1507,15 +1507,20 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison", "Erkennung", "eBay-Status",
-    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung", "Tags",
+    "SKU", "Titel", "Team", "Saison", "Set", "Typ", "Variante", "Kartennr.",
+    "Erkennung", "eBay-Status",
+    "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung",
+    "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Tags",
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
+    c.set_name || "", c.card_type || "", c.variant || "", c.card_number || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
     c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein",
-    c.private_collection ? "Ja" : "Nein", c.tags || "",
+    c.private_collection ? "Ja" : "Nein",
+    c.is_numbered ? "Ja" : "Nein", c.is_rookie ? "Ja" : "Nein", c.is_autograph ? "Ja" : "Nein",
+    c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
 });

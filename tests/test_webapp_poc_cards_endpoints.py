@@ -1113,8 +1113,8 @@ class ListCardsEbayStatusFieldTests(unittest.TestCase):
              patch("main.db.sale_flags_by_card_id", return_value={}):
             response = client.get("/api/cards")
         cards = response.json()["cards"]
-        self.assertEqual(cards[0]["card_type"], "sport")
-        self.assertEqual(cards[1]["card_type"], "non_sport")
+        self.assertEqual(cards[0]["listing_type"], "sport")
+        self.assertEqual(cards[1]["listing_type"], "non_sport")
 
     def test_attaches_manual_sale_channel_when_present(self):
         rows = [

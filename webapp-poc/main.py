@@ -626,7 +626,7 @@ def _expand_inventory_items(items):
         item["ebay_status"] = info.get("status")
         item["manual_sale_channel"] = (manual_sale_info.get(item["card_id"]) or {}).get("channel") or None
         item["private_collection"] = bool(card.get("private_collection"))
-        item["card_type"] = ebay_listing.derive_listing_type(card)
+        item["listing_type"] = ebay_listing.derive_listing_type(card)
         # Inventarwert je Zeile: bevorzugt der aktuelle eBay-Angebotspreis
         # (was die Karte JETZT wert sein soll), sonst ersatzweise der
         # Einstandspreis aus einem verknuepften Kauf - fehlen beide, bleibt
@@ -754,7 +754,7 @@ async def list_cards(q: str | None = None, status: str | None = None):
         # Angebots (ebay_listing.derive_listing_type() - card.category gegen
         # die bekannte Sportarten-Liste) - hier als Filter-Grundlage, nicht
         # nur fuers eBay-Kategorie-Mapping.
-        c["card_type"] = ebay_listing.derive_listing_type(c)
+        c["listing_type"] = ebay_listing.derive_listing_type(c)
         c["manual_sale_channel"] = (manual_sale_info.get(c["id"]) or {}).get("channel") or None
         flags = sale_flags.get(c["id"]) or {}
         c["delivered"] = flags.get("delivered", False)
@@ -3180,9 +3180,20 @@ def _sheets_tabs():
 
     card_headers = [
         "id", "title", "category", "team", "manufacturer", "set_name",
-        "season_year", "card_number", "recognition_status", "created_at",
+        "season_year", "card_type", "variant", "card_number", "recognition_status",
+        "is_numbered", "is_rookie", "is_autograph", "created_at",
     ]
-    card_rows = [[str(c.get(h, "") or "") for h in card_headers] for c in cards]
+    # Boolsche Felder (is_numbered/is_rookie/is_autograph) brauchen eine
+    # eigene Ja/Nein-Darstellung statt der generischen str(...)-Umwandlung -
+    # sonst wuerde "False" (falsy) durch das "or \"\"" zu einem leeren Feld,
+    # nicht unterscheidbar von einem tatsaechlich leeren Textfeld.
+    card_rows = [
+        [
+            ("Ja" if c.get(h) else "Nein") if isinstance(c.get(h), bool) else str(c.get(h, "") or "")
+            for h in card_headers
+        ]
+        for c in cards
+    ]
 
     purchase_headers = ["id", "purchase_date", "platform", "seller", "total_price", "notes", "Anzahl Karten"]
     purchase_rows = [
