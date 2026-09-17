@@ -2678,7 +2678,13 @@ async def sync_ebay_listings_best_offer(listing_ids: str):
             results.append({"listing_id": listing_id, "ok": True, **terms})
         except ebay_client.EbayNotAuthorizedError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
-        except ebay_client.EbayApiError as exc:
+        except Exception as exc:
+            # Gleiches Isolationsprinzip wie /api/ebay/listings/best-offer-bulk
+            # oben - ein fehlgeschlagenes Angebot darf den Rest der Auswahl
+            # nicht abbrechen. Bewusst breiter als nur EbayApiError (siehe
+            # Bugreport des Nutzers: eine ungefangene Exception liess den
+            # gesamten Request mit einem generischen 500 fehlschlagen statt
+            # das eine betroffene Angebot als Fehler zu melden).
             results.append({"listing_id": listing_id, "error": str(exc)})
     return JSONResponse({"results": results})
 
