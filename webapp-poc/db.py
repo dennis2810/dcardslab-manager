@@ -585,7 +585,11 @@ def purchase_info_by_card_ids(card_ids):
     for item in items:
         purchase = purchases_by_id.get(item["purchase_id"])
         if purchase:
-            result[item["card_id"]] = {"platform": purchase.get("platform") or "", "seller": purchase.get("seller") or ""}
+            result[item["card_id"]] = {
+                "id": purchase["id"],
+                "platform": purchase.get("platform") or "",
+                "seller": purchase.get("seller") or "",
+            }
     return result
 
 

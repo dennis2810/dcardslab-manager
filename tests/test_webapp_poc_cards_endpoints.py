@@ -417,6 +417,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
 
@@ -434,11 +435,52 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.post("/api/cards/card-1/rotate", json={"side": "back", "degrees": 180})
 
         self.assertEqual(response.status_code, 200)
         mock_rotate.assert_called_once_with("b1/1_back.jpg", 180)
+
+    def test_republishes_to_ebay_when_card_has_a_live_listing(self):
+        # Bugreport des Nutzers: eine Foto-Bearbeitung wurde bei eBay nicht
+        # uebernommen, solange nicht zusaetzlich noch etwas anderes am
+        # Angebot geaendert wurde - main.py's _republish_images_if_live()
+        # stoesst jetzt direkt nach der Foto-Bearbeitung selbst eine
+        # Veroeffentlichung an, wenn die Karte ein aktives eigenes Angebot hat.
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        listing = {"id": "listing-1", "card_id": "card-1", "status": "Veroeffentlicht", "ebay_offer_id": "offer-1"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.db.get_ebay_listing_for_card", return_value=listing), \
+             patch("main._publish_listing") as mock_publish, \
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 200)
+        mock_publish.assert_called_once_with(listing)
+
+    def test_does_not_republish_when_listing_is_a_draft(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        listing = {"id": "listing-1", "card_id": "card-1", "status": "Entwurf", "ebay_offer_id": None}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.db.get_ebay_listing_for_card", return_value=listing), \
+             patch("main._publish_listing") as mock_publish, \
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 200)
+        mock_publish.assert_not_called()
+
+    def test_republish_failure_does_not_break_the_photo_edit(self):
+        card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
+        listing = {"id": "listing-1", "card_id": "card-1", "status": "Veroeffentlicht", "ebay_offer_id": "offer-1"}
+        with patch("main.db.get_card", return_value=card), \
+             patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.db.get_ebay_listing_for_card", return_value=listing), \
+             patch("main._publish_listing", side_effect=RuntimeError("eBay down")), \
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
+            response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
+        self.assertEqual(response.status_code, 200)
 
     def test_returns_404_when_card_not_found(self):
         with patch("main.db.get_card", return_value=None):
@@ -471,6 +513,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", return_value={}):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
         self.assertEqual(response.status_code, 200)
@@ -494,6 +537,7 @@ class ReplaceCardImageEndpointTests(unittest.TestCase):
              patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
              patch("main.storage.upload_image", return_value="batch-1/3_front.jpg") as mock_upload, \
              patch("main.db.set_card_image_path", return_value=updated) as mock_set, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_signed_urls_map({"batch-1/3_front.jpg": "https://signed/batch-1/3_front.jpg"})):
             response = self._post_replace()
         self.assertEqual(response.status_code, 200)
@@ -513,6 +557,7 @@ class ReplaceCardImageEndpointTests(unittest.TestCase):
              patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
              patch("main.storage.upload_image", return_value="batch-1/1_back.jpg") as mock_upload, \
              patch("main.db.set_card_image_path", return_value=card), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = self._post_replace(side="back", filename="new-back.jpg")
         self.assertEqual(response.status_code, 200)
@@ -551,6 +596,7 @@ class AddCardExtraImageEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.upload_extra_image", return_value="batch-1/3_extra_abc123.jpg") as mock_upload, \
              patch("main.db.add_card_extra_image", return_value=updated) as mock_add, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_signed_urls_map({"batch-1/3_extra_abc123.jpg": "https://signed/extra"})):
             response = self._post_extra()
         self.assertEqual(response.status_code, 200)
@@ -581,7 +627,8 @@ class DeleteCardExtraImageEndpointTests(unittest.TestCase):
     def test_deletes_from_db_and_storage(self):
         updated = {"id": "card-1", "extra_image_paths": ""}
         with patch("main.db.remove_card_extra_image", return_value=(updated, "batch-1/3_extra_abc.jpg")) as mock_remove, \
-             patch("main.storage.delete_images") as mock_delete:
+             patch("main.storage.delete_images") as mock_delete, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None):
             response = client.delete("/api/cards/card-1/images/0")
         self.assertEqual(response.status_code, 204)
         mock_remove.assert_called_once_with("card-1", 0)
@@ -597,7 +644,8 @@ class DeleteCardExtraImageEndpointTests(unittest.TestCase):
     def test_storage_deletion_failure_does_not_break_the_delete(self):
         updated = {"id": "card-1", "extra_image_paths": ""}
         with patch("main.db.remove_card_extra_image", return_value=(updated, "batch-1/3_extra_abc.jpg")), \
-             patch("main.storage.delete_images", side_effect=RuntimeError("bucket down")):
+             patch("main.storage.delete_images", side_effect=RuntimeError("bucket down")), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None):
             response = client.delete("/api/cards/card-1/images/0")
         self.assertEqual(response.status_code, 204)
 
@@ -607,6 +655,7 @@ class RotateCardExtraImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "extra_image_paths": "b1/1_extra_aaa.jpg,b1/1_extra_bbb.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.post("/api/cards/card-1/images/1/rotate", json={"degrees": 90})
         self.assertEqual(response.status_code, 200)
@@ -644,6 +693,7 @@ class ReplaceCardExtraImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "extra_image_paths": "b1/1_extra_aaa.jpg,b1/1_extra_bbb.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.replace_image_at_path", return_value=b"\xff\xd8\xff") as mock_replace, \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
              patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = self._post_replace(index=1)
         self.assertEqual(response.status_code, 200)

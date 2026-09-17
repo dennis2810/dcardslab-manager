@@ -558,7 +558,11 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
             response = client.post("/api/ebay/listings/listing-1/publish")
         self.assertEqual(response.status_code, 200)
         image_urls = mock_put.call_args[0][3]
-        self.assertEqual(image_urls, ["https://img/b1/1_front.jpg", "https://img/b1/1_back.jpg"])
+        # Cache-Buster-Query-Parameter (siehe _publish_listing()) haengt an
+        # jeder URL, daher startswith() statt exaktem Vergleich.
+        self.assertEqual(len(image_urls), 2)
+        self.assertTrue(image_urls[0].startswith("https://img/b1/1_front.jpg?v="))
+        self.assertTrue(image_urls[1].startswith("https://img/b1/1_back.jpg?v="))
 
     def test_includes_extra_photos_after_front_and_back_capped_at_twelve(self):
         extra = ",".join(f"b1/1_extra_{i}.jpg" for i in range(11))
@@ -580,10 +584,12 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         image_urls = mock_put.call_args[0][3]
         # 2 (front+back) + 11 extras = 13, capped at eBay's 12-image limit.
+        # Cache-Buster-Query-Parameter (siehe _publish_listing()) haengt an
+        # jeder URL, daher startswith() statt exaktem Vergleich.
         self.assertEqual(len(image_urls), 12)
-        self.assertEqual(image_urls[0], "https://img/b1/1_front.jpg")
-        self.assertEqual(image_urls[1], "https://img/b1/1_back.jpg")
-        self.assertEqual(image_urls[2], "https://img/b1/1_extra_0.jpg")
+        self.assertTrue(image_urls[0].startswith("https://img/b1/1_front.jpg?v="))
+        self.assertTrue(image_urls[1].startswith("https://img/b1/1_back.jpg?v="))
+        self.assertTrue(image_urls[2].startswith("https://img/b1/1_extra_0.jpg?v="))
 
     def test_returns_502_on_ebay_api_error(self):
         with patch("main.db.get_ebay_listing", return_value=_listing()), \

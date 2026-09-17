@@ -86,18 +86,24 @@ if ("serviceWorker" in navigator) {
      ueber alle Seiten hinweg, daher pro Seite einzeln ergaenzt. */
   body.compact th, body.compact td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   /* Frei wählbare Tabellenspalten (Einstellungen je Seite, localStorage) -
-     per CSS statt in render() bedingt zu rendern. */
-  #listings-table.hide-col-6 th:nth-child(6), #listings-table.hide-col-6 td:nth-child(6) { display: none; }
-  #listings-table.hide-col-8 th:nth-child(8), #listings-table.hide-col-8 td:nth-child(8) { display: none; }
-  #listings-table.hide-col-9 th:nth-child(9), #listings-table.hide-col-9 td:nth-child(9) { display: none; }
-  #listings-table.hide-col-10 th:nth-child(10), #listings-table.hide-col-10 td:nth-child(10) { display: none; }
-  #listings-table.hide-col-11 th:nth-child(11), #listings-table.hide-col-11 td:nth-child(11) { display: none; }
-  #listings-table.hide-col-12 th:nth-child(12), #listings-table.hide-col-12 td:nth-child(12) { display: none; }
-  #listings-table.hide-col-13 th:nth-child(13), #listings-table.hide-col-13 td:nth-child(13) { display: none; }
-  #listings-table.hide-col-15 th:nth-child(15), #listings-table.hide-col-15 td:nth-child(15) { display: none; }
-  #listings-table.hide-col-16 th:nth-child(16), #listings-table.hide-col-16 td:nth-child(16) { display: none; }
-  #listings-table.hide-col-17 th:nth-child(17), #listings-table.hide-col-17 td:nth-child(17) { display: none; }
-  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
+     ueber data-col statt nth-child, damit sich Spalten auch umsortieren
+     lassen (siehe applyColumnOrder() unten): nth-child-Regeln wuerden nach
+     einer Umsortierung die falsche Spalte treffen, ein Attribut-Selektor
+     bleibt unabhaengig von der DOM-Position korrekt. */
+  #listings-table.hide-price_check [data-col="price_check"],
+  #listings-table.hide-listing_since [data-col="listing_since"],
+  #listings-table.hide-scheduled_at [data-col="scheduled_at"],
+  #listings-table.hide-sale_date [data-col="sale_date"],
+  #listings-table.hide-sale_price [data-col="sale_price"],
+  #listings-table.hide-published_at [data-col="published_at"],
+  #listings-table.hide-views [data-col="views"],
+  #listings-table.hide-condition [data-col="condition"],
+  #listings-table.hide-auto_accept_price [data-col="auto_accept_price"],
+  #listings-table.hide-auto_decline_price [data-col="auto_decline_price"] { display: none; }
+  .column-toggle-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; max-width: 22rem; }
+  .column-toggle-panel .col-row { display: flex; align-items: center; gap: 0.5rem; }
+  .column-toggle-panel .col-row label { display: flex; align-items: center; gap: 0.4rem; flex: 1; }
+  .column-toggle-panel .col-row button { padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
   .shortcuts-panel ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
   .shortcuts-panel li { margin: 0.15rem 0; }
@@ -207,10 +213,19 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
+    <button type="button" id="load-best-offer-btn">💰 Preisvorschläge laden</button>
   </div>
   <p id="views-status" class="no-print"></p>
+  <p id="best-offer-sync-status" class="no-print"></p>
   <div class="controls no-print">
-    <label>Verkauft von <input type="date" id="sold-from"></label>
+    <label>Zeitraum für
+      <select id="sum-date-field">
+        <option value="sale_date">Verkauft</option>
+        <option value="listing_since">Eingestellt</option>
+        <option value="published_at">Aktualisiert</option>
+      </select>
+    </label>
+    <label>von <input type="date" id="sold-from"></label>
     <label>bis <input type="date" id="sold-to"></label>
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
   </div>
@@ -246,23 +261,23 @@ if ("serviceWorker" in navigator) {
     <table id="listings-table" style="display: none;">
         <thead>
           <tr>
-            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-            <th></th>
-            <th data-key="sku">SKU <span class="sort-arrow"></span></th>
-            <th data-key="title">Titel <span class="sort-arrow"></span></th>
-            <th data-key="price">Preis <span class="sort-arrow"></span></th>
-            <th>Preis-Check</th>
-            <th data-key="status">Status <span class="sort-arrow"></span></th>
-            <th data-key="listing_since">Eingestellt am <span class="sort-arrow"></span></th>
-            <th data-key="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
-            <th data-key="sale_date">Verkauft am <span class="sort-arrow"></span></th>
-            <th data-key="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
-            <th data-key="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
-            <th>Aufrufe</th>
-            <th>eBay</th>
-            <th data-key="condition">Zustand <span class="sort-arrow"></span></th>
-            <th data-key="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
-            <th data-key="auto_decline_price">Auto-Ablehnung <span class="sort-arrow"></span></th>
+            <th data-col="select"><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th data-col="thumb"></th>
+            <th data-key="sku" data-col="sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title" data-col="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="price" data-col="price">Preis <span class="sort-arrow"></span></th>
+            <th data-col="price_check">Preis-Check</th>
+            <th data-key="status" data-col="status">Status <span class="sort-arrow"></span></th>
+            <th data-key="listing_since" data-col="listing_since">Eingestellt am <span class="sort-arrow"></span></th>
+            <th data-key="scheduled_at" data-col="scheduled_at">Geplant für <span class="sort-arrow"></span></th>
+            <th data-key="sale_date" data-col="sale_date">Verkauft am <span class="sort-arrow"></span></th>
+            <th data-key="sale_price" data-col="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
+            <th data-key="published_at" data-col="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
+            <th data-col="views">Aufrufe</th>
+            <th data-col="ebay_link">eBay</th>
+            <th data-key="condition" data-col="condition">Zustand <span class="sort-arrow"></span></th>
+            <th data-key="auto_accept_price" data-col="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
+            <th data-key="auto_decline_price" data-col="auto_decline_price">Auto-Ablehnung <span class="sort-arrow"></span></th>
           </tr>
         </thead>
         <tbody id="listings-body"></tbody>
@@ -651,53 +666,142 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   if (currentListings) render(sortedListings());
 }).catch(() => {});
 
-// Frei wählbare Tabellenspalten - gleiches Prinzip wie auf cards.html
-// (siehe dort für die ausführliche Begründung): Spalten per CSS-Klasse auf
-// der Tabelle aus-/einblenden statt bedingt in render() zu rendern.
+// Frei wählbare Tabellenspalten - Sichtbarkeit weiterhin per CSS-Klasse auf
+// der Tabelle (siehe .hide-<key>-Regeln oben im <style>), jetzt aber ueber
+// data-col statt nth-child, weil die Position nach einer Umsortierung (s.u.)
+// nicht mehr der urspruenglichen Spaltenreihenfolge entspricht. "select" und
+// "thumb" (Checkbox/Foto) sind bewusst weder aus- noch umsortierbar - die
+// Checkbox fuer die Massenauswahl muss immer an fester Position stehen.
 const COLUMN_TOGGLES = [
-  { key: "price_check", label: "Preis-Check", index: 6 },
-  { key: "listing_since", label: "Eingestellt am", index: 8 },
-  { key: "scheduled_at", label: "Geplant für", index: 9 },
-  { key: "sale_date", label: "Verkauft am", index: 10 },
-  { key: "sale_price", label: "Verkaufspreis", index: 11 },
-  { key: "published_at", label: "Zuletzt aktualisiert", index: 12 },
-  { key: "views", label: "Aufrufe", index: 13 },
-  { key: "condition", label: "Zustand", index: 15 },
-  { key: "auto_accept_price", label: "Auto-Annahme", index: 16 },
-  { key: "auto_decline_price", label: "Auto-Ablehnung", index: 17 },
+  { key: "price_check", label: "Preis-Check" },
+  { key: "listing_since", label: "Eingestellt am" },
+  { key: "scheduled_at", label: "Geplant für" },
+  { key: "sale_date", label: "Verkauft am" },
+  { key: "sale_price", label: "Verkaufspreis" },
+  { key: "published_at", label: "Zuletzt aktualisiert" },
+  { key: "views", label: "Aufrufe" },
+  { key: "condition", label: "Zustand" },
+  { key: "auto_accept_price", label: "Auto-Annahme" },
+  { key: "auto_decline_price", label: "Auto-Ablehnung" },
+];
+const COLUMN_LABELS = {
+  sku: "SKU", title: "Titel", price: "Preis", status: "Status", ebay_link: "eBay",
+};
+for (const col of COLUMN_TOGGLES) COLUMN_LABELS[col.key] = col.label;
+const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
+// Reihenfolge, in der die Spalten (ausser select/thumb) im <thead> stehen -
+// zugleich die Grundlage fuer applyColumnOrder() unten.
+const DEFAULT_COLUMN_ORDER = [
+  "sku", "title", "price", "price_check", "status", "listing_since", "scheduled_at",
+  "sale_date", "sale_price", "published_at", "views", "ebay_link", "condition",
+  "auto_accept_price", "auto_decline_price",
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "ebay_hidden_columns";
+const COLUMN_ORDER_STORAGE_KEY = "ebay_column_order";
 let hiddenColumns = new Set();
 try {
   hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
 } catch (err) {}
+let columnOrder = DEFAULT_COLUMN_ORDER.slice();
+try {
+  const saved = JSON.parse(localStorage.getItem(COLUMN_ORDER_STORAGE_KEY) || "null");
+  if (Array.isArray(saved) && saved.length) {
+    // Faengt ab, wenn sich DEFAULT_COLUMN_ORDER seit dem letzten Speichern
+    // geaendert hat (neue Spalte hinzugekommen/entfernt) - unbekannte
+    // gespeicherte Keys werden verworfen, fehlende ans Ende angehaengt.
+    const known = new Set(DEFAULT_COLUMN_ORDER);
+    const filtered = saved.filter((k) => known.has(k));
+    const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k));
+    columnOrder = [...filtered, ...missing];
+  }
+} catch (err) {}
+
+function saveColumnOrder() {
+  try { localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder)); } catch (err) {}
+}
+
+// Sortiert die Zellen EINER Zeile (Kopf- oder Datenzeile) per data-col in
+// columnOrder-Reihenfolge um - appendChild() auf einen bereits im DOM
+// vorhandenen Knoten VERSCHIEBT ihn nur, statt ihn zu duplizieren. "select"/
+// "thumb" bleiben unangetastet an ihrer Ausgangsposition (kein data-col fuer
+// sie in columnOrder), alles danach wird neu angeordnet.
+function reorderRowCells(row) {
+  if (!row) return;
+  const cellsByCol = {};
+  for (const cell of row.children) {
+    if (cell.dataset.col) cellsByCol[cell.dataset.col] = cell;
+  }
+  for (const key of columnOrder) {
+    const cell = cellsByCol[key];
+    if (cell) row.appendChild(cell);
+  }
+}
+
+function applyColumnOrder() {
+  reorderRowCells(document.querySelector("#listings-table thead tr"));
+  for (const row of document.querySelectorAll("#listings-body tr")) reorderRowCells(row);
+}
 
 function applyColumnVisibility() {
   const listingsTable = document.getElementById("listings-table");
   for (const col of COLUMN_TOGGLES) {
-    listingsTable.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+    listingsTable.classList.toggle(`hide-${col.key}`, hiddenColumns.has(col.key));
   }
 }
 
 function renderColumnTogglePanel() {
   const panel = document.getElementById("column-toggle-panel");
   panel.innerHTML = "";
-  for (const col of COLUMN_TOGGLES) {
+  for (let i = 0; i < columnOrder.length; i++) {
+    const key = columnOrder[i];
+    const row = document.createElement("div");
+    row.className = "col-row";
+
     const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = !hiddenColumns.has(col.key);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) hiddenColumns.delete(col.key);
-      else hiddenColumns.add(col.key);
-      try {
-        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
-      } catch (err) {}
-      applyColumnVisibility();
+    if (TOGGLEABLE_KEYS.has(key)) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = !hiddenColumns.has(key);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) hiddenColumns.delete(key);
+        else hiddenColumns.add(key);
+        try {
+          localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+        } catch (err) {}
+        applyColumnVisibility();
+      });
+      label.appendChild(checkbox);
+    }
+    label.append(" " + (COLUMN_LABELS[key] || key));
+    row.appendChild(label);
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.textContent = "▲";
+    upBtn.title = "Nach links";
+    upBtn.disabled = i === 0;
+    upBtn.addEventListener("click", () => {
+      [columnOrder[i - 1], columnOrder[i]] = [columnOrder[i], columnOrder[i - 1]];
+      saveColumnOrder();
+      applyColumnOrder();
+      renderColumnTogglePanel();
     });
-    label.appendChild(checkbox);
-    label.append(" " + col.label);
-    panel.appendChild(label);
+    row.appendChild(upBtn);
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.textContent = "▼";
+    downBtn.title = "Nach rechts";
+    downBtn.disabled = i === columnOrder.length - 1;
+    downBtn.addEventListener("click", () => {
+      [columnOrder[i], columnOrder[i + 1]] = [columnOrder[i + 1], columnOrder[i]];
+      saveColumnOrder();
+      applyColumnOrder();
+      renderColumnTogglePanel();
+    });
+    row.appendChild(downBtn);
+
+    panel.appendChild(row);
   }
 }
 
@@ -707,6 +811,7 @@ document.getElementById("column-toggle-btn").addEventListener("click", () => {
 });
 
 renderColumnTogglePanel();
+applyColumnOrder();
 applyColumnVisibility();
 
 function priceResearchFlag(listing) {
@@ -764,18 +869,22 @@ function render(listings) {
     tr.appendChild(thumbTd);
 
     const skuTd = document.createElement("td");
+    skuTd.dataset.col = "sku";
     skuTd.textContent = listing.sku || "";
     tr.appendChild(skuTd);
 
     const titleTd = document.createElement("td");
+    titleTd.dataset.col = "title";
     titleTd.textContent = listing.title || "(ohne Titel)";
     tr.appendChild(titleTd);
 
     const priceTd = document.createElement("td");
+    priceTd.dataset.col = "price";
     priceTd.textContent = fmtEuro(listing.price);
     tr.appendChild(priceTd);
 
     const priceFlagTd = document.createElement("td");
+    priceFlagTd.dataset.col = "price_check";
     const flag = priceResearchFlag(listing);
     if (flag) {
       const flagSpan = document.createElement("span");
@@ -787,6 +896,7 @@ function render(listings) {
     tr.appendChild(priceFlagTd);
 
     const statusTd = document.createElement("td");
+    statusTd.dataset.col = "status";
     statusTd.className = "status-" + listing.status;
     statusTd.textContent = STATUS_LABELS[listing.status] || listing.status;
     if (listing.status === "Geplant" && daysPending(listing) > STALE_GEPLANT_DAYS) {
@@ -849,6 +959,7 @@ function render(listings) {
     // (siehe main.py's _publish_listing()) - zeigt "seit wann laeuft
     // GENAU DIESES eBay-Listing", card.html hat dieselbe Anzeige.
     const listingSinceTd = document.createElement("td");
+    listingSinceTd.dataset.col = "listing_since";
     if (listing.listing_since) {
       const days = Math.floor((Date.now() - new Date(listing.listing_since).getTime()) / (24 * 60 * 60 * 1000));
       const daysLabel = days <= 0 ? "heute" : days === 1 ? "1 Tag" : `${days} Tage`;
@@ -865,23 +976,28 @@ function render(listings) {
     tr.appendChild(listingSinceTd);
 
     const scheduledTd = document.createElement("td");
+    scheduledTd.dataset.col = "scheduled_at";
     scheduledTd.textContent = formatDateTime(listing.scheduled_at);
     tr.appendChild(scheduledTd);
 
     const saleDateTd = document.createElement("td");
+    saleDateTd.dataset.col = "sale_date";
     saleDateTd.textContent = formatDate(listing.sale_date);
     tr.appendChild(saleDateTd);
 
     const salePriceTd = document.createElement("td");
+    salePriceTd.dataset.col = "sale_price";
     salePriceTd.textContent = fmtEuro(listing.sale_price);
     tr.appendChild(salePriceTd);
 
     const updatedTd = document.createElement("td");
+    updatedTd.dataset.col = "published_at";
     updatedTd.textContent = formatDateTime(listing.published_at);
     tr.appendChild(updatedTd);
 
     const viewsTd = document.createElement("td");
     viewsTd.className = "views-cell";
+    viewsTd.dataset.col = "views";
     if (listing.ebay_listing_id) {
       viewsTd.dataset.listingId = listing.ebay_listing_id;
       // listingViews (frisch per "Aufrufe laden" in dieser Sitzung geladen)
@@ -899,6 +1015,7 @@ function render(listings) {
     tr.appendChild(viewsTd);
 
     const ebayLinkTd = document.createElement("td");
+    ebayLinkTd.dataset.col = "ebay_link";
     if (listing.ebay_listing_id) {
       const a = document.createElement("a");
       a.href = ebayListingUrl(listing);
@@ -913,15 +1030,18 @@ function render(listings) {
     tr.appendChild(ebayLinkTd);
 
     const conditionTd = document.createElement("td");
+    conditionTd.dataset.col = "condition";
     conditionTd.textContent = CONDITION_LABELS[listing.condition] || listing.condition || "";
     tr.appendChild(conditionTd);
 
     const autoAcceptTd = document.createElement("td");
+    autoAcceptTd.dataset.col = "auto_accept_price";
     autoAcceptTd.textContent = listing.best_offer_enabled && listing.auto_accept_price
       ? fmtEuro(listing.auto_accept_price) : "";
     tr.appendChild(autoAcceptTd);
 
     const autoDeclineTd = document.createElement("td");
+    autoDeclineTd.dataset.col = "auto_decline_price";
     autoDeclineTd.textContent = listing.best_offer_enabled && listing.auto_decline_price
       ? fmtEuro(listing.auto_decline_price) : "";
     tr.appendChild(autoDeclineTd);
@@ -933,6 +1053,7 @@ function render(listings) {
     makeRowKeyboardNavigable(tr);
     body.appendChild(tr);
   }
+  applyColumnOrder();
   renderGrid(pageItems);
   updateBulkBar();
   renderSums(listings);
@@ -1064,29 +1185,103 @@ function ebayImportedBadge(listing) {
   return badge;
 }
 
+// Fuer welches Datumsfeld die "Summe im Zeitraum" unten berechnet wird -
+// urspruenglich fest auf "Verkauft am" (sale_date), Klaerung mit dem Nutzer:
+// soll auch fuer "Eingestellt am" (listing_since) und "Zuletzt aktualisiert"
+// (published_at) moeglich sein, z.B. um zu sehen, wie viel in einem
+// bestimmten Zeitraum neu eingestellt wurde. Bei den beiden letzteren macht
+// eine "Verkaufserloes"-Summe keinen Sinn (die Angebote muessen noch nicht
+// verkauft sein) - stattdessen wird die Summe der Angebotspreise gezeigt.
+const SUM_DATE_FIELDS = {
+  sale_date: {
+    getValue: (l) => (l.status === "Verkauft" ? l.sale_date : null),
+    sumField: "sale_price", sumLabel: "Verkaufserlös", countLabel: "Verkäufe",
+  },
+  listing_since: {
+    getValue: (l) => l.listing_since,
+    sumField: "price", sumLabel: "Angebotspreise (eingestellt)", countLabel: "Angebot(e)",
+  },
+  published_at: {
+    getValue: (l) => l.published_at,
+    sumField: "price", sumLabel: "Angebotspreise (aktualisiert)", countLabel: "Angebot(e)",
+  },
+};
+
 function renderSums(listings) {
   const priceSum = listings.reduce((sum, l) => sum + (l.price || 0), 0);
   const from = document.getElementById("sold-from").value;
   const to = document.getElementById("sold-to").value;
-  const soldInRange = listings.filter((l) => {
-    if (l.status !== "Verkauft" || !l.sale_date) return false;
-    const day = l.sale_date.slice(0, 10);
+  const fieldDef = SUM_DATE_FIELDS[document.getElementById("sum-date-field").value] || SUM_DATE_FIELDS.sale_date;
+  const inRange = listings.filter((l) => {
+    const value = fieldDef.getValue(l);
+    if (!value) return false;
+    const day = value.slice(0, 10);
     if (from && day < from) return false;
     if (to && day > to) return false;
     return true;
   });
-  const revenueSum = soldInRange.reduce((sum, l) => sum + (l.sale_price || 0), 0);
+  const rangeSum = inRange.reduce((sum, l) => sum + (l[fieldDef.sumField] || 0), 0);
   document.getElementById("sums").textContent =
     `Summe Angebotspreise (sichtbar): ${fmtEuro(priceSum)} · `
-    + `Summe Verkaufserlös${from || to ? " (Zeitraum)" : ""}: ${fmtEuro(revenueSum)} (${soldInRange.length} Verkäufe)`;
+    + `Summe ${fieldDef.sumLabel}${from || to ? " (Zeitraum)" : ""}: ${fmtEuro(rangeSum)} (${inRange.length} ${fieldDef.countLabel})`;
 }
 
+document.getElementById("sum-date-field").addEventListener("change", () => render(sortedListings()));
 document.getElementById("sold-from").addEventListener("change", () => render(sortedListings()));
 document.getElementById("sold-to").addEventListener("change", () => render(sortedListings()));
 document.getElementById("reset-date-filter").addEventListener("click", () => {
+  document.getElementById("sum-date-field").value = "sale_date";
   document.getElementById("sold-from").value = "";
   document.getElementById("sold-to").value = "";
   render(sortedListings());
+});
+
+// Fuellt best_offer_enabled/auto_accept_price/auto_decline_price fuer die
+// aktuell sichtbaren Angebote nach (siehe /api/ebay/listings/best-offer-sync
+// in main.py) - ohne diesen Klick bleiben die drei Spalten fuer Angebote,
+// deren Preisvorschlaege-Formular noch nie in card.html geoeffnet wurde,
+// leer (Bugreport des Nutzers).
+document.getElementById("load-best-offer-btn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("best-offer-sync-status");
+  const ids = [...new Set(
+    currentPageItems.filter((l) => l.ebay_offer_id).map((l) => l.id)
+  )];
+  if (ids.length === 0) {
+    statusEl.textContent = "Keine selbst verwalteten, veröffentlichten Angebote auf dieser Seite.";
+    statusEl.className = "";
+    return;
+  }
+  statusEl.textContent = "Lädt …";
+  statusEl.className = "";
+  try {
+    const res = await fetch("/api/ebay/listings/best-offer-sync?listing_ids=" + encodeURIComponent(ids.join(",")));
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = "Fehler: " + (data.detail || res.statusText);
+      statusEl.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
+      return;
+    }
+    const byId = {};
+    for (const r of data.results) byId[r.listing_id] = r;
+    let hitCount = 0;
+    for (const listing of currentPageItems) {
+      const result = byId[listing.id];
+      if (result && result.ok) {
+        listing.best_offer_enabled = result.best_offer_enabled;
+        listing.auto_accept_price = result.auto_accept_price;
+        listing.auto_decline_price = result.auto_decline_price;
+        hitCount++;
+      }
+    }
+    statusEl.textContent = `Preisvorschläge für ${hitCount} von ${ids.length} Angebot(en) geladen.`;
+    statusEl.className = "";
+    render(sortedListings());
+  } catch (err) {
+    statusEl.textContent = "Fehler: " + err;
+    statusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
 });
 
 document.getElementById("prev-page").addEventListener("click", () => {

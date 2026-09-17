@@ -94,33 +94,37 @@ if ("serviceWorker" in navigator) {
   body.compact .list th, body.compact .list td { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
   body.compact .list img { width: 32px; height: 32px; }
   /* Frei wählbare Tabellenspalten (Einstellungen je Seite, localStorage) -
-     per CSS statt in renderList() bedingt zu rendern, damit die Auswahl
-     unabhaengig von Ladereihenfolge/Sortierung sofort greift. */
-  #list.hide-col-5 th:nth-child(5), #list.hide-col-5 td:nth-child(5) { display: none; }
-  #list.hide-col-6 th:nth-child(6), #list.hide-col-6 td:nth-child(6) { display: none; }
-  #list.hide-col-7 th:nth-child(7), #list.hide-col-7 td:nth-child(7) { display: none; }
-  #list.hide-col-10 th:nth-child(10), #list.hide-col-10 td:nth-child(10) { display: none; }
-  #list.hide-col-11 th:nth-child(11), #list.hide-col-11 td:nth-child(11) { display: none; }
-  #list.hide-col-12 th:nth-child(12), #list.hide-col-12 td:nth-child(12) { display: none; }
-  #list.hide-col-13 th:nth-child(13), #list.hide-col-13 td:nth-child(13) { display: none; }
-  #list.hide-col-14 th:nth-child(14), #list.hide-col-14 td:nth-child(14) { display: none; }
-  #list.hide-col-15 th:nth-child(15), #list.hide-col-15 td:nth-child(15) { display: none; }
-  #list.hide-col-16 th:nth-child(16), #list.hide-col-16 td:nth-child(16) { display: none; }
-  #list.hide-col-17 th:nth-child(17), #list.hide-col-17 td:nth-child(17) { display: none; }
-  #list.hide-col-18 th:nth-child(18), #list.hide-col-18 td:nth-child(18) { display: none; }
-  #list.hide-col-19 th:nth-child(19), #list.hide-col-19 td:nth-child(19) { display: none; }
-  #list.hide-col-20 th:nth-child(20), #list.hide-col-20 td:nth-child(20) { display: none; }
-  #list.hide-col-21 th:nth-child(21), #list.hide-col-21 td:nth-child(21) { display: none; }
-  #list.hide-col-22 th:nth-child(22), #list.hide-col-22 td:nth-child(22) { display: none; }
-  #list.hide-col-23 th:nth-child(23), #list.hide-col-23 td:nth-child(23) { display: none; }
-  #list.hide-col-24 th:nth-child(24), #list.hide-col-24 td:nth-child(24) { display: none; }
-  #list.hide-col-25 th:nth-child(25), #list.hide-col-25 td:nth-child(25) { display: none; }
-  #list.hide-col-26 th:nth-child(26), #list.hide-col-26 td:nth-child(26) { display: none; }
-  #list.hide-col-27 th:nth-child(27), #list.hide-col-27 td:nth-child(27) { display: none; }
-  #list.hide-col-28 th:nth-child(28), #list.hide-col-28 td:nth-child(28) { display: none; }
-  #list.hide-col-29 th:nth-child(29), #list.hide-col-29 td:nth-child(29) { display: none; }
-  .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
-  .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
+     ueber data-col statt nth-child, damit sich Spalten auch umsortieren
+     lassen (siehe applyColumnOrder() im Script): nth-child-Regeln wuerden
+     nach einer Umsortierung die falsche Spalte treffen, ein Attribut-
+     Selektor bleibt unabhaengig von der DOM-Position korrekt. */
+  #list.hide-team [data-col="team"],
+  #list.hide-season_year [data-col="season_year"],
+  #list.hide-recognition_status [data-col="recognition_status"],
+  #list.hide-tags [data-col="tags"],
+  #list.hide-set_name [data-col="set_name"],
+  #list.hide-card_type [data-col="card_type"],
+  #list.hide-variant [data-col="variant"],
+  #list.hide-card_number [data-col="card_number"],
+  #list.hide-theme [data-col="theme"],
+  #list.hide-manufacturer [data-col="manufacturer"],
+  #list.hide-position [data-col="position"],
+  #list.hide-category [data-col="category"],
+  #list.hide-squad_number [data-col="squad_number"],
+  #list.hide-club_debut_season [data-col="club_debut_season"],
+  #list.hide-serial_number [data-col="serial_number"],
+  #list.hide-print_run [data-col="print_run"],
+  #list.hide-card_no [data-col="card_no"],
+  #list.hide-grading_summary [data-col="grading_summary"],
+  #list.hide-purchase_platform [data-col="purchase_platform"],
+  #list.hide-purchase_seller [data-col="purchase_seller"],
+  #list.hide-inventory_location [data-col="inventory_location"],
+  #list.hide-features [data-col="features"],
+  #list.hide-listing_hints [data-col="listing_hints"] { display: none; }
+  .column-toggle-panel { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; max-width: 22rem; max-height: 20rem; overflow-y: auto; }
+  .column-toggle-panel .col-row { display: flex; align-items: center; gap: 0.5rem; }
+  .column-toggle-panel .col-row label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; flex: 1; }
+  .column-toggle-panel .col-row button { padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
   .shortcuts-panel ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
   .shortcuts-panel li { margin: 0.15rem 0; }
@@ -304,35 +308,35 @@ if ("serviceWorker" in navigator) {
     <table id="list" class="list" hidden>
         <thead>
           <tr>
-            <th><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
-            <th></th>
-            <th data-key="ebay_sku">SKU <span class="sort-arrow"></span></th>
-            <th data-key="title">Titel <span class="sort-arrow"></span></th>
-            <th data-key="team">Team <span class="sort-arrow"></span></th>
-            <th data-key="season_year">Saison <span class="sort-arrow"></span></th>
-            <th data-key="recognition_status">Erkennung <span class="sort-arrow"></span></th>
-            <th data-key="ebay_status">Verkauf <span class="sort-arrow"></span></th>
-            <th data-key="shipped">Versand <span class="sort-arrow"></span></th>
-            <th data-key="tags">Tags <span class="sort-arrow"></span></th>
-            <th data-key="set_name">Set <span class="sort-arrow"></span></th>
-            <th data-key="card_type">Typ <span class="sort-arrow"></span></th>
-            <th data-key="variant">Variante <span class="sort-arrow"></span></th>
-            <th data-key="card_number">Kartennr. <span class="sort-arrow"></span></th>
-            <th data-key="theme">Thema <span class="sort-arrow"></span></th>
-            <th data-key="manufacturer">Hersteller <span class="sort-arrow"></span></th>
-            <th data-key="position">Position <span class="sort-arrow"></span></th>
-            <th data-key="category">Kategorie <span class="sort-arrow"></span></th>
-            <th data-key="squad_number">Trikotnr. <span class="sort-arrow"></span></th>
-            <th data-key="club_debut_season">Debütsaison <span class="sort-arrow"></span></th>
-            <th data-key="serial_number">Seriennr. <span class="sort-arrow"></span></th>
-            <th data-key="print_run">Auflage <span class="sort-arrow"></span></th>
-            <th data-key="card_no">Lfd. Nr. <span class="sort-arrow"></span></th>
-            <th data-key="grading_summary">Grading <span class="sort-arrow"></span></th>
-            <th data-key="purchase_platform">Kauf-Plattform <span class="sort-arrow"></span></th>
-            <th data-key="purchase_seller">Kauf-Verkäufer <span class="sort-arrow"></span></th>
-            <th data-key="inventory_location">Lagerort <span class="sort-arrow"></span></th>
-            <th>Merkmale</th>
-            <th>Angebots-Hinweise</th>
+            <th data-col="select"><input type="checkbox" id="select-all-checkbox" title="Alle auswählen"></th>
+            <th data-col="thumb"></th>
+            <th data-key="ebay_sku" data-col="ebay_sku">SKU <span class="sort-arrow"></span></th>
+            <th data-key="title" data-col="title">Titel <span class="sort-arrow"></span></th>
+            <th data-key="team" data-col="team">Team <span class="sort-arrow"></span></th>
+            <th data-key="season_year" data-col="season_year">Saison <span class="sort-arrow"></span></th>
+            <th data-key="recognition_status" data-col="recognition_status">Erkennung <span class="sort-arrow"></span></th>
+            <th data-key="ebay_status" data-col="ebay_status">Verkauf <span class="sort-arrow"></span></th>
+            <th data-key="shipped" data-col="shipped">Versand <span class="sort-arrow"></span></th>
+            <th data-key="tags" data-col="tags">Tags <span class="sort-arrow"></span></th>
+            <th data-key="set_name" data-col="set_name">Set <span class="sort-arrow"></span></th>
+            <th data-key="card_type" data-col="card_type">Typ <span class="sort-arrow"></span></th>
+            <th data-key="variant" data-col="variant">Variante <span class="sort-arrow"></span></th>
+            <th data-key="card_number" data-col="card_number">Kartennr. <span class="sort-arrow"></span></th>
+            <th data-key="theme" data-col="theme">Thema <span class="sort-arrow"></span></th>
+            <th data-key="manufacturer" data-col="manufacturer">Hersteller <span class="sort-arrow"></span></th>
+            <th data-key="position" data-col="position">Position <span class="sort-arrow"></span></th>
+            <th data-key="category" data-col="category">Kategorie <span class="sort-arrow"></span></th>
+            <th data-key="squad_number" data-col="squad_number">Trikotnr. <span class="sort-arrow"></span></th>
+            <th data-key="club_debut_season" data-col="club_debut_season">Debütsaison <span class="sort-arrow"></span></th>
+            <th data-key="serial_number" data-col="serial_number">Seriennr. <span class="sort-arrow"></span></th>
+            <th data-key="print_run" data-col="print_run">Auflage <span class="sort-arrow"></span></th>
+            <th data-key="card_no" data-col="card_no">Lfd. Nr. <span class="sort-arrow"></span></th>
+            <th data-key="grading_summary" data-col="grading_summary">Grading <span class="sort-arrow"></span></th>
+            <th data-key="purchase_platform" data-col="purchase_platform">Kauf-Plattform <span class="sort-arrow"></span></th>
+            <th data-key="purchase_seller" data-col="purchase_seller">Kauf-Verkäufer <span class="sort-arrow"></span></th>
+            <th data-key="inventory_location" data-col="inventory_location">Lagerort <span class="sort-arrow"></span></th>
+            <th data-col="features">Merkmale</th>
+            <th data-col="listing_hints">Angebots-Hinweise</th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
@@ -435,69 +439,156 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   renderCurrentView();
 }).catch(() => {});
 
-// Frei wählbare Tabellenspalten (Listenansicht) - je Spalte ihr fester
-// nth-child-Index im #list-Tabellenkopf (siehe <thead> oben), damit das
-// Ausblenden per CSS-Klasse auf der Tabelle passiert statt in renderList()
-// bedingt zu rendern (siehe .hide-col-N-Regeln oben im <style>). Nur die
-// weniger zentralen Spalten sind wählbar, SKU/Titel/Verkauf/Versand bleiben
-// immer sichtbar.
+// Frei wählbare UND umsortierbare Tabellenspalten (Listenansicht) - Sichtbarkeit
+// weiterhin per CSS-Klasse auf der Tabelle (.hide-<key>-Regeln oben im
+// <style>), jetzt ueber data-col statt nth-child, weil die Position nach
+// einer Umsortierung nicht mehr der urspruenglichen Reihenfolge entspricht.
+// "select" und "thumb" (Checkbox/Foto) bleiben bewusst immer an fester
+// erster Position - weder aus- noch umsortierbar.
 const COLUMN_TOGGLES = [
-  { key: "team", label: "Team", index: 5 },
-  { key: "season_year", label: "Saison", index: 6 },
-  { key: "recognition_status", label: "Erkennung", index: 7 },
-  { key: "tags", label: "Tags", index: 10 },
-  { key: "set_name", label: "Set", index: 11 },
-  { key: "card_type", label: "Typ", index: 12 },
-  { key: "variant", label: "Variante", index: 13 },
-  { key: "card_number", label: "Kartennr.", index: 14 },
-  { key: "theme", label: "Thema", index: 15 },
-  { key: "manufacturer", label: "Hersteller", index: 16 },
-  { key: "position", label: "Position", index: 17 },
-  { key: "category", label: "Kategorie", index: 18 },
-  { key: "squad_number", label: "Trikotnr.", index: 19 },
-  { key: "club_debut_season", label: "Debütsaison", index: 20 },
-  { key: "serial_number", label: "Seriennr.", index: 21 },
-  { key: "print_run", label: "Auflage", index: 22 },
-  { key: "card_no", label: "Lfd. Nr.", index: 23 },
-  { key: "grading_summary", label: "Grading", index: 24 },
-  { key: "purchase_platform", label: "Kauf-Plattform", index: 25 },
-  { key: "purchase_seller", label: "Kauf-Verkäufer", index: 26 },
-  { key: "inventory_location", label: "Lagerort", index: 27 },
-  { key: "features", label: "Merkmale", index: 28 },
-  { key: "listing_hints", label: "Angebots-Hinweise", index: 29 },
+  { key: "team", label: "Team" },
+  { key: "season_year", label: "Saison" },
+  { key: "recognition_status", label: "Erkennung" },
+  { key: "tags", label: "Tags" },
+  { key: "set_name", label: "Set" },
+  { key: "card_type", label: "Typ" },
+  { key: "variant", label: "Variante" },
+  { key: "card_number", label: "Kartennr." },
+  { key: "theme", label: "Thema" },
+  { key: "manufacturer", label: "Hersteller" },
+  { key: "position", label: "Position" },
+  { key: "category", label: "Kategorie" },
+  { key: "squad_number", label: "Trikotnr." },
+  { key: "club_debut_season", label: "Debütsaison" },
+  { key: "serial_number", label: "Seriennr." },
+  { key: "print_run", label: "Auflage" },
+  { key: "card_no", label: "Lfd. Nr." },
+  { key: "grading_summary", label: "Grading" },
+  { key: "purchase_platform", label: "Kauf-Plattform" },
+  { key: "purchase_seller", label: "Kauf-Verkäufer" },
+  { key: "inventory_location", label: "Lagerort" },
+  { key: "features", label: "Merkmale" },
+  { key: "listing_hints", label: "Angebots-Hinweise" },
+];
+const COLUMN_LABELS = {
+  ebay_sku: "SKU", title: "Titel", ebay_status: "Verkauf", shipped: "Versand",
+};
+for (const col of COLUMN_TOGGLES) COLUMN_LABELS[col.key] = col.label;
+const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
+// Standard-Reihenfolge - "Lfd. Nr." bewusst ganz vorne (Klaerung mit dem
+// Nutzer: soll ganz nach links), alle anderen unveraendert in der bisherigen
+// Reihenfolge.
+const DEFAULT_COLUMN_ORDER = [
+  "card_no", "ebay_sku", "title", "team", "season_year", "recognition_status",
+  "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "card_number",
+  "theme", "manufacturer", "position", "category", "squad_number", "club_debut_season",
+  "serial_number", "print_run", "grading_summary", "purchase_platform", "purchase_seller",
+  "inventory_location", "features", "listing_hints",
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
+const COLUMN_ORDER_STORAGE_KEY = "cards_column_order";
 let hiddenColumns = new Set();
 try {
   hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
 } catch (err) {}
+let columnOrder = DEFAULT_COLUMN_ORDER.slice();
+try {
+  const saved = JSON.parse(localStorage.getItem(COLUMN_ORDER_STORAGE_KEY) || "null");
+  if (Array.isArray(saved) && saved.length) {
+    // Faengt ab, wenn sich DEFAULT_COLUMN_ORDER seit dem letzten Speichern
+    // geaendert hat - unbekannte gespeicherte Keys werden verworfen, fehlende
+    // ans Ende angehaengt.
+    const known = new Set(DEFAULT_COLUMN_ORDER);
+    const filtered = saved.filter((k) => known.has(k));
+    const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k));
+    columnOrder = [...filtered, ...missing];
+  }
+} catch (err) {}
+
+function saveColumnOrder() {
+  try { localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder)); } catch (err) {}
+}
+
+// Sortiert die Zellen EINER Zeile (Kopf- oder Datenzeile) per data-col in
+// columnOrder-Reihenfolge um - appendChild() auf einen bereits im DOM
+// vorhandenen Knoten VERSCHIEBT ihn nur, statt ihn zu duplizieren.
+function reorderRowCells(row) {
+  if (!row) return;
+  const cellsByCol = {};
+  for (const cell of row.children) {
+    if (cell.dataset.col) cellsByCol[cell.dataset.col] = cell;
+  }
+  for (const key of columnOrder) {
+    const cell = cellsByCol[key];
+    if (cell) row.appendChild(cell);
+  }
+}
+
+function applyColumnOrder() {
+  reorderRowCells(document.querySelector("#list thead tr"));
+  for (const row of document.querySelectorAll("#list-body tr")) reorderRowCells(row);
+}
 
 function applyColumnVisibility() {
   const table = document.getElementById("list");
   for (const col of COLUMN_TOGGLES) {
-    table.classList.toggle(`hide-col-${col.index}`, hiddenColumns.has(col.key));
+    table.classList.toggle(`hide-${col.key}`, hiddenColumns.has(col.key));
   }
 }
 
 function renderColumnTogglePanel() {
   const panel = document.getElementById("column-toggle-panel");
   panel.innerHTML = "";
-  for (const col of COLUMN_TOGGLES) {
+  for (let i = 0; i < columnOrder.length; i++) {
+    const key = columnOrder[i];
+    const row = document.createElement("div");
+    row.className = "col-row";
+
     const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = !hiddenColumns.has(col.key);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) hiddenColumns.delete(col.key);
-      else hiddenColumns.add(col.key);
-      try {
-        localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
-      } catch (err) {}
-      applyColumnVisibility();
+    if (TOGGLEABLE_KEYS.has(key)) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = !hiddenColumns.has(key);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) hiddenColumns.delete(key);
+        else hiddenColumns.add(key);
+        try {
+          localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([...hiddenColumns]));
+        } catch (err) {}
+        applyColumnVisibility();
+      });
+      label.appendChild(checkbox);
+    }
+    label.append(" " + (COLUMN_LABELS[key] || key));
+    row.appendChild(label);
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.textContent = "▲";
+    upBtn.title = "Nach links";
+    upBtn.disabled = i === 0;
+    upBtn.addEventListener("click", () => {
+      [columnOrder[i - 1], columnOrder[i]] = [columnOrder[i], columnOrder[i - 1]];
+      saveColumnOrder();
+      applyColumnOrder();
+      renderColumnTogglePanel();
     });
-    label.appendChild(checkbox);
-    label.append(" " + col.label);
-    panel.appendChild(label);
+    row.appendChild(upBtn);
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.textContent = "▼";
+    downBtn.title = "Nach rechts";
+    downBtn.disabled = i === columnOrder.length - 1;
+    downBtn.addEventListener("click", () => {
+      [columnOrder[i], columnOrder[i + 1]] = [columnOrder[i + 1], columnOrder[i]];
+      saveColumnOrder();
+      applyColumnOrder();
+      renderColumnTogglePanel();
+    });
+    row.appendChild(downBtn);
+
+    panel.appendChild(row);
   }
 }
 
@@ -507,6 +598,7 @@ document.getElementById("column-toggle-btn").addEventListener("click", () => {
 });
 
 renderColumnTogglePanel();
+applyColumnOrder();
 applyColumnVisibility();
 
 const qInput = document.getElementById("q");
@@ -997,6 +1089,7 @@ function renderList(cards) {
     const tr = document.createElement("tr");
 
     const checkboxTd = document.createElement("td");
+    checkboxTd.dataset.col = "select";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = selectedIds.has(card.id);
@@ -1011,6 +1104,7 @@ function renderList(cards) {
     tr.appendChild(checkboxTd);
 
     const imgTd = document.createElement("td");
+    imgTd.dataset.col = "thumb";
     const img = document.createElement("img");
     if (card.front_image_url) img.src = card.front_image_url;
     img.alt = card.title || "";
@@ -1018,14 +1112,17 @@ function renderList(cards) {
     tr.appendChild(imgTd);
 
     const skuTd = document.createElement("td");
+    skuTd.dataset.col = "ebay_sku";
     skuTd.textContent = card.ebay_sku || "";
     tr.appendChild(skuTd);
 
     const titleTd = document.createElement("td");
+    titleTd.dataset.col = "title";
     titleTd.textContent = card.title || "(ohne Titel)";
     tr.appendChild(titleTd);
 
     const teamTd = document.createElement("td");
+    teamTd.dataset.col = "team";
     // Non-Sport-Karten (Marvel, Pokemon, ...) haben kein Team - category
     // traegt dort das Franchise (siehe ai_card_recognition.py), sonst
     // bliebe die Spalte fuer diese Karten einfach leer.
@@ -1033,40 +1130,32 @@ function renderList(cards) {
     tr.appendChild(teamTd);
 
     const seasonTd = document.createElement("td");
+    seasonTd.dataset.col = "season_year";
     seasonTd.textContent = card.season_year || "";
     tr.appendChild(seasonTd);
 
     const statusTd = document.createElement("td");
+    statusTd.dataset.col = "recognition_status";
     statusTd.className = statusClass(card.recognition_status);
     statusTd.textContent = card.recognition_status || "";
     tr.appendChild(statusTd);
 
+    // Zeigt nur noch den eigentlichen eBay-/Verkaufsstatus - RC/Nummeriert/
+    // Auto stehen jetzt in der eigenen Spalte "Merkmale", importiert/neu
+    // eingestellt/lange gelistet in "Angebots-Hinweise" (Klaerung mit dem
+    // Nutzer: Dopplung vermeiden, seit es diese Spalten gibt).
     const ebayTd = document.createElement("td");
+    ebayTd.dataset.col = "ebay_status";
     const badge = ebayBadge(card.ebay_status);
     if (badge) ebayTd.appendChild(badge);
-    const relisted = relistedBadge(card.last_auto_relisted_at);
-    if (relisted) ebayTd.appendChild(relisted);
-    const longListed = longListedBadge(card);
-    if (longListed) ebayTd.appendChild(longListed);
     const manualBadge = manualSaleBadge(card.manual_sale_channel);
     if (manualBadge) ebayTd.appendChild(manualBadge);
-    // Gehoert inhaltlich zum Verkaufsstatus (importiertes Angebot bzw.
-    // Privatentnahme in die private Sammlung), nicht zum Versand -
-    // Klaerung mit dem Nutzer: die Versand-Spalte soll ausschliesslich
-    // Versandinfos/"Abgeholt" zeigen.
-    const importedBadgeEl = importedBadge(card.ebay_imported);
-    if (importedBadgeEl) ebayTd.appendChild(importedBadgeEl);
     const privateBadge = privateCollectionBadge(card.private_collection);
     if (privateBadge) ebayTd.appendChild(privateBadge);
-    const rookie = rookieBadge(card);
-    if (rookie) ebayTd.appendChild(rookie);
-    const numbered = numberedBadge(card);
-    if (numbered) ebayTd.appendChild(numbered);
-    const autograph = autographBadge(card);
-    if (autograph) ebayTd.appendChild(autograph);
     tr.appendChild(ebayTd);
 
     const shippedTd = document.createElement("td");
+    shippedTd.dataset.col = "shipped";
     const shipped = shippedBadge(card.shipped);
     if (shipped) shippedTd.appendChild(shipped);
     const pickedUp = pickedUpBadge(card.picked_up);
@@ -1078,78 +1167,109 @@ function renderList(cards) {
     tr.appendChild(shippedTd);
 
     const tagsTd = document.createElement("td");
+    tagsTd.dataset.col = "tags";
     tagsTd.textContent = card.tags || "";
     tr.appendChild(tagsTd);
 
     const setTd = document.createElement("td");
+    setTd.dataset.col = "set_name";
     setTd.textContent = card.set_name || "";
     tr.appendChild(setTd);
 
     const typeTd = document.createElement("td");
+    typeTd.dataset.col = "card_type";
     typeTd.textContent = card.card_type || "";
     tr.appendChild(typeTd);
 
     const variantTd = document.createElement("td");
+    variantTd.dataset.col = "variant";
     variantTd.textContent = card.variant || "";
     tr.appendChild(variantTd);
 
     const cardNumberTd = document.createElement("td");
+    cardNumberTd.dataset.col = "card_number";
     cardNumberTd.textContent = card.card_number || "";
     tr.appendChild(cardNumberTd);
 
     const themeTd = document.createElement("td");
+    themeTd.dataset.col = "theme";
     themeTd.textContent = card.theme || "";
     tr.appendChild(themeTd);
 
     const manufacturerTd = document.createElement("td");
+    manufacturerTd.dataset.col = "manufacturer";
     manufacturerTd.textContent = card.manufacturer || "";
     tr.appendChild(manufacturerTd);
 
     const positionTd = document.createElement("td");
+    positionTd.dataset.col = "position";
     positionTd.textContent = card.position || "";
     tr.appendChild(positionTd);
 
     const categoryTd = document.createElement("td");
+    categoryTd.dataset.col = "category";
     categoryTd.textContent = card.category || "";
     tr.appendChild(categoryTd);
 
     const squadNumberTd = document.createElement("td");
+    squadNumberTd.dataset.col = "squad_number";
     squadNumberTd.textContent = card.squad_number || "";
     tr.appendChild(squadNumberTd);
 
     const clubDebutSeasonTd = document.createElement("td");
+    clubDebutSeasonTd.dataset.col = "club_debut_season";
     clubDebutSeasonTd.textContent = card.club_debut_season || "";
     tr.appendChild(clubDebutSeasonTd);
 
     const serialNumberTd = document.createElement("td");
+    serialNumberTd.dataset.col = "serial_number";
     serialNumberTd.textContent = card.serial_number || "";
     tr.appendChild(serialNumberTd);
 
     const printRunTd = document.createElement("td");
+    printRunTd.dataset.col = "print_run";
     printRunTd.textContent = card.print_run || "";
     tr.appendChild(printRunTd);
 
     const cardNoTd = document.createElement("td");
+    cardNoTd.dataset.col = "card_no";
     cardNoTd.textContent = card.card_no || "";
     tr.appendChild(cardNoTd);
 
     const gradingSummaryTd = document.createElement("td");
+    gradingSummaryTd.dataset.col = "grading_summary";
     gradingSummaryTd.textContent = card.grading_summary || "";
     tr.appendChild(gradingSummaryTd);
 
+    // Verlinkt (falls vorhanden) direkt auf den zugehoerigen Kauf - reziprok
+    // dazu kann man in Kauf.html/purchases.html die verknuepften Karten
+    // sehen, Klaerung mit dem Nutzer: Kaeufe haben keine eigene sichtbare
+    // Nummer, daher ein Link statt einer Nummernanzeige.
     const purchasePlatformTd = document.createElement("td");
-    purchasePlatformTd.textContent = card.purchase_platform || "";
+    purchasePlatformTd.dataset.col = "purchase_platform";
+    if (card.purchase_id) {
+      const a = document.createElement("a");
+      a.href = `purchase.html?id=${encodeURIComponent(card.purchase_id)}`;
+      a.textContent = card.purchase_platform || "Kauf ansehen";
+      a.addEventListener("click", (ev) => ev.stopPropagation());
+      purchasePlatformTd.appendChild(a);
+    } else {
+      purchasePlatformTd.textContent = card.purchase_platform || "";
+    }
     tr.appendChild(purchasePlatformTd);
 
     const purchaseSellerTd = document.createElement("td");
+    purchaseSellerTd.dataset.col = "purchase_seller";
     purchaseSellerTd.textContent = card.purchase_seller || "";
     tr.appendChild(purchaseSellerTd);
 
     const inventoryLocationTd = document.createElement("td");
+    inventoryLocationTd.dataset.col = "inventory_location";
     inventoryLocationTd.textContent = card.inventory_location || "";
     tr.appendChild(inventoryLocationTd);
 
     const featuresTd = document.createElement("td");
+    featuresTd.dataset.col = "features";
     const rcFeature = rookieBadge(card);
     if (rcFeature) featuresTd.appendChild(rcFeature);
     const numberedFeature = numberedBadge(card);
@@ -1159,6 +1279,7 @@ function renderList(cards) {
     tr.appendChild(featuresTd);
 
     const listingHintsTd = document.createElement("td");
+    listingHintsTd.dataset.col = "listing_hints";
     const importedHint = importedBadge(card.ebay_imported);
     if (importedHint) listingHintsTd.appendChild(importedHint);
     const relistedHint = relistedBadge(card.last_auto_relisted_at);
@@ -1174,6 +1295,7 @@ function renderList(cards) {
     makeRowKeyboardNavigable(tr);
     listBody.appendChild(tr);
   }
+  applyColumnOrder();
 }
 
 qInput.addEventListener("input", () => {

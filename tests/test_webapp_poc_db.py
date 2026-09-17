@@ -1339,7 +1339,7 @@ class PurchaseInfoByCardIdsTests(unittest.TestCase):
         mock_client.table.side_effect = table_side_effect
         with patch("db.get_client", return_value=mock_client):
             result = db.purchase_info_by_card_ids(["card-1"])
-        self.assertEqual(result, {"card-1": {"platform": "eBay", "seller": "cardking"}})
+        self.assertEqual(result, {"card-1": {"id": "p1", "platform": "eBay", "seller": "cardking"}})
 
     def test_empty_input_skips_query(self):
         mock_client = MagicMock()

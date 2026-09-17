@@ -158,15 +158,18 @@ if ("serviceWorker" in navigator) {
     Käufe- und Alle-Verkäufe-Seite.
     In der Listenansicht sind die Spalten sortierbar und decken praktisch alle Kartenfelder ab (inkl. Kategorie,
     Trikotnummer, Debütsaison, Seriennummer, Auflage, laufende Nummer, Grading-Status sowie verknüpfter
-    Kauf-Plattform/-Verkäufer und Lagerort). Ein kleines 📥-Symbol markiert Karten mit einem manuell
-    importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
-    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft – diese drei Hinweise
-    stehen zusätzlich als eigene Spalte „Angebots-Hinweise" sowie als eigenes Filter-Auswahlfeld zur Verfügung.
-    RC/Nummeriert/Auto haben ebenfalls eine eigene Spalte „Merkmale" und ein Filter-Auswahlfeld „Alle Merkmale".
-    Der Status-Filter heißt „Alle OCR-Status" (bezieht sich auf die automatische Text-/Felderkennung beim
-    Scannen, nicht auf den Verkaufsstatus). Über den Button „⚙
-    Spalten" lassen sich einzelne, weniger zentrale Spalten aus-/einblenden – die Auswahl wird je Browser
-    gemerkt. Bei einer
+    Kauf-Plattform/-Verkäufer und Lagerort). Die Spalte „Kauf-Plattform" ist bei verknüpften Käufen anklickbar
+    und führt direkt zum betreffenden Kauf. Die Spalte „Verkauf" zeigt ausschließlich den eBay-/Verkaufsstatus
+    (inkl. Warnungen bei Doppel-Verkauf oder Privatentnahme) – ein kleines 📥-Symbol markiert Karten mit einem
+    manuell importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot
+    und ein ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft – diese drei
+    Hinweise stehen in der eigenen Spalte „Angebots-Hinweise" sowie als eigenes Filter-Auswahlfeld zur
+    Verfügung. RC/Nummeriert/Auto haben ebenfalls eine eigene Spalte „Merkmale" und ein Filter-Auswahlfeld
+    „Alle Merkmale". Der Status-Filter heißt „Alle OCR-Status" (bezieht sich auf die automatische
+    Text-/Felderkennung beim Scannen, nicht auf den Verkaufsstatus). Über den Button „⚙
+    Spalten" lassen sich einzelne, weniger zentrale Spalten aus-/einblenden und über die Pfeile ▲/▼ auch in eine
+    beliebige eigene Reihenfolge bringen (z. B. die laufende Nummer weiter nach vorne) – die Auswahl wird je
+    Browser gemerkt. Bei einer
     Mehrfachauswahl steht in der Massenaktionen-Leiste außerdem ein Auswahlfeld „Feld ändern" zur Verfügung (Team,
     Saison, Thema, Hersteller, Set, Typ, Variante, Position, Kategorie, Trikotnummer, Debütsaison, Tags sowie
     RC/Nummeriert/Auto als Ja/Nein-Auswahl) – Wert eintragen, „Übernehmen" klicken, und alle
@@ -219,7 +222,9 @@ if ("serviceWorker" in navigator) {
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
     Beschädigungen) – sie werden beim Veröffentlichen automatisch mit an eBay übertragen (bis zu eBays Limit von
     12 Fotos pro Angebot). Wie bei Vorder-/Rückseite lassen sich diese weiteren Fotos ebenfalls drehen, zuschneiden
-    und ersetzen (gleiche Buttons direkt am jeweiligen Foto), nicht nur löschen. Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
+    und ersetzen (gleiche Buttons direkt am jeweiligen Foto), nicht nur löschen. Jede Foto-Änderung (drehen,
+    zuschneiden, ersetzen, hinzufügen, löschen) wird bei einem bereits veröffentlichten Angebot automatisch an
+    eBay weitergegeben, ohne dass dafür extra noch etwas anderes am Angebot geändert werden muss. Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
     ein Badge den aktuellen Verkaufsstatus (eBay-Status bzw. „Verkauft: &lt;Kanal&gt;" bei einem manuellen Verkauf,
     zusätzlich „Versendet" falls zutreffend, sowie „📥 Importiert" bzw. „🔄 Neu eingestellt" für ein importiertes
     bzw. zuletzt neu eingestelltes eBay-Angebot) – ohne erst zum eBay-/Verkaufs-Abschnitt weiter unten scrollen zu
@@ -431,11 +436,16 @@ if ("serviceWorker" in navigator) {
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
-    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung) aus-/einblenden – die Auswahl wird je
+    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung) aus-/einblenden und über die Pfeile
+    ▲/▼ auch in eine beliebige eigene Reihenfolge bringen – die Auswahl wird je
     Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
-    sofern für das Angebot aktiviert; in der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
+    sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
+    Karte aktualisiert werden, lädt der Button „💰 Preisvorschläge laden" sie für alle Angebote der aktuellen
+    Seite auf einmal nach. In der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
     aktiv"-Kästchen) für mehrere ausgewählte Angebote auf einmal setzen, analog zur prozentualen
-    Preisanpassung. Der Button „Kachelansicht"
+    Preisanpassung. Die Summenzeile unten zeigt neben der Summe der sichtbaren Angebotspreise auch eine Summe für
+    einen wählbaren Zeitraum – per Auswahlfeld lässt sich umschalten, ob sich „von/bis" auf das Verkaufs-, das
+    Einstell- oder das letzte Aktualisierungsdatum bezieht. Der Button „Kachelansicht"
     oben rechts neben dem Sport/Non-Sport-Filter zeigt dieselbe Liste stattdessen als Foto-Kacheln (Titel, Preis,
     Status inkl. Warnhinweisen) – praktisch zum schnellen Durchblättern nach Bild statt Tabellenzeile. Dieselben
     Badges wie in der Tabelle (Zugestellt, Retoure, 🔄 neu eingestellt, ⏳ lange gelistet ohne Verkauf, 📥
