@@ -160,8 +160,11 @@ if ("serviceWorker" in navigator) {
     importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
     ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Über den Button „⚙
     Spalten" lassen sich einzelne, weniger zentrale Spalten (Team, Saison, Erkennung, Tags, Set, Typ, Variante,
-    Kartennr.) aus-/einblenden – die Auswahl wird je Browser gemerkt. Filter, Sortierung, Seite und Scrollposition
-    bleiben beim Besuch einer
+    Kartennr., Thema, Hersteller, Position) aus-/einblenden – die Auswahl wird je Browser gemerkt. Bei einer
+    Mehrfachauswahl steht in der Massenaktionen-Leiste außerdem ein Auswahlfeld „Feld ändern" zur Verfügung (Team,
+    Saison, Thema, Hersteller, Set, Typ, Variante, Position, Tags) – Wert eintragen, „Übernehmen" klicken, und alle
+    ausgewählten Karten übernehmen ihn (z. B. praktisch, wenn ein größerer Posten Karten derselben Serie/Saison
+    gescannt oder manuell angelegt wurde). Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch einer
     Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird). Zusätzlich lässt sich
     die aktuelle Kombination aus Filtern und Sortierung unter einem frei wählbaren Namen dauerhaft speichern
     („Aktuelle Filter/Sortierung speichern") und über die Auswahlliste jederzeit wieder anwenden oder löschen – die
@@ -181,10 +184,10 @@ if ("serviceWorker" in navigator) {
       übrigen Karten des Lots)</li>
     <li>In private Sammlung überführen (Privatentnahme)</li>
   </ul>
-  <p>Die letzten Massenaktionen (Versand-Markierung, eBay-Entwürfe, Privatentnahme) lassen sich per „Rückgängig"
-    zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung – der CSV-Export enthält zusätzlich zu den
-    sichtbaren Spalten immer Set, Typ, Variante, Kartennummer sowie Nummeriert/Rookie (RC)/Autogramm (Auto) als
-    Ja/Nein. In der Listenansicht zeigt die Spalte
+  <p>Die letzten Massenaktionen (Versand-Markierung, Feld-Bearbeitung, eBay-Entwürfe, Privatentnahme) lassen sich
+    per „Rückgängig" zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung – der CSV-Export enthält
+    zusätzlich zu den sichtbaren Spalten immer Thema, Hersteller, Set, Typ, Variante, Position, Kartennummer sowie
+    Nummeriert/Rookie (RC)/Autogramm (Auto) als Ja/Nein. In der Listenansicht zeigt die Spalte
     „Verkauf" sowohl den eBay-Status als auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B.
     „Verkauft: Kleinanzeigen"), dazu bei Bedarf „📥 Importiert" und „Private Sammlung". Die Spalte „Versand" zeigt
     ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>

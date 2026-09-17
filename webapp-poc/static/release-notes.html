@@ -86,10 +86,15 @@ if ("serviceWorker" in navigator) {
 
   <h2>Karten-Export erweitert, Titel-Refresh &amp; zwei Bugfixes <span class="date">September 2026</span></h2>
   <ul>
-    <li>CSV-Export und Google-Sheets-Sync der Karten enthalten jetzt zusätzlich Set, Typ, Variante, Kartennummer
-      sowie RC/Nummeriert/Autogramm (als Ja/Nein).</li>
-    <li>Karten-Übersicht (Listenansicht) um die gleichen vier Spalten (Set/Typ/Variante/Kartennr.) erweitert –
-      über „⚙ Spalten" wie gewohnt einzeln ein-/ausblendbar.</li>
+    <li>CSV-Export der Karten enthält jetzt zusätzlich Thema, Hersteller, Set, Typ, Variante, Position,
+      Kartennummer sowie RC/Nummeriert/Autogramm (als Ja/Nein); Google-Sheets-Sync um Set, Typ, Variante,
+      Kartennummer und RC/Nummeriert/Autogramm erweitert.</li>
+    <li>Karten-Übersicht (Listenansicht) um sieben Spalten erweitert (Set, Typ, Variante, Kartennr., Thema,
+      Hersteller, Position) – über „⚙ Spalten" wie gewohnt einzeln ein-/ausblendbar; auch im CSV-Export enthalten.</li>
+    <li>Neu: Massenbearbeitung mit frei wählbarem Feld – ein Auswahlfeld (Team, Saison, Thema, Hersteller, Set,
+      Typ, Variante, Position, Tags) plus Werteingabe in der Massenaktionen-Leiste überträgt einen Wert auf alle
+      ausgewählten Karten auf einmal (z. B. praktisch für einen größeren Posten Karten derselben Serie),
+      inklusive „Rückgängig".</li>
     <li>Neuer Button „Titel neu vorschlagen" im eBay-Bearbeiten-Formular bereits veröffentlichter Angebote –
       erzeugt den Titel frisch aus den aktuellen Kartenfeldern, falls sich z. B. Set/Typ/Variante/RC nachträglich
       geändert haben und der Titel von Hand nachgezogen werden müsste.</li>
