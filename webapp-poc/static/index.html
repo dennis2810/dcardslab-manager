@@ -345,6 +345,8 @@ function renderPreview(cards) {
   }
   const table = document.createElement("table");
   const thead = document.createElement("tr");
+  const removeTh = document.createElement("th");
+  thead.appendChild(removeTh);
   const thumbTh = document.createElement("th");
   thumbTh.textContent = "Bild (Vorder-/Rückseite)";
   thead.appendChild(thumbTh);
@@ -353,39 +355,10 @@ function renderPreview(cards) {
     th.textContent = label;
     thead.appendChild(th);
   }
-  const removeTh = document.createElement("th");
-  thead.appendChild(removeTh);
   table.appendChild(thead);
 
   for (const card of cards) {
     const tr = document.createElement("tr");
-    const thumbTd = document.createElement("td");
-    thumbTd.className = "card-thumbs";
-    for (const [key, alt] of [["front_image_url", "Vorderseite"], ["back_image_url", "Rückseite"]]) {
-      if (card[key]) {
-        const img = document.createElement("img");
-        img.src = card[key];
-        img.alt = alt;
-        thumbTd.appendChild(img);
-      }
-    }
-    tr.appendChild(thumbTd);
-    for (const [key] of COLUMNS) {
-      const td = document.createElement("td");
-      // Titel bleibt vor der Uebernahme editierbar - falls die KI-Erkennung
-      // bei einer einzelnen Karte danebenliegt, muss dafuer nicht extra
-      // card.html nach der Uebernahme bemueht werden.
-      if (key === "title") {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = card.title ?? "";
-        input.addEventListener("input", () => { card.title = input.value; });
-        td.appendChild(input);
-      } else {
-        td.textContent = card[key] ?? "";
-      }
-      tr.appendChild(td);
-    }
     const removeTd = document.createElement("td");
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -397,6 +370,37 @@ function renderPreview(cards) {
     });
     removeTd.appendChild(removeBtn);
     tr.appendChild(removeTd);
+
+    const thumbTd = document.createElement("td");
+    thumbTd.className = "card-thumbs";
+    for (const [key, alt] of [["front_image_url", "Vorderseite"], ["back_image_url", "Rückseite"]]) {
+      if (card[key]) {
+        const img = document.createElement("img");
+        img.src = card[key];
+        img.alt = alt;
+        thumbTd.appendChild(img);
+      }
+    }
+    tr.appendChild(thumbTd);
+
+    // Alle Felder bleiben vor der Uebernahme editierbar (nicht nur der
+    // Titel) - falls die KI-Erkennung bei einer einzelnen Karte irgendwo
+    // danebenliegt, muss dafuer nicht extra card.html nach der Uebernahme
+    // bemueht werden. "number" bleibt Klartext, da es nur die Position im
+    // Scan-Batch ist, kein eigentliches Kartenfeld.
+    for (const [key] of COLUMNS) {
+      const td = document.createElement("td");
+      if (key === "number") {
+        td.textContent = card[key] ?? "";
+      } else {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = card[key] ?? "";
+        input.addEventListener("input", () => { card[key] = input.value; });
+        td.appendChild(input);
+      }
+      tr.appendChild(td);
+    }
     table.appendChild(tr);
   }
   resultEl.appendChild(table);
