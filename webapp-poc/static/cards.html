@@ -107,6 +107,18 @@ if ("serviceWorker" in navigator) {
   #list.hide-col-15 th:nth-child(15), #list.hide-col-15 td:nth-child(15) { display: none; }
   #list.hide-col-16 th:nth-child(16), #list.hide-col-16 td:nth-child(16) { display: none; }
   #list.hide-col-17 th:nth-child(17), #list.hide-col-17 td:nth-child(17) { display: none; }
+  #list.hide-col-18 th:nth-child(18), #list.hide-col-18 td:nth-child(18) { display: none; }
+  #list.hide-col-19 th:nth-child(19), #list.hide-col-19 td:nth-child(19) { display: none; }
+  #list.hide-col-20 th:nth-child(20), #list.hide-col-20 td:nth-child(20) { display: none; }
+  #list.hide-col-21 th:nth-child(21), #list.hide-col-21 td:nth-child(21) { display: none; }
+  #list.hide-col-22 th:nth-child(22), #list.hide-col-22 td:nth-child(22) { display: none; }
+  #list.hide-col-23 th:nth-child(23), #list.hide-col-23 td:nth-child(23) { display: none; }
+  #list.hide-col-24 th:nth-child(24), #list.hide-col-24 td:nth-child(24) { display: none; }
+  #list.hide-col-25 th:nth-child(25), #list.hide-col-25 td:nth-child(25) { display: none; }
+  #list.hide-col-26 th:nth-child(26), #list.hide-col-26 td:nth-child(26) { display: none; }
+  #list.hide-col-27 th:nth-child(27), #list.hide-col-27 td:nth-child(27) { display: none; }
+  #list.hide-col-28 th:nth-child(28), #list.hide-col-28 td:nth-child(28) { display: none; }
+  #list.hide-col-29 th:nth-child(29), #list.hide-col-29 td:nth-child(29) { display: none; }
   .column-toggle-panel { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; }
   .column-toggle-panel label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; font-weight: normal; }
   .shortcuts-panel { padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.4rem; font-size: 0.85rem; }
@@ -173,7 +185,7 @@ if ("serviceWorker" in navigator) {
   <div class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set, Kartennr., SKU, Saison, Tags)">
     <select id="status">
-      <option value="">Alle Status</option>
+      <option value="">Alle OCR-Status</option>
       <option value="ok">ok</option>
       <option value="prüfen">prüfen</option>
       <option value="nicht erkannt">nicht erkannt</option>
@@ -202,6 +214,18 @@ if ("serviceWorker" in navigator) {
       <option value="">Sport &amp; Non-Sport</option>
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
+    </select>
+    <select id="feature-filter">
+      <option value="">Alle Merkmale</option>
+      <option value="rc">Rookie (RC)</option>
+      <option value="numbered">Nummeriert</option>
+      <option value="autograph">Autogramm (Auto)</option>
+    </select>
+    <select id="listing-hint-filter">
+      <option value="">Alle Angebots-Hinweise</option>
+      <option value="imported">Importiert</option>
+      <option value="relisted">Neu eingestellt</option>
+      <option value="long_listed">Lange gelistet (&gt;14 Tage)</option>
     </select>
     <button type="button" id="view-toggle">Listenansicht</button>
     <a class="new-card-link" href="card-new.html"><button type="button">+ Neue Karte anlegen</button></a>
@@ -297,6 +321,18 @@ if ("serviceWorker" in navigator) {
             <th data-key="theme">Thema <span class="sort-arrow"></span></th>
             <th data-key="manufacturer">Hersteller <span class="sort-arrow"></span></th>
             <th data-key="position">Position <span class="sort-arrow"></span></th>
+            <th data-key="category">Kategorie <span class="sort-arrow"></span></th>
+            <th data-key="squad_number">Trikotnr. <span class="sort-arrow"></span></th>
+            <th data-key="club_debut_season">Debütsaison <span class="sort-arrow"></span></th>
+            <th data-key="serial_number">Seriennr. <span class="sort-arrow"></span></th>
+            <th data-key="print_run">Auflage <span class="sort-arrow"></span></th>
+            <th data-key="card_no">Lfd. Nr. <span class="sort-arrow"></span></th>
+            <th data-key="grading_summary">Grading <span class="sort-arrow"></span></th>
+            <th data-key="purchase_platform">Kauf-Plattform <span class="sort-arrow"></span></th>
+            <th data-key="purchase_seller">Kauf-Verkäufer <span class="sort-arrow"></span></th>
+            <th data-key="inventory_location">Lagerort <span class="sort-arrow"></span></th>
+            <th>Merkmale</th>
+            <th>Angebots-Hinweise</th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
@@ -417,6 +453,18 @@ const COLUMN_TOGGLES = [
   { key: "theme", label: "Thema", index: 15 },
   { key: "manufacturer", label: "Hersteller", index: 16 },
   { key: "position", label: "Position", index: 17 },
+  { key: "category", label: "Kategorie", index: 18 },
+  { key: "squad_number", label: "Trikotnr.", index: 19 },
+  { key: "club_debut_season", label: "Debütsaison", index: 20 },
+  { key: "serial_number", label: "Seriennr.", index: 21 },
+  { key: "print_run", label: "Auflage", index: 22 },
+  { key: "card_no", label: "Lfd. Nr.", index: 23 },
+  { key: "grading_summary", label: "Grading", index: 24 },
+  { key: "purchase_platform", label: "Kauf-Plattform", index: 25 },
+  { key: "purchase_seller", label: "Kauf-Verkäufer", index: 26 },
+  { key: "inventory_location", label: "Lagerort", index: 27 },
+  { key: "features", label: "Merkmale", index: 28 },
+  { key: "listing_hints", label: "Angebots-Hinweise", index: 29 },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
 let hiddenColumns = new Set();
@@ -493,6 +541,28 @@ const ebayFilterSelect = document.getElementById("ebay-filter");
 const shippingFilterSelect = document.getElementById("shipping-filter");
 const tagFilterSelect = document.getElementById("tag-filter");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
+const featureFilterSelect = document.getElementById("feature-filter");
+const listingHintFilterSelect = document.getElementById("listing-hint-filter");
+
+function matchesFeatureFilter(card, value) {
+  if (value === "rc") return !!card.is_rookie;
+  if (value === "numbered") return !!card.is_numbered;
+  if (value === "autograph") return !!card.is_autograph;
+  return true;
+}
+
+// Gleiche Bedingungen wie relistedBadge()/longListedBadge() unten - hier nur
+// als Bool statt als Badge, fuer den Filter.
+function matchesListingHintFilter(card, value) {
+  if (value === "imported") return !!card.ebay_imported;
+  if (value === "relisted") return !!card.last_auto_relisted_at;
+  if (value === "long_listed") {
+    if (card.ebay_status !== "Veroeffentlicht" || !card.listing_since) return false;
+    const days = Math.floor((Date.now() - new Date(card.listing_since).getTime()) / (24 * 60 * 60 * 1000));
+    return days > LONG_LISTED_DAYS;
+  }
+  return true;
+}
 const statusMsg = document.getElementById("status-msg");
 const grid = document.getElementById("grid");
 const list = document.getElementById("list");
@@ -755,6 +825,12 @@ function visibleCards() {
   }
   if (cardTypeFilterSelect.value) {
     filtered = filtered.filter((c) => c.listing_type === cardTypeFilterSelect.value);
+  }
+  if (featureFilterSelect.value) {
+    filtered = filtered.filter((c) => matchesFeatureFilter(c, featureFilterSelect.value));
+  }
+  if (listingHintFilterSelect.value) {
+    filtered = filtered.filter((c) => matchesListingHintFilter(c, listingHintFilterSelect.value));
   }
   return filtered;
 }
@@ -1033,6 +1109,64 @@ function renderList(cards) {
     positionTd.textContent = card.position || "";
     tr.appendChild(positionTd);
 
+    const categoryTd = document.createElement("td");
+    categoryTd.textContent = card.category || "";
+    tr.appendChild(categoryTd);
+
+    const squadNumberTd = document.createElement("td");
+    squadNumberTd.textContent = card.squad_number || "";
+    tr.appendChild(squadNumberTd);
+
+    const clubDebutSeasonTd = document.createElement("td");
+    clubDebutSeasonTd.textContent = card.club_debut_season || "";
+    tr.appendChild(clubDebutSeasonTd);
+
+    const serialNumberTd = document.createElement("td");
+    serialNumberTd.textContent = card.serial_number || "";
+    tr.appendChild(serialNumberTd);
+
+    const printRunTd = document.createElement("td");
+    printRunTd.textContent = card.print_run || "";
+    tr.appendChild(printRunTd);
+
+    const cardNoTd = document.createElement("td");
+    cardNoTd.textContent = card.card_no || "";
+    tr.appendChild(cardNoTd);
+
+    const gradingSummaryTd = document.createElement("td");
+    gradingSummaryTd.textContent = card.grading_summary || "";
+    tr.appendChild(gradingSummaryTd);
+
+    const purchasePlatformTd = document.createElement("td");
+    purchasePlatformTd.textContent = card.purchase_platform || "";
+    tr.appendChild(purchasePlatformTd);
+
+    const purchaseSellerTd = document.createElement("td");
+    purchaseSellerTd.textContent = card.purchase_seller || "";
+    tr.appendChild(purchaseSellerTd);
+
+    const inventoryLocationTd = document.createElement("td");
+    inventoryLocationTd.textContent = card.inventory_location || "";
+    tr.appendChild(inventoryLocationTd);
+
+    const featuresTd = document.createElement("td");
+    const rcFeature = rookieBadge(card);
+    if (rcFeature) featuresTd.appendChild(rcFeature);
+    const numberedFeature = numberedBadge(card);
+    if (numberedFeature) featuresTd.appendChild(numberedFeature);
+    const autoFeature = autographBadge(card);
+    if (autoFeature) featuresTd.appendChild(autoFeature);
+    tr.appendChild(featuresTd);
+
+    const listingHintsTd = document.createElement("td");
+    const importedHint = importedBadge(card.ebay_imported);
+    if (importedHint) listingHintsTd.appendChild(importedHint);
+    const relistedHint = relistedBadge(card.last_auto_relisted_at);
+    if (relistedHint) listingHintsTd.appendChild(relistedHint);
+    const longListedHint = longListedBadge(card);
+    if (longListedHint) listingHintsTd.appendChild(longListedHint);
+    tr.appendChild(listingHintsTd);
+
     tr.addEventListener("click", () => {
       window.location.href = `card.html?id=${encodeURIComponent(card.id)}`;
     });
@@ -1061,6 +1195,14 @@ tagFilterSelect.addEventListener("change", () => {
   renderCurrentView();
 });
 cardTypeFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
+featureFilterSelect.addEventListener("change", () => {
+  currentPage = 0;
+  renderCurrentView();
+});
+listingHintFilterSelect.addEventListener("change", () => {
   currentPage = 0;
   renderCurrentView();
 });
@@ -1184,7 +1326,13 @@ const BULK_EDIT_FIELDS = [
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
   { key: "position", label: "Position" },
+  { key: "category", label: "Kategorie" },
+  { key: "squad_number", label: "Trikotnummer" },
+  { key: "club_debut_season", label: "Debütsaison" },
   { key: "tags", label: "Tags" },
+  { key: "is_rookie", label: "Rookie (RC)", type: "boolean" },
+  { key: "is_numbered", label: "Nummeriert", type: "boolean" },
+  { key: "is_autograph", label: "Autogramm (Auto)", type: "boolean" },
 ];
 const bulkEditFieldSelect = document.getElementById("bulk-edit-field");
 for (const f of BULK_EDIT_FIELDS) {
@@ -1194,9 +1342,30 @@ for (const f of BULK_EDIT_FIELDS) {
   bulkEditFieldSelect.appendChild(opt);
 }
 
+const bulkEditValueInput = document.getElementById("bulk-edit-value");
+const bulkEditValueSelect = document.createElement("select");
+for (const [value, label] of [["true", "Ja"], ["false", "Nein"]]) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  bulkEditValueSelect.appendChild(opt);
+}
+bulkEditValueSelect.hidden = true;
+bulkEditValueInput.after(bulkEditValueSelect);
+
+// Boolsche Felder (RC/Nummeriert/Auto) bekommen ein Ja/Nein-Auswahlfeld statt
+// des Freitext-Inputs - "Ja"/"Nein" als Text waere sonst nicht eindeutig
+// genug in ein echtes true/false uebersetzbar.
+bulkEditFieldSelect.addEventListener("change", () => {
+  const isBoolean = BULK_EDIT_FIELDS.find((f) => f.key === bulkEditFieldSelect.value)?.type === "boolean";
+  bulkEditValueInput.hidden = isBoolean;
+  bulkEditValueSelect.hidden = !isBoolean;
+});
+
 async function bulkEditField() {
+  const fieldDef = BULK_EDIT_FIELDS.find((f) => f.key === bulkEditFieldSelect.value);
   const field = bulkEditFieldSelect.value;
-  const value = document.getElementById("bulk-edit-value").value;
+  const value = fieldDef?.type === "boolean" ? bulkEditValueSelect.value === "true" : bulkEditValueInput.value;
   const ids = [...selectedIds];
   if (!ids.length) return;
   const cardsById = new Map(currentCards.map((c) => [c.id, c]));
@@ -1213,7 +1382,7 @@ async function bulkEditField() {
     bulkStatusEl.textContent = "";
     selectedIds.clear();
     updateBulkBar();
-    const fieldLabel = BULK_EDIT_FIELDS.find((f) => f.key === field)?.label || field;
+    const fieldLabel = fieldDef?.label || field;
     setUndo({ type: "field-edit", entries }, `${fieldLabel} von ${entries.length} Karte(n) geändert.`);
     showToast(`${fieldLabel} von ${entries.length} Karte(n) geändert.`);
     loadCards();
@@ -1626,19 +1795,26 @@ function downloadCsv(filename, headers, rows) {
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
     "SKU", "Titel", "Team", "Saison", "Thema", "Hersteller", "Set", "Typ", "Variante", "Position",
-    "Kartennr.", "Erkennung", "eBay-Status",
+    "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
+    "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Lagerort",
+    "Erkennung", "eBay-Status",
     "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung",
-    "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Tags",
+    "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Importiert", "Neu eingestellt",
+    "Lange gelistet (>14 Tage)", "Tags",
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
     c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.position || "",
-    c.card_number || "",
+    c.category || "", c.squad_number || "", c.club_debut_season || "", c.card_number || "",
+    c.serial_number || "", c.print_run || "", c.card_no || "",
+    c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "", c.inventory_location || "",
     c.recognition_status || "", EBAY_STATUS_LABELS[c.ebay_status] || c.ebay_status || "",
     c.shipped ? "Ja" : "Nein", c.picked_up ? "Ja" : "Nein",
     c.delivered ? "Ja" : "Nein", c.refunded ? "Ja" : "Nein",
     c.private_collection ? "Ja" : "Nein",
     c.is_numbered ? "Ja" : "Nein", c.is_rookie ? "Ja" : "Nein", c.is_autograph ? "Ja" : "Nein",
+    c.ebay_imported ? "Ja" : "Nein", c.last_auto_relisted_at ? "Ja" : "Nein",
+    matchesListingHintFilter(c, "long_listed") ? "Ja" : "Nein",
     c.tags || "",
   ]);
   downloadCsv("karten.csv", headers, rows);
@@ -1667,7 +1843,7 @@ function currentFilterState() {
   return {
     q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
     shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
-    cardTypeFilter: cardTypeFilterSelect.value, sortKey, sortAsc,
+    cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc,
   };
 }
 function applyFilterState(state) {
@@ -1675,7 +1851,7 @@ function applyFilterState(state) {
   statusSelect.value = state.status || "";
   ebayFilterSelect.value = state.ebayFilter || "";
   shippingFilterSelect.value = state.shippingFilter || "";
-  cardTypeFilterSelect.value = state.cardTypeFilter || "";
+  cardTypeFilterSelect.value = state.cardTypeFilter || ""; featureFilterSelect.value = state.featureFilter || ""; listingHintFilterSelect.value = state.listingHintFilter || "";
   // Gleiche Vorsicht wie beim Laden der "letzten Ansicht" unten - ein
   // gespeicherter Tag, der inzwischen an keiner Karte mehr haengt, faellt
   // sonst stillschweigend auf die erste Option zurueck statt auf "Alle Tags".
@@ -1751,7 +1927,7 @@ function saveViewState() {
     sessionStorage.setItem("cardsViewState", JSON.stringify({
       q: qInput.value, status: statusSelect.value, ebayFilter: ebayFilterSelect.value,
       shippingFilter: shippingFilterSelect.value, tagFilter: tagFilterSelect.value,
-      cardTypeFilter: cardTypeFilterSelect.value, sortKey, sortAsc, currentPage,
+      cardTypeFilter: cardTypeFilterSelect.value, featureFilter: featureFilterSelect.value, listingHintFilter: listingHintFilterSelect.value, sortKey, sortAsc, currentPage,
       scrollY: window.scrollY,
     }));
   } catch (err) {
@@ -1783,7 +1959,7 @@ loadCards().then(() => {
   if (!savedViewState) return;
   ebayFilterSelect.value = savedViewState.ebayFilter || "";
   shippingFilterSelect.value = savedViewState.shippingFilter || "";
-  cardTypeFilterSelect.value = savedViewState.cardTypeFilter || "";
+  cardTypeFilterSelect.value = savedViewState.cardTypeFilter || ""; featureFilterSelect.value = savedViewState.featureFilter || ""; listingHintFilterSelect.value = savedViewState.listingHintFilter || "";
   // tagFilterSelect-Optionen werden erst in loadCards() -> populateTagFilter()
   // aus den geladenen Karten aufgebaut - der gespeicherte Tag kann daher erst
   // jetzt (nicht vorher) gesetzt werden, sonst wuerde er beim Fehlen der

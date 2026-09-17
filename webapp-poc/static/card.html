@@ -84,10 +84,13 @@ if ("serviceWorker" in navigator) {
   .extra-images { margin-bottom: 1.5rem; }
   .extra-images h2 { font-size: 1rem; margin: 0 0 0.5rem; }
   .extra-images-gallery { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; }
-  .extra-image-item { position: relative; width: 100px; }
+  .extra-image-item { width: 140px; }
   .extra-image-item img { width: 100%; border-radius: 6px; background: var(--placeholder-bg); display: block; }
-  .extra-image-item button { position: absolute; top: 2px; right: 2px; padding: 0.1rem 0.4rem; font-size: 0.75rem;
-    line-height: 1; border-radius: 4px; background: var(--danger-bg); color: var(--danger-fg); border: none; cursor: pointer; }
+  .extra-image-controls { display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.25rem; }
+  .extra-image-controls button { padding: 0.1rem 0.35rem; font-size: 0.72rem; line-height: 1.4; border-radius: 4px;
+    border: 1px solid var(--border-color, #ccc); background: var(--neutral-bg); color: var(--neutral-fg); cursor: pointer; }
+  .extra-image-controls button[title="Foto löschen"] { background: var(--danger-bg); color: var(--danger-fg); border: none; }
+  .extra-image-status { display: block; font-size: 0.72rem; color: var(--muted-fg, #666); min-height: 1em; }
   #prev-next-nav { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
   form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
   label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 600; }
@@ -690,7 +693,8 @@ const cropModal = {
   rotationRange: document.getElementById("crop-rotation-range"),
   rotationNumber: document.getElementById("crop-rotation-number"),
   statusEl: document.getElementById("crop-modal-status"),
-  side: null,
+  target: null, // "front" | "back" | { kind: "extra", index }
+  imgEl: null,
   img: null, // per Blob/Object-URL geladen, siehe cropLoadImage()
   crop: { x: 0, y: 0, w: 1, h: 1 }, // Anteile (0..1) der gedrehten Bounding-Box
   drag: null,
@@ -883,10 +887,10 @@ function cropLoadImage(src) {
     }));
 }
 
-async function openCropModal(side) {
-  const imgEl = document.getElementById(side === "front" ? "front-img" : "back-img");
+async function openCropModal(target, imgEl) {
   if (!imgEl || !imgEl.src) return;
-  cropModal.side = side;
+  cropModal.target = target;
+  cropModal.imgEl = imgEl;
   cropModal.statusEl.textContent = "Bild wird geladen …";
   cropModal.backdrop.hidden = false;
   try {
@@ -944,11 +948,17 @@ document.getElementById("crop-apply-btn").addEventListener("click", async () => 
   cropModal.statusEl.textContent = "Wird verarbeitet …";
   try {
     const blob = await cropBuildResultBlob();
-    const file = new File([blob], `${cropModal.side}.jpg`, { type: "image/jpeg" });
-    const side = cropModal.side;
+    const file = new File([blob], "image.jpg", { type: "image/jpeg" });
+    const target = cropModal.target;
+    const imgEl = cropModal.imgEl;
     cropModal.backdrop.hidden = true;
     cropModal.img = null;
-    await replaceImage(side, file);
+    if (typeof target === "string") {
+      await replaceImage(target, file);
+    } else {
+      const body = await fetchExtraImageReplace(target.index, file);
+      if (body.replaced_image_data_uri && imgEl) imgEl.src = body.replaced_image_data_uri;
+    }
   } catch (err) {
     alert("Zuschneiden fehlgeschlagen: " + err);
   } finally {
@@ -957,13 +967,68 @@ document.getElementById("crop-apply-btn").addEventListener("click", async () => 
   }
 });
 
-document.getElementById("front-crop-btn").addEventListener("click", () => openCropModal("front"));
-document.getElementById("back-crop-btn").addEventListener("click", () => openCropModal("back"));
+document.getElementById("front-crop-btn").addEventListener("click", () => openCropModal("front", document.getElementById("front-img")));
+document.getElementById("back-crop-btn").addEventListener("click", () => openCropModal("back", document.getElementById("back-img")));
 
 // Weitere Fotos neben Vorder-/Rueckseite (z.B. Detailaufnahmen bei
 // Beschaedigungen) - werden beim eBay-Veroeffentlichen mit hochgeladen
 // (main.py's _publish_listing()), daher kein separates "Auch zu eBay
 // hochladen"-Kaestchen noetig.
+// Rohe Fetch-Helfer ohne UI-Kram (Busy-Status/Fehleranzeige) - werden sowohl
+// von den Inline-Dreh-/Ersetzen-Buttons unten (mit eigenem Busy-Handling) als
+// auch vom Zuschneiden-Modal (das seinen eigenen Status/Disabled-Zustand hat)
+// gemeinsam genutzt, um die Fetch-Logik nicht zu duplizieren.
+async function fetchExtraImageRotate(index, degrees) {
+  const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/images/${index}/rotate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ degrees }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+async function fetchExtraImageReplace(index, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`/api/cards/${encodeURIComponent(cardId)}/images/${index}/replace`, {
+    method: "POST",
+    body: formData,
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+async function rotateExtraImageAt(index, degrees, imgEl, setBusy, statusEl) {
+  setBusy(true);
+  statusEl.textContent = "Dreht …";
+  try {
+    const body = await fetchExtraImageRotate(index, degrees);
+    if (body.rotated_image_data_uri) imgEl.src = body.rotated_image_data_uri;
+  } catch (err) {
+    showToast("Fehler beim Drehen: " + err, true);
+  } finally {
+    setBusy(false);
+    statusEl.textContent = "";
+  }
+}
+
+async function replaceExtraImageAt(index, file, imgEl, setBusy, statusEl) {
+  setBusy(true);
+  statusEl.textContent = "Lädt hoch …";
+  try {
+    const body = await fetchExtraImageReplace(index, file);
+    if (body.replaced_image_data_uri) imgEl.src = body.replaced_image_data_uri;
+  } catch (err) {
+    showToast("Fehler beim Ersetzen: " + err, true);
+  } finally {
+    setBusy(false);
+    statusEl.textContent = "";
+  }
+}
+
 function renderExtraImages(urls) {
   const gallery = document.getElementById("extra-images-gallery");
   gallery.innerHTML = "";
@@ -974,12 +1039,61 @@ function renderExtraImages(urls) {
     img.src = url;
     img.alt = `Weiteres Foto ${index + 1}`;
     item.appendChild(img);
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "extra-image-status";
+
+    const controls = document.createElement("div");
+    controls.className = "extra-image-controls";
+    function setBusy(busy) {
+      for (const btn of controls.querySelectorAll("button")) btn.disabled = busy;
+    }
+
+    const rotateLeftBtn = document.createElement("button");
+    rotateLeftBtn.type = "button";
+    rotateLeftBtn.textContent = "⟲";
+    rotateLeftBtn.title = "90° gegen den Uhrzeigersinn drehen";
+    rotateLeftBtn.addEventListener("click", () => rotateExtraImageAt(index, 270, img, setBusy, statusEl));
+    controls.appendChild(rotateLeftBtn);
+
+    const rotateRightBtn = document.createElement("button");
+    rotateRightBtn.type = "button";
+    rotateRightBtn.textContent = "⟳";
+    rotateRightBtn.title = "90° im Uhrzeigersinn drehen";
+    rotateRightBtn.addEventListener("click", () => rotateExtraImageAt(index, 90, img, setBusy, statusEl));
+    controls.appendChild(rotateRightBtn);
+
+    const cropBtn = document.createElement("button");
+    cropBtn.type = "button";
+    cropBtn.textContent = "Zuschneiden";
+    cropBtn.addEventListener("click", () => openCropModal({ kind: "extra", index }, img));
+    controls.appendChild(cropBtn);
+
+    const replaceBtn = document.createElement("button");
+    replaceBtn.type = "button";
+    replaceBtn.textContent = "Ersetzen";
+    const replaceFile = document.createElement("input");
+    replaceFile.type = "file";
+    replaceFile.accept = "image/*";
+    replaceFile.hidden = true;
+    replaceBtn.addEventListener("click", () => replaceFile.click());
+    replaceFile.addEventListener("change", () => {
+      const file = replaceFile.files[0];
+      replaceFile.value = "";
+      if (file) replaceExtraImageAt(index, file, img, setBusy, statusEl);
+    });
+    controls.appendChild(replaceBtn);
+    controls.appendChild(replaceFile);
+
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.textContent = "✕";
     removeBtn.title = "Foto löschen";
     removeBtn.addEventListener("click", () => deleteExtraImage(index));
-    item.appendChild(removeBtn);
+    controls.appendChild(removeBtn);
+
+    item.appendChild(controls);
+    item.appendChild(statusEl);
     gallery.appendChild(item);
   });
 }

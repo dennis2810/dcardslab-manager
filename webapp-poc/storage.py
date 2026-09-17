@@ -70,6 +70,20 @@ def upload_extra_image(batch_id, position, path):
     return object_path
 
 
+def replace_image_at_path(object_path, path):
+    """Overwrites the image already stored at object_path with a freshly
+    compressed version, in place - used for crop/replace edits where the
+    path itself must stay unchanged (extra images have no fixed front/back
+    naming scheme to re-derive, unlike upload_image()). Returns the
+    compressed bytes so the caller can show them immediately, same
+    read-after-write-race reasoning as rotate_image()."""
+    data = compress_image(Path(path))
+    get_client().storage.from_(BUCKET).upload(
+        object_path, data, file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
+    return data
+
+
 def signed_url(object_path, expires_in=3600):
     response = get_client().storage.from_(BUCKET).create_signed_url(object_path, expires_in)
     return response["signedURL"]

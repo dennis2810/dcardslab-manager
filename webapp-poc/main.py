@@ -736,8 +736,21 @@ async def list_cards(q: str | None = None, status: str | None = None):
     ebay_info = db.ebay_info_by_card_id(card_ids)
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     sale_flags = db.sale_flags_by_card_id(card_ids)
+    purchase_info = db.purchase_info_by_card_ids(card_ids)
+    inventory_locations = db.inventory_location_by_card_ids(card_ids)
     for c in cards:
         c["has_purchase"] = c["id"] in linked_ids
+        # Fuer die Karten-Uebersicht (cards.html) als eigene Spalten, statt
+        # dass man dafuer jede Karte einzeln oeffnen muesste.
+        purchase = purchase_info.get(c["id"]) or {}
+        c["purchase_platform"] = purchase.get("platform") or ""
+        c["purchase_seller"] = purchase.get("seller") or ""
+        c["inventory_location"] = inventory_locations.get(c["id"], "")
+        c["grading_summary"] = (
+            f"{c['grading_company']} {c['grading_grade']}".strip()
+            if c.get("grading_company") and c.get("grading_grade")
+            else (c.get("grading_status") or "")
+        )
         info = ebay_info.get(c["id"]) or {}
         c["ebay_status"] = info.get("status")
         c["ebay_sku"] = info.get("sku")
@@ -1092,6 +1105,59 @@ async def add_card_extra_image(card_id: str, file: UploadFile = File(...)):
 
     updated = db.add_card_extra_image(card_id, object_path)
     return JSONResponse(_attach_signed_urls(updated))
+
+
+@app.post("/api/cards/{card_id}/images/{index}/rotate")
+async def rotate_card_extra_image(card_id: str, index: int, body: dict = Body(...)):
+    degrees = body.get("degrees")
+    if degrees not in (90, 180, 270):
+        raise HTTPException(status_code=400, detail="degrees muss 90, 180 oder 270 sein.")
+
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    paths = _split_extra_image_paths(card)
+    if index < 0 or index >= len(paths):
+        raise HTTPException(status_code=404, detail="Foto nicht gefunden.")
+
+    rotated_bytes = storage.rotate_image(paths[index], degrees)
+
+    result = _attach_signed_urls(card)
+    # Gleiche Begruendung wie beim Dreh-Endpunkt fuer Vorder-/Rueckseite: die
+    # Data-URI kommt direkt aus rotate_image()'s Rueckgabe und kann daher
+    # nicht durch eine kurzzeitig veraltete Storage-CDN-Kopie ueberholt sein.
+    result["rotated_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(rotated_bytes).decode("ascii")
+    result["rotated_index"] = index
+    return JSONResponse(result)
+
+
+@app.post("/api/cards/{card_id}/images/{index}/replace")
+async def replace_card_extra_image(card_id: str, index: int, file: UploadFile = File(...)):
+    card = db.get_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"Karte {card_id} nicht gefunden.")
+    paths = _split_extra_image_paths(card)
+    if index < 0 or index >= len(paths):
+        raise HTTPException(status_code=404, detail="Foto nicht gefunden.")
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_extra_replace_") as tmp_str:
+        tmp_path = Path(tmp_str) / f"extra{Path(file.filename or 'extra.jpg').suffix}"
+        tmp_path.write_bytes(await file.read())
+        try:
+            # Ueberschreibt denselben Objekt-Pfad statt (wie beim Hinzufuegen)
+            # einen neuen anzulegen - haelt die Reihenfolge in
+            # extra_image_paths unveraendert, ein DB-Update ist dafuer nicht
+            # noetig.
+            compressed = storage.replace_image_at_path(paths[index], tmp_path)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Bild-Upload fehlgeschlagen: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    result = _attach_signed_urls(card)
+    result["replaced_image_data_uri"] = "data:image/jpeg;base64," + base64.b64encode(compressed).decode("ascii")
+    result["replaced_index"] = index
+    return JSONResponse(result)
 
 
 @app.delete("/api/cards/{card_id}/images/{index}", status_code=204)
@@ -2459,16 +2525,21 @@ async def get_ebay_listing_best_offer(listing_id: str):
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # In der DB spiegeln (siehe schema.sql-Migration) - haelt den lokalen
+    # Cache aktuell, den die eBay-Uebersichtsliste liest, ohne dafuer selbst
+    # einen eBay-Aufruf pro Zeile machen zu muessen.
+    db.update_ebay_listing(listing_id, terms)
     return JSONResponse(terms)
 
 
 @app.put("/api/ebay/listings/{listing_id}/best-offer")
 async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(default={})):
-    # Aendert nur die Best-Offer-Einstellungen eines schon veroeffentlichten
-    # Angebots (siehe ebay_client.update_offer_best_offer_terms) - bewusst
-    # nicht in der DB gespeichert, da eBay hierfuer bereits die Quelle der
-    # Wahrheit ist (per GET Offer jederzeit abrufbar) und keine neue Spalte
-    # fuer dieses kleine Feature angelegt werden soll.
+    # Aendert die Best-Offer-Einstellungen eines schon veroeffentlichten
+    # Angebots (siehe ebay_client.update_offer_best_offer_terms). eBay bleibt
+    # die Quelle der Wahrheit, der lokale Cache (schema.sql-Migration) wird
+    # nach einem erfolgreichen Update nur mitgezogen, damit die eBay-
+    # Uebersichtsliste die Werte anzeigen kann, ohne pro Zeile einen eBay-
+    # Aufruf zu machen.
     listing = db.get_ebay_listing(listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
@@ -2480,19 +2551,66 @@ async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(defa
             status_code=409,
             detail="Das Angebot muss zuerst veröffentlicht werden, bevor Preisvorschläge geändert werden können.",
         )
+    enabled = bool(body.get("enabled"))
+    auto_accept_price = body.get("auto_accept_price")
+    auto_decline_price = body.get("auto_decline_price")
     try:
         token = ebay_client.get_access_token()
         ebay_client.update_offer_best_offer_terms(
-            token, offer_id,
-            enabled=bool(body.get("enabled")),
-            auto_accept_price=body.get("auto_accept_price"),
-            auto_decline_price=body.get("auto_decline_price"),
+            token, offer_id, enabled=enabled,
+            auto_accept_price=auto_accept_price, auto_decline_price=auto_decline_price,
         )
     except ebay_client.EbayNotAuthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    db.update_ebay_listing(listing_id, {
+        "best_offer_enabled": enabled,
+        "auto_accept_price": auto_accept_price or "",
+        "auto_decline_price": auto_decline_price or "",
+    })
     return JSONResponse({"ok": True})
+
+
+@app.post("/api/ebay/listings/best-offer-bulk")
+async def update_ebay_listings_best_offer_bulk(body: dict = Body(...)):
+    # Gleiches Isolationsprinzip wie /api/ebay/listings/price-bulk oben - ein
+    # fehlgeschlagenes Angebot (z.B. importiert/extern verwaltet oder noch
+    # nicht veroeffentlicht) darf den Rest der Auswahl nicht abbrechen.
+    enabled = bool(body.get("enabled"))
+    auto_accept_price = body.get("auto_accept_price")
+    auto_decline_price = body.get("auto_decline_price")
+    results = []
+    for listing_id in body.get("listing_ids", []):
+        listing = db.get_ebay_listing(listing_id)
+        if listing is None:
+            results.append({"listing_id": listing_id, "error": "Nicht gefunden."})
+            continue
+        if _is_externally_managed(listing):
+            results.append({"listing_id": listing_id, "error": _EXTERNALLY_MANAGED_DETAIL})
+            continue
+        offer_id = listing.get("ebay_offer_id")
+        if not offer_id:
+            results.append({
+                "listing_id": listing_id,
+                "error": "Das Angebot muss zuerst veröffentlicht werden, bevor Preisvorschläge geändert werden können.",
+            })
+            continue
+        try:
+            token = ebay_client.get_access_token()
+            ebay_client.update_offer_best_offer_terms(
+                token, offer_id, enabled=enabled,
+                auto_accept_price=auto_accept_price, auto_decline_price=auto_decline_price,
+            )
+            db.update_ebay_listing(listing_id, {
+                "best_offer_enabled": enabled,
+                "auto_accept_price": auto_accept_price or "",
+                "auto_decline_price": auto_decline_price or "",
+            })
+            results.append({"listing_id": listing_id, "ok": True})
+        except Exception as exc:
+            results.append({"listing_id": listing_id, "error": str(exc)})
+    return JSONResponse({"results": results})
 
 
 @app.post("/api/ebay/listings/{listing_id}/unschedule")
@@ -3181,9 +3299,11 @@ def _sheets_tabs():
     sales_by_listing = {s["listing_id"]: s for s in db.all_ebay_sales() if s.get("listing_id")}
 
     card_headers = [
-        "id", "title", "category", "team", "manufacturer", "set_name",
-        "season_year", "card_type", "variant", "card_number", "recognition_status",
-        "is_numbered", "is_rookie", "is_autograph", "created_at",
+        "id", "title", "category", "theme", "team", "manufacturer", "set_name",
+        "season_year", "card_type", "variant", "position", "squad_number", "club_debut_season",
+        "card_number", "serial_number", "print_run", "card_no", "recognition_status",
+        "is_numbered", "is_rookie", "is_autograph", "shipped", "picked_up", "private_collection",
+        "tags", "created_at",
     ]
     # Boolsche Felder (is_numbered/is_rookie/is_autograph) brauchen eine
     # eigene Ja/Nein-Darstellung statt der generischen str(...)-Umwandlung -
@@ -3203,15 +3323,21 @@ def _sheets_tabs():
         for p in purchases
     ]
 
-    ebay_headers = ["id", "title", "price", "status", "scheduled_at", "sale_date", "gross_price"]
+    ebay_headers = [
+        "id", "title", "price", "condition", "status", "scheduled_at", "sale_date", "gross_price",
+        "best_offer_enabled", "auto_accept_price", "auto_decline_price",
+    ]
     ebay_rows = []
     for listing in listings:
         sale = sales_by_listing.get(listing["id"], {})
         ebay_rows.append([
             str(listing.get("id", "") or ""), str(listing.get("title", "") or ""),
-            str(listing.get("price", "") or ""), str(listing.get("status", "") or ""),
+            str(listing.get("price", "") or ""), str(listing.get("condition", "") or ""),
+            str(listing.get("status", "") or ""),
             str(listing.get("scheduled_at") or ""),
             str(sale.get("sale_date") or ""), str(sale.get("gross_price") or ""),
+            "Ja" if listing.get("best_offer_enabled") else "Nein",
+            str(listing.get("auto_accept_price", "") or ""), str(listing.get("auto_decline_price", "") or ""),
         ])
 
     inventory_items = _expand_inventory_items(db.list_inventory())

@@ -128,6 +128,35 @@ class UploadExtraImageTests(unittest.TestCase):
                     storage.upload_extra_image("batch-123", 3, fixture)
 
 
+class ReplaceImageAtPathTests(unittest.TestCase):
+    def test_uploads_compressed_bytes_to_the_same_path(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _write_fixture_image(Path(tmp))
+            mock_client = MagicMock()
+            with patch("storage.get_client", return_value=mock_client):
+                data = storage.replace_image_at_path("batch-123/3_extra_abc123.jpg", fixture)
+
+        self.assertTrue(data)
+        mock_client.storage.from_.assert_called_once_with(storage.BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        upload_call.assert_called_once()
+        args, kwargs = upload_call.call_args
+        self.assertEqual(args[0], "batch-123/3_extra_abc123.jpg")
+        self.assertEqual(kwargs["file_options"]["content-type"], "image/jpeg")
+        self.assertEqual(kwargs["file_options"]["upsert"], "true")
+
+    def test_propagates_upload_errors_to_caller(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _write_fixture_image(Path(tmp))
+            mock_client = MagicMock()
+            mock_client.storage.from_.return_value.upload.side_effect = RuntimeError("bucket down")
+            with patch("storage.get_client", return_value=mock_client):
+                with self.assertRaises(RuntimeError):
+                    storage.replace_image_at_path("batch-123/3_extra_abc123.jpg", fixture)
+
+
 class UploadDebugImageTests(unittest.TestCase):
     def test_uploads_compressed_bytes_to_expected_path(self):
         import tempfile

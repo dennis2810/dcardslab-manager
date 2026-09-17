@@ -1320,6 +1320,67 @@ class PurchaseCostByCardIdTests(unittest.TestCase):
         mock_client.table.assert_not_called()
 
 
+class PurchaseInfoByCardIdsTests(unittest.TestCase):
+    def test_joins_purchase_items_and_purchases(self):
+        mock_client = MagicMock()
+        items_response = MagicMock()
+        items_response.data = [{"card_id": "card-1", "purchase_id": "p1"}]
+        purchases_response = MagicMock()
+        purchases_response.data = [{"id": "p1", "platform": "eBay", "seller": "cardking"}]
+
+        def table_side_effect(name):
+            m = MagicMock()
+            if name == "purchase_items":
+                m.select.return_value.in_.return_value.execute.return_value = items_response
+            elif name == "purchases":
+                m.select.return_value.in_.return_value.execute.return_value = purchases_response
+            return m
+
+        mock_client.table.side_effect = table_side_effect
+        with patch("db.get_client", return_value=mock_client):
+            result = db.purchase_info_by_card_ids(["card-1"])
+        self.assertEqual(result, {"card-1": {"platform": "eBay", "seller": "cardking"}})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.purchase_info_by_card_ids([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+    def test_returns_empty_dict_when_no_purchase_items(self):
+        mock_client = MagicMock()
+        items_response = MagicMock()
+        items_response.data = []
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = items_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.purchase_info_by_card_ids(["card-1"])
+        self.assertEqual(result, {})
+
+
+class InventoryLocationByCardIdsTests(unittest.TestCase):
+    def test_joins_and_dedupes_multiple_locations(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"card_id": "card-1", "location": "Kiste 3"},
+            {"card_id": "card-1", "location": "Kiste 7"},
+            {"card_id": "card-1", "location": "Kiste 3"},
+            {"card_id": "card-2", "location": ""},
+        ]
+        mock_client.table.return_value.select.return_value.in_.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.inventory_location_by_card_ids(["card-1", "card-2"])
+        self.assertEqual(result, {"card-1": "Kiste 3, Kiste 7"})
+
+    def test_empty_input_skips_query(self):
+        mock_client = MagicMock()
+        with patch("db.get_client", return_value=mock_client):
+            result = db.inventory_location_by_card_ids([])
+        self.assertEqual(result, {})
+        mock_client.table.assert_not_called()
+
+
 class CreateEbayListingTests(unittest.TestCase):
     def test_inserts_row_with_card_id_and_sku(self):
         mock_client = MagicMock()

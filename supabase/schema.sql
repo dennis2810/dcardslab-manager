@@ -645,3 +645,15 @@ alter table app_status add column if not exists vacation_mode_until date;
 -- direkt auf card.html editierbar, falls die KI-Erkennung sie uebersieht.
 alter table cards add column if not exists is_rookie boolean not null default false;
 alter table cards add column if not exists is_autograph boolean not null default false;
+
+-- Migration (2026-09-17): Best-Offer-Einstellungen (Preisvorschlaege) als
+-- lokaler Cache statt nur live von eBay abgefragt - fuer die eBay-
+-- Uebersichtsliste (viele Angebote pro Seite) waere ein eBay-API-Aufruf pro
+-- Zeile viel zu langsam. Wird bei jedem erfolgreichen GET/PUT gegen
+-- ebay_client.get_best_offer_terms()/update_offer_best_offer_terms()
+-- geschrieben (main.py), kann daher kurzzeitig veraltet sein, falls die
+-- Einstellungen direkt auf eBay geaendert wurden - dasselbe Prinzip wie bei
+-- condition/condition_id oben.
+alter table ebay_listings add column if not exists best_offer_enabled boolean not null default false;
+alter table ebay_listings add column if not exists auto_accept_price text default '';
+alter table ebay_listings add column if not exists auto_decline_price text default '';

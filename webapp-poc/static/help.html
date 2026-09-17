@@ -156,13 +156,20 @@ if ("serviceWorker" in navigator) {
     <code>↓</code> navigieren in der Tabelle, <code>Enter</code> öffnet die markierte Zeile und <code>?</code> zeigt
     eine Übersicht aller Tastenkürzel (auch per „⌨ Kürzel"-Button) – gleiche Kürzel auch auf der eBay-, Inventar-,
     Käufe- und Alle-Verkäufe-Seite.
-    In der Listenansicht sind die Spalten sortierbar. Ein kleines 📥-Symbol markiert Karten mit einem manuell
+    In der Listenansicht sind die Spalten sortierbar und decken praktisch alle Kartenfelder ab (inkl. Kategorie,
+    Trikotnummer, Debütsaison, Seriennummer, Auflage, laufende Nummer, Grading-Status sowie verknüpfter
+    Kauf-Plattform/-Verkäufer und Lagerort). Ein kleines 📥-Symbol markiert Karten mit einem manuell
     importierten, extern verwalteten eBay-Angebot, ein 🔄-Symbol ein zuletzt neu eingestelltes Angebot und ein
-    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft. Über den Button „⚙
-    Spalten" lassen sich einzelne, weniger zentrale Spalten (Team, Saison, Erkennung, Tags, Set, Typ, Variante,
-    Kartennr., Thema, Hersteller, Position) aus-/einblenden – die Auswahl wird je Browser gemerkt. Bei einer
+    ⏳-Symbol ein veröffentlichtes Angebot, das seit mehr als 14 Tagen ohne Verkauf läuft – diese drei Hinweise
+    stehen zusätzlich als eigene Spalte „Angebots-Hinweise" sowie als eigenes Filter-Auswahlfeld zur Verfügung.
+    RC/Nummeriert/Auto haben ebenfalls eine eigene Spalte „Merkmale" und ein Filter-Auswahlfeld „Alle Merkmale".
+    Der Status-Filter heißt „Alle OCR-Status" (bezieht sich auf die automatische Text-/Felderkennung beim
+    Scannen, nicht auf den Verkaufsstatus). Über den Button „⚙
+    Spalten" lassen sich einzelne, weniger zentrale Spalten aus-/einblenden – die Auswahl wird je Browser
+    gemerkt. Bei einer
     Mehrfachauswahl steht in der Massenaktionen-Leiste außerdem ein Auswahlfeld „Feld ändern" zur Verfügung (Team,
-    Saison, Thema, Hersteller, Set, Typ, Variante, Position, Tags) – Wert eintragen, „Übernehmen" klicken, und alle
+    Saison, Thema, Hersteller, Set, Typ, Variante, Position, Kategorie, Trikotnummer, Debütsaison, Tags sowie
+    RC/Nummeriert/Auto als Ja/Nein-Auswahl) – Wert eintragen, „Übernehmen" klicken, und alle
     ausgewählten Karten übernehmen ihn (z. B. praktisch, wenn ein größerer Posten Karten derselben Serie/Saison
     gescannt oder manuell angelegt wurde). Filter, Sortierung, Seite und Scrollposition bleiben beim Besuch einer
     Kartendetailseite und der Rückkehr zur Übersicht erhalten (bis der Tab geschlossen wird). Zusätzlich lässt sich
@@ -186,8 +193,9 @@ if ("serviceWorker" in navigator) {
   </ul>
   <p>Die letzten Massenaktionen (Versand-Markierung, Feld-Bearbeitung, eBay-Entwürfe, Privatentnahme) lassen sich
     per „Rückgängig" zurücknehmen. CSV-Export und Drucken stehen ebenfalls zur Verfügung – der CSV-Export enthält
-    zusätzlich zu den sichtbaren Spalten immer Thema, Hersteller, Set, Typ, Variante, Position, Kartennummer sowie
-    Nummeriert/Rookie (RC)/Autogramm (Auto) als Ja/Nein. In der Listenansicht zeigt die Spalte
+    unabhängig von der aktuellen Spaltenauswahl immer alle Kartenfelder (inkl. Kategorie, Trikotnummer,
+    Debütsaison, Seriennummer, Auflage, laufende Nummer, Grading, verknüpfter Kauf, Lagerort sowie
+    Nummeriert/Rookie (RC)/Autogramm (Auto) und Importiert/Neu eingestellt/Lange gelistet als Ja/Nein). In der Listenansicht zeigt die Spalte
     „Verkauf" sowohl den eBay-Status als auch – falls zutreffend – den Kanal eines manuellen Verkaufs (z. B.
     „Verkauft: Kleinanzeigen"), dazu bei Bedarf „📥 Importiert" und „Private Sammlung". Die Spalte „Versand" zeigt
     ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>
@@ -210,7 +218,8 @@ if ("serviceWorker" in navigator) {
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
     Beschädigungen) – sie werden beim Veröffentlichen automatisch mit an eBay übertragen (bis zu eBays Limit von
-    12 Fotos pro Angebot). Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
+    12 Fotos pro Angebot). Wie bei Vorder-/Rückseite lassen sich diese weiteren Fotos ebenfalls drehen, zuschneiden
+    und ersetzen (gleiche Buttons direkt am jeweiligen Foto), nicht nur löschen. Ein Druckbutton oben auf der Seite druckt alle Infos zur Karte. Direkt daneben zeigt
     ein Badge den aktuellen Verkaufsstatus (eBay-Status bzw. „Verkauft: &lt;Kanal&gt;" bei einem manuellen Verkauf,
     zusätzlich „Versendet" falls zutreffend, sowie „📥 Importiert" bzw. „🔄 Neu eingestellt" für ein importiertes
     bzw. zuletzt neu eingestelltes eBay-Angebot) – ohne erst zum eBay-/Verkaufs-Abschnitt weiter unten scrollen zu
@@ -422,7 +431,11 @@ if ("serviceWorker" in navigator) {
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
-    Zuletzt aktualisiert, Aufrufe) aus-/einblenden – die Auswahl wird je Browser gemerkt. Der Button „Kachelansicht"
+    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung) aus-/einblenden – die Auswahl wird je
+    Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
+    sofern für das Angebot aktiviert; in der Massenaktionen-Leiste lassen sich diese Werte (inkl. „Preisvorschläge
+    aktiv"-Kästchen) für mehrere ausgewählte Angebote auf einmal setzen, analog zur prozentualen
+    Preisanpassung. Der Button „Kachelansicht"
     oben rechts neben dem Sport/Non-Sport-Filter zeigt dieselbe Liste stattdessen als Foto-Kacheln (Titel, Preis,
     Status inkl. Warnhinweisen) – praktisch zum schnellen Durchblättern nach Bild statt Tabellenzeile. Dieselben
     Badges wie in der Tabelle (Zugestellt, Retoure, 🔄 neu eingestellt, ⏳ lange gelistet ohne Verkauf, 📥
