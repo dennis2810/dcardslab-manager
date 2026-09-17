@@ -68,6 +68,7 @@ if ("serviceWorker" in navigator) {
      wie das Feld daneben). */
   .nav-search { display: flex; gap: 0.4rem; margin: 0; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
+  .nav-cross-link { font-weight: 600; white-space: nowrap; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -230,6 +231,7 @@ if ("serviceWorker" in navigator) {
     <form class="nav-search" action="search.html" method="get">
       <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
     </form>
+    <a class="nav-cross-link" href="cards.html">Zu den Karten &rarr;</a>
   </nav>
 
   <div id="oauth-banner" class="no-print">eBay-Status wird geprüft …</div>
@@ -252,8 +254,6 @@ if ("serviceWorker" in navigator) {
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
     </select>
-    <label>Preis von (€) <input type="number" id="price-min" step="0.01" min="0" style="width: 5.5rem;"></label>
-    <label>bis (€) <input type="number" id="price-max" step="0.01" min="0" style="width: 5.5rem;"></label>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
   <div class="controls no-print">
@@ -274,6 +274,8 @@ if ("serviceWorker" in navigator) {
     <label>von <input type="date" id="sold-from"></label>
     <label>bis <input type="date" id="sold-to"></label>
     <button type="button" id="reset-date-filter">Zeitfilter zurücksetzen</button>
+    <label>Preis von (€) <input type="number" id="price-min" step="0.01" min="0" style="width: 5.5rem;"></label>
+    <label>bis (€) <input type="number" id="price-max" step="0.01" min="0" style="width: 5.5rem;"></label>
   </div>
   <p id="sync-status"></p>
 
@@ -1400,7 +1402,17 @@ document.getElementById("prev-page").addEventListener("click", goToPrevPage);
 document.getElementById("next-page").addEventListener("click", goToNextPage);
 document.getElementById("prev-page-top").addEventListener("click", goToPrevPage);
 document.getElementById("next-page-top").addEventListener("click", goToNextPage);
-document.getElementById("print-btn").addEventListener("click", () => window.print());
+document.getElementById("print-btn").addEventListener("click", () => {
+  // Ohne diesen Umweg wuerde nur die aktuell angezeigte Seite (PAGE_SIZE
+  // Zeilen) gedruckt statt der gesamten gefilterten Liste (Bugreport des
+  // Nutzers: Druck zeigt nur einen Ausschnitt).
+  const savedPageSize = PAGE_SIZE;
+  PAGE_SIZE = Infinity;
+  render(sortedListings());
+  window.print();
+  PAGE_SIZE = savedPageSize;
+  render(sortedListings());
+});
 
 // Semikolon als Trennzeichen (deutsches Excel erwartet das per Default bei
 // Komma-Dezimalzahlen) + UTF-8-BOM, damit Umlaute nicht als Mojibake landen.
