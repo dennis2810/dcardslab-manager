@@ -31,7 +31,9 @@ class CreatePurchaseEndpointTests(unittest.TestCase):
         with patch("main.db.create_purchase", return_value=created) as mock_create, \
              patch("main.db.get_card", return_value={"id": "card-1"}), \
              patch("main.db.get_cards_by_ids", return_value=[{"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg"}]), \
-             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=lambda paths, **_: {
+                 p: "https://signed/b1/1_front.jpg" for p in paths if p
+             }):
             response = client.post("/api/purchases", json={
                 "purchase_date": "2026-08-27", "items": [{"card_id": "card-1"}],
             })
@@ -78,6 +80,25 @@ class GetPurchaseEndpointTests(unittest.TestCase):
             response = client.get("/api/purchases/p1")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["items"][0]["card"]["title"], "Karte 1")
+
+    def test_attaches_front_image_urls_via_a_single_batched_storage_call(self):
+        # Regression test for the N+1 pattern (one signed_url() call per
+        # item) that made a purchase with many cards slow to load.
+        items = [{"id": f"item-{i}", "card_id": f"card-{i}"} for i in range(1, 11)]
+        purchase = {"id": "p1", "items": items}
+        cards = [
+            {"id": f"card-{i}", "title": f"Karte {i}", "front_image_path": f"b1/{i}_front.jpg"}
+            for i in range(1, 11)
+        ]
+        with patch("main.db.get_purchase", return_value=purchase), \
+             patch("main.db.get_cards_by_ids", return_value=cards), \
+             patch("main.storage.signed_urls", side_effect=lambda paths, **_: {
+                 p: f"https://signed/{p}" for p in paths if p
+             }) as mock_signed_urls:
+            response = client.get("/api/purchases/p1")
+        self.assertEqual(response.status_code, 200)
+        mock_signed_urls.assert_called_once()
+        self.assertEqual(response.json()["items"][0]["card"]["front_image_url"], "https://signed/b1/1_front.jpg")
 
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_purchase", return_value=None):

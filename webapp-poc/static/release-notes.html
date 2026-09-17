@@ -84,6 +84,22 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>RC/Auto/Nummeriert-Kennzeichnung &amp; Kartenfelder-Doku <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Drei neue, jederzeit manuell umschaltbare Kästchen auf der Kartendetailseite: „Nummeriert (Numbered)",
+      „Rookie-Karte (RC)" und „Autogramm (Auto)" – fließen automatisch als Zusatz in den eBay-Titel sowie in die
+      Standard-Suchanfrage der Preisrecherche mit ein, um Vergleichstreffer genauer einzugrenzen.</li>
+    <li>KI-Erkennung erkennt Rookie-Logo und Autogramm jetzt zusätzlich direkt auf dem Kartenfoto; die Prompt-Regeln
+      für Typ/Variante wurden geschärft, damit z. B. „Silver" nicht mehr fälschlich in der Variante statt im
+      Typ landet.</li>
+    <li>Neuer Anleitungs-Abschnitt „Kartenfelder erklärt": dokumentiert die genaue Bedeutung und Abgrenzung aller
+      Kartenfelder (Kategorie, Thema, Set, Typ, Variante, Nummerierung, RC, Auto, …).</li>
+    <li>Zuschneiden/Drehen-Tool: Mauszeiger zeigt beim Ziehen an den Eckpunkten passende Größenänderungs-Pfeile,
+      der Drehwinkel lässt sich zusätzlich als Zahl mit Nachkommastelle eintragen statt nur per Schieberegler.</li>
+    <li>Performance: Bild-URLs für Karten-, Käufe-, Inventar- und eBay-Listen werden jetzt in einem gebündelten
+      Aufruf statt einzeln pro Zeile geladen – merklich schnellere Ladezeiten bei größeren Beständen.</li>
+  </ul>
+
   <h2>Bild zuschneiden/frei drehen <span class="date">September 2026</span></h2>
   <ul>
     <li>Neuer Button „Zuschneiden/Drehen" neben Vorder-/Rückseite auf der Kartendetailseite: Ausschnitt per

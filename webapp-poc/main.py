@@ -581,17 +581,19 @@ def _expand_purchase_items(items):
         return []
     card_ids = [item["card_id"] for item in items]
     cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    # Ein einziger Storage-Aufruf fuer alle Vorderseiten dieser Liste statt
+    # eines signed_url()-Aufrufs pro Zeile (siehe _attach_signed_urls_many()) -
+    # sonst waechst die Ladezeit von purchase.html direkt mit der Kartenzahl
+    # eines Kaufs.
+    front_urls = storage.signed_urls([c.get("front_image_path") for c in cards_by_id.values()])
     expanded = []
     for item in items:
         item = dict(item)
         card = cards_by_id.get(item["card_id"], {})
         card_summary = {"id": item["card_id"], "title": card.get("title", "")}
         front_path = card.get("front_image_path")
-        if front_path:
-            try:
-                card_summary["front_image_url"] = storage.signed_url(front_path)
-            except Exception:
-                pass
+        if front_path in front_urls:
+            card_summary["front_image_url"] = front_urls[front_path]
         item["card"] = card_summary
         expanded.append(item)
     return expanded
@@ -609,17 +611,15 @@ def _expand_inventory_items(items):
     ebay_info = db.ebay_info_by_card_id(card_ids)
     manual_sale_info = db.manual_sale_info_by_card_id(card_ids)
     purchase_costs = db.purchase_cost_by_card_id(card_ids)
+    front_urls = storage.signed_urls([c.get("front_image_path") for c in cards_by_id.values()])
     expanded = []
     for item in items:
         item = dict(item)
         card = cards_by_id.get(item["card_id"], {})
         card_summary = {"id": item["card_id"], "title": card.get("title", "")}
         front_path = card.get("front_image_path")
-        if front_path:
-            try:
-                card_summary["front_image_url"] = storage.signed_url(front_path)
-            except Exception:
-                pass
+        if front_path in front_urls:
+            card_summary["front_image_url"] = front_urls[front_path]
         item["card"] = card_summary
         info = ebay_info.get(item["card_id"]) or {}
         item["sku"] = info.get("sku")
@@ -669,32 +669,39 @@ def _attach_manual_sale_receipt(sale):
 
 
 def _attach_signed_urls(card):
-    # Mirrors process_one()'s pattern in POST /api/scan: each signed_url()
-    # call is guarded individually, so a transient Supabase Storage hiccup
-    # (or a stored path that no longer resolves) drops only that one URL
-    # key instead of raising out of the list comprehension in list_cards()
-    # and taking down the whole /api/cards response with a 500.
-    card = dict(card)
-    front_path = card.get("front_image_path")
-    back_path = card.get("back_image_path")
-    if front_path:
-        try:
-            card["front_image_url"] = storage.signed_url(front_path)
-        except Exception:
-            pass
-    if back_path:
-        try:
-            card["back_image_url"] = storage.signed_url(back_path)
-        except Exception:
-            pass
-    extra_urls = []
-    for path in _split_extra_image_paths(card):
-        try:
-            extra_urls.append(storage.signed_url(path))
-        except Exception:
-            pass
-    card["extra_image_urls"] = extra_urls
-    return card
+    # One batched storage.signed_urls() call for this card's own images
+    # (front/back/extras) instead of one signed_url() call per image - see
+    # _attach_signed_urls_many()'s docstring for why that matters. A path
+    # storage.signed_urls() couldn't resolve (or the whole request failing)
+    # simply drops that URL key, same graceful-degradation contract the
+    # per-image try/except used to give.
+    return _attach_signed_urls_many([card])[0]
+
+
+def _attach_signed_urls_many(cards):
+    # Batched variant of _attach_signed_urls() for a whole list response
+    # (list_cards(), list_private_collection_cards()) - one Storage API
+    # call for every image across every card in the list, instead of one
+    # call per image per card. Without this, a list view's load time scaled
+    # directly with how many cards it showed (2+ Storage round trips per
+    # card), getting slower the larger the collection grew - see the
+    # performance report that prompted this.
+    cards = [dict(c) for c in cards]
+    all_paths = []
+    for card in cards:
+        all_paths.append(card.get("front_image_path"))
+        all_paths.append(card.get("back_image_path"))
+        all_paths.extend(_split_extra_image_paths(card))
+    urls = storage.signed_urls(all_paths)
+    for card in cards:
+        front_path = card.get("front_image_path")
+        if front_path in urls:
+            card["front_image_url"] = urls[front_path]
+        back_path = card.get("back_image_path")
+        if back_path in urls:
+            card["back_image_url"] = urls[back_path]
+        card["extra_image_urls"] = [urls[p] for p in _split_extra_image_paths(card) if p in urls]
+    return cards
 
 
 def _split_extra_image_paths(card):
@@ -723,7 +730,7 @@ async def list_cards(q: str | None = None, status: str | None = None):
         # Karten (z.B. Suche nach der Bestandsnummer) zusaetzlich mischen.
         existing_ids = {c["id"] for c in matched}
         matched += [c for c in db.list_cards_by_sku(q) if c["id"] not in existing_ids]
-    cards = [_attach_signed_urls(c) for c in matched]
+    cards = _attach_signed_urls_many(matched)
     card_ids = [c["id"] for c in cards]
     linked_ids = db.cards_with_purchase(card_ids)
     ebay_info = db.ebay_info_by_card_id(card_ids)
@@ -857,7 +864,7 @@ async def unmark_card_private_collection(card_id: str):
 
 @app.get("/api/private-collection")
 async def list_private_collection(q: str | None = None):
-    cards = [_attach_signed_urls(c) for c in db.list_private_collection_cards(q=q)]
+    cards = _attach_signed_urls_many(db.list_private_collection_cards(q=q))
     return JSONResponse({"cards": cards})
 
 
@@ -2003,17 +2010,15 @@ def _expand_ebay_listings(listings):
     # Fuer die Preisrecherche-Statusspalte (siehe ebay.html) - gleicher
     # +-20%-Schwellwert wie der Preis-Alarm auf der Kartenseite.
     price_research_info = db.price_research_by_card_ids(card_ids)
+    front_urls = storage.signed_urls([c.get("front_image_path") for c in cards_by_id.values()])
     expanded = []
     for listing in listings:
         listing = dict(listing)
         card = cards_by_id.get(listing["card_id"], {})
         card_summary = {"id": listing["card_id"], "title": card.get("title", "")}
         front_path = card.get("front_image_path")
-        if front_path:
-            try:
-                card_summary["front_image_url"] = storage.signed_url(front_path)
-            except Exception:
-                pass
+        if front_path in front_urls:
+            card_summary["front_image_url"] = front_urls[front_path]
         listing["card"] = card_summary
         sale = sales_by_listing.get(listing["id"])
         listing["sale_date"] = sale.get("sale_date") if sale else None

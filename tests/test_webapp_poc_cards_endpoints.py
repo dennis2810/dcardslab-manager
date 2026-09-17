@@ -22,6 +22,21 @@ import main  # noqa: E402
 client = TestClient(main.app)
 
 
+def _echo_signed_urls(paths, **_):
+    """Fake storage.signed_urls(paths) mirroring the real one's contract:
+    every truthy path gets a deterministic URL back."""
+    return {p: f"https://signed/{p}" for p in paths if p}
+
+
+def _signed_urls_map(mapping):
+    """Fake storage.signed_urls(paths) for tests that need a specific URL
+    per path - any path not in `mapping` (or falsy) is simply omitted,
+    same best-effort contract as the real function."""
+    def _fake(paths, **_):
+        return {p: mapping[p] for p in paths if p in mapping}
+    return _fake
+
+
 class ListCardsEndpointTests(unittest.TestCase):
     def test_returns_cards_with_signed_urls(self):
         rows = [
@@ -33,7 +48,7 @@ class ListCardsEndpointTests(unittest.TestCase):
              patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
-             patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.get("/api/cards")
 
         self.assertEqual(response.status_code, 200)
@@ -42,23 +57,45 @@ class ListCardsEndpointTests(unittest.TestCase):
         self.assertEqual(body["cards"][0]["front_image_url"], "https://signed/b1/1_front.jpg")
         self.assertNotIn("front_image_url", body["cards"][1])
 
+    def test_uses_a_single_batched_storage_call_for_the_whole_list(self):
+        # Regression test for the N+1 pattern that made GET /api/cards'
+        # load time scale directly with the number of cards returned (one
+        # signed_url() network round trip per image per card) - however
+        # many cards/images are in the response, this must still be exactly
+        # one storage.signed_urls() call.
+        rows = [
+            {"id": f"card-{i}", "title": f"Karte {i}", "front_image_path": f"b1/{i}_front.jpg", "back_image_path": f"b1/{i}_back.jpg"}
+            for i in range(1, 21)
+        ]
+        with patch("main.db.list_cards", return_value=rows), \
+             patch("main.db.cards_with_purchase", return_value=set()), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.sale_flags_by_card_id", return_value={}), \
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls) as mock_signed_urls:
+            response = client.get("/api/cards")
+        self.assertEqual(response.status_code, 200)
+        mock_signed_urls.assert_called_once()
+        self.assertEqual(len(response.json()["cards"]), 20)
+
     def test_signed_url_failure_for_one_card_does_not_crash_whole_response(self):
         rows = [
             {"id": "card-1", "title": "Karte 1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"},
             {"id": "card-2", "title": "Karte 2", "front_image_path": "b1/2_front.jpg", "back_image_path": "b1/2_back.jpg"},
         ]
 
-        def fake_signed_url(path, **_):
-            if path == "b1/1_front.jpg":
-                raise RuntimeError("Supabase Storage hiccup")
-            return f"https://signed/{path}"
+        def fake_signed_urls(paths, **_):
+            # Mirrors storage.signed_urls()'s own contract: a path that
+            # can't be resolved is simply left out of the result, never
+            # raises for a single bad path among many.
+            return {p: f"https://signed/{p}" for p in paths if p and p != "b1/1_front.jpg"}
 
         with patch("main.db.list_cards", return_value=rows), \
              patch("main.db.cards_with_purchase", return_value=set()), \
              patch("main.db.ebay_info_by_card_id", return_value={}), \
              patch("main.db.manual_sale_info_by_card_id", return_value={}), \
              patch("main.db.sale_flags_by_card_id", return_value={}), \
-             patch("main.storage.signed_url", side_effect=fake_signed_url):
+             patch("main.storage.signed_urls", side_effect=fake_signed_urls):
             response = client.get("/api/cards")
 
         self.assertEqual(response.status_code, 200)
@@ -87,7 +124,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.db.list_reminders_for_card", return_value=[]), \
-             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"b1/1_front.jpg": "https://signed/b1/1_front.jpg"})):
             response = client.get("/api/cards/card-1")
 
         self.assertEqual(response.status_code, 200)
@@ -166,7 +203,7 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.db.list_reminders_for_card", return_value=[]), \
-             patch("main.storage.signed_url", side_effect=RuntimeError("Supabase Storage hiccup")):
+             patch("main.storage.signed_urls", return_value={}):
             response = client.get("/api/cards/card-1")
 
         self.assertEqual(response.status_code, 200)
@@ -223,7 +260,7 @@ class UpdateCardEndpointTests(unittest.TestCase):
             "front_image_path": "b1/1_front.jpg", "back_image_path": None,
         }
         with patch("main.db.update_card", return_value=updated) as mock_update, \
-             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"b1/1_front.jpg": "https://signed/b1/1_front.jpg"})):
             response = client.patch("/api/cards/card-1", json={"title": "Korrigiert"})
         self.assertEqual(response.status_code, 200)
         mock_update.assert_called_once_with("card-1", {"title": "Korrigiert"})
@@ -243,7 +280,7 @@ class SetCardPrivateCollectionEndpointTests(unittest.TestCase):
             "front_image_path": "b1/1_front.jpg", "back_image_path": None,
         }
         with patch("main.db.set_card_private_collection", return_value=updated) as mock_set, \
-             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"b1/1_front.jpg": "https://signed/b1/1_front.jpg"})):
             response = client.post("/api/cards/card-1/private-collection")
         self.assertEqual(response.status_code, 200)
         mock_set.assert_called_once_with("card-1", True)
@@ -276,7 +313,7 @@ class ListPrivateCollectionEndpointTests(unittest.TestCase):
             {"id": "card-1", "title": "Karte 1", "private_collection": True, "front_image_path": "b1/1_front.jpg"},
         ]
         with patch("main.db.list_private_collection_cards", return_value=rows) as mock_list, \
-             patch("main.storage.signed_url", return_value="https://signed/b1/1_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"b1/1_front.jpg": "https://signed/b1/1_front.jpg"})):
             response = client.get("/api/private-collection")
         self.assertEqual(response.status_code, 200)
         mock_list.assert_called_once_with(q=None)
@@ -368,7 +405,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
-             patch("main.storage.signed_url", side_effect=lambda p, **_: f"https://signed/{p}"):
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
 
         self.assertEqual(response.status_code, 200)
@@ -385,7 +422,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff") as mock_rotate, \
-             patch("main.storage.signed_url", return_value="https://signed/x"):
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = client.post("/api/cards/card-1/rotate", json={"side": "back", "degrees": 180})
 
         self.assertEqual(response.status_code, 200)
@@ -422,7 +459,7 @@ class RotateCardImageEndpointTests(unittest.TestCase):
         card = {"id": "card-1", "front_image_path": "b1/1_front.jpg", "back_image_path": "b1/1_back.jpg"}
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.rotate_image", return_value=b"\xff\xd8\xff"), \
-             patch("main.storage.signed_url", side_effect=Exception("boom")):
+             patch("main.storage.signed_urls", return_value={}):
             response = client.post("/api/cards/card-1/rotate", json={"side": "front", "degrees": 90})
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -445,7 +482,7 @@ class ReplaceCardImageEndpointTests(unittest.TestCase):
              patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
              patch("main.storage.upload_image", return_value="batch-1/3_front.jpg") as mock_upload, \
              patch("main.db.set_card_image_path", return_value=updated) as mock_set, \
-             patch("main.storage.signed_url", return_value="https://signed/batch-1/3_front.jpg"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"batch-1/3_front.jpg": "https://signed/batch-1/3_front.jpg"})):
             response = self._post_replace()
         self.assertEqual(response.status_code, 200)
         mock_upload.assert_called_once()
@@ -464,7 +501,7 @@ class ReplaceCardImageEndpointTests(unittest.TestCase):
              patch("main.storage.compress_image", return_value=b"\xff\xd8\xff"), \
              patch("main.storage.upload_image", return_value="batch-1/1_back.jpg") as mock_upload, \
              patch("main.db.set_card_image_path", return_value=card), \
-             patch("main.storage.signed_url", return_value="https://signed/x"):
+             patch("main.storage.signed_urls", side_effect=_echo_signed_urls):
             response = self._post_replace(side="back", filename="new-back.jpg")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_upload.call_args.args[2], "back")
@@ -502,7 +539,7 @@ class AddCardExtraImageEndpointTests(unittest.TestCase):
         with patch("main.db.get_card", return_value=card), \
              patch("main.storage.upload_extra_image", return_value="batch-1/3_extra_abc123.jpg") as mock_upload, \
              patch("main.db.add_card_extra_image", return_value=updated) as mock_add, \
-             patch("main.storage.signed_url", return_value="https://signed/extra"):
+             patch("main.storage.signed_urls", side_effect=_signed_urls_map({"batch-1/3_extra_abc123.jpg": "https://signed/extra"})):
             response = self._post_extra()
         self.assertEqual(response.status_code, 200)
         mock_upload.assert_called_once()
@@ -1188,7 +1225,7 @@ class CreateCardManualEndpointTests(unittest.TestCase):
                 "front_image_path": "batch-1/1_front.jpg", "back_image_path": "batch-1/1_back.jpg",
             }),
             "main.storage.upload_image": MagicMock(side_effect=lambda b, p, side, path: f"{b}/{p}_{side}.jpg"),
-            "main.storage.signed_url": MagicMock(side_effect=lambda object_path, **_: f"https://signed/{object_path}"),
+            "main.storage.signed_urls": MagicMock(side_effect=_echo_signed_urls),
             "main.db.create_inventory_item": MagicMock(),
             "main.db.find_duplicate_card": MagicMock(return_value=None),
         }

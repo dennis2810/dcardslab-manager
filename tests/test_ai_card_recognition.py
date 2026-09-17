@@ -133,6 +133,24 @@ class RecognizeCardParsingTests(unittest.TestCase):
             result = ai.recognize_card(front_path=self.img)
         self.assertEqual(result["is_numbered"], 0)
 
+    def test_maps_is_rookie_and_is_autograph_to_ints(self):
+        response = self._mock_response(
+            title="Karte", confidence=80, is_rookie=True, is_autograph=True,
+        )
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            mock_anthropic_cls.return_value.messages.create.return_value = response
+            result = ai.recognize_card(front_path=self.img)
+        self.assertEqual(result["is_rookie"], 1)
+        self.assertEqual(result["is_autograph"], 1)
+
+    def test_is_rookie_and_is_autograph_default_to_zero(self):
+        response = self._mock_response(title="Karte", confidence=80)
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            mock_anthropic_cls.return_value.messages.create.return_value = response
+            result = ai.recognize_card(front_path=self.img)
+        self.assertEqual(result["is_rookie"], 0)
+        self.assertEqual(result["is_autograph"], 0)
+
     def test_api_error_never_raises(self):
         with patch("anthropic.Anthropic") as mock_anthropic_cls:
             mock_anthropic_cls.return_value.messages.create.side_effect = RuntimeError("network down")

@@ -53,6 +53,33 @@ class GenerateTitleTests(unittest.TestCase):
         long_title = ebay_listing.generate_title(_card(title="X" * 200), max_len=80)
         self.assertLessEqual(len(long_title), 80)
 
+    def test_appends_rc_suffix_for_rookie_cards(self):
+        title = ebay_listing.generate_title(_card(is_rookie=True))
+        self.assertTrue(title.endswith("RC"))
+
+    def test_appends_auto_suffix_for_autograph_cards(self):
+        title = ebay_listing.generate_title(_card(is_autograph=True))
+        self.assertTrue(title.endswith("Auto"))
+
+    def test_appends_print_run_suffix(self):
+        title = ebay_listing.generate_title(_card(print_run="99"))
+        self.assertTrue(title.endswith("/99"))
+
+    def test_combines_rc_auto_and_print_run_suffixes_in_order(self):
+        title = ebay_listing.generate_title(_card(is_rookie=True, is_autograph=True, print_run="99"))
+        self.assertTrue(title.endswith("RC Auto /99"))
+
+    def test_omits_suffixes_that_would_exceed_max_len(self):
+        long_title = ebay_listing.generate_title(
+            _card(title="X" * 76, is_rookie=True), max_len=80,
+        )
+        self.assertNotIn("RC", long_title)
+        self.assertLessEqual(len(long_title), 80)
+
+    def test_no_suffix_when_flags_are_falsy(self):
+        title = ebay_listing.generate_title(_card(is_rookie=False, is_autograph=False, print_run=""))
+        self.assertEqual(title, "2024 Topps Musterkarte FC Beispiel")
+
 
 class GenerateDescriptionTests(unittest.TestCase):
     def test_includes_key_card_fields(self):

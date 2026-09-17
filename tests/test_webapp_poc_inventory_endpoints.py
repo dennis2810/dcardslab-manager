@@ -124,6 +124,30 @@ class ListInventoryEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["inventory"], [])
         self.assertEqual(response.json()["total_value"], 0)
 
+    def test_attaches_front_image_urls_via_a_single_batched_storage_call(self):
+        # Regression test for the N+1 pattern (one signed_url() call per
+        # row) that made inventory.html's load time scale with how many
+        # rows it showed - however many rows/images, exactly one
+        # storage.signed_urls() call.
+        rows = [{"id": f"inv-{i}", "card_id": f"card-{i}", "quantity": 1} for i in range(1, 11)]
+        cards = [
+            {"id": f"card-{i}", "title": f"Karte {i}", "front_image_path": f"b1/{i}_front.jpg"}
+            for i in range(1, 11)
+        ]
+        with patch("main.db.list_inventory", return_value=rows), \
+             patch("main.db.get_cards_by_ids", return_value=cards), \
+             patch("main.db.ebay_info_by_card_id", return_value={}), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.purchase_cost_by_card_id", return_value={}), \
+             patch("main.storage.signed_urls", side_effect=lambda paths, **_: {
+                 p: f"https://signed/{p}" for p in paths if p
+             }) as mock_signed_urls:
+            response = client.get("/api/inventory")
+        self.assertEqual(response.status_code, 200)
+        mock_signed_urls.assert_called_once()
+        inventory = response.json()["inventory"]
+        self.assertEqual(inventory[0]["card"]["front_image_url"], "https://signed/b1/1_front.jpg")
+
 
 class InventoryValueTests(unittest.TestCase):
     def test_uses_ebay_price_when_available(self):

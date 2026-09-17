@@ -141,6 +141,24 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         mock_list.assert_called_once_with(status="Entwurf", q="Muster")
 
+    def test_attaches_front_image_urls_via_a_single_batched_storage_call(self):
+        # Regression test for the N+1 pattern (one signed_url() call per
+        # listing) that made ebay.html's load time scale with how many
+        # listings it showed.
+        listings = [_listing(id=f"listing-{i}", card_id=f"card-{i}") for i in range(1, 11)]
+        cards = [_card(id=f"card-{i}", front_image_path=f"b1/{i}_front.jpg") for i in range(1, 11)]
+        with patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.get_cards_by_ids", return_value=cards), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.storage.signed_urls", side_effect=lambda paths, **_: {
+                 p: f"https://signed/{p}" for p in paths if p
+             }) as mock_signed_urls:
+            response = client.get("/api/ebay/listings")
+        self.assertEqual(response.status_code, 200)
+        mock_signed_urls.assert_called_once()
+        self.assertEqual(response.json()["listings"][0]["card"]["front_image_url"], "https://signed/b1/1_front.jpg")
+
     def test_attaches_sale_info_for_sold_listings(self):
         sold_listing = _listing(status="Verkauft")
         with patch("main.db.list_ebay_listings", return_value=[sold_listing]), \
