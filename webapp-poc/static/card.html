@@ -193,7 +193,7 @@ if ("serviceWorker" in navigator) {
   .toast-error { background: #b00020; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   @media print {
-    .page-nav, #back-to-cards, #prev-next-nav, #toast-container, button, input[type="file"] { display: none !important; }
+    .page-nav, #back-to-cards, #back-to-ebay, #prev-next-nav, #toast-container, button, input[type="file"] { display: none !important; }
   }
 </style>
 </head>
@@ -203,6 +203,7 @@ if ("serviceWorker" in navigator) {
     <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
   </div>
   <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a>
+    <a id="back-to-ebay" href="ebay.html" hidden>&larr; Zurück zu eBay</a>
     <button type="button" id="print-btn" class="no-print">🖨 Drucken</button>
     <span id="sale-status-badges"></span></p>
   <nav class="page-nav">
@@ -749,6 +750,8 @@ async function loadCard() {
 }
 
 function render(card) {
+  document.getElementById("back-to-ebay").hidden = !card.ebay_listing;
+
   const frontImg = document.getElementById("front-img");
   if (card.front_image_url) frontImg.src = card.front_image_url;
   const backImg = document.getElementById("back-img");
@@ -2835,6 +2838,38 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
   }
   form.appendChild(aspectsWrapper);
 
+  // Preisvorschlaege (Best Offer) schon vor der Veroeffentlichung setzbar -
+  // wird nicht mit dem Entwurf gespeichert (kein DB-Feld dafuer, siehe
+  // PUT .../best-offer), sondern erst nach erfolgreichem Veroeffentlichen
+  // per eigenem Request angewendet (s.u. im publishBtn-Handler).
+  const bestOfferBlock = document.createElement("div");
+  bestOfferBlock.className = "tracking-block";
+  const bestOfferLabel = document.createElement("label");
+  bestOfferLabel.style.flexDirection = "row";
+  bestOfferLabel.style.alignItems = "center";
+  bestOfferLabel.style.gap = "0.3rem";
+  const bestOfferCheckbox = document.createElement("input");
+  bestOfferCheckbox.type = "checkbox";
+  bestOfferLabel.append(bestOfferCheckbox, "Preisvorschläge aktiv");
+  bestOfferBlock.appendChild(bestOfferLabel);
+  const autoAcceptLabel = document.createElement("label");
+  autoAcceptLabel.textContent = "Automatisch akzeptieren ab (€)";
+  const autoAcceptInput = document.createElement("input");
+  autoAcceptInput.type = "number";
+  autoAcceptInput.step = "0.01";
+  autoAcceptInput.min = "0";
+  autoAcceptLabel.appendChild(autoAcceptInput);
+  bestOfferBlock.appendChild(autoAcceptLabel);
+  const autoDeclineLabel = document.createElement("label");
+  autoDeclineLabel.textContent = "Automatisch ablehnen unter (€)";
+  const autoDeclineInput = document.createElement("input");
+  autoDeclineInput.type = "number";
+  autoDeclineInput.step = "0.01";
+  autoDeclineInput.min = "0";
+  autoDeclineLabel.appendChild(autoDeclineInput);
+  bestOfferBlock.appendChild(autoDeclineLabel);
+  form.appendChild(bestOfferBlock);
+
   const scheduleWrapper = document.createElement("label");
   scheduleWrapper.textContent = "Veröffentlichen am (optional)";
   const scheduleInput = document.createElement("input");
@@ -2979,6 +3014,24 @@ function renderEbayEditForm(section, listing, purchase, onCancel) {
         statusEl.className = "error";
         showToast("Fehler: " + (body.detail || res.statusText), true);
         return;
+      }
+      // Preisvorschlaege gelten nur fuer ein tatsaechlich veroeffentlichtes
+      // (nicht nur geplantes) Angebot - erst dann existiert ein offer_id bei
+      // eBay, gegen den PUT .../best-offer ueberhaupt etwas aendern kann.
+      if (!scheduleInput.value && bestOfferCheckbox.checked) {
+        try {
+          await fetch(`/api/ebay/listings/${encodeURIComponent(body.id)}/best-offer`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              enabled: true,
+              auto_accept_price: autoAcceptInput.value || null,
+              auto_decline_price: autoDeclineInput.value || null,
+            }),
+          });
+        } catch (err) {
+          showToast("Preisvorschläge konnten nicht gesetzt werden: " + err, true);
+        }
       }
       showToast(scheduleInput.value ? "eBay-Angebot geplant." : "eBay-Angebot veröffentlicht.");
       loadCard();
@@ -3373,6 +3426,19 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     bestOfferBlock.appendChild(bestOfferBtn);
     bestOfferBlock.appendChild(bestOfferStatus);
     section.appendChild(bestOfferBlock);
+
+    // Aktuellen Stand von eBay laden und vorbelegen - eBay bleibt die
+    // alleinige Quelle der Wahrheit dafuer (siehe PUT .../best-offer),
+    // ohne das saehe man beim erneuten Aufruf der Karte immer leere Felder.
+    fetch(`/api/ebay/listings/${encodeURIComponent(listing.id)}/best-offer`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((current) => {
+        if (!current) return;
+        bestOfferCheckbox.checked = Boolean(current.best_offer_enabled);
+        if (current.auto_accept_price != null) autoAcceptInput.value = current.auto_accept_price;
+        if (current.auto_decline_price != null) autoDeclineInput.value = current.auto_decline_price;
+      })
+      .catch(() => {});
   }
 }
 

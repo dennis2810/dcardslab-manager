@@ -485,6 +485,29 @@ class GetOfferTests(unittest.TestCase):
         self.assertEqual(offer["offerId"], "offer-1")
 
 
+class GetBestOfferTermsTests(unittest.TestCase):
+    def test_returns_parsed_terms(self):
+        offer = {
+            "listingPolicies": {"bestOfferTerms": {
+                "bestOfferEnabled": True,
+                "autoAcceptPrice": {"value": "18.00", "currency": "EUR"},
+                "autoDeclinePrice": {"value": "12.00", "currency": "EUR"},
+            }},
+        }
+        with patch("ebay_client.httpx.request", return_value=_response(200, offer)):
+            terms = ebay_client.get_best_offer_terms("tok", "offer-1")
+        self.assertEqual(terms, {
+            "best_offer_enabled": True, "auto_accept_price": "18.00", "auto_decline_price": "12.00",
+        })
+
+    def test_returns_disabled_when_no_terms_set(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {"listingPolicies": {}})):
+            terms = ebay_client.get_best_offer_terms("tok", "offer-1")
+        self.assertEqual(terms, {
+            "best_offer_enabled": False, "auto_accept_price": None, "auto_decline_price": None,
+        })
+
+
 class UpdateOfferBestOfferTermsTests(unittest.TestCase):
     def _existing_offer(self):
         return {

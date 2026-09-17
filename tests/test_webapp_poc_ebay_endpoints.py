@@ -679,6 +679,32 @@ class PublishEbayListingEndpointTests(unittest.TestCase):
         self.assertEqual(updates["scheduling_mode"], "app")
 
 
+class GetEbayListingBestOfferEndpointTests(unittest.TestCase):
+    def test_returns_404_when_not_found(self):
+        with patch("main.db.get_ebay_listing", return_value=None):
+            response = client.get("/api/ebay/listings/does-not-exist/best-offer")
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_disabled_default_when_not_yet_published(self):
+        with patch("main.db.get_ebay_listing", return_value=_listing(ebay_offer_id="")):
+            response = client.get("/api/ebay/listings/listing-1/best-offer")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "best_offer_enabled": False, "auto_accept_price": None, "auto_decline_price": None,
+        })
+
+    def test_returns_current_terms_from_ebay(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_best_offer_terms", return_value={
+                 "best_offer_enabled": True, "auto_accept_price": "18.00", "auto_decline_price": "12.00",
+             }):
+            response = client.get("/api/ebay/listings/listing-1/best-offer")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["auto_accept_price"], "18.00")
+
+
 class UpdateEbayListingBestOfferEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_ebay_listing", return_value=None):
