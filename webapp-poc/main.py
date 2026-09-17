@@ -803,10 +803,20 @@ async def get_card(card_id: str):
     # (siehe _rank_statistics_by()) auch auf der einzelnen Kartenseite.
     card["team_avg_holding_days"] = None
     if card.get("team") and not card["ebay_sale"] and not card["manual_sale"]:
+        # Nutzt eine auf dieses eine Team eingeschraenkte Abfrage statt der
+        # vollen _compute_statistics() (siehe deren Docstring) - die wuerde
+        # dafuer jede Karte der gesamten Sammlung laden, was diese einzelne
+        # Kartenseite mit wachsender Sammlung zunehmend verlangsamt haette.
         try:
-            team_ranking = _compute_statistics()["team_ranking"]
-            team_stat = next((g for g in team_ranking if g["name"] == card["team"]), None)
-            card["team_avg_holding_days"] = team_stat["avg_holding_days"] if team_stat else None
+            pairs = db.team_sold_holding_day_pairs(card["team"])
+            holding_days_list = []
+            for purchase_date, sale_date in pairs:
+                purchase_dt = _parse_date_like(purchase_date)
+                sale_dt = _parse_date_like(sale_date)
+                if purchase_dt and sale_dt:
+                    holding_days_list.append((sale_dt.date() - purchase_dt.date()).days)
+            if holding_days_list:
+                card["team_avg_holding_days"] = round(sum(holding_days_list) / len(holding_days_list), 1)
         except Exception:
             logger.exception("Verkaufsprognose konnte nicht berechnet werden fuer Karte %s", card_id)
     if card["manual_sale"] and card["manual_sale"].get("lot_id"):

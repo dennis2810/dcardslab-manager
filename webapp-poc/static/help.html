@@ -186,9 +186,11 @@ if ("serviceWorker" in navigator) {
     ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
-  <p>Auf der Detailseite einer Karte lassen sich Fotos drehen oder komplett ersetzen (z. B. bei einem unscharfen
-    Bild), alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt, mit Vorschlagsliste aus bereits vergebenen
-    Tags beim Tippen) und das „Versendet"-Kästchen umschalten.
+  <p>Auf der Detailseite einer Karte lassen sich Fotos in 90°-Schritten drehen, komplett ersetzen (z. B. bei einem
+    unscharfen Bild) oder über „Zuschneiden/Drehen" frei zuschneiden und in beliebigem Winkel (nicht nur 90°)
+    gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
+    wegzuschneiden. Außerdem lassen sich alle erkannten Felder bearbeiten, Tags setzen (kommagetrennt, mit
+    Vorschlagsliste aus bereits vergebenen Tags beim Tippen) und das „Versendet"-Kästchen umschalten.
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -205,7 +207,11 @@ if ("serviceWorker" in navigator) {
     („verkauft sich erfahrungsgemäß in ~X Tagen") basierend auf der Team-Verkaufsgeschwindigkeit aus den
     Statistiken (siehe unten).</p>
   <p>Ist die Karte einem Kauf zugeordnet, wird der anteilige Einstandspreis angezeigt. Der Inventar-Bereich zeigt
-    Menge, Zustand und Lagerort. Im Preisrecherche-Verlauf lassen sich manuell beobachtete Marktpreise eintragen; der
+    Menge, Zustand und Lagerort. Über „eBay-Preise suchen (aktive Angebote)" im Preisrecherche-Bereich ist die
+    Suchanfrage bereits mit Set, Typ, Variante und Nummerierung/Auflage vorbelegt (nicht nur dem Titel) – so werden
+    eher wirklich vergleichbare Treffer gefunden statt anderer Parallelen/Varianten derselben Karte, die preislich
+    ganz anders liegen können; die Anfrage lässt sich vor dem Suchen weiter anpassen. Im Preisrecherche-Verlauf
+    lassen sich außerdem manuell beobachtete Marktpreise eintragen; der
     Marktdurchschnitt wird immer angezeigt, unabhängig davon, ob der eigene Angebotspreis (noch) abweicht – weicht er
     um mehr als die in den Einstellungen festgelegte Schwelle ab (Abschnitt „Preis-Alarm", Standard 20 %), erscheint
     zusätzlich ein Preis-Alarm – bei einem selbst über die eBay-API verwalteten Angebot direkt mit einem Button

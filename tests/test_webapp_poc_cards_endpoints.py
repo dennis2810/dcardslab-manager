@@ -100,8 +100,11 @@ class GetCardEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_includes_team_avg_holding_days_for_unsold_card_with_team(self):
+        # Zwei Verkaufs-Paare fuers selbe Team - db.team_sold_holding_day_pairs()
+        # liefert bereits die passenden (Kauf-, Verkaufsdatum)-Rohdaten,
+        # main.py rechnet daraus den Mittelwert (10 und 15 Tage -> 12.5).
         row = {"id": "card-1", "title": "Karte 1", "team": "FC Bayern"}
-        stats = {"team_ranking": [{"name": "FC Bayern", "avg_holding_days": 12.5}]}
+        pairs = [("2026-01-01", "2026-01-11"), ("2026-02-01", "2026-02-16")]
         with patch("main.db.get_card", return_value=row), \
              patch("main.db.get_purchase_for_card", return_value=None), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \
@@ -110,9 +113,12 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.db.list_reminders_for_card", return_value=[]), \
-             patch("main._compute_statistics", return_value=stats):
+             patch("main.db.team_sold_holding_day_pairs", return_value=pairs) as mock_pairs:
             response = client.get("/api/cards/card-1")
         self.assertEqual(response.json()["team_avg_holding_days"], 12.5)
+        # Auf ein einzelnes Team eingeschraenkt statt der vollen Statistik
+        # ueber die ganze Sammlung (siehe Performance-Begruendung in db.py).
+        mock_pairs.assert_called_once_with("FC Bayern")
 
     def test_omits_forecast_for_already_sold_card(self):
         row = {"id": "card-1", "title": "Karte 1", "team": "FC Bayern"}
@@ -124,10 +130,10 @@ class GetCardEndpointTests(unittest.TestCase):
              patch("main.db.get_manual_sale_for_card", return_value=None), \
              patch("main.db.list_price_research_for_card", return_value=[]), \
              patch("main.db.list_reminders_for_card", return_value=[]), \
-             patch("main._compute_statistics") as mock_stats:
+             patch("main.db.team_sold_holding_day_pairs") as mock_pairs:
             response = client.get("/api/cards/card-1")
         self.assertIsNone(response.json()["team_avg_holding_days"])
-        mock_stats.assert_not_called()
+        mock_pairs.assert_not_called()
 
     def test_includes_lot_siblings_when_part_of_a_lot(self):
         row = {"id": "card-1", "title": "Karte 1"}
