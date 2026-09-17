@@ -2412,6 +2412,24 @@ async def publish_ebay_listing(listing_id: str, body: dict = Body(default={})):
     return JSONResponse(_listing_with_card(updated))
 
 
+@app.get("/api/ebay/listings/{listing_id}/best-offer")
+async def get_ebay_listing_best_offer(listing_id: str):
+    listing = db.get_ebay_listing(listing_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"eBay-Angebot {listing_id} nicht gefunden.")
+    offer_id = listing.get("ebay_offer_id")
+    if not offer_id:
+        return JSONResponse({"best_offer_enabled": False, "auto_accept_price": None, "auto_decline_price": None})
+    try:
+        token = ebay_client.get_access_token()
+        terms = ebay_client.get_best_offer_terms(token, offer_id)
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return JSONResponse(terms)
+
+
 @app.put("/api/ebay/listings/{listing_id}/best-offer")
 async def update_ebay_listing_best_offer(listing_id: str, body: dict = Body(default={})):
     # Aendert nur die Best-Offer-Einstellungen eines schon veroeffentlichten

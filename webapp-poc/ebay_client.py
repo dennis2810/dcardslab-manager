@@ -484,6 +484,19 @@ def _custom_best_offer_terms(enabled, auto_accept_price=None, auto_decline_price
     return terms
 
 
+def get_best_offer_terms(token, offer_id):
+    """Liest nur die aktuellen Best-Offer-Einstellungen eines Offers aus
+    (fuer die Anzeige auf card.html) - eBay bleibt die alleinige Quelle der
+    Wahrheit dafuer, es wird nichts davon in der eigenen DB gespiegelt."""
+    offer = get_offer(token, offer_id)
+    terms = (offer.get("listingPolicies") or {}).get("bestOfferTerms") or {}
+    return {
+        "best_offer_enabled": bool(terms.get("bestOfferEnabled")),
+        "auto_accept_price": (terms.get("autoAcceptPrice") or {}).get("value"),
+        "auto_decline_price": (terms.get("autoDeclinePrice") or {}).get("value"),
+    }
+
+
 def update_offer_best_offer_terms(token, offer_id, enabled, auto_accept_price=None, auto_decline_price=None):
     """Aendert nachtraeglich nur die Best-Offer-Einstellungen (Preisvorschlaege)
     eines schon bei eBay angelegten Offers. updateOffer ersetzt das Offer
