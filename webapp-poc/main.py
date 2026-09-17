@@ -2440,6 +2440,49 @@ async def ebay_listing_views(listing_ids: str):
     return JSONResponse({"views": views})
 
 
+@app.get("/api/ebay/listings/best-offer-sync")
+async def sync_ebay_listings_best_offer(listing_ids: str):
+    # Behebt, dass Auto-Annahme/-Ablehnung in der Uebersicht (ebay.html) fuer
+    # bereits bestehende Angebote leer bleiben: der lokale Cache (siehe
+    # get_ebay_listing_best_offer()/update_ebay_listing_best_offer() oben)
+    # wird nur befuellt, wenn jemand das Preisvorschlaege-Formular eines
+    # EINZELNEN Angebots in card.html geoeffnet/geaendert hat. Fuer alle
+    # anderen Angebote blieb er nach der Migration leer. Gleiches Muster wie
+    # /api/ebay/listings/views oben - eigener, nur per Klick ausgeloester
+    # Aufruf statt bei jedem GET /api/ebay/listings mitgeladen (ein eBay-
+    # API-Aufruf pro Angebot waere bei jedem Listen-Laden zu teuer/langsam).
+    #
+    # MUSS vor /api/ebay/listings/{listing_id} registriert sein: FastAPI/
+    # Starlette matcht Routen in Registrierungsreihenfolge, nicht nach
+    # Spezifitaet - stand dieser Endpunkt nach der {listing_id}-Route (wie
+    # urspruenglich der Fall), fing "best-offer-sync" dort als listing_id
+    # ab und db.get_ebay_listing("best-offer-sync") schlug an der
+    # UUID-Validierung mit einer ungefangenen Exception fehl (der
+    # eigentliche Grund fuer den vom Nutzer gemeldeten 500-Fehler - die
+    # Fehlerbehandlung in DIESEM Endpunkt wurde nie erreicht).
+    ids = [v for v in listing_ids.split(",") if v]
+    results = []
+    token = None
+    for listing_id in ids:
+        try:
+            listing = db.get_ebay_listing(listing_id)
+            if listing is None or _is_externally_managed(listing) or not listing.get("ebay_offer_id"):
+                continue
+            if token is None:
+                token = ebay_client.get_access_token()
+            terms = ebay_client.get_best_offer_terms(token, listing["ebay_offer_id"])
+            db.update_ebay_listing(listing_id, terms)
+            results.append({"listing_id": listing_id, "ok": True, **terms})
+        except ebay_client.EbayNotAuthorizedError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except Exception as exc:
+            # Gleiches Isolationsprinzip wie /api/ebay/listings/best-offer-bulk
+            # oben - ein fehlgeschlagenes Angebot darf den Rest der Auswahl
+            # nicht abbrechen.
+            results.append({"listing_id": listing_id, "error": str(exc)})
+    return JSONResponse({"results": results})
+
+
 @app.get("/api/ebay/listings/{listing_id}")
 async def get_ebay_listing(listing_id: str):
     listing = db.get_ebay_listing(listing_id)
@@ -2648,43 +2691,6 @@ async def update_ebay_listings_best_offer_bulk(body: dict = Body(...)):
             })
             results.append({"listing_id": listing_id, "ok": True})
         except Exception as exc:
-            results.append({"listing_id": listing_id, "error": str(exc)})
-    return JSONResponse({"results": results})
-
-
-@app.get("/api/ebay/listings/best-offer-sync")
-async def sync_ebay_listings_best_offer(listing_ids: str):
-    # Behebt, dass Auto-Annahme/-Ablehnung in der Uebersicht (ebay.html) fuer
-    # bereits bestehende Angebote leer bleiben: der lokale Cache (siehe
-    # get_ebay_listing_best_offer()/update_ebay_listing_best_offer() oben)
-    # wird nur befuellt, wenn jemand das Preisvorschlaege-Formular eines
-    # EINZELNEN Angebots in card.html geoeffnet/geaendert hat. Fuer alle
-    # anderen Angebote blieb er nach der Migration leer. Gleiches Muster wie
-    # /api/ebay/listings/views oben - eigener, nur per Klick ausgeloester
-    # Aufruf statt bei jedem GET /api/ebay/listings mitgeladen (ein eBay-
-    # API-Aufruf pro Angebot waere bei jedem Listen-Laden zu teuer/langsam).
-    ids = [v for v in listing_ids.split(",") if v]
-    results = []
-    token = None
-    for listing_id in ids:
-        try:
-            listing = db.get_ebay_listing(listing_id)
-            if listing is None or _is_externally_managed(listing) or not listing.get("ebay_offer_id"):
-                continue
-            if token is None:
-                token = ebay_client.get_access_token()
-            terms = ebay_client.get_best_offer_terms(token, listing["ebay_offer_id"])
-            db.update_ebay_listing(listing_id, terms)
-            results.append({"listing_id": listing_id, "ok": True, **terms})
-        except ebay_client.EbayNotAuthorizedError as exc:
-            raise HTTPException(status_code=401, detail=str(exc)) from exc
-        except Exception as exc:
-            # Gleiches Isolationsprinzip wie /api/ebay/listings/best-offer-bulk
-            # oben - ein fehlgeschlagenes Angebot darf den Rest der Auswahl
-            # nicht abbrechen. Bewusst breiter als nur EbayApiError (siehe
-            # Bugreport des Nutzers: eine ungefangene Exception liess den
-            # gesamten Request mit einem generischen 500 fehlschlagen statt
-            # das eine betroffene Angebot als Fehler zu melden).
             results.append({"listing_id": listing_id, "error": str(exc)})
     return JSONResponse({"results": results})
 

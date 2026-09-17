@@ -1195,6 +1195,86 @@ class BestOfferBulkEndpointTests(unittest.TestCase):
         self.assertEqual(results[1], {"listing_id": "listing-1", "ok": True})
 
 
+class BestOfferSyncEndpointTests(unittest.TestCase):
+    def test_route_is_matched_before_the_listing_id_route(self):
+        # Regression test fuer den vom Nutzer gemeldeten 500-Fehler: dieser
+        # Endpunkt MUSS vor /api/ebay/listings/{listing_id} registriert sein
+        # (siehe Kommentar bei der Route in main.py), sonst faengt die
+        # {listing_id}-Route "best-offer-sync" als Pfad-Parameter ab, noch
+        # bevor main.sync_ebay_listings_best_offer() ueberhaupt aufgerufen
+        # wird - main.get_ebay_listing() (der {listing_id}-Handler) darf
+        # hier also nicht aufgerufen werden.
+        with patch("main.db.get_ebay_listing", return_value=None) as mock_get, \
+             patch("main.get_ebay_listing") as mock_wrong_handler:
+            response = client.get("/api/ebay/listings/best-offer-sync?listing_ids=")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"results": []})
+        mock_wrong_handler.assert_not_called()
+        mock_get.assert_not_called()
+
+    def test_updates_terms_for_each_listing_and_caches_in_db(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_best_offer_terms", return_value={
+                 "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+             }) as mock_terms, \
+             patch("main.db.update_ebay_listing") as mock_db_update:
+            response = client.get("/api/ebay/listings/best-offer-sync?listing_ids=listing-1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [{
+            "listing_id": "listing-1", "ok": True,
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+        }])
+        mock_terms.assert_called_once_with("tok", "offer-1")
+        mock_db_update.assert_called_once_with("listing-1", {
+            "best_offer_enabled": True, "auto_accept_price": "18", "auto_decline_price": "12",
+        })
+
+    def test_skips_unknown_externally_managed_and_unpublished_listings(self):
+        def get_listing(listing_id):
+            return {
+                "unknown": None,
+                "imported": _listing(status="Veroeffentlicht", ebay_offer_id=""),
+                "draft": _listing(status="Entwurf", ebay_offer_id=""),
+            }[listing_id]
+
+        with patch("main.db.get_ebay_listing", side_effect=get_listing), \
+             patch("main.ebay_client.get_access_token") as mock_token:
+            response = client.get(
+                "/api/ebay/listings/best-offer-sync?listing_ids=unknown,imported,draft"
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
+        mock_token.assert_not_called()
+
+    def test_one_failure_does_not_abort_the_rest(self):
+        def get_listing(listing_id):
+            if listing_id == "bad":
+                raise RuntimeError("DB down")
+            return _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+
+        with patch("main.db.get_ebay_listing", side_effect=get_listing), \
+             patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_best_offer_terms", return_value={
+                 "best_offer_enabled": False, "auto_accept_price": None, "auto_decline_price": None,
+             }), \
+             patch("main.db.update_ebay_listing"):
+            response = client.get("/api/ebay/listings/best-offer-sync?listing_ids=bad,listing-1")
+        results = response.json()["results"]
+        self.assertIn("error", results[0])
+        self.assertEqual(results[1]["listing_id"], "listing-1")
+        self.assertTrue(results[1]["ok"])
+
+    def test_returns_401_when_ebay_not_authorized(self):
+        published = _listing(status="Veroeffentlicht", ebay_offer_id="offer-1")
+        with patch("main.db.get_ebay_listing", return_value=published), \
+             patch("main.ebay_client.get_access_token",
+                   side_effect=ebay_client.EbayNotAuthorizedError("nicht verbunden")):
+            response = client.get("/api/ebay/listings/best-offer-sync?listing_ids=listing-1")
+        self.assertEqual(response.status_code, 401)
+
+
 class OauthStatusEndpointTests(unittest.TestCase):
     def test_proxies_oauth_server_response(self):
         mock_response = MagicMock()
