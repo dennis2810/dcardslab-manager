@@ -1031,7 +1031,7 @@ async function loadCard() {
     renderEbaySection(card.ebay_listing, card.purchase, card.ebay_sale, card.manual_sale, card.private_collection, card.title);
     renderManualSaleSection(card.manual_sale, card.purchase, card.ebay_listing, card.title, card.lot_siblings);
     renderPriceResearchSection(
-      card.price_research, card.ebay_listing?.title || card.title, card.ebay_listing?.price,
+      card.price_research, priceResearchSearchDefault(card), card.ebay_listing?.price,
       card.ebay_listing?.ebay_listing_id, card.ebay_listing
     );
     renderSaleStatusBadges(card);
@@ -1656,6 +1656,23 @@ function renderSaleStatusBadges(card) {
     badge.textContent = "Abgeholt";
     container.appendChild(badge);
   }
+}
+
+// Baut die Standard-Suchanfrage fuer die automatische eBay-Preisrecherche
+// (renderPriceResearchSection() unten) - nur der (kurze) Titel allein
+// findet oft auch andere Parallelen/Varianten derselben Karte, die
+// preislich ganz anders liegen. Set/Typ/Variante sowie eine Nummerierung
+// grenzen den Treffer genauer ein; main.py's _filter_price_research_results()
+// erkennt "Auto"/eine Auflagenangabe (z.B. "/99") direkt aus dem Text dieser
+// Suchanfrage, daher reicht es, die vorhandenen Merkmale hier mit
+// aufzunehmen statt ein eigenes Autogramm-Feld zu pflegen.
+function priceResearchSearchDefault(card) {
+  const parts = [
+    card.ebay_listing?.title || card.title,
+    card.set_name, card.card_type, card.variant,
+    card.serial_number || (card.print_run ? `/${card.print_run}` : ""),
+  ];
+  return parts.filter(Boolean).join(" ");
 }
 
 // Same URL formulas as ebay_listing.price_research_links() on the backend
