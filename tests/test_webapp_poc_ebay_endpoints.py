@@ -359,15 +359,20 @@ class EbayListingPromotedStatusEndpointTests(unittest.TestCase):
         listings = [_listing(id="listing-1", ebay_listing_id="111"), _listing(id="listing-2", ebay_listing_id="222")]
         campaigns = [{"campaignId": "camp-1", "campaignStatus": "RUNNING"}, {"campaignId": "camp-2", "campaignStatus": "ENDED"}]
         status_by_listing = {"111": {"campaign_id": "camp-1", "ad_status": "ACTIVE", "bid_percentage": 2.0}}
+
+        def fake_update(listing_id, fields):
+            return {"id": listing_id, **fields}
+
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_ad_campaigns", return_value=campaigns), \
              patch("main.ebay_client.get_promoted_listing_status", return_value=status_by_listing) as mock_status, \
              patch("main.db.list_ebay_listings", return_value=listings), \
-             patch("main.db.update_ebay_listing") as mock_update:
+             patch("main.db.update_ebay_listing", side_effect=fake_update) as mock_update:
             response = client.get("/api/ebay/listings/promoted-status?listing_ids=111,222")
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["promoted_status"], {"111": status_by_listing["111"], "222": None})
+        self.assertNotIn("persist_warning", body)
         # Nur laufende Kampagnen werden fuer den Ads-Abruf herangezogen -
         # eine beendete Kampagne kann kein Angebot mehr aktiv bewerben.
         mock_status.assert_called_once_with("tok", ["camp-1"])
@@ -379,6 +384,43 @@ class EbayListingPromotedStatusEndpointTests(unittest.TestCase):
             "listing-2",
             {"promoted_listing_campaign_id": "", "promoted_listing_status": "", "promoted_listing_bid_percentage": None},
         )
+
+    def test_surfaces_a_persist_warning_when_db_update_raises(self):
+        # Bugreport: Werbestatus wird nicht ueber einen Seiten-Neuladen
+        # hinweg gespeichert - db.update_ebay_listing() kann fehlschlagen,
+        # ohne dass main.py das bisher bemerkt hat (kein try/except um den
+        # Aufruf). Jetzt wird das geloggt und im Response sichtbar gemacht.
+        listings = [_listing(id="listing-1", ebay_listing_id="111")]
+        status_by_listing = {"111": {"campaign_id": "camp-1", "ad_status": "ACTIVE", "bid_percentage": 2.0}}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_ad_campaigns", return_value=[{"campaignId": "camp-1", "campaignStatus": "RUNNING"}]), \
+             patch("main.ebay_client.get_promoted_listing_status", return_value=status_by_listing), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.update_ebay_listing", side_effect=RuntimeError("boom")):
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=111")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # Die Anzeige (eBay-Live-Daten) bleibt korrekt, auch wenn das
+        # Speichern fehlschlug - nur eine Warnung kommt dazu.
+        self.assertEqual(body["promoted_status"], {"111": status_by_listing["111"]})
+        self.assertIn("persist_warning", body)
+
+    def test_surfaces_a_persist_warning_when_db_update_returns_no_confirmed_row(self):
+        # Kein Fehler, aber auch keine (oder eine abweichende) aktualisierte
+        # Zeile zurueck - deutet auf ein stilles Fehlschlagen hin (z.B. 0
+        # getroffene Zeilen bei der Supabase-Anfrage).
+        listings = [_listing(id="listing-1", ebay_listing_id="111")]
+        status_by_listing = {"111": {"campaign_id": "camp-1", "ad_status": "ACTIVE", "bid_percentage": 2.0}}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_ad_campaigns", return_value=[{"campaignId": "camp-1", "campaignStatus": "RUNNING"}]), \
+             patch("main.ebay_client.get_promoted_listing_status", return_value=status_by_listing), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.update_ebay_listing", return_value=None):
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=111")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["promoted_status"], {"111": status_by_listing["111"]})
+        self.assertIn("persist_warning", body)
 
     def test_skips_persisting_for_a_listing_id_with_no_local_match(self):
         with patch("main.ebay_client.get_access_token", return_value="tok"), \

@@ -2496,18 +2496,51 @@ async def ebay_listing_promoted_status(listing_ids: str):
         l["ebay_listing_id"]: l for l in db.list_ebay_listings() if l.get("ebay_listing_id")
     }
     result = {}
+    persist_failures = []
     for ebay_id in ids:
         listing = listings_by_item_id.get(ebay_id)
         if not listing:
             continue
         info = status_by_listing.get(ebay_id)
-        db.update_ebay_listing(listing["id"], {
+        update_fields = {
             "promoted_listing_campaign_id": (info or {}).get("campaign_id") or "",
             "promoted_listing_status": (info or {}).get("ad_status") or "",
             "promoted_listing_bid_percentage": (info or {}).get("bid_percentage"),
-        })
+        }
+        # Nicht mehr ungeprueft "fire and forget" wie zuvor (Bugreport des
+        # Nutzers: Werbestatus ueberlebt keinen Seiten-Neuladen) - db.
+        # update_ebay_listing() gibt bei einem erfolgreichen Update die
+        # aktualisierte Zeile zurueck (siehe _update_ebay_listing_and_
+        # republish(), das direkt updated["status"] indiziert - waere bei
+        # einem regelmaessig leeren Rueckgabewert laengst aufgefallen).
+        # Weicht das Ergebnis hier trotzdem ab (kein Fehler, aber auch keine
+        # bestaetigte Zeile mit dem gerade gesetzten Wert), deutet das auf
+        # ein stilles Fehlschlagen der Persistierung hin (z. B. 0 getroffene
+        # Zeilen) - wird geloggt (docker logs) statt unbemerkt zu bleiben.
+        try:
+            updated = db.update_ebay_listing(listing["id"], update_fields)
+        except Exception:
+            logger.exception(
+                "Werbestatus fuer Angebot %s (ebay_listing_id=%s) konnte nicht gespeichert werden",
+                listing["id"], ebay_id,
+            )
+            persist_failures.append(ebay_id)
+        else:
+            if not updated or updated.get("promoted_listing_status") != update_fields["promoted_listing_status"]:
+                logger.warning(
+                    "Werbestatus-Update fuer Angebot %s (ebay_listing_id=%s) lieferte keine bestaetigte "
+                    "Zeile mit dem neuen Stand zurueck: %s", listing["id"], ebay_id, updated,
+                )
+                persist_failures.append(ebay_id)
         result[ebay_id] = info
-    return JSONResponse({"promoted_status": result})
+    response_body = {"promoted_status": result}
+    if persist_failures:
+        response_body["persist_warning"] = (
+            f"Werbestatus wurde nur zur Anzeige geladen, konnte aber für {len(persist_failures)} von "
+            f"{len(result)} Angebot(en) nicht dauerhaft gespeichert werden - nach einem Neuladen der Seite "
+            "fehlt er dort wieder. Siehe Server-Log (docker logs) für Details."
+        )
+    return JSONResponse(response_body)
 
 
 @app.get("/api/ebay/listings/best-offer-sync")
