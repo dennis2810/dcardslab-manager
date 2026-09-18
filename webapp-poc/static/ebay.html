@@ -246,9 +246,9 @@ if ("serviceWorker" in navigator) {
 
   <nav class="page-toc no-print" aria-label="Bereiche auf dieser Seite">
     <a href="#filter-section">Filter</a>
-    <a href="#filter-presets-section">Gespeicherte Ansichten</a>
     <a href="#actions-section">Aktionen</a>
     <a href="#import-section">Von eBay importieren</a>
+    <a href="#filter-presets-section">Gespeicherte Ansichten</a>
     <a href="#listing-list-section">Angebotsliste</a>
   </nav>
 
@@ -281,16 +281,6 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
 
-  <div id="filter-presets-section" class="controls no-print filter-presets">
-    <select id="preset-select">
-      <option value="">Gespeicherte Ansicht wählen…</option>
-    </select>
-    <button type="button" id="apply-preset-btn">Anwenden</button>
-    <button type="button" id="delete-preset-btn">Löschen</button>
-    <input type="text" id="preset-name-input" placeholder="Name für neue Ansicht" maxlength="40">
-    <button type="button" id="save-preset-btn">Aktuelle Filter/Sortierung speichern</button>
-  </div>
-
   <div id="actions-section" class="controls no-print">
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
@@ -321,6 +311,16 @@ if ("serviceWorker" in navigator) {
     <input type="text" id="import-item-id" placeholder="eBay-Artikelnummer (z. B. 123456789012)">
     <button type="button" id="import-btn">Von eBay importieren</button>
     <span id="import-status"></span>
+  </div>
+
+  <div id="filter-presets-section" class="controls no-print filter-presets">
+    <select id="preset-select">
+      <option value="">Gespeicherte Ansicht wählen…</option>
+    </select>
+    <button type="button" id="apply-preset-btn">Anwenden</button>
+    <button type="button" id="delete-preset-btn">Löschen</button>
+    <input type="text" id="preset-name-input" placeholder="Name für neue Ansicht" maxlength="40">
+    <button type="button" id="save-preset-btn">Aktuelle Filter/Sortierung speichern</button>
   </div>
 
   <div id="bulk-actions" class="controls no-print" hidden>

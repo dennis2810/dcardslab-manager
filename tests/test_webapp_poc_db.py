@@ -2690,7 +2690,7 @@ class GetCardsByIdsTests(unittest.TestCase):
             result = db.get_cards_by_ids(["card-1"])
         self.assertEqual(result, response.data)
         mock_client.table.return_value.select.assert_called_once_with(
-            "id,title,front_image_path,private_collection"
+            "id,title,category,front_image_path,private_collection"
         )
 
 
