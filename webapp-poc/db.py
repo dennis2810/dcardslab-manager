@@ -13,6 +13,15 @@ CARD_FIELDS = [
     "season_year", "card_type", "variant", "language", "team", "position",
     "squad_number", "club_debut_season", "card_number",
     "serial_number", "print_run",
+    # Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-
+    # Migration vom 2026-09-18) - muessen nicht zwangslaeufig befuellt
+    # werden, siehe ebay_listing.build_aspects() fuer die eBay-Zuordnung.
+    "manufacturing_year", "origin_country", "material", "card_size",
+    "card_stock", "edition", "special_features", "product_type",
+    "insert_set", "vintage", "reprint_status", "custom_made",
+    "autograph_authentication", "signed_by", "autograph_type",
+    "autograph_auth_number", "tv_series", "movie", "genre", "illustrator",
+    "age_recommendation",
 ]
 
 # Grading-Tracking (PSA/BGS/SGC/...): Status eines optionalen Einsende-

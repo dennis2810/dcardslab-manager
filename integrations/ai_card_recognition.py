@@ -29,6 +29,14 @@ EMPTY_FIELDS = {
     "set_name": "", "season_year": "", "card_type": "", "variant": "",
     "language": "", "team": "", "position": "", "squad_number": "",
     "club_debut_season": "", "card_number": "", "serial_number": "", "print_run": "",
+    # Weitere optionale eBay-Item-Specifics (siehe db.CARD_FIELDS) - werden
+    # nur befuellt, wenn wirklich auf der Karte lesbar (siehe PROMPT).
+    "manufacturing_year": "", "origin_country": "", "material": "",
+    "card_size": "", "card_stock": "", "edition": "", "special_features": "",
+    "product_type": "", "insert_set": "", "vintage": "", "reprint_status": "",
+    "custom_made": "", "autograph_authentication": "", "signed_by": "",
+    "autograph_type": "", "autograph_auth_number": "", "tv_series": "",
+    "movie": "", "genre": "", "illustrator": "", "age_recommendation": "",
     "is_numbered": 0, "is_rookie": 0, "is_autograph": 0,
     "confidence": 0, "raw": "",
 }
@@ -95,6 +103,44 @@ PROMPT = (
     "serial_number und print_run = bei nummerierten/limitierten Karten die "
     "zwei Zahlen aus einem Bruch wie 123/199 (serial_number=123, "
     "print_run=199).\n"
+    "Die folgenden Felder NUR ausfuellen, wenn explizit und eindeutig so "
+    "auf der Karte beschriftet - bei jedem Zweifel leer lassen statt zu "
+    "raten (die meisten Karten werden fuer die meisten dieser Felder leer "
+    "bleiben, das ist normal):\n"
+    "manufacturing_year = Herstellungsjahr, falls separat vom "
+    "Saison-/Erscheinungsjahr (season_year) angegeben.\n"
+    "origin_country = Herstellungsland (z.B. \"Made in USA\").\n"
+    "material = Kartenmaterial (z.B. \"Karton\", \"Kunststoff\", \"Metall\").\n"
+    "card_size = Kartengroesse/-format, falls vom Standardformat abweichend "
+    "angegeben.\n"
+    "card_stock = Kartenstaerke in Punkt (pt), falls angegeben.\n"
+    "edition = Editionsbezeichnung (z.B. \"1st Edition\").\n"
+    "special_features = sonstige explizit aufgedruckte Besonderheiten.\n"
+    "product_type = Produktart, falls von der Standard-Sammelkarte "
+    "abweichend beschriftet.\n"
+    "insert_set = Name des Insert-/Themen-Subsets, falls angegeben.\n"
+    "vintage = Vintage-Einordnung, falls angegeben.\n"
+    "reprint_status = \"Original\" oder \"Lizenzierter Nachdruck\", falls "
+    "explizit angegeben.\n"
+    "custom_made = \"Ja\", falls die Karte explizit als maßgefertigt "
+    "gekennzeichnet ist.\n"
+    "autograph_authentication = Authentifizierungsstelle des Autogramms "
+    "(z.B. \"PSA/DNA\"), nur bei erkennbarem Autogramm relevant.\n"
+    "signed_by = Name der signierenden Person, falls explizit angegeben "
+    "und vom Titel/Charakter abweichend.\n"
+    "autograph_type = Art des Autogramms (z.B. \"Hard Signed\", \"Sticker "
+    "Auto\"), nur bei erkennbarem Autogramm relevant.\n"
+    "autograph_auth_number = Zertifizierungsnummer des Autogramms, falls "
+    "aufgedruckt.\n"
+    "tv_series = TV-Serie, der die Karte entstammt (nur bei Non-Sport-"
+    "Karten relevant, z.B. Serien-Merchandise).\n"
+    "movie = Film, dem die Karte entstammt (nur bei Non-Sport-Karten "
+    "relevant).\n"
+    "genre = Genre-Einordnung (nur bei Non-Sport-Karten relevant).\n"
+    "illustrator = Zeichner/Illustrator der Karte, falls namentlich "
+    "genannt (nur bei Non-Sport-Karten relevant).\n"
+    "age_recommendation = Altersempfehlung, falls aufgedruckt (nur bei "
+    "Non-Sport-Karten relevant).\n"
     "is_rookie = true, NUR wenn auf der Karte explizit \"RC\", \"Rookie "
     "Card\" oder \"Rookie\" aufgedruckt ist - nicht aus Season/Debütjahr "
     "erschliessen.\n"
@@ -113,8 +159,14 @@ PROMPT = (
     '"set_name": "", "season_year": "", "card_type": "", "variant": "", '
     '"language": "", "team": "", "position": "", "squad_number": "", '
     '"club_debut_season": "", "card_number": "", "serial_number": "", '
-    '"print_run": "", "is_rookie": false, "is_autograph": false, '
-    '"confidence": 0}}'
+    '"print_run": "", "manufacturing_year": "", "origin_country": "", '
+    '"material": "", "card_size": "", "card_stock": "", "edition": "", '
+    '"special_features": "", "product_type": "", "insert_set": "", '
+    '"vintage": "", "reprint_status": "", "custom_made": "", '
+    '"autograph_authentication": "", "signed_by": "", "autograph_type": "", '
+    '"autograph_auth_number": "", "tv_series": "", "movie": "", "genre": "", '
+    '"illustrator": "", "age_recommendation": "", "is_rookie": false, '
+    '"is_autograph": false, "confidence": 0}}'
 )
 
 
@@ -210,6 +262,27 @@ def recognize_card(front_path=None, back_path=None):
         card_number: str = ""
         serial_number: str = ""
         print_run: str = ""
+        manufacturing_year: str = ""
+        origin_country: str = ""
+        material: str = ""
+        card_size: str = ""
+        card_stock: str = ""
+        edition: str = ""
+        special_features: str = ""
+        product_type: str = ""
+        insert_set: str = ""
+        vintage: str = ""
+        reprint_status: str = ""
+        custom_made: str = ""
+        autograph_authentication: str = ""
+        signed_by: str = ""
+        autograph_type: str = ""
+        autograph_auth_number: str = ""
+        tv_series: str = ""
+        movie: str = ""
+        genre: str = ""
+        illustrator: str = ""
+        age_recommendation: str = ""
         is_rookie: bool = False
         is_autograph: bool = False
         confidence: float = 0

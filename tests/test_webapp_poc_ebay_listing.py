@@ -249,6 +249,74 @@ class BuildAspectsTests(unittest.TestCase):
         aspects = ebay_listing.build_aspects(_card(card_type="", variant=""), "sport")
         self.assertNotIn("Parallel/Variante", aspects)
 
+    def test_includes_print_run_as_auflage(self):
+        aspects = ebay_listing.build_aspects(_card(print_run="99"), "sport")
+        self.assertEqual(aspects["Auflage"], ["99"])
+
+    def test_sport_includes_title_as_spieler_sportler(self):
+        aspects = ebay_listing.build_aspects(_card(title="Max Mustermann"), "sport")
+        self.assertEqual(aspects["Spieler/Sportler"], ["Max Mustermann"])
+        self.assertNotIn("Charakter", aspects)
+
+    def test_non_sport_includes_title_as_charakter(self):
+        aspects = ebay_listing.build_aspects(_card(title="Pikachu"), "non_sport")
+        self.assertEqual(aspects["Charakter"], ["Pikachu"])
+        self.assertNotIn("Spieler/Sportler", aspects)
+
+    def test_sport_includes_theme_as_liga(self):
+        aspects = ebay_listing.build_aspects(_card(theme="Bundesliga"), "sport")
+        self.assertEqual(aspects["Liga"], ["Bundesliga"])
+
+    def test_non_sport_omits_liga(self):
+        aspects = ebay_listing.build_aspects(_card(theme="Anime"), "non_sport")
+        self.assertNotIn("Liga", aspects)
+
+    def test_includes_generic_extra_aspects(self):
+        aspects = ebay_listing.build_aspects(
+            _card(
+                manufacturing_year="2024", origin_country="USA", material="Karton",
+                card_size="Standard", card_stock="20pt", edition="1st Edition",
+                special_features="Holo", product_type="Sammelkarte",
+                insert_set="Chrome Update", vintage="Ja",
+                reprint_status="Original", custom_made="Nein",
+                autograph_authentication="PSA/DNA", signed_by="Max Mustermann",
+                autograph_type="Hard Signed", autograph_auth_number="12345",
+            ),
+            "sport",
+        )
+        self.assertEqual(aspects["Herstellungsjahr"], ["2024"])
+        self.assertEqual(aspects["Ursprungsland"], ["USA"])
+        self.assertEqual(aspects["Material"], ["Karton"])
+        self.assertEqual(aspects["Kartengröße"], ["Standard"])
+        self.assertEqual(aspects["Kartenstärke"], ["20pt"])
+        self.assertEqual(aspects["Edition"], ["1st Edition"])
+        self.assertEqual(aspects["Besonderheiten"], ["Holo"])
+        self.assertEqual(aspects["Produktart"], ["Sammelkarte"])
+        self.assertEqual(aspects["Insert Set"], ["Chrome Update"])
+        self.assertEqual(aspects["Vintage"], ["Ja"])
+        self.assertEqual(aspects["Original/Lizenzierter Nachdruck"], ["Original"])
+        self.assertEqual(aspects["Maßgefertigt"], ["Nein"])
+        self.assertEqual(aspects["Autogramm-Authentifizierung"], ["PSA/DNA"])
+        self.assertEqual(aspects["Signiert von"], ["Max Mustermann"])
+        self.assertEqual(aspects["Autogrammart"], ["Hard Signed"])
+        self.assertEqual(aspects["Autogramm-Authentifizierungsnummer"], ["12345"])
+
+    def test_non_sport_only_aspects_included_for_non_sport(self):
+        aspects = ebay_listing.build_aspects(
+            _card(tv_series="Naruto", movie="", genre="Shonen", illustrator="Max Muster", age_recommendation="6+"),
+            "non_sport",
+        )
+        self.assertEqual(aspects["TV-Serie"], ["Naruto"])
+        self.assertEqual(aspects["Genre"], ["Shonen"])
+        self.assertEqual(aspects["Zeichner"], ["Max Muster"])
+        self.assertEqual(aspects["Altersempfehlung"], ["6+"])
+        self.assertNotIn("Film", aspects)
+
+    def test_non_sport_only_aspects_omitted_for_sport(self):
+        aspects = ebay_listing.build_aspects(_card(tv_series="Naruto", genre="Shonen"), "sport")
+        self.assertNotIn("TV-Serie", aspects)
+        self.assertNotIn("Genre", aspects)
+
 
 class RequiredAspectsTests(unittest.TestCase):
     """Reads the real eBay-provided CSV templates in templates/ebay/ - no

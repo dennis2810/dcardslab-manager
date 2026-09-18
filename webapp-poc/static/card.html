@@ -495,6 +495,30 @@ const FIELDS = [
   ["card_number", "Kartennr.", "Kartennummer, wie auf der Karte angegeben (z. B. \"#123\")"],
   ["serial_number", "Seriennr.", "Seriennummer bei limitierten Karten (z. B. \"12/99\")"],
   ["print_run", "Auflage", "Gesamtauflage bei limitierten Karten (z. B. \"99\")"],
+  // Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-Migration
+  // vom 2026-09-18 und ebay_listing.build_aspects()) - muessen nicht
+  // zwangslaeufig befuellt werden.
+  ["manufacturing_year", "Herstellungsjahr", "Herstellungsjahr, falls separat vom Saison-/Erscheinungsjahr angegeben"],
+  ["origin_country", "Ursprungsland", "Herstellungsland, falls auf der Karte vermerkt"],
+  ["material", "Material", "Kartenmaterial (z. B. Karton, Kunststoff, Metall)"],
+  ["card_size", "Kartengröße", "Kartengröße/-format, falls vom Standardformat abweichend"],
+  ["card_stock", "Kartenstärke", "Kartenstärke in Punkt (pt), falls bekannt"],
+  ["edition", "Edition", "Editionsbezeichnung, falls angegeben (z. B. \"1st Edition\")"],
+  ["special_features", "Besonderheiten", "Sonstige Besonderheiten, die auf der Karte vermerkt sind"],
+  ["product_type", "Produktart", "Produktart, falls von der Standard-Sammelkarte abweichend"],
+  ["insert_set", "Insert Set", "Name des Insert-/Themen-Subsets, falls die Karte einem solchen angehört"],
+  ["vintage", "Vintage", "Vintage-Einordnung, falls angegeben"],
+  ["reprint_status", "Original/Nachdruck", "\"Original\" oder \"Lizenzierter Nachdruck\", falls angegeben"],
+  ["custom_made", "Maßgefertigt", "Ob die Karte maßgefertigt ist, falls zutreffend (z. B. \"Ja\")"],
+  ["autograph_authentication", "Autogramm-Authentifizierung", "Authentifizierungsstelle des Autogramms (z. B. \"PSA/DNA\"), nur bei Autogramm-Karten relevant"],
+  ["signed_by", "Signiert von", "Name der signierenden Person, falls von der abgebildeten Person abweichend"],
+  ["autograph_type", "Autogrammart", "Art des Autogramms (z. B. \"Hard Signed\", \"Sticker Auto\")"],
+  ["autograph_auth_number", "Autogramm-Zertifikatsnr.", "Zertifizierungsnummer des Autogramms, falls vorhanden"],
+  ["tv_series", "TV-Serie", "TV-Serie, der die Karte entstammt (nur bei Non-Sport-Karten relevant)"],
+  ["movie", "Film", "Film, dem die Karte entstammt (nur bei Non-Sport-Karten relevant)"],
+  ["genre", "Genre", "Genre-Einordnung (nur bei Non-Sport-Karten relevant)"],
+  ["illustrator", "Zeichner", "Zeichner/Illustrator der Karte (nur bei Non-Sport-Karten relevant)"],
+  ["age_recommendation", "Altersempfehlung", "Altersempfehlung, falls angegeben (nur bei Non-Sport-Karten relevant)"],
 ];
 
 // Kleines "ⓘ"-Symbol neben einem Feldlabel, das die Erklaerung als native

@@ -3403,7 +3403,15 @@ def _sheets_tabs():
         "season_year", "card_type", "variant", "language", "position", "squad_number", "club_debut_season",
         "card_number", "serial_number", "print_run", "card_no", "recognition_status",
         "is_numbered", "is_rookie", "is_autograph", "shipped", "picked_up", "private_collection",
-        "tags", "created_at",
+        "tags",
+        # Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-
+        # Migration vom 2026-09-18) - muessen nicht zwangslaeufig befuellt sein.
+        "manufacturing_year", "origin_country", "material", "card_size", "card_stock",
+        "edition", "special_features", "product_type", "insert_set", "vintage",
+        "reprint_status", "custom_made", "autograph_authentication", "signed_by",
+        "autograph_type", "autograph_auth_number", "tv_series", "movie", "genre",
+        "illustrator", "age_recommendation",
+        "created_at",
     ]
     # Boolsche Felder (is_numbered/is_rookie/is_autograph) brauchen eine
     # eigene Ja/Nein-Darstellung statt der generischen str(...)-Umwandlung -

@@ -675,3 +675,32 @@ alter table ebay_listings add column if not exists best_offer_updated_at timesta
 -- Preisfaktor ist. Fuer Sport-Karten weiterhin nur optional/frei, kein
 -- Pflichtfeld.
 alter table cards add column if not exists language text default '';
+
+-- Migration (2026-09-18): Alle uebrigen optionalen eBay-Item-Specifics aus
+-- beiden Kategorie-Vorlagen (templates/ebay/eBay-category-listing-template_*.csv)
+-- als eigene Kartenfelder - auf Nutzerwunsch, muessen nicht zwangslaeufig
+-- befuellt werden. Generelle Felder gelten fuer beide Kartentypen, die
+-- Autogramm-Detailfelder sind nur bei Autogramm-Karten relevant (siehe
+-- is_autograph), die TV/Film/Genre/Zeichner/Altersempfehlung-Felder nur bei
+-- Non-Sport-Karten (siehe ebay_listing.build_aspects()).
+alter table cards add column if not exists manufacturing_year text default '';
+alter table cards add column if not exists origin_country text default '';
+alter table cards add column if not exists material text default '';
+alter table cards add column if not exists card_size text default '';
+alter table cards add column if not exists card_stock text default '';
+alter table cards add column if not exists edition text default '';
+alter table cards add column if not exists special_features text default '';
+alter table cards add column if not exists product_type text default '';
+alter table cards add column if not exists insert_set text default '';
+alter table cards add column if not exists vintage text default '';
+alter table cards add column if not exists reprint_status text default '';
+alter table cards add column if not exists custom_made text default '';
+alter table cards add column if not exists autograph_authentication text default '';
+alter table cards add column if not exists signed_by text default '';
+alter table cards add column if not exists autograph_type text default '';
+alter table cards add column if not exists autograph_auth_number text default '';
+alter table cards add column if not exists tv_series text default '';
+alter table cards add column if not exists movie text default '';
+alter table cards add column if not exists genre text default '';
+alter table cards add column if not exists illustrator text default '';
+alter table cards add column if not exists age_recommendation text default '';
