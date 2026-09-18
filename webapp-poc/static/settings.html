@@ -314,8 +314,11 @@ if ("serviceWorker" in navigator) {
 
   <section id="reminder-thresholds-section">
     <h2>Wiedervorlage-Schwellenwerte</h2>
-    <p>Steuert, ab wann die beiden automatisch erkannten Situationen im Dashboard unter „Was jetzt tun?"
-      (und in der täglichen Erinnerungs-E-Mail) erscheinen.</p>
+    <p>Steuert, ab wann die automatisch erkannten Situationen im Dashboard unter „Was jetzt tun?"
+      (und in der täglichen Erinnerungs-E-Mail) erscheinen. Der Preis-Alarm-Schwellenwert (siehe eBay-Übersicht)
+      gilt zusätzlich auch für die E-Mail: liegt der eigene Preis eines veröffentlichten Angebots um mindestens
+      diesen Prozentsatz über oder unter dem zuletzt ermittelten Marktdurchschnitt, taucht es ebenfalls in der
+      täglichen Erinnerungs-E-Mail auf – nicht mehr nur als Badge, die erst beim Öffnen der Seite auffällt.</p>
     <label>Eigenes eBay-Angebot: unverkauft seit mind. (Tage)
       <input type="number" id="stale-listing-min-days-input" min="1" step="1">
     </label>

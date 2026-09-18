@@ -101,18 +101,34 @@ if ("serviceWorker" in navigator) {
   .ranking-table th:nth-child(2), .ranking-table td:nth-child(2),
   .ranking-table th:nth-child(3), .ranking-table td:nth-child(3),
   .ranking-table th:nth-child(4), .ranking-table td:nth-child(4) { width: 20%; }
-  /* Team-/Set-Ranking haben eine fuenfte Spalte (Verkaufsgeschwindigkeit) -
-     eigene Breitenaufteilung statt der generischen 40/20/20/20-Regel oben. */
+  /* Team-/Set-/Sportart-/Liga-/Preisklassen-Ranking haben eine fuenfte
+     Spalte (Verkaufsgeschwindigkeit) - eigene Breitenaufteilung statt der
+     generischen 40/20/20/20-Regel oben. */
   #team-ranking-table th:nth-child(1), #team-ranking-table td:nth-child(1),
-  #set-ranking-table th:nth-child(1), #set-ranking-table td:nth-child(1) { width: 30%; }
+  #set-ranking-table th:nth-child(1), #set-ranking-table td:nth-child(1),
+  #category-ranking-table th:nth-child(1), #category-ranking-table td:nth-child(1),
+  #theme-ranking-table th:nth-child(1), #theme-ranking-table td:nth-child(1),
+  #price-bucket-ranking-table th:nth-child(1), #price-bucket-ranking-table td:nth-child(1) { width: 30%; }
   #team-ranking-table th:nth-child(2), #team-ranking-table td:nth-child(2),
   #team-ranking-table th:nth-child(3), #team-ranking-table td:nth-child(3),
   #team-ranking-table th:nth-child(4), #team-ranking-table td:nth-child(4),
   #set-ranking-table th:nth-child(2), #set-ranking-table td:nth-child(2),
   #set-ranking-table th:nth-child(3), #set-ranking-table td:nth-child(3),
-  #set-ranking-table th:nth-child(4), #set-ranking-table td:nth-child(4) { width: 15%; }
+  #set-ranking-table th:nth-child(4), #set-ranking-table td:nth-child(4),
+  #category-ranking-table th:nth-child(2), #category-ranking-table td:nth-child(2),
+  #category-ranking-table th:nth-child(3), #category-ranking-table td:nth-child(3),
+  #category-ranking-table th:nth-child(4), #category-ranking-table td:nth-child(4),
+  #theme-ranking-table th:nth-child(2), #theme-ranking-table td:nth-child(2),
+  #theme-ranking-table th:nth-child(3), #theme-ranking-table td:nth-child(3),
+  #theme-ranking-table th:nth-child(4), #theme-ranking-table td:nth-child(4),
+  #price-bucket-ranking-table th:nth-child(2), #price-bucket-ranking-table td:nth-child(2),
+  #price-bucket-ranking-table th:nth-child(3), #price-bucket-ranking-table td:nth-child(3),
+  #price-bucket-ranking-table th:nth-child(4), #price-bucket-ranking-table td:nth-child(4) { width: 15%; }
   #team-ranking-table th:nth-child(5), #team-ranking-table td:nth-child(5),
-  #set-ranking-table th:nth-child(5), #set-ranking-table td:nth-child(5) { width: 25%; }
+  #set-ranking-table th:nth-child(5), #set-ranking-table td:nth-child(5),
+  #category-ranking-table th:nth-child(5), #category-ranking-table td:nth-child(5),
+  #theme-ranking-table th:nth-child(5), #theme-ranking-table td:nth-child(5),
+  #price-bucket-ranking-table th:nth-child(5), #price-bucket-ranking-table td:nth-child(5) { width: 25%; }
   .profit-positive { color: #1e4620; }
   .profit-negative { color: #b00020; }
   #status-msg { font-style: italic; color: #555; }
@@ -233,6 +249,47 @@ if ("serviceWorker" in navigator) {
       </table>
   </div>
   <p id="set-ranking-empty"></p>
+
+  <h2>Sportart-Ranking (nach Gewinn)</h2>
+  <div class="table-scroll">
+    <table id="category-ranking-table" class="ranking-table" style="display: none;">
+        <thead><tr><th>Sportart</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th><th>Ø Tage bis Verkauf</th></tr></thead>
+        <tbody id="category-ranking-body"></tbody>
+      </table>
+  </div>
+  <p id="category-ranking-empty"></p>
+
+  <h2>Liga-Ranking (nach Gewinn)</h2>
+  <div class="table-scroll">
+    <table id="theme-ranking-table" class="ranking-table" style="display: none;">
+        <thead><tr><th>Liga / Thema</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th><th>Ø Tage bis Verkauf</th></tr></thead>
+        <tbody id="theme-ranking-body"></tbody>
+      </table>
+  </div>
+  <p id="theme-ranking-empty"></p>
+
+  <h2>Lagerreichweite nach Preisklasse</h2>
+  <p>Wie lange eine verkaufte Karte im Schnitt vom Kauf bis zum Verkauf braucht, aufgeschlüsselt nach
+    Verkaufspreis-Preisklasse – feste Klassen statt Gewinn-Sortierung, damit erkennbar bleibt, ob sich die
+    Verkaufsgeschwindigkeit mit steigendem Preis verändert.</p>
+  <div class="table-scroll">
+    <table id="price-bucket-ranking-table" class="ranking-table" style="display: none;">
+        <thead><tr><th>Preisklasse</th><th>Verkäufe</th><th>Umsatz</th><th>Gewinn</th><th>Ø Tage bis Verkauf</th></tr></thead>
+        <tbody id="price-bucket-ranking-body"></tbody>
+      </table>
+  </div>
+  <p id="price-bucket-ranking-empty"></p>
+
+  <h2>Trendprognose</h2>
+  <p>Einfache lineare Fortschreibung der letzten Monatswerte (keine Saisonalität, kein echtes Prognosemodell) – ein
+    grober Hinweis, ob Umsatz/Gewinn zuletzt eher gestiegen oder gefallen sind, keine verlässliche Vorhersage.</p>
+  <div class="table-scroll">
+    <table id="forecast-table" class="ranking-table" style="display: none;">
+        <thead><tr><th>Monat</th><th>Prognostizierter Umsatz</th><th>Prognostizierter Gewinn</th></tr></thead>
+        <tbody id="forecast-body"></tbody>
+      </table>
+  </div>
+  <p id="forecast-empty"></p>
 
   <h2>Portfolio-Wertverlauf</h2>
   <p>Geschätzter Wert des aktuellen Bestands (eBay-Angebotspreis, ersatzweise Einstandspreis) über die Zeit –
@@ -371,6 +428,10 @@ async function load() {
       "Noch keine verkauften Karten mit erfasstem Verkaufskanal.");
     renderRanking("team-ranking-table", "team-ranking-body", "team-ranking-empty", data.team_ranking);
     renderRanking("set-ranking-table", "set-ranking-body", "set-ranking-empty", data.set_ranking);
+    renderRanking("category-ranking-table", "category-ranking-body", "category-ranking-empty", data.category_ranking);
+    renderRanking("theme-ranking-table", "theme-ranking-body", "theme-ranking-empty", data.theme_ranking);
+    renderRanking("price-bucket-ranking-table", "price-bucket-ranking-body", "price-bucket-ranking-empty", data.price_bucket_ranking);
+    renderForecast(data.forecast);
     renderYearlyOverview(data.monthly);
     await loadPortfolioSnapshots();
   } catch (err) {
@@ -409,6 +470,39 @@ function renderRanking(tableId, bodyId, emptyId, entries) {
     const holdingTd = document.createElement("td");
     holdingTd.textContent = entry.avg_holding_days != null ? `${fmtNumber(entry.avg_holding_days, 1)} Tage` : "–";
     tr.appendChild(holdingTd);
+    body.appendChild(tr);
+  }
+}
+
+// Trendprognose (Klaerung mit dem Nutzer) - einfache lineare Fortschreibung
+// der letzten Monatswerte aus main.py's _linear_forecast(). Eigene, simple
+// Tabelle statt einer Erweiterung des bestehenden SVG-Balkendiagramms
+// (renderMonthlyChart()) - Prognosewerte in denselben Balken wie echte
+// Ist-Werte darzustellen wuerde beides leicht verwechselbar machen.
+function renderForecast(forecast) {
+  const table = document.getElementById("forecast-table");
+  const body = document.getElementById("forecast-body");
+  const empty = document.getElementById("forecast-empty");
+  body.innerHTML = "";
+  if (!forecast || !forecast.length) {
+    table.style.display = "none";
+    empty.textContent = "Noch nicht genug Monate mit Verkäufen für eine Prognose (mindestens zwei nötig).";
+    return;
+  }
+  table.style.display = "table";
+  empty.textContent = "";
+  for (const entry of forecast) {
+    const tr = document.createElement("tr");
+    const monthTd = document.createElement("td");
+    monthTd.textContent = formatMonth(entry.month);
+    tr.appendChild(monthTd);
+    const revenueTd = document.createElement("td");
+    revenueTd.textContent = fmtEuro(entry.projected_revenue);
+    tr.appendChild(revenueTd);
+    const profitTd = document.createElement("td");
+    profitTd.textContent = fmtEuro(entry.projected_profit);
+    profitTd.className = entry.projected_profit >= 0 ? "profit-positive" : "profit-negative";
+    tr.appendChild(profitTd);
     body.appendChild(tr);
   }
 }

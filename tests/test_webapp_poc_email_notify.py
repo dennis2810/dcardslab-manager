@@ -162,6 +162,26 @@ class FormatReminderDigestTests(unittest.TestCase):
         )
         self.assertIn("(ohne Titel)", body)
 
+    def test_includes_price_alerts_in_subject_and_body(self):
+        price_alerts = [{"title": "Messi Panini", "price": 12.0, "price_research_avg": 8.5, "diff_pct": 41.2}]
+        subject, body = email_notify.format_reminder_digest([], [], [], price_alerts)
+        self.assertEqual(subject, "1 fällige Wiedervorlage")
+        self.assertIn("Messi Panini", body)
+        self.assertIn("12.0", body)
+        self.assertIn("8.5", body)
+        self.assertIn("41.2", body)
+        self.assertIn("über", body)
+
+    def test_price_alert_below_market_average_says_unter(self):
+        price_alerts = [{"title": "X", "price": 5.0, "price_research_avg": 10.0, "diff_pct": -50.0}]
+        _, body = email_notify.format_reminder_digest([], [], [], price_alerts)
+        self.assertIn("unter", body)
+
+    def test_price_alerts_default_to_empty_when_omitted(self):
+        subject, body = email_notify.format_reminder_digest([], [], [])
+        self.assertEqual(subject, "0 fällige Wiedervorlagen")
+        self.assertNotIn("Preis-Alarm", body)
+
 
 if __name__ == "__main__":
     unittest.main()

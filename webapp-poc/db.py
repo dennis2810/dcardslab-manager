@@ -1820,7 +1820,7 @@ def statistics_rows():
     # zum Verkaufsbestand - siehe set_card_private_collection() - und
     # bleiben deshalb aus Statistiken/Dashboard-Kennzahlen aussen vor.
     cards = (
-        get_client().table("cards").select("id,title,card_no,team,set_name")
+        get_client().table("cards").select("id,title,card_no,team,set_name,category,theme")
         .eq("private_collection", False).execute().data
     )
     if not cards:
@@ -1880,6 +1880,11 @@ def statistics_rows():
             "card_no": card.get("card_no"),
             "team": card.get("team", ""),
             "set_name": card.get("set_name", ""),
+            # Fuer die Sportart-/Liga-Auswertung auf statistics.html (Klaerung
+            # mit dem Nutzer) - category ist die Sportart bzw. uebergeordnete
+            # Kategorie (z.B. Fussball, Marvel), theme das Thema/die Liga.
+            "category": card.get("category", ""),
+            "theme": card.get("theme", ""),
             "platform": purchase.get("platform", "") if purchase else "",
             "sku": (ebay_info.get(card["id"]) or {}).get("sku"),
             # Fuer den "Auf eBay ansehen"-Link in der Kaeufer-Historie

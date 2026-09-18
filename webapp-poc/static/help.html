@@ -350,14 +350,17 @@ if ("serviceWorker" in navigator) {
     nicht selbst verwalten kann). Einträge lassen sich per Checkbox mehrfach auswählen und auf einmal löschen.</p>
   <p>Im Abschnitt „Erinnerungen" lassen sich frei wählbare Wiedervorlagen mit Datum und Notiz anlegen (z. B. „Preis
     im März nochmal prüfen") – erledigte Erinnerungen werden per Klick auf „Erledigt" abgehakt, nicht mehr benötigte
-    können gelöscht werden. Zusätzlich zu selbst angelegten Erinnerungen erkennt das Tool automatisch zwei Situationen
+    können gelöscht werden. Zusätzlich zu selbst angelegten Erinnerungen erkennt das Tool automatisch drei Situationen
     und zeigt sie im Dashboard unter „Was jetzt tun?" an: ein eigenes eBay-Angebot, das seit mehr als 90 Tagen
     (Standardwert) unverkauft ist und seit mehr als 30 Tagen (Standardwert) nicht neu auf den Preis geprüft wurde,
-    sowie einen Wunschlisten-Eintrag, dessen Zielpreis seit mehr als 60 Tagen (Standardwert) nicht erreicht wurde.
-    Alle drei Tagesanzahlen lassen sich in den Einstellungen (Abschnitt „Wiedervorlage-Schwellenwerte") anpassen.
-    Ist in den Einstellungen (Abschnitt „E-Mail-Benachrichtigungen") die Option „Bei fälligen
-    Erinnerungen/Wiedervorlagen benachrichtigen" aktiviert, verschickt das Tool einmal täglich eine zusammenfassende
-    E-Mail mit allen fälligen Erinnerungen und den beiden automatisch erkannten Situationen.</p>
+    ein Wunschlisten-Eintrag, dessen Zielpreis seit mehr als 60 Tagen (Standardwert) nicht erreicht wurde, sowie ein
+    veröffentlichtes Angebot mit einem aktiven Preis-Alarm (eigener Preis weicht um mehr als die Preis-Alarm-Schwelle,
+    Standard 20&nbsp;%, vom Preisrecherche-Marktdurchschnitt ab). Die Tagesanzahlen/die Preis-Alarm-Schwelle lassen
+    sich in den Einstellungen (Abschnitte „Wiedervorlage-Schwellenwerte"/„Preis-Alarm") anpassen. Ist in den
+    Einstellungen (Abschnitt „E-Mail-Benachrichtigungen") die Option „Bei fälligen Erinnerungen/Wiedervorlagen
+    benachrichtigen" aktiviert, verschickt das Tool einmal täglich eine zusammenfassende E-Mail mit allen fälligen
+    Erinnerungen und den drei automatisch erkannten Situationen – der Preis-Alarm war bisher nur eine reine Anzeige
+    auf Kartendetail/eBay-Übersicht/Dashboard, die man erst beim Öffnen der jeweiligen Seite bemerkt hätte.</p>
   <p>Bei einem veröffentlichten Angebot lassen sich unten im eBay-Bereich die eBay-Preisvorschläge (Best Offer)
     verwalten: Kästchen „Preisvorschläge aktiv" setzen, optional eine Schwelle für automatisches Annehmen/Ablehnen
     eintragen und auf „Preisvorschläge aktualisieren" klicken – die Änderung wird sofort an eBay übertragen, ohne
@@ -765,11 +768,18 @@ if ("serviceWorker" in navigator) {
   <h2 id="statistiken">Statistiken</h2>
   <p>Die Übersichtsseite zeigt Kennzahlen (Umsatz, Gewinn, ROI, Ø Marge, Ø Liegedauer, Retouren, aktueller
     Inventarwert), ein Monats-Diagramm für Umsatz/Gewinn, eine Jahresübersicht sowie Plattform- (Einkauf),
-    Kanal- (Verkauf), Team- und Set / Serie-Ranking. Die Plattform-Auswertung zeigt, wo die Karten gekauft wurden; die
-    Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller Kanal) – beide mit
-    durchschnittlichem Gewinn/Marge. Team- und Set / Serie-Ranking zeigen zusätzlich die Spalte „Ø Tage bis Verkauf" – die
-    durchschnittliche Liegedauer (Kauf- bis Verkaufsdatum) der jeweiligen Gruppe, als grober Anhaltspunkt, welche
-    Teams/Sets sich erfahrungsgemäß schneller verkaufen. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
+    Kanal- (Verkauf), Team-, Set / Serie-, Sportart- und Liga-Ranking. Die Plattform-Auswertung zeigt, wo die Karten
+    gekauft wurden; die Kanal-Auswertung direkt daneben zeigt, worüber sie verkauft wurden (eBay oder manueller
+    Kanal) – beide mit durchschnittlichem Gewinn/Marge. Team-, Set / Serie-, Sportart- und Liga-Ranking zeigen
+    zusätzlich die Spalte „Ø Tage bis Verkauf" – die durchschnittliche Liegedauer (Kauf- bis Verkaufsdatum) der
+    jeweiligen Gruppe, als grober Anhaltspunkt, welche Teams/Sets/Sportarten/Ligen sich erfahrungsgemäß schneller
+    verkaufen (Sportart/Liga stammen aus den gleichnamigen Kartenfeldern „Kategorie"/„Thema"). Der Abschnitt
+    „Lagerreichweite nach Preisklasse" zeigt dieselbe Liegedauer-Kennzahl zusätzlich nach Verkaufspreis gestaffelt
+    (feste Klassen von unter 10&nbsp;€ bis über 100&nbsp;€, in dieser Reihenfolge statt nach Gewinn sortiert) – hilft
+    zu erkennen, ob sich teurere Karten schneller oder langsamer verkaufen als günstigere. Die „Trendprognose"
+    darunter schreibt die letzten Monatswerte linear fort (keine Saisonalität, kein echtes Prognosemodell) und zeigt
+    nur grob, ob Umsatz/Gewinn zuletzt eher gestiegen oder gefallen sind – erscheint erst ab mindestens zwei Monaten
+    mit Verkäufen. Die Kennzahlen-Kacheln sind anklickbar und führen zur jeweils passenden Seite
     (Käufe, Inventar, Karten, Alle Verkäufe); über den Button „⚙ Kacheln" lassen sich einzelne Kacheln aus-/einblenden
     und per Pfeiltasten in der gewünschten Reihenfolge anordnen – die Auswahl wird je Browser gemerkt. Der
     Jahresvergleich stellt die beiden jüngsten Jahre mit Verkäufen
