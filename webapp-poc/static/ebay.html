@@ -580,6 +580,19 @@ function effectiveViews(listing) {
   if (listing.ebay_listing_id in listingViews) return listingViews[listing.ebay_listing_id];
   return listing.last_known_views ?? "";
 }
+
+// Gleiches Prinzip wie effectiveViews() oben, jetzt auch fuer Impressionen/
+// Klickrate (main.py speichert beide inzwischen in last_known_impressions/
+// last_known_click_through_rate, Nutzerwunsch: sollen wie die Aufrufe einen
+// Seiten-Neuladen ueberleben statt nur fuer die aktuelle Sitzung sichtbar
+// zu sein).
+function effectiveTrafficExtra(listing) {
+  const extra = listingTrafficExtra[listing.ebay_listing_id];
+  return {
+    impressions: extra?.impressions ?? listing.last_known_impressions ?? null,
+    click_through_rate: extra?.click_through_rate ?? listing.last_known_click_through_rate ?? null,
+  };
+}
 // Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
 // nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
 // ueber alle Seiten hinweg). Gleiches Muster wie cards.html.
@@ -1189,11 +1202,8 @@ function render(listings) {
       // Seiten-Neuladen) - "-", wenn noch nie geladen.
       const views = effectiveViews(listing);
       viewsTd.textContent = views === "" ? "–" : views;
-      // Impressionen/Klickrate nur fuer diese Sitzung verfuegbar (siehe
-      // listingTrafficExtra oben) - anders als bei den Aufrufen gibt es
-      // dafuer keinen ueber einen Seiten-Neuladen hinweg gespeicherten Wert.
-      const extra = listingTrafficExtra[listing.ebay_listing_id];
-      if (extra && (extra.impressions != null || extra.click_through_rate != null)) {
+      const extra = effectiveTrafficExtra(listing);
+      if (extra.impressions != null || extra.click_through_rate != null) {
         const extraSpan = document.createElement("span");
         extraSpan.className = "views-extra";
         const parts = [];

@@ -704,3 +704,11 @@ alter table cards add column if not exists movie text default '';
 alter table cards add column if not exists genre text default '';
 alter table cards add column if not exists illustrator text default '';
 alter table cards add column if not exists age_recommendation text default '';
+
+-- Migration (2026-09-18): letzte bekannte Impressionen/Klickrate (analog zu
+-- last_known_views oben, siehe ebay_client.get_listing_traffic_extra(),
+-- main.py's ebay_listing_views()) - Nutzerwunsch: sollen wie die Aufrufe
+-- ueber einen Seiten-Neuladen hinweg sichtbar bleiben statt nur fuer die
+-- aktuelle Sitzung.
+alter table ebay_listings add column if not exists last_known_impressions int;
+alter table ebay_listings add column if not exists last_known_click_through_rate numeric;

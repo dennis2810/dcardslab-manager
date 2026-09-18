@@ -281,7 +281,10 @@ if ("serviceWorker" in navigator) {
   <h2 id="kartendetail">Kartendetail</h2>
   <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu den Bereichen der Seite (Fotos, Felder, Kauf,
     Zielpreis-Rechner, Inventar, eBay, Verkauf außerhalb eBay, Preisrecherche, Erinnerungen) – die Seite wurde
-    außerdem verbreitert, damit mehrspaltige Bereiche wie die eBay-Aspects besser Platz finden.</p>
+    außerdem verbreitert, und die Formulare (Kartenfelder, eBay-Angebot, Verkauf außerhalb eBay) ordnen ihre
+    Felder jetzt automatisch in so vielen Spalten an, wie auf den Bildschirm passen, statt fest zwei Spalten zu
+    erzwingen – nutzt die Breite besser aus und fällt auf schmalen Bildschirmen von selbst auf eine Spalte
+    zurück.</p>
   <p>Auf der Detailseite einer Karte lassen sich Fotos in 90°-Schritten drehen, komplett ersetzen (z. B. bei einem
     unscharfen Bild) oder über „Zuschneiden/Drehen" frei zuschneiden und in beliebigem Winkel (nicht nur 90°)
     gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
@@ -573,9 +576,9 @@ if ("serviceWorker" in navigator) {
     Karte aktualisiert werden, lädt der Button „💰 Preisvorschläge laden" sie für alle Angebote der aktuellen
     Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
     (gilt genauso für „👁 Aufrufe laden" unten). „👁 Aufrufe laden" zeigt in der Spalte „Aufrufe" neben der
-    Aufrufzahl (bleibt bis zum nächsten Klick sichtbar) zusätzlich, sofern von eBay geliefert, Impressionen und
-    Klickrate (CTR) als kleiner Zusatztext – letztere beide nur für die aktuelle Sitzung, nicht dauerhaft
-    gespeichert. Die Spalte „Aufrufe" ist wie die meisten anderen Spalten sortierbar (sortiert nach der jeweils
+    Aufrufzahl zusätzlich, sofern von eBay geliefert, Impressionen und Klickrate (CTR) als kleiner Zusatztext –
+    alle drei bleiben wie gewohnt bis zum nächsten Klick auf „Aufrufe laden" sichtbar, auch über einen
+    Seiten-Neuladen hinweg. Die Spalte „Aufrufe" ist wie die meisten anderen Spalten sortierbar (sortiert nach der jeweils
     aktuellsten bekannten Aufrufzahl). Genaue Bedeutung der drei Metriken (auch als Tooltip auf der
     Spaltenüberschrift):</p>
   <ul>
