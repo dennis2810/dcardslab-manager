@@ -354,6 +354,57 @@ class ListEbayListingViewsEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
 
 
+class EbayListingPromotedStatusEndpointTests(unittest.TestCase):
+    def test_returns_and_persists_promoted_status_per_listing_id(self):
+        listings = [_listing(id="listing-1", ebay_listing_id="111"), _listing(id="listing-2", ebay_listing_id="222")]
+        campaigns = [{"campaignId": "camp-1", "campaignStatus": "RUNNING"}, {"campaignId": "camp-2", "campaignStatus": "ENDED"}]
+        status_by_listing = {"111": {"campaign_id": "camp-1", "ad_status": "ACTIVE", "bid_percentage": 2.0}}
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_ad_campaigns", return_value=campaigns), \
+             patch("main.ebay_client.get_promoted_listing_status", return_value=status_by_listing) as mock_status, \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=111,222")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["promoted_status"], {"111": status_by_listing["111"], "222": None})
+        # Nur laufende Kampagnen werden fuer den Ads-Abruf herangezogen -
+        # eine beendete Kampagne kann kein Angebot mehr aktiv bewerben.
+        mock_status.assert_called_once_with("tok", ["camp-1"])
+        mock_update.assert_any_call(
+            "listing-1",
+            {"promoted_listing_campaign_id": "camp-1", "promoted_listing_status": "ACTIVE", "promoted_listing_bid_percentage": 2.0},
+        )
+        mock_update.assert_any_call(
+            "listing-2",
+            {"promoted_listing_campaign_id": "", "promoted_listing_status": "", "promoted_listing_bid_percentage": None},
+        )
+
+    def test_skips_persisting_for_a_listing_id_with_no_local_match(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_ad_campaigns", return_value=[]), \
+             patch("main.ebay_client.get_promoted_listing_status", return_value={}), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=999")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["promoted_status"], {})
+        mock_update.assert_not_called()
+
+    def test_returns_401_when_not_authorized(self):
+        with patch("main.ebay_client.get_access_token",
+                    side_effect=ebay_client.EbayNotAuthorizedError("nicht verbunden")):
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=111")
+        self.assertEqual(response.status_code, 401)
+
+    def test_returns_502_on_api_error(self):
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_ad_campaigns",
+                   side_effect=ebay_client.EbayApiError("insufficient_scope")):
+            response = client.get("/api/ebay/listings/promoted-status?listing_ids=111")
+        self.assertEqual(response.status_code, 502)
+
+
 class GetEbayListingEndpointTests(unittest.TestCase):
     def test_returns_404_when_not_found(self):
         with patch("main.db.get_ebay_listing", return_value=None):

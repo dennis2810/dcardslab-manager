@@ -672,8 +672,10 @@ EBAY_LISTING_WRITABLE_STATUS_FIELDS = {
     "last_auto_relisted_at", "listing_since", "last_known_views",
     "last_known_impressions", "last_known_click_through_rate",
     "best_offer_updated_at",
+    "promoted_listing_campaign_id", "promoted_listing_status",
+    "promoted_listing_bid_percentage",
 }
-EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity", "auto_relist_after_days"}
+EBAY_LISTING_NUMERIC_FIELDS = {"price", "quantity", "auto_relist_after_days", "promoted_listing_bid_percentage"}
 EBAY_LISTING_MONEY_FIELDS = {"price"}
 
 

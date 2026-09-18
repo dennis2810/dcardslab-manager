@@ -712,3 +712,14 @@ alter table cards add column if not exists age_recommendation text default '';
 -- aktuelle Sitzung.
 alter table ebay_listings add column if not exists last_known_impressions int;
 alter table ebay_listings add column if not exists last_known_click_through_rate numeric;
+
+-- Migration (2026-09-18): Promoted-Listings-Status (Stufe 1 der eBay
+-- Marketing API - Sichtbarkeit, siehe ebay_client.get_promoted_listing_status(),
+-- main.py's /api/ebay/listings/promoted-status) - ob und mit welchem
+-- Gebot-% ein Angebot aktuell in einer laufenden Promoted-Listings-Kampagne
+-- (General Strategy/CPS) beworben wird. promoted_listing_status leer =
+-- beim letzten Abruf in keiner laufenden Kampagne gefunden (nicht zwingend
+-- "nie geprueft", gleiche Konvention wie last_known_views oben).
+alter table ebay_listings add column if not exists promoted_listing_campaign_id text default '';
+alter table ebay_listings add column if not exists promoted_listing_status text default '';
+alter table ebay_listings add column if not exists promoted_listing_bid_percentage numeric;

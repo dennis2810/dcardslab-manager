@@ -361,6 +361,59 @@ def get_listing_traffic_extra(token, listing_ids, days=30):
     return result
 
 
+def get_ad_campaigns(token):
+    """Alle Promoted-Listings-Kampagnen des Verkaeufers (Marketing API, GET
+    /sell/marketing/v1/ad_campaign) - Ausgangspunkt fuer
+    get_promoted_listing_status() unten, da Ads dort kampagnen- statt
+    listing-zentriert abgefragt werden (siehe dessen Docstring). Braucht den
+    zusaetzlichen OAuth-Scope sell.marketing.readonly (siehe README.md,
+    gleiches Einrichtungs-Muster wie sell.analytics.readonly fuer
+    get_listing_views()). limit=100 statt eBays Default (20) - ein
+    Ein-Personen-Verkaeufer wie hier hat typischerweise nur eine Handvoll
+    Kampagnen, ein zweiter Seitenabruf lohnt den Zusatzaufwand nicht."""
+    response = _request("GET", token, "/sell/marketing/v1/ad_campaign", params={"limit": "100"})
+    return response.json().get("campaigns") or []
+
+
+def get_promoted_listing_status(token, campaign_ids):
+    """Promoted-Listings-Status (beworben ja/nein, mit welchem Gebot-%) je
+    eBay-Angebots-ID, ueber alle uebergebenen Kampagnen hinweg (Marketing
+    API, GET .../ad_campaign/{campaign_id}/ad - alle Ads EINER Kampagne
+    paginiert auflisten). Bewusst NICHT ueber getAdsByInventoryReference (das
+    braeuchte einen Aufruf pro SKU): stattdessen wird pro Kampagne einmal
+    komplett gelesen und danach lokal per listingId gegen
+    ebay_listings.ebay_listing_id gematcht - bei wenigen Kampagnen, aber
+    potenziell vielen Angeboten, deutlich sparsamer mit eBays 200-Aufrufe/
+    Stunde-Limit fuer Marketing-API-Endpunkte. Gibt {ebay_listing_id:
+    {"campaign_id": str, "ad_status": str, "bid_percentage": float|None}}
+    zurueck; ein Angebot ganz ohne Ad in irgendeiner der Kampagnen fehlt im
+    Ergebnis-Dict (== nicht beworben)."""
+    result = {}
+    limit = 200
+    for campaign_id in campaign_ids:
+        offset = 0
+        while True:
+            response = _request(
+                "GET", token, f"/sell/marketing/v1/ad_campaign/{campaign_id}/ad",
+                params={"limit": str(limit), "offset": str(offset)},
+            )
+            ads = response.json().get("ads") or []
+            for ad in ads:
+                listing_id = ad.get("listingId")
+                if not listing_id:
+                    continue
+                bid = ad.get("bidPercentage")
+                result[listing_id] = {
+                    "campaign_id": campaign_id,
+                    "ad_status": ad.get("adStatus") or "",
+                    "bid_percentage": float(bid) if bid not in (None, "") else None,
+                }
+            if len(ads) < limit:
+                break
+            offset += limit
+    return result
+
+
 def get_listing_policies(token, marketplace_id=MARKETPLACE_ID):
     """Looks up the seller's existing Business Policy IDs. Creates none -
     that stays the one-time manual/policies-bootstrap step against

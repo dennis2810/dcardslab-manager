@@ -282,6 +282,75 @@ class GetListingTrafficExtraTests(unittest.TestCase):
         mock_request.assert_not_called()
 
 
+class GetAdCampaignsTests(unittest.TestCase):
+    def test_returns_campaigns_list(self):
+        body = {"campaigns": [{"campaignId": "1", "campaignStatus": "RUNNING"}]}
+        with patch("ebay_client.httpx.request", return_value=_response(200, body)) as mock_request:
+            campaigns = ebay_client.get_ad_campaigns("tok")
+        self.assertEqual(campaigns, [{"campaignId": "1", "campaignStatus": "RUNNING"}])
+        self.assertIn("/sell/marketing/v1/ad_campaign", mock_request.call_args.args[1])
+
+    def test_returns_empty_list_when_no_campaigns_key(self):
+        with patch("ebay_client.httpx.request", return_value=_response(200, {})):
+            campaigns = ebay_client.get_ad_campaigns("tok")
+        self.assertEqual(campaigns, [])
+
+
+class GetPromotedListingStatusTests(unittest.TestCase):
+    def _ads_response(self, ads):
+        return _response(200, {"ads": ads})
+
+    def test_matches_ads_to_listing_ids_across_campaigns(self):
+        with patch(
+            "ebay_client.httpx.request",
+            side_effect=[
+                self._ads_response([
+                    {"listingId": "111", "adStatus": "ACTIVE", "bidPercentage": "2.0"},
+                ]),
+                self._ads_response([
+                    {"listingId": "222", "adStatus": "PAUSED", "bidPercentage": "5.5"},
+                ]),
+            ],
+        ) as mock_request:
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1", "camp-2"])
+        self.assertEqual(result, {
+            "111": {"campaign_id": "camp-1", "ad_status": "ACTIVE", "bid_percentage": 2.0},
+            "222": {"campaign_id": "camp-2", "ad_status": "PAUSED", "bid_percentage": 5.5},
+        })
+        self.assertEqual(mock_request.call_count, 2)
+
+    def test_listing_without_any_ad_is_absent_from_result(self):
+        with patch("ebay_client.httpx.request", return_value=self._ads_response([])):
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertEqual(result, {})
+
+    def test_paginates_within_a_campaign_until_a_short_page(self):
+        full_page = [{"listingId": str(i), "adStatus": "ACTIVE", "bidPercentage": "1"} for i in range(200)]
+        with patch(
+            "ebay_client.httpx.request",
+            side_effect=[self._ads_response(full_page), self._ads_response([])],
+        ) as mock_request:
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertEqual(len(result), 200)
+        self.assertEqual(mock_request.call_count, 2)
+        offsets = [call.kwargs["params"]["offset"] for call in mock_request.call_args_list]
+        self.assertEqual(offsets, ["0", "200"])
+
+    def test_ad_without_bid_percentage_gets_none(self):
+        with patch(
+            "ebay_client.httpx.request",
+            return_value=self._ads_response([{"listingId": "111", "adStatus": "ACTIVE"}]),
+        ):
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertIsNone(result["111"]["bid_percentage"])
+
+    def test_returns_empty_dict_for_no_campaigns(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            result = ebay_client.get_promoted_listing_status("tok", [])
+        self.assertEqual(result, {})
+        mock_request.assert_not_called()
+
+
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):
         return _response(200, {list_field: [{id_field: policy_id}]})
