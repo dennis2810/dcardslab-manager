@@ -2116,7 +2116,10 @@ def _expand_ebay_listings(listings):
     for listing in listings:
         listing = dict(listing)
         card = cards_by_id.get(listing["card_id"], {})
-        card_summary = {"id": listing["card_id"], "title": card.get("title", "")}
+        # category zusaetzlich zu title/front_image_url - fuer den
+        # Kategorie-Filter auf ebay.html (analog zum Kategorie-Filter auf
+        # cards.html), rein lesend, keine neue eBay-API-Anbindung noetig.
+        card_summary = {"id": listing["card_id"], "title": card.get("title", ""), "category": card.get("category", "")}
         front_path = card.get("front_image_path")
         if front_path in front_urls:
             card_summary["front_image_url"] = front_urls[front_path]

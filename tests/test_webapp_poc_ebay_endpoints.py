@@ -159,6 +159,19 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
         mock_signed_urls.assert_called_once()
         self.assertEqual(response.json()["listings"][0]["card"]["front_image_url"], "https://signed/b1/1_front.jpg")
 
+    def test_attaches_card_category(self):
+        # Fuer den Kategorie-Filter auf ebay.html (analog zu cards.html).
+        listing = _listing(card_id="card-1")
+        card = _card(id="card-1", category="Pokémon")
+        with patch("main.db.list_ebay_listings", return_value=[listing]), \
+             patch("main.db.get_cards_by_ids", return_value=[card]), \
+             patch("main.db.manual_sale_info_by_card_id", return_value={}), \
+             patch("main.db.price_research_by_card_ids", return_value={}), \
+             patch("main.storage.signed_urls", return_value={}):
+            response = client.get("/api/ebay/listings")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["listings"][0]["card"]["category"], "Pokémon")
+
     def test_attaches_sale_info_for_sold_listings(self):
         sold_listing = _listing(status="Verkauft")
         with patch("main.db.list_ebay_listings", return_value=[sold_listing]), \

@@ -246,6 +246,7 @@ if ("serviceWorker" in navigator) {
 
   <nav class="page-toc no-print" aria-label="Bereiche auf dieser Seite">
     <a href="#filter-section">Filter</a>
+    <a href="#filter-presets-section">Gespeicherte Ansichten</a>
     <a href="#actions-section">Aktionen</a>
     <a href="#import-section">Von eBay importieren</a>
     <a href="#listing-list-section">Angebotsliste</a>
@@ -267,8 +268,29 @@ if ("serviceWorker" in navigator) {
       <option value="sport">Nur Sport</option>
       <option value="non_sport">Nur Non-Sport</option>
     </select>
+    <select id="category-filter">
+      <option value="">Alle Kategorien</option>
+    </select>
+    <select id="price-check-filter">
+      <option value="">Alle Preis-Checks</option>
+      <option value="ok">✅ Preis ok</option>
+      <option value="high">🔺 Zu teuer</option>
+      <option value="low">🔻 Zu günstig</option>
+      <option value="none">Keine Preisrecherche</option>
+    </select>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
+
+  <div id="filter-presets-section" class="controls no-print filter-presets">
+    <select id="preset-select">
+      <option value="">Gespeicherte Ansicht wählen…</option>
+    </select>
+    <button type="button" id="apply-preset-btn">Anwenden</button>
+    <button type="button" id="delete-preset-btn">Löschen</button>
+    <input type="text" id="preset-name-input" placeholder="Name für neue Ansicht" maxlength="40">
+    <button type="button" id="save-preset-btn">Aktuelle Filter/Sortierung speichern</button>
+  </div>
+
   <div id="actions-section" class="controls no-print">
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
@@ -343,7 +365,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="sale_date" data-col="sale_date">Verkauft am <span class="sort-arrow"></span></th>
             <th data-key="sale_price" data-col="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="published_at" data-col="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
-            <th data-col="views" title="Aufrufe: wie oft die Angebotsseite aufgerufen wurde. Impressionen: wie oft das Angebot in Suchergebnissen/Shop angezeigt wurde. Klickrate (CTR): Aufrufe geteilt durch Impressionen - keine absolute Klickzahl, die liefert eBay nicht. Alle drei aus dem letzten &quot;Aufrufe laden&quot;.">Aufrufe</th>
+            <th data-key="views" data-col="views" title="Aufrufe: wie oft die Angebotsseite aufgerufen wurde. Impressionen: wie oft das Angebot in Suchergebnissen/Shop angezeigt wurde. Klickrate (CTR): Aufrufe geteilt durch Impressionen - keine absolute Klickzahl, die liefert eBay nicht. Alle drei aus dem letzten &quot;Aufrufe laden&quot;.">Aufrufe <span class="sort-arrow"></span></th>
             <th data-col="ebay_link">eBay</th>
             <th data-key="condition" data-col="condition">Zustand <span class="sort-arrow"></span></th>
             <th data-key="auto_accept_price" data-col="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
@@ -495,6 +517,8 @@ document.getElementById("shortcuts-btn").addEventListener("click", () => {
 });
 const statusSelect = document.getElementById("status");
 const cardTypeFilterSelect = document.getElementById("card-type-filter");
+const categoryFilterSelect = document.getElementById("category-filter");
+const priceCheckFilterSelect = document.getElementById("price-check-filter");
 const priceMinInput = document.getElementById("price-min");
 const priceMaxInput = document.getElementById("price-max");
 const statusMsg = document.getElementById("status-msg");
@@ -546,6 +570,16 @@ let listingViews = {};
 // fuer die aktuelle Sitzung, per Klick auf "Aufrufe laden" mitgeladen,
 // nicht persistiert - siehe main.py's /api/ebay/listings/views).
 let listingTrafficExtra = {};
+
+// Aufrufe sind keine feste Eigenschaft auf listing (anders als z.B. price) -
+// frisch per "Aufrufe laden" geladene Werte (listingViews) haben Vorrang vor
+// dem zuletzt gespeicherten Wert (listing.last_known_views), gleiche
+// Prioritaet wie beim Rendern der Zelle (siehe renderListingRow()) - fuer
+// Sortierung (sortedListings()) und Anzeige gemeinsam genutzt.
+function effectiveViews(listing) {
+  if (listing.ebay_listing_id in listingViews) return listingViews[listing.ebay_listing_id];
+  return listing.last_known_views ?? "";
+}
 // Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
 // nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
 // ueber alle Seiten hinweg). Gleiches Muster wie cards.html.
@@ -597,10 +631,40 @@ function ebayListingUrl(listing) {
   return `https://www.${host}/itm/${encodeURIComponent(listing.ebay_listing_id)}`;
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// Gleiches Prinzip wie cards.html's populateCategoryFilter() - Optionen
+// kommen aus den aktuell geladenen Angeboten (via listing.card.category,
+// siehe main.py's _expand_ebay_listings()), keine eigene Kategorien-Tabelle.
+function populateCategoryFilter() {
+  const previous = categoryFilterSelect.value;
+  const categories = new Set();
+  for (const listing of currentListings) {
+    if (listing.card && listing.card.category) categories.add(listing.card.category);
+  }
+  const sorted = [...categories].sort((a, b) => a.localeCompare(b, "de"));
+  categoryFilterSelect.innerHTML = '<option value="">Alle Kategorien</option>' +
+    sorted.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (sorted.includes(previous)) categoryFilterSelect.value = previous;
+}
+
 function filteredListings() {
   let list = currentListings;
   if (cardTypeFilterSelect.value) {
     list = list.filter((l) => l.listing_type === cardTypeFilterSelect.value);
+  }
+  if (categoryFilterSelect.value) {
+    list = list.filter((l) => (l.card && l.card.category) === categoryFilterSelect.value);
+  }
+  if (priceCheckFilterSelect.value) {
+    list = list.filter((l) => {
+      const flag = priceResearchFlag(l);
+      return priceCheckFilterSelect.value === "none" ? !flag : flag && flag.kind === priceCheckFilterSelect.value;
+    });
   }
   const min = parseFloat(priceMinInput.value);
   const max = parseFloat(priceMaxInput.value);
@@ -613,8 +677,8 @@ function sortedListings() {
   const source = filteredListings();
   if (!sortKey) return source;
   return [...source].sort((a, b) => {
-    const av = a[sortKey] ?? "";
-    const bv = b[sortKey] ?? "";
+    const av = sortKey === "views" ? effectiveViews(a) : a[sortKey] ?? "";
+    const bv = sortKey === "views" ? effectiveViews(b) : b[sortKey] ?? "";
     if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
     return sortAsc
       ? String(av).localeCompare(String(bv), "de")
@@ -738,6 +802,7 @@ async function loadListings() {
     currentPage = 0;
     selectedIds.clear();
     updateBulkBar();
+    populateCategoryFilter();
     render(sortedListings());
   } catch (err) {
     statusMsg.textContent = "Fehler: " + err;
@@ -1118,17 +1183,12 @@ function render(listings) {
     viewsTd.dataset.col = "views";
     if (listing.ebay_listing_id) {
       viewsTd.dataset.listingId = listing.ebay_listing_id;
-      // listingViews (frisch per "Aufrufe laden" in dieser Sitzung geladen)
-      // hat Vorrang vor last_known_views (von main.py gespeicherter Wert
-      // vom letzten Abruf, ueberlebt einen Seiten-Neuladen) - beides "-",
-      // wenn noch nie geladen.
-      if (listing.ebay_listing_id in listingViews) {
-        viewsTd.textContent = listingViews[listing.ebay_listing_id];
-      } else if (listing.last_known_views !== null && listing.last_known_views !== undefined) {
-        viewsTd.textContent = listing.last_known_views;
-      } else {
-        viewsTd.textContent = "–";
-      }
+      // effectiveViews() (siehe oben): listingViews (frisch per "Aufrufe
+      // laden" in dieser Sitzung geladen) hat Vorrang vor last_known_views
+      // (von main.py gespeicherter Wert vom letzten Abruf, ueberlebt einen
+      // Seiten-Neuladen) - "-", wenn noch nie geladen.
+      const views = effectiveViews(listing);
+      viewsTd.textContent = views === "" ? "–" : views;
       // Impressionen/Klickrate nur fuer diese Sitzung verfuegbar (siehe
       // listingTrafficExtra oben) - anders als bei den Aufrufen gibt es
       // dafuer keinen ueber einen Seiten-Neuladen hinweg gespeicherten Wert.
@@ -1986,23 +2046,113 @@ qInput.addEventListener("input", () => {
   qInput._debounce = setTimeout(loadListings, 300);
 });
 statusSelect.addEventListener("change", loadListings);
-cardTypeFilterSelect.addEventListener("change", () => {
-  currentPage = 0;
-  document.getElementById("views-status").textContent = "";
-  document.getElementById("best-offer-sync-status").textContent = "";
-  document.getElementById("sync-status").textContent = "";
-  render(sortedListings());
-});
-
-function onPriceRangeFilterChange() {
+function onClientFilterChange() {
   currentPage = 0;
   document.getElementById("views-status").textContent = "";
   document.getElementById("best-offer-sync-status").textContent = "";
   document.getElementById("sync-status").textContent = "";
   render(sortedListings());
 }
-priceMinInput.addEventListener("input", onPriceRangeFilterChange);
-priceMaxInput.addEventListener("input", onPriceRangeFilterChange);
+cardTypeFilterSelect.addEventListener("change", onClientFilterChange);
+categoryFilterSelect.addEventListener("change", onClientFilterChange);
+priceCheckFilterSelect.addEventListener("change", onClientFilterChange);
+priceMinInput.addEventListener("input", onClientFilterChange);
+priceMaxInput.addEventListener("input", onClientFilterChange);
+
+// Gespeicherte Filter-Ansichten/Presets - gleiches Prinzip wie cards.html's
+// Filter-Presets (eigener localStorage-Key, da unabhaengig von dort
+// gespeicherten Ansichten). loadListings() (statt nur render()) beim
+// Anwenden, da q/status server-seitige Filter sind (siehe loadListings()
+// oben) - card-type/category/price-check/price-min/-max sind dagegen rein
+// client-seitig und wirken schon vor dem Response ueber die gesetzten
+// Select-/Input-Werte.
+const FILTER_PRESETS_STORAGE_KEY = "ebay_filter_presets";
+
+function loadFilterPresets() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FILTER_PRESETS_STORAGE_KEY) || "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch (err) {
+    return [];
+  }
+}
+function saveFilterPresets(presets) {
+  try {
+    localStorage.setItem(FILTER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch (err) {}
+}
+function currentFilterState() {
+  return {
+    q: qInput.value, status: statusSelect.value, cardTypeFilter: cardTypeFilterSelect.value,
+    categoryFilter: categoryFilterSelect.value, priceCheckFilter: priceCheckFilterSelect.value,
+    priceMin: priceMinInput.value, priceMax: priceMaxInput.value, sortKey, sortAsc,
+  };
+}
+function applyFilterState(state) {
+  qInput.value = state.q || "";
+  statusSelect.value = state.status || "";
+  cardTypeFilterSelect.value = state.cardTypeFilter || "";
+  categoryFilterSelect.value = state.categoryFilter || "";
+  priceCheckFilterSelect.value = state.priceCheckFilter || "";
+  priceMinInput.value = state.priceMin || "";
+  priceMaxInput.value = state.priceMax || "";
+  sortKey = state.sortKey || sortKey;
+  sortAsc = state.sortAsc !== false;
+  setSortIndicator(sortKey);
+  loadListings();
+}
+
+function renderPresetSelect() {
+  const select = document.getElementById("preset-select");
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">Gespeicherte Ansicht wählen…</option>';
+  for (const preset of loadFilterPresets()) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    select.appendChild(option);
+  }
+  select.value = currentValue;
+}
+renderPresetSelect();
+
+document.getElementById("save-preset-btn").addEventListener("click", () => {
+  const nameInput = document.getElementById("preset-name-input");
+  const name = nameInput.value.trim();
+  if (!name) {
+    showToast("Bitte einen Namen für die Ansicht eingeben.", true);
+    return;
+  }
+  const presets = loadFilterPresets();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  presets.push({ id, name, state: currentFilterState() });
+  saveFilterPresets(presets);
+  nameInput.value = "";
+  renderPresetSelect();
+  document.getElementById("preset-select").value = id;
+  showToast(`Ansicht „${name}" gespeichert.`);
+});
+
+document.getElementById("apply-preset-btn").addEventListener("click", () => {
+  const select = document.getElementById("preset-select");
+  if (!select.value) return;
+  const preset = loadFilterPresets().find((p) => p.id === select.value);
+  if (!preset) return;
+  applyFilterState(preset.state);
+  showToast(`Ansicht „${preset.name}" angewendet.`);
+});
+
+document.getElementById("delete-preset-btn").addEventListener("click", () => {
+  const select = document.getElementById("preset-select");
+  if (!select.value) return;
+  const presets = loadFilterPresets();
+  const preset = presets.find((p) => p.id === select.value);
+  if (!preset) return;
+  if (!confirm(`Ansicht „${preset.name}" wirklich löschen?`)) return;
+  saveFilterPresets(presets.filter((p) => p.id !== select.value));
+  renderPresetSelect();
+  showToast("Ansicht gelöscht.");
+});
 
 loadOauthStatus();
 loadListings();
