@@ -6,6 +6,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 for _name in ("tkinter", "tkinter.filedialog", "tkinter.messagebox", "tkinter.ttk"):
     if _name not in sys.modules:
@@ -37,6 +38,19 @@ class NoCacheForHtmlMiddlewareTests(unittest.TestCase):
         response = client.get("/manifest.json")
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(response.headers.get("cache-control"), "no-cache")
+
+    def test_sets_no_store_for_api_responses(self):
+        # Bugreport: frisch gespeicherter Werbestatus war nach einem reinen
+        # Seiten-Neuladen wieder weg, obwohl die DB den neuen Wert laut
+        # Server-Log bestaetigt hatte - ein zwischengeschalteter Cache (z.B.
+        # ein Reverse-Proxy vor einem NAS-Docker-Setup, siehe main.py) fuer
+        # GET /api/... ohne eigenes Cache-Control war der einzige noch nicht
+        # ausgeschlossene Erklaerungsansatz. "no-store" schliesst das jetzt
+        # explizit aus, egal ob Browser- oder Proxy-Cache.
+        with patch("main.db.get_app_status", return_value={}):
+            response = client.get("/api/app-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
 
 
 if __name__ == "__main__":

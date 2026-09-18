@@ -4014,10 +4014,27 @@ async def _no_cache_for_html(request: Request, call_next):
     # bei jedem Laden - StaticFiles' ETag/Last-Modified-Unterstuetzung
     # liefert dann weiterhin ein schnelles 304, wenn sich nichts geaendert
     # hat, aber nie mehr eine blind gecachte alte Version ohne Nachfrage.
+    #
+    # /api/*-Antworten (JSONResponse) bekommen ganz ohne diese Middleware gar
+    # keinen Cache-Control-Header - normalerweise cachen Browser eine GET-
+    # Antwort ohne jegliche Validatoren (kein ETag/Last-Modified) nicht
+    # heuristisch, ABER bei einigen Reverse-Proxy-/NAS-Docker-Setups (siehe
+    # docker-compose.webapp-poc.yml, "UGOS-Docker-App") kann ein
+    # vorgeschalteter Proxy GET-Antworten pauschal zwischenspeichern, wenn
+    # der Ursprungsserver KEIN explizites Cache-Control setzt (Bugreport:
+    # frisch gespeicherter Werbestatus/Aufrufe waren nach einem reinen
+    # Seiten-Neuladen wieder weg, obwohl die DB laut Server-Log den neuen
+    # Wert bestaetigt hatte - ein zwischengeschalteter Cache fuer GET
+    # /api/ebay/listings war der einzige noch nicht ausgeschlossene
+    # Erklaerungsansatz). "no-store" statt "no-cache", da es hier anders als
+    # bei StaticFiles keine ETag-basierte Revalidierung gibt, die sich
+    # lohnen wuerde.
     response = await call_next(request)
     path = request.url.path
     if path == "/" or path.endswith(".html"):
         response.headers["Cache-Control"] = "no-cache"
+    elif path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 

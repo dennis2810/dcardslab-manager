@@ -61,6 +61,10 @@ if ("serviceWorker" in navigator) {
   .status-effort { color: #375a7f; border: 1px solid #6b8cae; }
   .item { border: 1px solid rgba(127, 127, 127, 0.25); border-radius: 8px; padding: 0.9rem 1.1rem; margin: 1rem 0; }
   .item h3 { margin: 0 0 0.4rem; font-size: 1rem; display: flex; align-items: center; flex-wrap: wrap; }
+  .item[hidden] { display: none; }
+  .backlog-filter { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; font-size: 0.9rem; }
+  .backlog-filter select { padding: 0.3rem 0.5rem; font-size: 0.9rem; }
+  .backlog-section-empty { color: #777; font-size: 0.9rem; font-style: italic; }
 </style>
 </head>
 <body>
@@ -95,10 +99,44 @@ if ("serviceWorker" in navigator) {
     </form>
   </nav>
   <p class="back-link"><a href="settings.html">&larr; Zurück zu den Einstellungen</a></p>
-  <p class="note">Angedachte, aber noch nicht umgesetzte Features – zum Nachverfolgen, nicht als Versprechen auf
-    einen Termin. Wird von Hand gepflegt, wenn neue Ideen entstehen oder ein Punkt umgesetzt wird.</p>
+  <p class="note">Angedachte, aber noch nicht umgesetzte Features sowie bekannte, noch offene Fehler – zum
+    Nachverfolgen, nicht als Versprechen auf einen Termin. Wird von Hand gepflegt, wenn neue Ideen entstehen oder ein
+    Punkt umgesetzt wird.</p>
 
-  <div class="item">
+  <div class="backlog-filter">
+    <label for="effort-filter">Aufwand</label>
+    <select id="effort-filter">
+      <option value="">Alle</option>
+      <option value="klein">klein</option>
+      <option value="mittel">mittel</option>
+      <option value="groß">groß</option>
+    </select>
+    <span id="effort-filter-count" class="note"></span>
+  </div>
+
+  <h2 id="bugfixes-section">Bugfixes</h2>
+  <div class="item" data-effort="mittel">
+    <h3>Automatische Kartenerkennung beim Scan ungenau, v. a. bei der Rückseite
+      <span class="status-tag status-open">offen – braucht Beispielscans</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Der automatische Zuschnitt der 9 Karten pro Scanbogen (<code>scanner/scanner_v0_8_dynamic.py</code>, für ein
+      Brother MFC-L2710DN bei 600&nbsp;dpi kalibriert) erkennt die einzelnen Karten anhand von Farbsättigung/
+      Kontrast-Kanten zwischen den Karten und dem Scanbett – bei der Vorderseite (meist farbig/kontrastreich)
+      funktioniert das in der Regel zuverlässig, bei eher einfarbig-weißen Kartenrückseiten (wenig Kontrast zum
+      Untergrund) deutlich fehleranfälliger. Ein Fallback über die tatsächlichen Lücken zwischen den 9 Karten
+      (<code>_grid_cell_bounds()</code>, per Canny-Kantenerkennung) existiert bereits genau für diesen Fall, liefert
+      laut Rückmeldung aber weiterhin nicht durchgehend gute Ergebnisse.</p>
+    <p>Workaround bereits vorhanden: auf der Kartenseite lässt sich jedes Foto über „Zuschneiden/Drehen" frei
+      nachbearbeiten (freier Winkel, nicht nur 90°-Schritte – siehe Hilfe, Abschnitt „Karte erfassen"). Das behebt
+      einzelne schlechte Zuschnitte im Nachhinein, aber nicht die Ursache beim Scan selbst.</p>
+    <p>Klärungsbedarf/nächster Schritt: ein paar konkrete Beispielscans (vor allem misslungene Rückseiten,
+      möglichst das Ausgangsbild vor dem Zuschnitt) wären nötig, um die bestehende Kontrast-/Kanten-Erkennung
+      gezielt nachzujustieren – ohne Beispielbilder lässt sich das kaum blind verbessern, ohne an anderer Stelle
+      neue Fehlerkennungen zu riskieren.</p>
+  </div>
+
+  <h2 id="features-section">Features</h2>
+  <div class="item" data-effort="mittel">
     <h3>„Gespeicherte Ansichten"/Kategorie-Filter auch auf Käufe, Inventar, Wunschliste, Private Sammlung <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Karten-Übersicht und eBay-Übersicht haben inzwischen beide ein „Gespeicherte Ansichten"-Feature (Filter/
@@ -111,7 +149,7 @@ if ("serviceWorker" in navigator) {
       angesichts von vier Seiten in Summe aber „mittel" statt „klein".</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Build mit Installationsassistent <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Wunsch des Nutzers: ein „Build" des Tools mit Installationsassistent. Aktuell läuft die Ersteinrichtung
@@ -134,7 +172,7 @@ if ("serviceWorker" in navigator) {
       gemeint ist bzw. wie viel Automatisierung gewünscht ist (reines Hilfsskript vs. geführte UI im Tool selbst).</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>UI-Anpassung mit Canva <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Ganz am Anfang des Projekts angedacht: das Look &amp; Feel (Farben, Icons, Layout, evtl. eigenes Branding
@@ -150,7 +188,7 @@ if ("serviceWorker" in navigator) {
     </ul>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Mehrere Benutzerkonten <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Aktuell schützt ein einziges gemeinsames Passwort (<code>APP_PASSWORD</code>) das ganze Tool ohne
@@ -160,7 +198,7 @@ if ("serviceWorker" in navigator) {
       sind, oder ob das gemeinsame Passwort weiterhin genügt.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Direkte Buchhaltungs-API-Anbindung (z. B. Lexoffice) <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Über den bestehenden DATEV/Lexoffice-CSV-Export hinaus eine direkte API-Anbindung, die Verkäufe/Ausgaben
@@ -169,7 +207,7 @@ if ("serviceWorker" in navigator) {
       nötig, wie Dubletten bei mehrfacher Übertragung vermieden werden.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="mittel">
     <h3>Set-Vervollständigung <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Anzeige, wie viele Karten eines Sets bereits vorhanden sind bzw. fehlen, um es zu vervollständigen.
@@ -178,7 +216,7 @@ if ("serviceWorker" in navigator) {
       importiert werden.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Cardmarket-API-Anbindung <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Analog zur bestehenden eBay-Integration (Angebote anlegen/synchronisieren, Preisrecherche) eine eigene
@@ -187,7 +225,7 @@ if ("serviceWorker" in navigator) {
       (nur Preisrecherche oder auch Angebote verwalten).</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="mittel">
     <h3>Automatische Preisverfall-Strategie <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Über den bestehenden Preis-Alarm mit manuellem Anpassungsvorschlag hinaus eine automatische, zeitgesteuerte
@@ -196,7 +234,7 @@ if ("serviceWorker" in navigator) {
       Bestätigung oder weiterhin nur als Vorschlag.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Textbausteine/Auto-Antworten für eBay-Nachrichten <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Über die bestehenden Textbausteine für Angebotsbeschreibungen hinaus vorformulierte bzw. automatische
@@ -205,7 +243,7 @@ if ("serviceWorker" in navigator) {
       wirklich automatisches Antworten, welche eBay-API das überhaupt hergibt.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="mittel">
     <h3>Versicherungswert-Report <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Ein druckbarer/exportierbarer Report des geschätzten Gesamtwerts der Sammlung (analog zum bestehenden
@@ -214,7 +252,7 @@ if ("serviceWorker" in navigator) {
       mit einbezogen werden soll.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Konsignation/Kommissionsverkauf <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Karten für Dritte gegen Provision verkaufen, statt nur eigene Karten. Beträfe Kaufpreis-/Gewinnlogik an
@@ -223,7 +261,7 @@ if ("serviceWorker" in navigator) {
       soll, wie die Provision berechnet wird, ob Auszahlungen an die Einlieferer mit erfasst werden sollen.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="klein">
     <h3>Wochendigest <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: klein</span></h3>
     <p>Zusätzlich zur bestehenden täglichen E-Mail bei fälligen Erinnerungen/Wiedervorlagen eine wöchentliche
@@ -231,7 +269,7 @@ if ("serviceWorker" in navigator) {
       Uhrzeit, welche Kennzahlen genau hinein sollen.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>Lot-Verkauf auch bei eBay einstellen <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Der bestehende Lot-/Bundle-Verkauf (Massenaktion „📦 Als Lot verkaufen") legt aktuell bewusst nur
@@ -243,7 +281,7 @@ if ("serviceWorker" in navigator) {
       erscheinen, oder weiterhin mehrere Einzel-Angebote, nur mit einem gemeinsamen Rabatt-/Bundle-Hinweis?</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="mittel">
     <h3>Kamera-Barcode-Scan im Kassenmodus <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Das Suchfeld im Kassenmodus (<code>pos.html</code>) nimmt bereits Eingaben von externen USB-/Bluetooth-
@@ -261,7 +299,7 @@ if ("serviceWorker" in navigator) {
       Aufwand wegen einer schwereren Bibliothek und mehr Testaufwand über Geräte/Lichtverhältnisse hinweg)?</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="mittel">
     <h3>Spekulationsfrist-Warnung für die private Sammlung <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
     <p>Beim Verkauf einer Karte aus der privaten Sammlung (siehe <code>private-collection.html</code>) prüfen, ob
@@ -276,7 +314,7 @@ if ("serviceWorker" in navigator) {
       steuerliche Beratung im Einzelfall.</p>
   </div>
 
-  <div class="item">
+  <div class="item" data-effort="groß">
     <h3>eBay Marketing API, Stufe 2 (Promoted Listings: Werbemetriken/Reporting)
       <span class="status-tag status-open">offen – konzeptionell geklärt</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
@@ -341,6 +379,53 @@ if ("serviceWorker" in navigator) {
   nav.addEventListener("change", () => {
     if (nav.value) location.href = nav.value;
   });
+})();
+
+// Aufwand-Filter (Klaerung mit dem Nutzer) - blendet Eintraege aus, deren
+// "Aufwand: X"-Kennzeichnung (data-effort auf .item, aus derselben Angabe
+// im h3 abgeleitet) nicht zur Auswahl passt. Wird je Browser gemerkt,
+// gleiches Muster wie z.B. die Spalten-Sichtbarkeit auf cards.html.
+const EFFORT_FILTER_STORAGE_KEY = "backlog_effort_filter";
+
+function applyEffortFilter() {
+  const select = document.getElementById("effort-filter");
+  const countEl = document.getElementById("effort-filter-count");
+  if (!select) return;
+  const value = select.value;
+  const items = document.querySelectorAll(".item");
+  let visible = 0;
+  for (const item of items) {
+    const match = !value || item.dataset.effort === value;
+    item.hidden = !match;
+    if (match) visible++;
+  }
+  // Eine Abschnitts-Ueberschrift ausblenden, wenn nach dem Filtern kein
+  // Eintrag mehr darunter uebrig ist - ein leerer Abschnitt saehe sonst wie
+  // ein Anzeigefehler aus statt wie ein erwartetes Filterergebnis.
+  for (const heading of document.querySelectorAll("h2[id$='-section']")) {
+    let node = heading.nextElementSibling;
+    let anyVisible = false;
+    while (node && node.tagName !== "H2") {
+      if (node.classList.contains("item") && !node.hidden) anyVisible = true;
+      node = node.nextElementSibling;
+    }
+    heading.hidden = !anyVisible;
+  }
+  countEl.textContent = value ? `${visible} von ${items.length} Einträgen` : "";
+}
+
+(function initEffortFilter() {
+  const select = document.getElementById("effort-filter");
+  if (!select) return;
+  try {
+    const saved = localStorage.getItem(EFFORT_FILTER_STORAGE_KEY);
+    if (saved) select.value = saved;
+  } catch (err) {}
+  select.addEventListener("change", () => {
+    try { localStorage.setItem(EFFORT_FILTER_STORAGE_KEY, select.value); } catch (err) {}
+    applyEffortFilter();
+  });
+  applyEffortFilter();
 })();
 </script>
 </body>

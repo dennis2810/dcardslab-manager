@@ -92,6 +92,15 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Bugfix: Gespeicherte Werte auf eBay-Übersicht/Kartendetail nach Neuladen wieder weg
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Frisch geladene Werte (z. B. Werbestatus, Aufrufe/Impressionen/Klickrate, Preisvorschläge) konnten je nach
+      Netzwerk-Setup (z. B. ein vorgeschalteter Reverse-Proxy) nach einem reinen Seiten-Neuladen wieder verschwinden,
+      obwohl sie in der Datenbank korrekt gespeichert waren - API-Antworten senden jetzt explizit
+      <code>Cache-Control: no-store</code>, damit sie nie zwischengespeichert werden.</li>
+  </ul>
+
   <h2>Werbestatus (Promoted Listings) sichtbar
     <span class="date">September 2026</span></h2>
   <ul>
