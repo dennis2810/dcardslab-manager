@@ -350,6 +350,37 @@ class GetPromotedListingStatusTests(unittest.TestCase):
         self.assertEqual(result, {})
         mock_request.assert_not_called()
 
+    def test_falls_back_to_status_field_when_adstatus_is_missing(self):
+        # Bugreport: eBays echte Antwort hatte kein "adStatus" (leer trotz
+        # korrekt gefuelltem bidPercentage/listingId im selben Ad-Objekt) -
+        # "status" als zweiter, unverifizierter Versuch.
+        with patch(
+            "ebay_client.httpx.request",
+            return_value=self._ads_response([{"listingId": "111", "status": "ACTIVE", "bidPercentage": "2.0"}]),
+        ):
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertEqual(result["111"]["ad_status"], "ACTIVE")
+
+    def test_prefers_adstatus_over_status_when_both_present(self):
+        with patch(
+            "ebay_client.httpx.request",
+            return_value=self._ads_response(
+                [{"listingId": "111", "adStatus": "PAUSED", "status": "ACTIVE", "bidPercentage": "2.0"}]
+            ),
+        ):
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertEqual(result["111"]["ad_status"], "PAUSED")
+
+    def test_logs_raw_ad_when_neither_status_field_is_present(self):
+        with patch(
+            "ebay_client.httpx.request",
+            return_value=self._ads_response([{"listingId": "111", "bidPercentage": "2.0"}]),
+        ), patch("ebay_client.logger.info") as mock_log:
+            result = ebay_client.get_promoted_listing_status("tok", ["camp-1"])
+        self.assertEqual(result["111"]["ad_status"], "")
+        mock_log.assert_called_once()
+        self.assertIn("111", mock_log.call_args.args)
+
 
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):

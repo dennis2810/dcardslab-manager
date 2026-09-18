@@ -403,9 +403,24 @@ def get_promoted_listing_status(token, campaign_ids):
                 if not listing_id:
                     continue
                 bid = ad.get("bidPercentage")
+                # eBays Doku nennt das Feld "adStatus", ein Nutzer-Bugreport
+                # zeigte aber eine leer bleibende ad_status bei gleichzeitig
+                # korrekt gefuelltem bidPercentage/listingId vom selben
+                # Ad-Objekt - "status" als zweiter Versuch, falls die Doku
+                # hier vom echten Feldnamen abweicht (unverifiziert, da kein
+                # direkter Zugriff auf developer.ebay.com moeglich war, siehe
+                # ebay_client.py's Modul-Docstring-Historie). Ist auch das
+                # leer, wird das rohe Ad-Objekt geloggt (docker logs), um den
+                # tatsaechlichen Feldnamen ohne weiteres Rateraten zu finden.
+                ad_status = ad.get("adStatus") or ad.get("status") or ""
+                if not ad_status:
+                    logger.info(
+                        "get_promoted_listing_status(): weder 'adStatus' noch 'status' im Ad-Objekt "
+                        "fuer listingId=%s gefunden - rohes Ad-Objekt: %s", listing_id, ad,
+                    )
                 result[listing_id] = {
                     "campaign_id": campaign_id,
-                    "ad_status": ad.get("adStatus") or "",
+                    "ad_status": ad_status,
                     "bid_percentage": float(bid) if bid not in (None, "") else None,
                 }
             if len(ads) < limit:
