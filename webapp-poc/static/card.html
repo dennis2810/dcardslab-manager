@@ -4063,6 +4063,51 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
     viewsP.appendChild(viewsBtn);
     viewsP.appendChild(viewsResult);
     readonly.appendChild(viewsP);
+
+    // Gleiches Prinzip wie der Aufrufe-Block oben, jetzt fuer den Promoted-
+    // Listings-Status (Marketing API, Stufe 1 - Sichtbarkeit) - eigener
+    // OAuth-Scope (sell.marketing.readonly), eigener Aufruf, siehe ebay.html
+    // fuer die Massenabruf-Variante.
+    const promotedP = document.createElement("p");
+    const promotedBtn = document.createElement("button");
+    promotedBtn.type = "button";
+    promotedBtn.textContent = "📢 Werbestatus laden";
+    const promotedResult = document.createElement("span");
+    promotedResult.style.marginLeft = "0.5rem";
+    if (listing.promoted_listing_status) {
+      const bidText = listing.promoted_listing_bid_percentage != null
+        ? `${listing.promoted_listing_bid_percentage}% Gebot` : "";
+      promotedResult.textContent = `Beworben (${bidText})`;
+    } else if (listing.promoted_listing_status === "") {
+      promotedResult.textContent = "Nicht beworben";
+    }
+    promotedBtn.addEventListener("click", async () => {
+      promotedResult.textContent = "Lädt …";
+      promotedResult.className = "";
+      try {
+        const res = await fetch("/api/ebay/listings/promoted-status?listing_ids=" + encodeURIComponent(listing.ebay_listing_id));
+        const data = await res.json();
+        if (!res.ok) {
+          promotedResult.textContent = "Fehler: " + (data.detail || res.statusText);
+          promotedResult.className = "error";
+          return;
+        }
+        const info = data.promoted_status[listing.ebay_listing_id];
+        if (info) {
+          const bidText = info.bid_percentage != null ? `${info.bid_percentage}% Gebot` : "";
+          promotedResult.textContent = `Beworben (${bidText})`;
+        } else {
+          promotedResult.textContent = "Nicht beworben";
+        }
+        promotedResult.className = "";
+      } catch (err) {
+        promotedResult.textContent = "Fehler: " + err;
+        promotedResult.className = "error";
+      }
+    });
+    promotedP.appendChild(promotedBtn);
+    promotedP.appendChild(promotedResult);
+    readonly.appendChild(promotedP);
   }
   section.appendChild(readonly);
 

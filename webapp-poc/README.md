@@ -251,6 +251,38 @@ eBay-Antwort inkl. `warnings`, das zeigt, ob eBay das Angebot als
 "nicht berichtsfähig" einstuft oder die Daten schlicht noch nicht
 verarbeitet hat.
 
+### Werbestatus (Promoted Listings) einrichten
+
+Zeigt auf `ebay.html` (Button „📢 Werbestatus laden") und einzeln auf
+`card.html`, ob und mit welchem Gebot-% ein Angebot aktuell in einer
+laufenden Promoted-Listings-Kampagne (General Strategy/Cost-per-Sale)
+beworben wird - über eBays Marketing API (`GET .../ad_campaign` +
+`GET .../ad_campaign/{campaign_id}/ad`, siehe
+`ebay_client.get_ad_campaigns()`/`get_promoted_listing_status()`). Reine
+Anzeige (Stufe 1 - Sichtbarkeit): das Einrichten oder Ändern von Kampagnen/
+Geboten bleibt weiterhin im eBay-Verkäufer-Cockpit. Echte Werbemetriken
+(Impressionen/Klicks/ACoS je Kampagne, Stufe 2) sind ein eigener,
+separater Backlog-Punkt - der asynchrone Report-Workflow der Marketing API
+unterscheidet sich zu stark vom synchronen Aufrufe-Abruf oben, um ihn
+nebenbei mitzunehmen.
+
+Wie bei den Aufrufen wird der zuletzt geladene Stand in
+`ebay_listings` gespeichert (`promoted_listing_status`/
+`-campaign_id`/`-bid_percentage`) und bleibt daher über einen
+Seiten-Neuladen hinweg sichtbar.
+
+Einmalige manuelle Einrichtung, optional (gleicher Ablauf wie oben für
+Aufrufe/Beobachter, nur mit einem anderen Scope):
+
+1. In `ebay-oauth-server`s Umgebungsvariable `EBAY_OAUTH_SCOPES` den
+   Scope `https://api.ebay.com/oauth/api_scope/sell.marketing.readonly`
+   ergänzen und den Container neu starten.
+2. Den eBay-Account einmalig erneut über `/ebay/oauth/start` autorisieren.
+
+Ohne diesen zusätzlichen Scope liefert „Werbestatus laden" einen Fehler
+mit eBays Meldung (`insufficient_scope` o. ä.) - alles andere im Tool
+bleibt davon unberührt.
+
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
 Live gegen die echte eBay-Sandbox getestet (27.08.2026): `POST .../offer/{id}/publish`

@@ -2466,6 +2466,50 @@ async def ebay_listing_views(listing_ids: str):
     return JSONResponse({"views": views, "traffic_extra": traffic_extra})
 
 
+@app.get("/api/ebay/listings/promoted-status")
+async def ebay_listing_promoted_status(listing_ids: str):
+    # Stufe 1 der eBay Marketing API (Sichtbarkeit) - gleiches Muster wie
+    # /api/ebay/listings/views oben: eigener, nur per Klick ausgeloester
+    # Aufruf mit eigenem OAuth-Scope (sell.marketing.readonly, siehe
+    # README.md) statt bei jedem GET /api/ebay/listings mitgeladen.
+    ids = [value for value in listing_ids.split(",") if value]
+    try:
+        token = ebay_client.get_access_token()
+        campaigns = ebay_client.get_ad_campaigns(token)
+        # Nur laufende Kampagnen - eine beendete/pausierte Kampagne kann kein
+        # Angebot mehr aktiv bewerben, ihre Ads mitzulesen waere unnoetiger
+        # API-Aufwand.
+        running_campaign_ids = [
+            c["campaignId"] for c in campaigns
+            if c.get("campaignStatus") == "RUNNING" and c.get("campaignId")
+        ]
+        status_by_listing = ebay_client.get_promoted_listing_status(token, running_campaign_ids)
+    except ebay_client.EbayNotAuthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ebay_client.EbayApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # In ebay_listings.promoted_listing_status/-campaign_id/-bid_percentage
+    # mitspeichern - gleiches Prinzip wie last_known_views, soll einen
+    # Seiten-Neuladen ueberleben statt nur fuer die aktuelle Sitzung
+    # sichtbar zu sein.
+    listings_by_item_id = {
+        l["ebay_listing_id"]: l for l in db.list_ebay_listings() if l.get("ebay_listing_id")
+    }
+    result = {}
+    for ebay_id in ids:
+        listing = listings_by_item_id.get(ebay_id)
+        if not listing:
+            continue
+        info = status_by_listing.get(ebay_id)
+        db.update_ebay_listing(listing["id"], {
+            "promoted_listing_campaign_id": (info or {}).get("campaign_id") or "",
+            "promoted_listing_status": (info or {}).get("ad_status") or "",
+            "promoted_listing_bid_percentage": (info or {}).get("bid_percentage"),
+        })
+        result[ebay_id] = info
+    return JSONResponse({"promoted_status": result})
+
+
 @app.get("/api/ebay/listings/best-offer-sync")
 async def sync_ebay_listings_best_offer(listing_ids: str):
     # Behebt, dass Auto-Annahme/-Ablehnung in der Uebersicht (ebay.html) fuer

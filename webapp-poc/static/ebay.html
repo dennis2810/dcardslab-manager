@@ -71,6 +71,7 @@ if ("serviceWorker" in navigator) {
   .nav-cross-link { font-weight: 600; white-space: nowrap; }
   .views-extra { font-size: 0.8rem; color: #777; white-space: nowrap; }
   .metric-info { font-size: 0.8rem; color: #777; margin: 0.3rem 0; }
+  .promoted-inactive { color: #999; }
   /* Kleines Sprungmarken-Inhaltsverzeichnis - gleiche Klasse wie auf
      cards.html/settings.html, fuer optisch konsistente Seiten. */
   .page-toc { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.85rem; margin: 0 0 1rem; }
@@ -285,12 +286,17 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
     <button type="button" id="load-best-offer-btn">💰 Preisvorschläge laden</button>
+    <button type="button" id="load-promoted-btn">📢 Werbestatus laden</button>
   </div>
   <p class="metric-info no-print"><strong>Aufrufe</strong>: wie oft die Angebotsseite aufgerufen wurde ·
     <strong>Impressionen</strong>: wie oft das Angebot in Suchergebnissen/Shop angezeigt wurde ·
     <strong>Klickrate (CTR)</strong>: Aufrufe ÷ Impressionen – eBay liefert keine absolute Klickzahl.</p>
+  <p class="metric-info no-print"><strong>Werbung</strong>: ob und mit welchem Gebot-% (Anteil vom Verkaufspreis)
+    ein Angebot aktuell in einer laufenden Promoted-Listings-Kampagne (General Strategy/Cost-per-Sale) beworben
+    wird – reine Anzeige, das Einrichten/Ändern von Kampagnen bleibt (noch) im eBay-Verkäufer-Cockpit.</p>
   <p id="views-status" class="no-print"></p>
   <p id="best-offer-sync-status" class="no-print"></p>
+  <p id="promoted-status" class="no-print"></p>
   <div class="controls no-print">
     <label>Zeitraum für
       <select id="sum-date-field">
@@ -366,6 +372,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="sale_price" data-col="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="published_at" data-col="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
             <th data-key="views" data-col="views" title="Aufrufe: wie oft die Angebotsseite aufgerufen wurde. Impressionen: wie oft das Angebot in Suchergebnissen/Shop angezeigt wurde. Klickrate (CTR): Aufrufe geteilt durch Impressionen - keine absolute Klickzahl, die liefert eBay nicht. Alle drei aus dem letzten &quot;Aufrufe laden&quot;.">Aufrufe <span class="sort-arrow"></span></th>
+            <th data-key="promoted" data-col="promoted" title="Ob und mit welchem Gebot-% das Angebot in einer laufenden Promoted-Listings-Kampagne beworben wird, aus dem letzten &quot;Werbestatus laden&quot;.">Werbung <span class="sort-arrow"></span></th>
             <th data-col="ebay_link">eBay</th>
             <th data-key="condition" data-col="condition">Zustand <span class="sort-arrow"></span></th>
             <th data-key="auto_accept_price" data-col="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
@@ -566,10 +573,17 @@ let currentListings = [];
 // ueber ein render() hinweg erhalten (nicht Teil von currentListings),
 // damit ein Sortieren/Blaettern die schon geladenen Werte nicht verwirft.
 let listingViews = {};
-// Impressionen/Klickrate - gleiches Prinzip wie listingViews oben (nur
-// fuer die aktuelle Sitzung, per Klick auf "Aufrufe laden" mitgeladen,
-// nicht persistiert - siehe main.py's /api/ebay/listings/views).
+// Impressionen/Klickrate - gleiches Prinzip wie listingViews oben, per
+// Klick auf "Aufrufe laden" mitgeladen und (wie listingViews) in
+// last_known_impressions/last_known_click_through_rate persistiert -
+// siehe main.py's /api/ebay/listings/views.
 let listingTrafficExtra = {};
+// Promoted-Listings-Status (Marketing API, Stufe 1 - Sichtbarkeit) je
+// eBay-Angebots-ID, nur nach Klick auf "Werbestatus laden" befuellt -
+// gleiches Prinzip wie listingViews/listingTrafficExtra oben. Wert ist
+// entweder null (nicht beworben) oder {campaign_id, ad_status,
+// bid_percentage}.
+let listingPromoted = {};
 
 // Aufrufe sind keine feste Eigenschaft auf listing (anders als z.B. price) -
 // frisch per "Aufrufe laden" geladene Werte (listingViews) haben Vorrang vor
@@ -592,6 +606,23 @@ function effectiveTrafficExtra(listing) {
     impressions: extra?.impressions ?? listing.last_known_impressions ?? null,
     click_through_rate: extra?.click_through_rate ?? listing.last_known_click_through_rate ?? null,
   };
+}
+
+// Gleiches Prinzip wie effectiveViews() oben, fuer den Promoted-Listings-
+// Status: frisch per "Werbestatus laden" geladene Werte (listingPromoted)
+// haben Vorrang vor dem zuletzt gespeicherten Stand (listing.
+// promoted_listing_status/-bid_percentage). Gibt null zurueck, wenn das
+// Angebot (beim letzten Abruf) in keiner laufenden Kampagne beworben wurde.
+function effectivePromoted(listing) {
+  if (listing.ebay_listing_id in listingPromoted) return listingPromoted[listing.ebay_listing_id];
+  if (listing.promoted_listing_status) {
+    return {
+      campaign_id: listing.promoted_listing_campaign_id,
+      ad_status: listing.promoted_listing_status,
+      bid_percentage: listing.promoted_listing_bid_percentage,
+    };
+  }
+  return null;
 }
 // Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
 // nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
@@ -690,8 +721,12 @@ function sortedListings() {
   const source = filteredListings();
   if (!sortKey) return source;
   return [...source].sort((a, b) => {
-    const av = sortKey === "views" ? effectiveViews(a) : a[sortKey] ?? "";
-    const bv = sortKey === "views" ? effectiveViews(b) : b[sortKey] ?? "";
+    const av = sortKey === "views" ? effectiveViews(a)
+      : sortKey === "promoted" ? effectivePromoted(a)?.bid_percentage ?? ""
+      : a[sortKey] ?? "";
+    const bv = sortKey === "views" ? effectiveViews(b)
+      : sortKey === "promoted" ? effectivePromoted(b)?.bid_percentage ?? ""
+      : b[sortKey] ?? "";
     if (typeof av === "number" && typeof bv === "number") return sortAsc ? av - bv : bv - av;
     return sortAsc
       ? String(av).localeCompare(String(bv), "de")
@@ -853,6 +888,7 @@ const COLUMN_TOGGLES = [
   { key: "sale_price", label: "Verkaufspreis" },
   { key: "published_at", label: "Zuletzt aktualisiert" },
   { key: "views", label: "Aufrufe" },
+  { key: "promoted", label: "Werbung" },
   { key: "condition", label: "Zustand" },
   { key: "auto_accept_price", label: "Auto-Annahme" },
   { key: "auto_decline_price", label: "Auto-Ablehnung" },
@@ -867,7 +903,7 @@ const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
 // zugleich die Grundlage fuer applyColumnOrder() unten.
 const DEFAULT_COLUMN_ORDER = [
   "sku", "title", "price", "price_check", "status", "listing_since", "scheduled_at",
-  "sale_date", "sale_price", "published_at", "views", "ebay_link", "condition",
+  "sale_date", "sale_price", "published_at", "views", "promoted", "ebay_link", "condition",
   "auto_accept_price", "auto_decline_price", "best_offer_updated_at",
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "ebay_hidden_columns";
@@ -1214,6 +1250,24 @@ function render(listings) {
       }
     }
     tr.appendChild(viewsTd);
+
+    const promotedTd = document.createElement("td");
+    promotedTd.dataset.col = "promoted";
+    if (listing.ebay_listing_id) {
+      const promoted = effectivePromoted(listing);
+      if (promoted) {
+        const bidText = promoted.bid_percentage != null
+          ? `${promoted.bid_percentage.toLocaleString("de-DE", { maximumFractionDigits: 2 })} %` : "";
+        promotedTd.textContent = `📢 ${bidText}`.trim();
+        if (promoted.ad_status && promoted.ad_status !== "ACTIVE") {
+          promotedTd.title = `Status: ${promoted.ad_status}`;
+          promotedTd.classList.add("promoted-inactive");
+        }
+      } else {
+        promotedTd.textContent = "–";
+      }
+    }
+    tr.appendChild(promotedTd);
 
     const ebayLinkTd = document.createElement("td");
     ebayLinkTd.dataset.col = "ebay_link";
@@ -1999,6 +2053,41 @@ document.getElementById("load-views-btn").addEventListener("click", async () => 
   } catch (err) {
     viewsStatus.textContent = "Fehler: " + err;
     viewsStatus.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+document.getElementById("load-promoted-btn").addEventListener("click", async () => {
+  const promotedStatus = document.getElementById("promoted-status");
+  const ids = [...new Set(
+    filteredListings()
+      .filter((l) => l.ebay_listing_id && (l.status === "Veroeffentlicht" || l.status === "Verkauft"))
+      .map((l) => l.ebay_listing_id)
+  )];
+  if (ids.length === 0) {
+    promotedStatus.textContent = "Keine veröffentlichten Angebote in der aktuellen Auswahl.";
+    promotedStatus.className = "";
+    return;
+  }
+  promotedStatus.textContent = "Lädt …";
+  promotedStatus.className = "";
+  try {
+    const res = await fetch("/api/ebay/listings/promoted-status?listing_ids=" + encodeURIComponent(ids.join(",")));
+    const data = await res.json();
+    if (!res.ok) {
+      promotedStatus.textContent = "Fehler: " + (data.detail || res.statusText);
+      promotedStatus.className = "error";
+      showToast("Fehler: " + (data.detail || res.statusText), true);
+      return;
+    }
+    Object.assign(listingPromoted, data.promoted_status);
+    const promotedCount = Object.values(data.promoted_status).filter((v) => v).length;
+    promotedStatus.textContent = `Werbestatus für ${ids.length} Angebot(e) geladen - ${promotedCount} davon aktuell beworben.`;
+    promotedStatus.className = "";
+    render(sortedListings());
+  } catch (err) {
+    promotedStatus.textContent = "Fehler: " + err;
+    promotedStatus.className = "error";
     showToast("Fehler: " + err, true);
   }
 });

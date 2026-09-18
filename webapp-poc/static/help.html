@@ -568,7 +568,7 @@ if ("serviceWorker" in navigator) {
     direkt zur Anzeige auf eBay. Bei verkauften Angeboten zeigt die Status-Spalte zusätzlich 📦, falls die Karte als
     zugestellt markiert wurde, bzw. ↩️ bei einer Rückerstattung/Retoure. Über den Button „⚙ Spalten" lassen sich
     einzelne, weniger zentrale Spalten (Preis-Check, Eingestellt am, Geplant für, Verkauft am, Verkaufspreis,
-    Zuletzt aktualisiert, Aufrufe, Zustand, Auto-Annahme, Auto-Ablehnung, Preisvorschläge geändert) aus-/einblenden
+    Zuletzt aktualisiert, Aufrufe, Werbung, Zustand, Auto-Annahme, Auto-Ablehnung, Preisvorschläge geändert) aus-/einblenden
     und über die Pfeile
     ▲/▼ (einen Schritt) bzw. ⏮/⏭ (an den Anfang/ans Ende) auch in eine beliebige eigene Reihenfolge bringen –
     die Auswahl wird je Browser gemerkt. Die Spalten „Auto-Annahme"/„Auto-Ablehnung" zeigen die eBay-Preisvorschläge (Best Offer),
@@ -589,9 +589,10 @@ if ("serviceWorker" in navigator) {
     <li><strong>Klickrate (CTR)</strong>: Aufrufe geteilt durch Impressionen, als Prozentsatz. Keine absolute
       Klickzahl – eine solche liefert eBays API nicht.</li>
   </ul>
-  <p>Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog) – ebenso wenig wie echte
-    Kampagnen-/Werbemetriken (Promoted Listings: Ausgaben, Klicks, ACoS/ROAS), die eine eigene Anbindung an eBays
-    Marketing API bräuchten (siehe Backlog).</p>
+  <p>Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog). Ob und mit welchem Gebot-% ein Angebot
+    aktuell per Promoted Listings beworben wird, zeigt der separate Button „📢 Werbestatus laden" (siehe unten) –
+    echte Werbemetriken je Kampagne (Ausgaben, Klicks, ACoS/ROAS) bräuchten dagegen weiterhin den asynchronen
+    Report-Teil von eBays Marketing API, ein eigener, separater Backlog-Punkt.</p>
   <p>Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
     Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
@@ -650,6 +651,12 @@ if ("serviceWorker" in navigator) {
     zuverlässig an. Auf der Kartenseite gibt es denselben Button auch einzeln im eBay-Abschnitt eines
     veröffentlichten oder verkauften Angebots. Der zuletzt geladene Wert bleibt sichtbar (auch nach einem
     Neuladen der Seite), bis erneut auf „Aufrufe laden" geklickt wird.</p>
+  <p>Der Button „📢 Werbestatus laden" funktioniert genauso, zeigt in der Spalte „Werbung" aber, ob und mit welchem
+    Gebot-% (Anteil vom Verkaufspreis) ein Angebot aktuell in einer laufenden Promoted-Listings-Kampagne (General
+    Strategy/Cost-per-Sale) beworben wird – über eBays Marketing API, mit einem eigenen, separat einzurichtenden
+    Berechtigungs-Scope (siehe README.md). Reine Anzeige: Kampagnen anlegen oder Gebote ändern bleibt weiterhin im
+    eBay-Verkäufer-Cockpit. Auch diesen Button gibt es einzeln auf der Kartenseite, und auch hier bleibt der
+    zuletzt geladene Stand über einen Seiten-Neuladen hinweg sichtbar.</p>
 
   <h2 id="inventar">Inventar</h2>
   <p>Zeigt den Bestand mit Menge, Zustand und Lagerort je Karte. Die Freitext-Suche filtert nach Titel, SKU oder
