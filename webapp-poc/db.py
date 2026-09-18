@@ -654,7 +654,7 @@ def get_cards_by_ids(card_ids):
     if not card_ids:
         return []
     response = (
-        get_client().table("cards").select("id,title,front_image_path,private_collection")
+        get_client().table("cards").select("id,title,category,front_image_path,private_collection")
         .in_("id", card_ids).execute()
     )
     return response.data
