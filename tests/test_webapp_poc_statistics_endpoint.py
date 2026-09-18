@@ -273,6 +273,101 @@ class StatisticsEndpointTests(unittest.TestCase):
         self.assertEqual(set_ranking[0]["name"], "Panini 2026")
         self.assertEqual(set_ranking[1]["name"], "Topps 2026")
 
+    def test_category_and_theme_ranking_group_sold_cards_by_profit(self):
+        rows = [
+            {
+                "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+                "category": "Fußball", "theme": "Bundesliga",
+                "purchase_date": "2026-01-01", "cost": 4.0,
+                "sale_date": "2026-01-15T00:00:00+00:00", "sale_price": 10.0,
+            },
+            {
+                "card_id": "card-2", "title": "Karte 2", "card_no": 2, "sku": None,
+                "category": "Basketball", "theme": "NBA",
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 20.0,
+            },
+            {
+                # Keine Kategorie/Thema -> darf im Ranking nicht auftauchen.
+                "card_id": "card-3", "title": "Karte 3", "card_no": 3, "sku": None,
+                "category": "", "theme": "",
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 3.0,
+            },
+        ]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+
+        category_ranking = body["category_ranking"]
+        self.assertEqual(len(category_ranking), 2)
+        self.assertEqual(category_ranking[0]["name"], "Basketball")
+        self.assertEqual(category_ranking[0]["profit"], 19.0)
+        self.assertEqual(category_ranking[1]["name"], "Fußball")
+        self.assertEqual(category_ranking[1]["profit"], 6.0)
+
+        theme_ranking = body["theme_ranking"]
+        self.assertEqual(len(theme_ranking), 2)
+        self.assertEqual(theme_ranking[0]["name"], "NBA")
+        self.assertEqual(theme_ranking[1]["name"], "Bundesliga")
+
+    def test_price_bucket_ranking_groups_by_sale_price_range_in_fixed_order(self):
+        rows = [
+            {
+                "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-01-15T00:00:00+00:00", "sale_price": 120.0,
+            },
+            {
+                "card_id": "card-2", "title": "Karte 2", "card_no": 2, "sku": None,
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-01-20T00:00:00+00:00", "sale_price": 5.0,
+            },
+            {
+                "card_id": "card-3", "title": "Karte 3", "card_no": 3, "sku": None,
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": "2026-02-01T00:00:00+00:00", "sale_price": 8.0,
+            },
+        ]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+
+        buckets = body["price_bucket_ranking"]
+        # Feste Preisklassen-Reihenfolge (nicht nach Gewinn sortiert) - "< 10 €"
+        # kommt vor "> 100 €", obwohl letztere Klasse hier mehr Gewinn brachte.
+        self.assertEqual([b["name"] for b in buckets], ["< 10 €", "> 100 €"])
+        self.assertEqual(buckets[0]["count"], 2)
+        self.assertEqual(buckets[1]["count"], 1)
+
+    def test_forecast_extrapolates_a_rising_linear_trend(self):
+        rows = [
+            {
+                "card_id": f"card-{i}", "title": f"Karte {i}", "card_no": i, "sku": None,
+                "purchase_date": "2026-01-01", "cost": 1.0,
+                "sale_date": f"2026-{month:02d}-01T00:00:00+00:00", "sale_price": price,
+            }
+            for i, (month, price) in enumerate([(1, 10.0), (2, 20.0), (3, 30.0)], start=1)
+        ]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        body = response.json()
+
+        forecast = body["forecast"]
+        self.assertEqual([f["month"] for f in forecast], ["2026-04", "2026-05", "2026-06"])
+        # Umsatz steigt exakt linear um 10 je Monat (10, 20, 30) -> Fortsetzung 40, 50, 60.
+        self.assertEqual([f["projected_revenue"] for f in forecast], [40.0, 50.0, 60.0])
+
+    def test_forecast_is_empty_with_fewer_than_two_months_of_data(self):
+        rows = [{
+            "card_id": "card-1", "title": "Karte 1", "card_no": 1, "sku": None,
+            "purchase_date": "2026-01-01", "cost": 1.0,
+            "sale_date": "2026-01-15T00:00:00+00:00", "sale_price": 10.0,
+        }]
+        with patch("main.db.statistics_rows", return_value=rows):
+            response = client.get("/api/statistics")
+        self.assertEqual(response.json()["forecast"], [])
+
     def test_platform_ranking_averages_profit_and_margin(self):
         rows = [
             {

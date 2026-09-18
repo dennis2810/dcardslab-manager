@@ -2068,6 +2068,7 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
              patch("main.db.list_due_reminders", return_value=[]), \
              patch("main.db.list_stale_unsold_listings", return_value=[]), \
              patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
              patch("main.email_notify.send_email") as mock_send:
             main._send_reminder_digest_if_due()
         mock_send.assert_not_called()
@@ -2082,6 +2083,7 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
              patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
              patch("main.db.list_stale_unsold_listings", return_value=[]), \
              patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
              patch("main.email_notify.send_email") as mock_send:
             main._send_reminder_digest_if_due()
         mock_send.assert_called_once()
@@ -2099,6 +2101,7 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
              patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
              patch("main.db.list_stale_unsold_listings", return_value=[]), \
              patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
              patch("main.email_notify.send_email", side_effect=OSError("boom")):
             main._send_reminder_digest_if_due()  # must not raise
 
@@ -2113,10 +2116,51 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
              patch("main.db.list_due_reminders", return_value=[]), \
              patch("main.db.list_stale_unsold_listings", return_value=[]) as mock_listings, \
              patch("main.db.list_stale_wishlist_items", return_value=[]) as mock_wishlist, \
+             patch("main.db.list_ebay_listings", return_value=[]), \
              patch("main.email_notify.send_email"):
             main._send_reminder_digest_if_due()
         mock_listings.assert_called_once_with(30, 10)
         mock_wishlist.assert_called_once_with(14)
+
+    def test_sends_digest_for_a_price_alert_alone(self):
+        # Neue vierte Digest-Kategorie (Klaerung mit dem Nutzer): ein
+        # veroeffentlichtes Angebot, dessen Preis stark vom
+        # Marktdurchschnitt abweicht, loest den Digest jetzt auch dann aus,
+        # wenn keine der anderen drei Kategorien etwas Faelliges hat.
+        settings = {"notify_on_reminders": True}
+        listings = [{"id": "l1", "card_id": "c1", "price": 20.0, "status": "Veroeffentlicht"}]
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.price_research_by_card_ids", return_value={"c1": {"avg_price": 10.0, "count": 3}}), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_send.assert_called_once()
+        body = mock_send.call_args[0][2]
+        self.assertIn("Karte 1", body)
+        self.assertIn("Preis-Alarm", body)
+
+    def test_price_alert_below_threshold_does_not_trigger_digest(self):
+        settings = {"notify_on_reminders": True}
+        # 10% Abweichung liegt unter dem Default-Schwellwert von 20%.
+        listings = [{"id": "l1", "card_id": "c1", "price": 11.0, "status": "Veroeffentlicht"}]
+        with patch("main._is_reminder_digest_due", return_value=True), \
+             patch("main.db.record_reminder_email_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.list_due_reminders", return_value=[]), \
+             patch("main.db.list_stale_unsold_listings", return_value=[]), \
+             patch("main.db.list_stale_wishlist_items", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.price_research_by_card_ids", return_value={"c1": {"avg_price": 10.0, "count": 3}}), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_reminder_digest_if_due()
+        mock_send.assert_not_called()
 
 
 class SyncEbayReturnsOnceTests(unittest.TestCase):

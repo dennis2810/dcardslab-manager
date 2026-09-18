@@ -368,6 +368,57 @@ if ("serviceWorker" in navigator) {
     </ul>
   </div>
 
+  <div class="item" data-effort="groß">
+    <h3>KI-Zustandsschätzung (Grading-Vorschlag) aus dem Scan-Foto <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Die bestehende Bilderkennung beim Scannen (<code>integrations/ai_card_recognition.py</code>, ruft Claude mit
+      den Kartenfotos auf) liest bereits Titel/Team/Set/Kartennummer usw. aus den Fotos aus, aber keinen
+      Zustand/keine Grading-Einschätzung – Zustand wird aktuell ausschließlich manuell gesetzt (Feld „Zustand" bzw.
+      bei bereits eingesendeten Karten die Grading-Felder, siehe <code>db.GRADING_FIELDS</code>). Naheliegender
+      Ansatz: denselben Bilderkennungs-Aufruf um eine Zustands-/Grading-Einschätzung (z. B. grobe Kategorie wie
+      „Near Mint"/„Excellent" oder ein geschätzter numerischer Grade) erweitern, als unverbindlichen Vorschlag zum
+      Übernehmen/Verwerfen – nicht automatisch speichern, da eine KI-Einschätzung ohne physische Prüfung
+      (Zentrierung, Kanten unter Vergrößerung, Oberflächenkratzer) prinzipbedingt unzuverlässig bleibt.</p>
+    <p>Klärungsbedarf: reicht eine grobe Einschätzung (gut/mittel/schlecht) oder soll es Richtung echter
+      Grading-Skala (PSA/BGS-artig 1–10) gehen – Letzteres suggeriert eine Genauigkeit, die ein Foto allein nicht
+      liefern kann und müsste im Tool entsprechend vorsichtig kommuniziert werden (Vorschlag statt Aussage);
+      außerdem, ob das für jeden Scan automatisch laufen soll (zusätzliche Anthropic-API-Kosten pro Karte) oder nur
+      auf Anfrage pro Karte.</p>
+  </div>
+
+  <div class="item" data-effort="mittel">
+    <h3>Auffällige Einkaufspreis-Ausreißer automatisch markieren <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Beim Erfassen eines Kaufs (<code>purchases.html</code>) auffällig hohe oder niedrige Einkaufspreise im
+      Vergleich zu ähnlichen Karten markieren – z. B. als Hinweis noch vor dem Speichern, nicht als harte Sperre
+      (ein bewusst günstiger Fund oder ein Aufpreis für einen besonderen Zustand sind ja legitim). Naheliegende
+      Vergleichsbasis: der Ø Einkaufspreis bereits vorhandener Karten desselben Teams/Sets in der eigenen Sammlung
+      (kein externer Marktpreis-Abgleich nötig, rein aus den eigenen Daten – anders als die bestehende, auf
+      Verkaufspreise ausgerichtete Preisrecherche).</p>
+    <p>Klärungsbedarf: ab welcher Abweichung (z. B. ±50&nbsp;%?) ein Hinweis erscheinen soll, ob eine feste Schwelle
+      reicht oder sie (wie die Preis-Alarm-/Wiedervorlage-Schwellenwerte) konfigurierbar sein soll, und ob die
+      eigene Kaufhistorie bei zu wenigen Vergleichskarten (z. B. erste Karte eines Teams/Sets) überhaupt eine
+      sinnvolle Aussage zulässt.</p>
+  </div>
+
+  <div class="item" data-effort="mittel">
+    <h3>Wunschliste-Preisalarm zusätzlich per Telegram/WhatsApp <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Der automatische Wunschlisten-Preis-Check (<code>ebay_scheduler.run_wishlist_price_check_once()</code>,
+      läuft bereits automatisch im Hintergrund) informiert aktuell nur passiv über die Wunschlisten-Seite selbst
+      bzw. eine Dashboard-Kachel – kein aktiver Versand wie bei der bestehenden E-Mail-Benachrichtigung. Für ein
+      knappes Zeitfenster bei einem guten Angebot wäre eine schnellere Push-Benachrichtigung praktisch.</p>
+    <p>Telegram und WhatsApp unterscheiden sich hier deutlich im Aufwand: ein <strong>Telegram-Bot</strong> ist mit
+      einem kostenlosen Bot-Token (via @BotFather) und einem einzigen HTTPS-Aufruf pro Nachricht schnell angebunden,
+      ganz ohne Geschäftskonto. <strong>WhatsApp</strong> braucht dagegen entweder die offizielle, kostenpflichtige
+      WhatsApp Business Cloud API (Meta-Geschäftskonto, Freigabeprozess für Vorlagen-Nachrichten) oder eine
+      inoffizielle Bibliothek (Nutzungsbedingungen-Risiko, keine Stabilitätsgarantie) – deutlich mehr Aufwand/Risiko
+      als Telegram.</p>
+    <p>Klärungsbedarf: reicht Telegram allein (deutlich schneller umsetzbar), oder ist WhatsApp explizit gewünscht
+      trotz des Mehraufwands? Soll das nur für Wunschlisten-Treffer gelten oder auch für den bestehenden
+      Preis-Alarm/die tägliche Erinnerungs-E-Mail als zusätzlicher Kanal?</p>
+  </div>
+
 <script>
 (function initPageNav() {
   const nav = document.getElementById("page-nav-select");

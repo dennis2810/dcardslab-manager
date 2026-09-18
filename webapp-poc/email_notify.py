@@ -98,13 +98,16 @@ def format_sale_notification(newly_synced):
     return subject, body
 
 
-def format_reminder_digest(due_reminders, stale_listings, stale_wishlist):
+def format_reminder_digest(due_reminders, stale_listings, stale_wishlist, price_alerts=None):
     """Baut (subject, body) fuer den taeglichen Wiedervorlage-Digest
-    (main.py's _send_reminder_digest_if_due()). Jede der drei Listen ist
-    bereits mit einem "title" angereichert (due_reminders/stale_listings:
-    Kartentitel, stale_wishlist: eigener Wunschlisten-Titel), damit diese
-    Funktion selbst keine DB-Zugriffe braucht."""
-    total = len(due_reminders) + len(stale_listings) + len(stale_wishlist)
+    (main.py's _send_reminder_digest_if_due()). Jede der Listen ist bereits
+    angereichert (due_reminders/stale_listings/price_alerts: Kartentitel,
+    stale_wishlist: eigener Wunschlisten-Titel), damit diese Funktion selbst
+    keine DB-Zugriffe braucht. price_alerts (Klaerung mit dem Nutzer:
+    proaktive Benachrichtigung statt nur einer visuellen Badge) ist
+    optional, damit bestehende Aufrufe mit nur drei Listen nicht brechen."""
+    price_alerts = price_alerts or []
+    total = len(due_reminders) + len(stale_listings) + len(stale_wishlist) + len(price_alerts)
     subject = "1 fällige Wiedervorlage" if total == 1 else f"{total} fällige Wiedervorlagen"
 
     lines = []
@@ -124,6 +127,16 @@ def format_reminder_digest(due_reminders, stale_listings, stale_wishlist):
         lines.append("Wunschliste, Zielpreis lange nicht erreicht:")
         for item in stale_wishlist:
             lines.append(f"- {item.get('title') or '(ohne Titel)'} (Zielpreis {item.get('target_price')} €)")
+        lines.append("")
+    if price_alerts:
+        lines.append("Preis-Alarm (eigener Preis weicht stark vom Marktdurchschnitt ab):")
+        for alert in price_alerts:
+            title = alert.get("title") or "(ohne Titel)"
+            richtung = "über" if alert.get("diff_pct", 0) > 0 else "unter"
+            lines.append(
+                f"- {title}: eigener Preis {alert.get('price')} € liegt {abs(alert.get('diff_pct', 0))} % "
+                f"{richtung} dem Marktdurchschnitt ({alert.get('price_research_avg')} €)"
+            )
         lines.append("")
 
     body = subject + ":\n\n" + "\n".join(lines).strip() + "\n"

@@ -228,9 +228,12 @@ def _send_reminder_digest_if_due():
         due_reminders = _due_reminders_with_titles()
         stale_listings = _stale_listing_reminders(settings)
         stale_wishlist = _stale_wishlist_reminders(settings)
-        if not (due_reminders or stale_listings or stale_wishlist):
+        price_alerts = _price_alert_reminders(settings)
+        if not (due_reminders or stale_listings or stale_wishlist or price_alerts):
             return
-        subject, body = email_notify.format_reminder_digest(due_reminders, stale_listings, stale_wishlist)
+        subject, body = email_notify.format_reminder_digest(
+            due_reminders, stale_listings, stale_wishlist, price_alerts
+        )
         email_notify.send_email(settings, subject, body)
     except Exception:
         logger.exception("Wiedervorlage-E-Mail-Digest fehlgeschlagen")
@@ -985,6 +988,45 @@ def _due_reminders_with_titles():
         {**r, "title": cards_by_id.get(r["card_id"], {}).get("title")}
         for r in reminders
     ]
+
+
+def _price_alert_reminders(status=None):
+    # Proaktive Benachrichtigung fuer den bestehenden 20%-Preis-Alarm
+    # (Klaerung mit dem Nutzer) - bisher nur eine rein visuelle Badge auf
+    # Kartendetail/eBay-Uebersicht/Dashboard (dashboard.html berechnet die
+    # Preis-Alarme-KPI rein clientseitig), sichtbar erst beim Oeffnen der
+    # jeweiligen Seite. Gleiche Formel wie dort
+    # (Math.abs((price - avg) / avg * 100) >= threshold), hier serverseitig
+    # fuer den E-Mail-Digest. Listet jede aktuell zutreffende Karte bei
+    # jedem Digest-Lauf neu auf statt nur einmalig bei erstmaligem
+    # Ueberschreiten zu benachrichtigen - gleiches Prinzip wie
+    # _stale_listing_reminders()/_stale_wishlist_reminders() oben (der
+    # taegliche Rhythmus des Digests selbst verhindert Spam).
+    if status is None:
+        status = db.get_app_status() or {}
+    threshold = status.get("price_alert_threshold_pct") or 20
+    listings = db.list_ebay_listings(status="Veroeffentlicht")
+    card_ids = [l["card_id"] for l in listings]
+    research = db.price_research_by_card_ids(card_ids)
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    alerts = []
+    for listing in listings:
+        info = research.get(listing["card_id"])
+        avg = info["avg_price"] if info else None
+        price = listing.get("price")
+        if not avg or price is None:
+            continue
+        diff_pct = ((float(price) - float(avg)) / float(avg)) * 100
+        if abs(diff_pct) < threshold:
+            continue
+        alerts.append({
+            "card_id": listing["card_id"],
+            "title": cards_by_id.get(listing["card_id"], {}).get("title") or "",
+            "price": price,
+            "price_research_avg": round(float(avg), 2),
+            "diff_pct": round(diff_pct, 1),
+        })
+    return alerts
 
 
 @app.get("/api/dashboard/reminders")
@@ -1897,6 +1939,13 @@ def _compute_statistics():
         "set_ranking": _rank_statistics_by(enriched, "set_name"),
         "platform_ranking": _rank_platforms(enriched),
         "channel_ranking": _rank_channels(enriched),
+        # Sportart-/Liga-Auswertung (Klaerung mit dem Nutzer) - category ist
+        # die Sportart bzw. uebergeordnete Kategorie (z.B. Fussball, Marvel),
+        # theme das Thema/die Liga (siehe db.statistics_rows()).
+        "category_ranking": _rank_statistics_by(enriched, "category"),
+        "theme_ranking": _rank_statistics_by(enriched, "theme"),
+        "price_bucket_ranking": _rank_by_price_bucket(enriched),
+        "forecast": _linear_forecast(monthly_list),
     }
 
 
@@ -1984,6 +2033,105 @@ def _rank_channels(enriched_rows):
     # Verkaufskanal (eBay oder manueller Kanal wie Kleinanzeigen/Vinted) -
     # Gegenstueck zu _rank_platforms() auf der Verkaufsseite.
     return _rank_by_avg(enriched_rows, "channel")
+
+
+# Preisklassen fuer die Lagerreichweite-Auswertung (Klaerung mit dem
+# Nutzer: "Ø Verkaufsdauer je Preisklasse") - (untere Grenze inklusiv,
+# obere Grenze exklusiv, Anzeige-Label). Feste, grobe Klassen statt
+# automatisch berechneter Quantile, damit die Klassen ueber verschiedene
+# Zeitraeume/Filter hinweg vergleichbar bleiben.
+_PRICE_BUCKETS = [
+    (0, 10, "< 10 €"),
+    (10, 25, "10–25 €"),
+    (25, 50, "25–50 €"),
+    (50, 100, "50–100 €"),
+    (100, None, "> 100 €"),
+]
+
+
+def _price_bucket_label(price):
+    for lo, hi, label in _PRICE_BUCKETS:
+        if price >= lo and (hi is None or price < hi):
+            return label
+    return _PRICE_BUCKETS[-1][2]
+
+
+def _rank_by_price_bucket(enriched_rows):
+    # "Lagerreichweite"-Kennzahl (Klaerung mit dem Nutzer): gleiche
+    # Gruppierung/Kennzahlen wie _rank_statistics_by() oben (u.a.
+    # avg_holding_days - die eigentlich interessante Zahl hier: wie lange
+    # eine Karte dieser Preisklasse im Schnitt bis zum Verkauf braucht),
+    # nur nach Verkaufspreis-Preisklasse statt einem Kartenfeld gruppiert.
+    groups = {}
+    for row in enriched_rows:
+        if row["profit"] is None or row.get("sale_price") is None:
+            continue
+        key = _price_bucket_label(float(row["sale_price"]))
+        group = groups.setdefault(key, {
+            "name": key, "count": 0, "revenue": 0.0, "profit": 0.0,
+            "_holding_days_sum": 0, "_holding_days_count": 0,
+        })
+        group["count"] += 1
+        group["revenue"] += float(row["sale_price"])
+        group["profit"] += row["profit"]
+        if row.get("holding_days") is not None:
+            group["_holding_days_sum"] += row["holding_days"]
+            group["_holding_days_count"] += 1
+    # In fester Preisklassen-Reihenfolge statt nach Gewinn sortiert (anders
+    # als _rank_statistics_by()) - die Reihenfolge selbst ist die
+    # interessante Information (steigt/faellt die Lagerreichweite mit dem
+    # Preis), nicht welche Preisklasse am meisten Gewinn brachte.
+    ranked = [groups[label] for _, _, label in _PRICE_BUCKETS if label in groups]
+    for group in ranked:
+        group["revenue"] = round(group["revenue"], 2)
+        group["profit"] = round(group["profit"], 2)
+        group["avg_holding_days"] = (
+            round(group["_holding_days_sum"] / group["_holding_days_count"], 1)
+            if group["_holding_days_count"] else None
+        )
+        del group["_holding_days_sum"]
+        del group["_holding_days_count"]
+    return ranked
+
+
+def _linear_forecast(monthly_list, months_ahead=3):
+    # Einfache Trendprognose (Klaerung mit dem Nutzer) - eine lineare
+    # Regression (kleinste Quadrate) ueber die vorhandenen Monatswerte,
+    # fortgeschrieben um months_ahead weitere Monate. Bewusst kein echtes
+    # Zeitreihen-/ML-Modell (keine Saisonalitaet, kein Konfidenzintervall) -
+    # nur ein grober linearer Trend, wie vom Nutzer angefragt. Braucht
+    # mindestens 2 Monate mit Daten, sonst laesst sich keine Gerade legen.
+    if len(monthly_list) < 2:
+        return []
+
+    def _fit(ys):
+        n = len(ys)
+        mean_x = (n - 1) / 2
+        mean_y = sum(ys) / n
+        num = sum((x - mean_x) * (y - mean_y) for x, y in enumerate(ys))
+        den = sum((x - mean_x) ** 2 for x in range(n))
+        slope = num / den if den else 0.0
+        return slope, mean_y - slope * mean_x
+
+    revenue_slope, revenue_intercept = _fit([m["revenue"] for m in monthly_list])
+    profit_slope, profit_intercept = _fit([m["profit"] for m in monthly_list])
+
+    year, month = (int(p) for p in monthly_list[-1]["month"].split("-"))
+    forecast = []
+    for i in range(1, months_ahead + 1):
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+        x = len(monthly_list) - 1 + i
+        forecast.append({
+            "month": f"{year:04d}-{month:02d}",
+            # Umsatz kann rechnerisch nicht negativ werden - Gewinn schon
+            # (bewusst nicht gekappt, ein Abwaertstrend soll sichtbar bleiben).
+            "projected_revenue": round(max(0.0, revenue_slope * x + revenue_intercept), 2),
+            "projected_profit": round(profit_slope * x + profit_intercept, 2),
+        })
+    return forecast
 
 
 @app.get("/api/statistics")
