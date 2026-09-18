@@ -2426,6 +2426,13 @@ async def ebay_listing_views(listing_ids: str):
     try:
         token = ebay_client.get_access_token()
         views = ebay_client.get_listing_views(token, ids)
+        # Impressionen/Klickrate zusaetzlich zu den Aufrufen (Klaerung mit
+        # dem Nutzer) - eigener try/except-Rahmen waere hier ueberfluessig,
+        # ein Fehler bei diesem zweiten Report-Aufruf soll wie beim ersten
+        # den ganzen Endpunkt mit derselben Fehlermeldung fehlschlagen
+        # lassen, statt Aufrufe stillschweigend ohne die Zusatzmetriken
+        # zurueckzugeben.
+        traffic_extra = ebay_client.get_listing_traffic_extra(token, ids)
     except ebay_client.EbayNotAuthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
@@ -2434,7 +2441,10 @@ async def ebay_listing_views(listing_ids: str):
     # Nutzer: soll bis zum naechsten Klick sichtbar bleiben, statt nach
     # jedem Seiten-Neuladen wieder bei "-" zu starten) - dafuer erst die
     # eBay-Listing-ID auf unsere interne ID abbilden, gleiches Muster wie
-    # sync_ebay_sales()'s listings_by_item_id oben.
+    # sync_ebay_sales()'s listings_by_item_id oben. Impressionen/Klickrate
+    # werden bewusst NICHT persistiert (kein eigenes DB-Feld) - anders als
+    # bei den Aufrufen gab es dafuer keinen expliziten Wunsch, sie bleiben
+    # wie bisher nur fuer die aktuelle Sitzung sichtbar.
     if views:
         listings_by_item_id = {
             l["ebay_listing_id"]: l for l in db.list_ebay_listings() if l.get("ebay_listing_id")
@@ -2443,7 +2453,7 @@ async def ebay_listing_views(listing_ids: str):
             listing = listings_by_item_id.get(ebay_id)
             if listing:
                 db.update_ebay_listing(listing["id"], {"last_known_views": count})
-    return JSONResponse({"views": views})
+    return JSONResponse({"views": views, "traffic_extra": traffic_extra})
 
 
 @app.get("/api/ebay/listings/best-offer-sync")
@@ -3390,10 +3400,18 @@ def _sheets_tabs():
 
     card_headers = [
         "id", "title", "category", "theme", "team", "manufacturer", "set_name",
-        "season_year", "card_type", "variant", "position", "squad_number", "club_debut_season",
+        "season_year", "card_type", "variant", "language", "position", "squad_number", "club_debut_season",
         "card_number", "serial_number", "print_run", "card_no", "recognition_status",
         "is_numbered", "is_rookie", "is_autograph", "shipped", "picked_up", "private_collection",
-        "tags", "created_at",
+        "tags",
+        # Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-
+        # Migration vom 2026-09-18) - muessen nicht zwangslaeufig befuellt sein.
+        "manufacturing_year", "origin_country", "material", "card_size", "card_stock",
+        "edition", "special_features", "product_type", "insert_set", "vintage",
+        "reprint_status", "custom_made", "autograph_authentication", "signed_by",
+        "autograph_type", "autograph_auth_number", "tv_series", "movie", "genre",
+        "illustrator", "age_recommendation",
+        "created_at",
     ]
     # Boolsche Felder (is_numbered/is_rookie/is_autograph) brauchen eine
     # eigene Ja/Nein-Darstellung statt der generischen str(...)-Umwandlung -

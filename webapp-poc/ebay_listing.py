@@ -162,23 +162,82 @@ def derive_listing_type(card):
     return "sport" if category in _KNOWN_SPORTS else "non_sport"
 
 
+# Weitere optionale eBay-Item-Specifics (Nutzerwunsch: alle moeglichen
+# Felder aus beiden Kategorie-Vorlagen aufnehmen, muessen nicht
+# zwangslaeufig befuellt sein) - einfache 1:1-Textzuordnung Aspect-Label zu
+# DCardsLab-Feld, gilt fuer Sport wie Non-Sport gleichermassen (beide
+# Vorlagen enthalten dieselben Spalten dafuer).
+_GENERIC_EXTRA_ASPECTS = (
+    ("Herstellungsjahr", "manufacturing_year"), ("Ursprungsland", "origin_country"),
+    ("Material", "material"), ("Kartengröße", "card_size"), ("Kartenstärke", "card_stock"),
+    ("Edition", "edition"), ("Besonderheiten", "special_features"),
+    ("Produktart", "product_type"), ("Insert Set", "insert_set"), ("Vintage", "vintage"),
+    ("Original/Lizenzierter Nachdruck", "reprint_status"), ("Maßgefertigt", "custom_made"),
+    ("Autogramm-Authentifizierung", "autograph_authentication"), ("Signiert von", "signed_by"),
+    ("Autogrammart", "autograph_type"),
+    ("Autogramm-Authentifizierungsnummer", "autograph_auth_number"),
+)
+
+# NUR in der Non-Sport-Vorlage vorhandene Spalten - bei Sport-Angeboten
+# bewusst nicht mitgeschickt, da die Sport-Kategorie diese Aspects gar
+# nicht kennt.
+_NON_SPORT_ONLY_ASPECTS = (
+    ("TV-Serie", "tv_series"), ("Film", "movie"), ("Genre", "genre"),
+    ("Zeichner", "illustrator"), ("Altersempfehlung", "age_recommendation"),
+)
+
+
 def build_aspects(card, listing_type):
     aspects = {}
     category = str(card.get("category") or "").strip()
     if category:
         aspects["Sportart" if listing_type == "sport" else "Franchise"] = [category]
+    # Titel = "Name der abgebildeten Person/des Charakters" (siehe
+    # ai_card_recognition.py) - je nach Kartentyp unter unterschiedlichem
+    # eBay-Aspect-Namen erwartet.
+    title = str(card.get("title") or "").strip()
+    if title:
+        aspects["Spieler/Sportler" if listing_type == "sport" else "Charakter"] = [title]
     for label, key in (
         ("Team / Verein", "team"), ("Hersteller", "manufacturer"),
         ("Set / Serie", "set_name"), ("Saison / Jahr", "season_year"),
-        ("Kartennummer", "card_number"),
+        ("Kartennummer", "card_number"), ("Sprache", "language"),
+        ("Auflage", "print_run"),
     ):
         value = str(card.get(key) or "").strip()
         if value:
             aspects[label] = [value]
-    # DCardsLab has no per-card autograph field - "Nein" is the correct
-    # default for the ordinary (non-autographed) card and saves the
-    # seller from having to fill it in by hand on every listing.
-    aspects["Mit Autogramm"] = ["Nein"]
+    # "Liga" existiert nur in der Sport-Vorlage - theme bedeutet dort
+    # "Liga/Wettbewerb/Serie" (siehe ai_card_recognition.py), bei Non-Sport-
+    # Karten deckt dasselbe Feld eher ein Set-Unterthema ab und passt nicht
+    # zu einem eBay-"Liga"-Aspect.
+    if listing_type == "sport":
+        theme = str(card.get("theme") or "").strip()
+        if theme:
+            aspects["Liga"] = [theme]
+    for label, key in _GENERIC_EXTRA_ASPECTS:
+        value = str(card.get(key) or "").strip()
+        if value:
+            aspects[label] = [value]
+    if listing_type == "non_sport":
+        for label, key in _NON_SPORT_ONLY_ASPECTS:
+            value = str(card.get(key) or "").strip()
+            if value:
+                aspects[label] = [value]
+    # Typ (z.B. "Parallel", "Insert") und Variante (z.B. "Blue Prizm") sind
+    # zwei getrennte DCardsLab-Felder, eBays "Parallel/Variante"-Aspect
+    # erwartet dagegen einen einzelnen Wert - beide zusammengefuegt, gleiche
+    # Reihenfolge wie im generierten Titel (siehe generate_title() oben).
+    card_type = str(card.get("card_type") or "").strip()
+    variant = str(card.get("variant") or "").strip()
+    parallel_variant = " ".join(part for part in (card_type, variant) if part)
+    if parallel_variant:
+        aspects["Parallel/Variante"] = [parallel_variant]
+    # is_autograph existiert inzwischen als eigenes Kartenfeld (siehe
+    # supabase/schema.sql-Migration vom 2026-09-17) - "Mit Autogramm" laesst
+    # sich daher direkt daraus ableiten, statt weiterhin fest auf "Nein" zu
+    # stehen (frueherer Stand, bevor es das Feld gab).
+    aspects["Mit Autogramm"] = ["Ja" if card.get("is_autograph") else "Nein"]
     return aspects
 
 

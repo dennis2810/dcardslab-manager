@@ -271,6 +271,57 @@ def _request(method, token, path, json_body=None, params=None):
 _REPORT_LAG_DAYS = 3
 
 
+def _traffic_report_metric(token, listing_ids, metric, days, cast):
+    """Ein einzelner getTrafficReport-Aufruf fuer genau EINE Metrik - bei
+    nur einer angefragten Metrik traegt metricValues[0] garantiert deren
+    Wert (kein Namens-Lookup noetig, siehe get_listing_views()'s
+    Docstring/Historie). Fuer mehrere Metriken auf einmal muesste die
+    Metrik->Index-Zuordnung aus der eBay-Antwort selbst gelesen werden -
+    deren genaues Feld ist hier nicht anhand einer echten eBay-Antwort
+    verifiziert, deshalb bewusst ein separater Aufruf je Metrik statt
+    eines ungetesteten Rateversuchs. Gibt {listing_id: value} zurueck,
+    wie das bisherige get_listing_views()."""
+    if not listing_ids:
+        return {}
+    end = datetime.now(timezone.utc).date() - timedelta(days=_REPORT_LAG_DAYS)
+    start = end - timedelta(days=days)
+    filter_value = (
+        f"marketplace_ids:{{{MARKETPLACE_ID}}},"
+        f"date_range:[{start:%Y%m%d}..{end:%Y%m%d}],"
+        f"listing_ids:{{{'|'.join(listing_ids)}}}"
+    )
+    response = _request(
+        "GET", token, "/sell/analytics/v1/traffic_report",
+        params={"filter": filter_value, "dimension": "LISTING", "metric": metric},
+    )
+    body = response.json()
+    records = body.get("records") or []
+    values = {}
+    for record in records:
+        dimension_values = record.get("dimensionValues") or []
+        metric_values = record.get("metricValues") or []
+        if not dimension_values or not metric_values:
+            continue
+        listing_id = dimension_values[0].get("value")
+        raw = metric_values[0].get("value")
+        if not listing_id or raw in (None, ""):
+            continue
+        values[listing_id] = cast(raw)
+    warnings = body.get("warnings") or []
+    if not values or warnings:
+        # Leeres Ergebnis trotz 200 ist bei dieser API oft kein Bug, sondern
+        # bedeutet "kein Treffer im Report" (siehe Docstring) - die rohe
+        # Antwort inkl. eventueller eBay-"warnings" mitloggen, damit sich das
+        # im Zweifel ohne Rateraten an echten eBay-Daten nachvollziehen
+        # laesst (z. B. `docker logs` des webapp-poc-Containers).
+        logger.info(
+            "_traffic_report_metric(%s): %d/%d Angebot(e) ohne Treffer im Report, "
+            "eBay-warnings=%s - rohe Antwort: %s",
+            metric, len(listing_ids) - len(values), len(listing_ids), warnings, response.text[:2000],
+        )
+    return values
+
+
 def get_listing_views(token, listing_ids, days=30):
     """Aufrufe je Angebot der letzten `days` Tage (Sell Analytics API,
     getTrafficReport, Metrik LISTING_VIEWS_TOTAL) - Beobachter-/Watcher-
@@ -286,50 +337,28 @@ def get_listing_views(token, listing_ids, days=30):
     (Report-Eligibility-Regel von eBay) - die Aufrufzahl im eBay-eigenen
     Verkaeufer-Cockpit ist davon nicht betroffen und kann daher hoeher
     liegen als hier, siehe README.md."""
-    if not listing_ids:
-        return {}
-    end = datetime.now(timezone.utc).date() - timedelta(days=_REPORT_LAG_DAYS)
-    start = end - timedelta(days=days)
-    filter_value = (
-        f"marketplace_ids:{{{MARKETPLACE_ID}}},"
-        f"date_range:[{start:%Y%m%d}..{end:%Y%m%d}],"
-        f"listing_ids:{{{'|'.join(listing_ids)}}}"
-    )
-    response = _request(
-        "GET", token, "/sell/analytics/v1/traffic_report",
-        params={"filter": filter_value, "dimension": "LISTING", "metric": "LISTING_VIEWS_TOTAL"},
-    )
-    # eBays einzelne dimensionValues/metricValues-Eintraege tragen selbst
-    # keinen Namen - der Name steht nur einmalig in header.dimensionKeys/
-    # header.metrics, positionsgleich zu den angefragten dimension-/metric-
-    # Query-Parametern (per eBay-OpenAPI-Spec bestaetigt). Da hier genau
-    # eine Dimension (LISTING) und eine Metrik (LISTING_VIEWS_TOTAL)
-    # angefragt wird, reicht Index 0.
-    body = response.json()
-    records = body.get("records") or []
-    views = {}
-    for record in records:
-        dimension_values = record.get("dimensionValues") or []
-        metric_values = record.get("metricValues") or []
-        if not dimension_values or not metric_values:
-            continue
-        listing_id = dimension_values[0].get("value")
-        if not listing_id:
-            continue
-        views[listing_id] = int(metric_values[0].get("value") or 0)
-    warnings = body.get("warnings") or []
-    if not views or warnings:
-        # Leeres Ergebnis trotz 200 ist bei dieser API oft kein Bug, sondern
-        # bedeutet "kein Treffer im Report" (siehe Docstring) - die rohe
-        # Antwort inkl. eventueller eBay-"warnings" mitloggen, damit sich das
-        # im Zweifel ohne Rateraten an echten eBay-Daten nachvollziehen
-        # laesst (z. B. `docker logs` des webapp-poc-Containers).
-        logger.info(
-            "get_listing_views: %d/%d Angebot(e) ohne Treffer im Report, "
-            "eBay-warnings=%s - rohe Antwort: %s",
-            len(listing_ids) - len(views), len(listing_ids), warnings, response.text[:2000],
-        )
-    return views
+    return _traffic_report_metric(token, listing_ids, "LISTING_VIEWS_TOTAL", days, int)
+
+
+def get_listing_traffic_extra(token, listing_ids, days=30):
+    """Impressionen (LISTING_IMPRESSION_TOTAL, Gesamt-Impressionen ueber
+    Suchergebnisse/Shop/sonstige Seiten) und Klickrate (CLICK_THROUGH_RATE,
+    eBays Definition: Views geteilt durch Impressionen, KEINE absolute
+    Klickzahl - eine solche liefert die API nicht) je Angebot, zusaetzlich
+    zu den Aufrufen aus get_listing_views(). Zwei separate Report-Aufrufe
+    statt einem gemeinsamen mit mehreren Metriken - siehe
+    _traffic_report_metric()'s Docstring, warum. Gibt {listing_id:
+    {"impressions": int, "click_through_rate": float}} zurueck; ein Angebot
+    fehlt, wenn es in KEINEM der beiden Reports auftaucht."""
+    impressions = _traffic_report_metric(token, listing_ids, "LISTING_IMPRESSION_TOTAL", days, int)
+    click_through_rates = _traffic_report_metric(token, listing_ids, "CLICK_THROUGH_RATE", days, float)
+    result = {}
+    for listing_id in set(impressions) | set(click_through_rates):
+        result[listing_id] = {
+            "impressions": impressions.get(listing_id),
+            "click_through_rate": click_through_rates.get(listing_id),
+        }
+    return result
 
 
 def get_listing_policies(token, marketplace_id=MARKETPLACE_ID):

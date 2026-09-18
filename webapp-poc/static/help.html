@@ -279,6 +279,9 @@ if ("serviceWorker" in navigator) {
     ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu den Bereichen der Seite (Fotos, Felder, Kauf,
+    Zielpreis-Rechner, Inventar, eBay, Verkauf außerhalb eBay, Preisrecherche, Erinnerungen) – die Seite wurde
+    außerdem verbreitert, damit mehrspaltige Bereiche wie die eBay-Aspects besser Platz finden.</p>
   <p>Auf der Detailseite einer Karte lassen sich Fotos in 90°-Schritten drehen, komplett ersetzen (z. B. bei einem
     unscharfen Bild) oder über „Zuschneiden/Drehen" frei zuschneiden und in beliebigem Winkel (nicht nur 90°)
     gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
@@ -291,7 +294,15 @@ if ("serviceWorker" in navigator) {
     Kästchen „Nummeriert (Numbered)", „Rookie-Karte (RC)" und „Autogramm (Auto)" lassen sich unabhängig von der
     KI-Erkennung jederzeit von Hand setzen oder korrigieren – sie erscheinen zusätzlich als eigene Kennzeichen
     oben auf der Kartenseite sowie in der Kartenübersicht (Kachel- und Listenansicht), und fließen automatisch
-    sowohl in den eBay-Titel als auch in die Standard-Suchanfrage der Preisrecherche mit ein (siehe unten).
+    sowohl in den eBay-Titel als auch in die Standard-Suchanfrage der Preisrecherche mit ein (siehe unten). Beim
+    Öffnen des eBay-Bearbeiten-Formulars werden zusätzlich eBays kategorieabhängige Pflicht-/optionale
+    Artikelmerkmale („Aspects", z. B. Sportart/Franchise, Spieler/Charakter, Team, Hersteller, Set / Serie,
+    Saison / Jahr, Liga, Kartennummer, Auflage, Sprache, Parallel/Variante, „Mit Autogramm" sowie die
+    weiteren optionalen Felder wie Herstellungsjahr/Ursprungsland/Material/… – siehe „Kartenfelder erklärt"
+    unten) automatisch aus den Kartenfeldern vorbefüllt – „Parallel/Variante" kombiniert dabei Typ und
+    Variante, „Mit Autogramm" übernimmt das Autogramm-Kästchen. Fehlende Pflichtfelder (je Kartentyp z. B.
+    Sportart/Franchise) werden vor dem
+    Veröffentlichen markiert; alle vorbefüllten Werte lassen sich vor dem Speichern noch anpassen.
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -454,6 +465,10 @@ if ("serviceWorker" in navigator) {
       „Gold Refractor" oder „Silver" – wird zusätzlich zum Typ angegeben, wenn beide getrennt aufgedruckt sind
       (z. B. „Parallel" + „Blue Prizm"). Ist nur ein einzelner Begriff aufgedruckt (z. B. nur „Silver" ohne
       separates „Parallel"), landet er im Feld Typ statt hier.</li>
+    <li><strong>Sprache</strong>: die Sprache des gedruckten Karten-/Fließtexts, z. B. „Deutsch", „Englisch" oder
+      „Japanisch" – optional, bei Sport-Karten meist nicht relevant, bei Non-Sport-/TCG-Karten (z. B. Pokémon) aber
+      oft ein spürbarer Preisfaktor. Wird beim eBay-Angebot als Item-Specific „Sprache" übernommen (siehe
+      Abschnitt „eBay" unten).</li>
     <li><strong>Team</strong>: der Verein/die Mannschaft bei Sport-Karten, z. B. „FC Bayern München". Bei
       Non-Sport-Karten meist leer (siehe Kategorie).</li>
     <li><strong>Kartennummer</strong>: die im Set aufgedruckte Katalognummer, z. B. „12" oder „RC-5" – kein
@@ -470,6 +485,38 @@ if ("serviceWorker" in navigator) {
     <li><strong>Autogramm (Auto)</strong>: Kästchen für Karten mit einer echten, direkt auf der Karte
       angebrachten Unterschrift (nicht zu verwechseln mit einem aufgedruckten Faksimile).</li>
   </ul>
+  <p>Weitere optionale eBay-Item-Specifics, alle nach demselben Prinzip: nur befüllen, wenn auf der Karte
+    tatsächlich lesbar angegeben – müssen nicht zwangsläufig ausgefüllt werden und starten in der
+    Karten-Übersicht standardmäßig ausgeblendet (über „⚙ Spalten" einblendbar). Werden beim eBay-Angebot
+    automatisch als gleichnamiger Aspect übernommen.</p>
+  <p><strong>Generell (beide Kartentypen):</strong></p>
+  <ul>
+    <li><strong>Herstellungsjahr</strong>, <strong>Ursprungsland</strong>, <strong>Material</strong>,
+      <strong>Kartengröße</strong>, <strong>Kartenstärke</strong>, <strong>Edition</strong>,
+      <strong>Besonderheiten</strong>, <strong>Produktart</strong>, <strong>Insert Set</strong>,
+      <strong>Vintage</strong>, <strong>Original/Nachdruck</strong> und <strong>Maßgefertigt</strong> –
+      jeweils direkt vom eBay-Item-Specific-Namen abgeleitet, keine weitere Erklärung nötig.</li>
+  </ul>
+  <p><strong>Nur bei Autogramm-Karten relevant:</strong></p>
+  <ul>
+    <li><strong>Autogramm-Authentifizierung</strong>: Authentifizierungsstelle des Autogramms (z. B.
+      „PSA/DNA").</li>
+    <li><strong>Signiert von</strong>: Name der signierenden Person, falls von der abgebildeten Person
+      abweichend.</li>
+    <li><strong>Autogrammart</strong>: Art des Autogramms (z. B. „Hard Signed", „Sticker Auto").</li>
+    <li><strong>Autogramm-Zertifikatsnr.</strong>: Zertifizierungsnummer des Autogramms.</li>
+  </ul>
+  <p><strong>Nur bei Non-Sport-Karten an eBay übertragen</strong> (Felder selbst sind bei allen Kartentypen
+    ausfüllbar, werden aber nur bei Non-Sport-Angeboten als Aspect gesendet, da die Sport-Kategorie sie nicht
+    kennt):</p>
+  <ul>
+    <li><strong>TV-Serie</strong>, <strong>Film</strong>, <strong>Genre</strong>, <strong>Zeichner</strong>
+      und <strong>Altersempfehlung</strong>.</li>
+  </ul>
+  <p>Zusätzlich fließen <strong>Titel</strong> automatisch in den Aspect „Spieler/Sportler" (Sport) bzw.
+    „Charakter" (Non-Sport), <strong>Thema</strong> bei Sport-Karten zusätzlich in „Liga" und
+    <strong>Auflage</strong> in den gleichnamigen Aspect ein – bereits vorhandene Felder, die bisher nicht
+    an eBay übertragen wurden.</p>
 
   <h2 id="kaeufe">Käufe</h2>
   <p>„+ Neuer Kauf" legt einen Kauf mit Datum, Plattform (eBay, Kleinanzeigen, Vinted, Cardmarket, COMC, Sonstiges), Verkäufer,
@@ -496,6 +543,8 @@ if ("serviceWorker" in navigator) {
     den Foto-Scan (siehe oben), nicht aus reinen Textdaten.</p>
 
   <h2 id="ebay">eBay</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu den Bereichen der Seite (Filter, Aktionen, Von eBay
+    importieren, Angebotsliste).</p>
   <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Beendet, Fehler). Angebote
     lassen sich einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte
     Angebote auf einmal angepasst werden (z. B. „-10" für 10 % günstiger). Veröffentlichte Angebote lassen sich
@@ -519,7 +568,10 @@ if ("serviceWorker" in navigator) {
     sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
     Karte aktualisiert werden, lädt der Button „💰 Preisvorschläge laden" sie für alle Angebote der aktuellen
     Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
-    (gilt genauso für „👁 Aufrufe laden" unten). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
+    (gilt genauso für „👁 Aufrufe laden" unten). „👁 Aufrufe laden" zeigt in der Spalte „Aufrufe" neben der
+    Aufrufzahl (bleibt bis zum nächsten Klick sichtbar) zusätzlich, sofern von eBay geliefert, Impressionen und
+    Klickrate (CTR) als kleiner Zusatztext – letztere beide nur für die aktuelle Sitzung, nicht dauerhaft
+    gespeichert. Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
     Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
     (einzeln auf der Kartenseite oder per Massenaktion) – unabhängig von „Zuletzt aktualisiert", das sich nur auf

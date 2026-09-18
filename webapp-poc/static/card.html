@@ -45,13 +45,20 @@ if ("serviceWorker" in navigator) {
       --info-bg: #1d2c44; --info-fg: #8ab4f8;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
   :root[data-theme="light"] { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  /* 700px war fuer eine schmale Detailansicht gedacht - mit inzwischen vielen
+     Abschnitten (Felder, eBay-Aspects, Preisrecherche-Verlauf, Statistiken)
+     deutlich breiter, damit weniger gescrollt werden muss und mehrspaltige
+     Bereiche (z.B. .ebay-aspects) besser Platz finden - gleiches Prinzip wie
+     die Verbreiterung von cards.html/pos.html. */
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }
   .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
   .page-nav label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
   .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
+  .page-toc { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.85rem; margin: 0 0 1rem; }
+  .page-toc a { color: inherit; }
   /* margin: 0 auf Form und Input, sonst kann eine seitenweite generische
      form{}/input{}-Regel (z.B. fuer das Scan-Formular oder Einstellungen-
      Formulare) mit niedrigerer Spezifitaet einen margin-top/-bottom auf
@@ -279,7 +286,19 @@ if ("serviceWorker" in navigator) {
   </nav>
   <p id="prev-next-nav"></p>
 
-  <div class="images">
+  <nav class="page-toc no-print" aria-label="Bereiche auf dieser Seite">
+    <a href="#images-section">Fotos</a>
+    <a href="#edit-form">Felder</a>
+    <a href="#purchase-section">Kauf</a>
+    <a href="#target-price-section">Zielpreis-Rechner</a>
+    <a href="#inventory-section">Inventar</a>
+    <a href="#ebay-section">eBay</a>
+    <a href="#manual-sale-section">Verkauf außerhalb eBay</a>
+    <a href="#price-research-section">Preisrecherche</a>
+    <a href="#reminders-section">Erinnerungen</a>
+  </nav>
+
+  <div class="images" id="images-section">
     <div class="image-block">
       <img id="front-img" alt="Vorderseite">
       <div class="rotate-buttons">
@@ -469,12 +488,37 @@ const FIELDS = [
   ["season_year", "Saison / Jahr", "Saison oder Jahr (z. B. \"2024\" oder \"2024/25\")"],
   ["card_type", "Typ", "Parallel-/Variantenbezeichnung (z. B. Gold, Silver, Base, Insert)"],
   ["variant", "Variante", "Weitere Variantenangabe, falls von Typ verschieden"],
+  ["language", "Sprache", "Sprache des Karten-/Fließtexts (z. B. Deutsch, Englisch, Japanisch) – optional, auch bei Sport-Karten"],
   ["position", "Position", "Spielposition, falls auf der Karte vermerkt"],
   ["squad_number", "Trikotnummer", "Trikotnummer, falls auf der Karte vermerkt"],
   ["club_debut_season", "Debütsaison", "Debütsaison beim Verein, falls vermerkt"],
   ["card_number", "Kartennr.", "Kartennummer, wie auf der Karte angegeben (z. B. \"#123\")"],
   ["serial_number", "Seriennr.", "Seriennummer bei limitierten Karten (z. B. \"12/99\")"],
   ["print_run", "Auflage", "Gesamtauflage bei limitierten Karten (z. B. \"99\")"],
+  // Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-Migration
+  // vom 2026-09-18 und ebay_listing.build_aspects()) - muessen nicht
+  // zwangslaeufig befuellt werden.
+  ["manufacturing_year", "Herstellungsjahr", "Herstellungsjahr, falls separat vom Saison-/Erscheinungsjahr angegeben"],
+  ["origin_country", "Ursprungsland", "Herstellungsland, falls auf der Karte vermerkt"],
+  ["material", "Material", "Kartenmaterial (z. B. Karton, Kunststoff, Metall)"],
+  ["card_size", "Kartengröße", "Kartengröße/-format, falls vom Standardformat abweichend"],
+  ["card_stock", "Kartenstärke", "Kartenstärke in Punkt (pt), falls bekannt"],
+  ["edition", "Edition", "Editionsbezeichnung, falls angegeben (z. B. \"1st Edition\")"],
+  ["special_features", "Besonderheiten", "Sonstige Besonderheiten, die auf der Karte vermerkt sind"],
+  ["product_type", "Produktart", "Produktart, falls von der Standard-Sammelkarte abweichend"],
+  ["insert_set", "Insert Set", "Name des Insert-/Themen-Subsets, falls die Karte einem solchen angehört"],
+  ["vintage", "Vintage", "Vintage-Einordnung, falls angegeben"],
+  ["reprint_status", "Original/Nachdruck", "\"Original\" oder \"Lizenzierter Nachdruck\", falls angegeben"],
+  ["custom_made", "Maßgefertigt", "Ob die Karte maßgefertigt ist, falls zutreffend (z. B. \"Ja\")"],
+  ["autograph_authentication", "Autogramm-Authentifizierung", "Authentifizierungsstelle des Autogramms (z. B. \"PSA/DNA\"), nur bei Autogramm-Karten relevant"],
+  ["signed_by", "Signiert von", "Name der signierenden Person, falls von der abgebildeten Person abweichend"],
+  ["autograph_type", "Autogrammart", "Art des Autogramms (z. B. \"Hard Signed\", \"Sticker Auto\")"],
+  ["autograph_auth_number", "Autogramm-Zertifikatsnr.", "Zertifizierungsnummer des Autogramms, falls vorhanden"],
+  ["tv_series", "TV-Serie", "TV-Serie, der die Karte entstammt (nur bei Non-Sport-Karten relevant)"],
+  ["movie", "Film", "Film, dem die Karte entstammt (nur bei Non-Sport-Karten relevant)"],
+  ["genre", "Genre", "Genre-Einordnung (nur bei Non-Sport-Karten relevant)"],
+  ["illustrator", "Zeichner", "Zeichner/Illustrator der Karte (nur bei Non-Sport-Karten relevant)"],
+  ["age_recommendation", "Altersempfehlung", "Altersempfehlung, falls angegeben (nur bei Non-Sport-Karten relevant)"],
 ];
 
 // Kleines "ⓘ"-Symbol neben einem Feldlabel, das die Erklaerung als native

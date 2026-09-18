@@ -130,6 +130,28 @@ if ("serviceWorker" in navigator) {
   #list.hide-set_name [data-col="set_name"],
   #list.hide-card_type [data-col="card_type"],
   #list.hide-variant [data-col="variant"],
+  #list.hide-language [data-col="language"],
+  #list.hide-manufacturing_year [data-col="manufacturing_year"],
+  #list.hide-origin_country [data-col="origin_country"],
+  #list.hide-material [data-col="material"],
+  #list.hide-card_size [data-col="card_size"],
+  #list.hide-card_stock [data-col="card_stock"],
+  #list.hide-edition [data-col="edition"],
+  #list.hide-special_features [data-col="special_features"],
+  #list.hide-product_type [data-col="product_type"],
+  #list.hide-insert_set [data-col="insert_set"],
+  #list.hide-vintage [data-col="vintage"],
+  #list.hide-reprint_status [data-col="reprint_status"],
+  #list.hide-custom_made [data-col="custom_made"],
+  #list.hide-autograph_authentication [data-col="autograph_authentication"],
+  #list.hide-signed_by [data-col="signed_by"],
+  #list.hide-autograph_type [data-col="autograph_type"],
+  #list.hide-autograph_auth_number [data-col="autograph_auth_number"],
+  #list.hide-tv_series [data-col="tv_series"],
+  #list.hide-movie [data-col="movie"],
+  #list.hide-genre [data-col="genre"],
+  #list.hide-illustrator [data-col="illustrator"],
+  #list.hide-age_recommendation [data-col="age_recommendation"],
   #list.hide-card_number [data-col="card_number"],
   #list.hide-theme [data-col="theme"],
   #list.hide-manufacturer [data-col="manufacturer"],
@@ -406,6 +428,28 @@ if ("serviceWorker" in navigator) {
             <th data-key="set_name" data-col="set_name">Set / Serie <span class="sort-arrow"></span></th>
             <th data-key="card_type" data-col="card_type">Typ <span class="sort-arrow"></span></th>
             <th data-key="variant" data-col="variant">Variante <span class="sort-arrow"></span></th>
+            <th data-key="language" data-col="language">Sprache <span class="sort-arrow"></span></th>
+            <th data-key="manufacturing_year" data-col="manufacturing_year">Herstellungsjahr <span class="sort-arrow"></span></th>
+            <th data-key="origin_country" data-col="origin_country">Ursprungsland <span class="sort-arrow"></span></th>
+            <th data-key="material" data-col="material">Material <span class="sort-arrow"></span></th>
+            <th data-key="card_size" data-col="card_size">Kartengröße <span class="sort-arrow"></span></th>
+            <th data-key="card_stock" data-col="card_stock">Kartenstärke <span class="sort-arrow"></span></th>
+            <th data-key="edition" data-col="edition">Edition <span class="sort-arrow"></span></th>
+            <th data-key="special_features" data-col="special_features">Besonderheiten <span class="sort-arrow"></span></th>
+            <th data-key="product_type" data-col="product_type">Produktart <span class="sort-arrow"></span></th>
+            <th data-key="insert_set" data-col="insert_set">Insert Set <span class="sort-arrow"></span></th>
+            <th data-key="vintage" data-col="vintage">Vintage <span class="sort-arrow"></span></th>
+            <th data-key="reprint_status" data-col="reprint_status">Original/Nachdruck <span class="sort-arrow"></span></th>
+            <th data-key="custom_made" data-col="custom_made">Maßgefertigt <span class="sort-arrow"></span></th>
+            <th data-key="autograph_authentication" data-col="autograph_authentication">Autogramm-Authentifizierung <span class="sort-arrow"></span></th>
+            <th data-key="signed_by" data-col="signed_by">Signiert von <span class="sort-arrow"></span></th>
+            <th data-key="autograph_type" data-col="autograph_type">Autogrammart <span class="sort-arrow"></span></th>
+            <th data-key="autograph_auth_number" data-col="autograph_auth_number">Autogramm-Zertifikatsnr. <span class="sort-arrow"></span></th>
+            <th data-key="tv_series" data-col="tv_series">TV-Serie <span class="sort-arrow"></span></th>
+            <th data-key="movie" data-col="movie">Film <span class="sort-arrow"></span></th>
+            <th data-key="genre" data-col="genre">Genre <span class="sort-arrow"></span></th>
+            <th data-key="illustrator" data-col="illustrator">Zeichner <span class="sort-arrow"></span></th>
+            <th data-key="age_recommendation" data-col="age_recommendation">Altersempfehlung <span class="sort-arrow"></span></th>
             <th data-key="card_number" data-col="card_number">Kartennr. <span class="sort-arrow"></span></th>
             <th data-key="theme" data-col="theme">Thema <span class="sort-arrow"></span></th>
             <th data-key="manufacturer" data-col="manufacturer">Hersteller <span class="sort-arrow"></span></th>
@@ -529,6 +573,37 @@ fetch("/api/app-status").then((r) => r.json()).then((body) => {
   renderCurrentView();
 }).catch(() => {});
 
+// Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-Migration
+// vom 2026-09-18, ebay_listing.build_aspects()) - einfache Text-Spalten nach
+// demselben Muster wie card_type/variant/language, hier als gemeinsame Liste
+// statt 21x einzeln ausgeschrieben (Basis fuer COLUMN_TOGGLES/
+// DEFAULT_COLUMN_ORDER/BULK_EDIT_FIELDS/CSV-Export unten sowie fuer die
+// Zellen-Erzeugung oben in renderRow()).
+const EXTRA_ASPECT_FIELDS = [
+  { key: "manufacturing_year", label: "Herstellungsjahr" },
+  { key: "origin_country", label: "Ursprungsland" },
+  { key: "material", label: "Material" },
+  { key: "card_size", label: "Kartengröße" },
+  { key: "card_stock", label: "Kartenstärke" },
+  { key: "edition", label: "Edition" },
+  { key: "special_features", label: "Besonderheiten" },
+  { key: "product_type", label: "Produktart" },
+  { key: "insert_set", label: "Insert Set" },
+  { key: "vintage", label: "Vintage" },
+  { key: "reprint_status", label: "Original/Nachdruck" },
+  { key: "custom_made", label: "Maßgefertigt" },
+  { key: "autograph_authentication", label: "Autogramm-Authentifizierung" },
+  { key: "signed_by", label: "Signiert von" },
+  { key: "autograph_type", label: "Autogrammart" },
+  { key: "autograph_auth_number", label: "Autogramm-Zertifikatsnr." },
+  { key: "tv_series", label: "TV-Serie" },
+  { key: "movie", label: "Film" },
+  { key: "genre", label: "Genre" },
+  { key: "illustrator", label: "Zeichner" },
+  { key: "age_recommendation", label: "Altersempfehlung" },
+];
+const EXTRA_ASPECT_FIELD_KEYS = EXTRA_ASPECT_FIELDS.map((f) => f.key);
+
 // Frei wählbare UND umsortierbare Tabellenspalten (Listenansicht) - Sichtbarkeit
 // weiterhin per CSS-Klasse auf der Tabelle (.hide-<key>-Regeln oben im
 // <style>), jetzt ueber data-col statt nth-child, weil die Position nach
@@ -543,6 +618,7 @@ const COLUMN_TOGGLES = [
   { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
+  { key: "language", label: "Sprache" },
   { key: "card_number", label: "Kartennr." },
   { key: "theme", label: "Thema" },
   { key: "manufacturer", label: "Hersteller" },
@@ -563,6 +639,7 @@ const COLUMN_TOGGLES = [
   { key: "inventory_location", label: "Lagerort" },
   { key: "features", label: "Merkmale" },
   { key: "listing_hints", label: "Angebots-Hinweise" },
+  ...EXTRA_ASPECT_FIELDS,
 ];
 const COLUMN_LABELS = {
   ebay_sku: "SKU", title: "Titel", ebay_status: "Verkauf", shipped: "Versand",
@@ -574,17 +651,26 @@ const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
 // Reihenfolge.
 const DEFAULT_COLUMN_ORDER = [
   "card_no", "ebay_sku", "title", "team", "season_year", "recognition_status",
-  "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "card_number",
+  "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "language", "card_number",
   "theme", "manufacturer", "position", "category", "squad_number", "club_debut_season",
   "serial_number", "print_run", "grading_summary", "purchase_platform", "purchase_seller",
   "purchase_date", "purchase_price", "sale_date", "sale_price",
   "inventory_location", "features", "listing_hints",
+  ...EXTRA_ASPECT_FIELD_KEYS,
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = "cards_hidden_columns";
 const COLUMN_ORDER_STORAGE_KEY = "cards_column_order";
+// Die 21 weiteren eBay-Item-Specifics (EXTRA_ASPECT_FIELD_KEYS) sind auf den
+// meisten Karten leer (Klaerung mit dem Nutzer: muessen nicht zwangslaeufig
+// befuellt werden) - ohne gespeicherte Praeferenz starten sie daher
+// ausgeblendet, statt die Tabelle auf ueber 50 Spalten aufzublaehen; ueber
+// "⚙ Spalten" weiterhin jederzeit einblendbar. Greift nur, wenn noch nie
+// etwas gespeichert wurde - eine bereits gespeicherte (auch leere) Auswahl
+// hat immer Vorrang.
 let hiddenColumns = new Set();
 try {
-  hiddenColumns = new Set(JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) || "[]"));
+  const savedHidden = localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+  hiddenColumns = new Set(JSON.parse(savedHidden ?? JSON.stringify(EXTRA_ASPECT_FIELD_KEYS)));
 } catch (err) {}
 let columnOrder = DEFAULT_COLUMN_ORDER.slice();
 try {
@@ -1354,6 +1440,21 @@ function renderList(cards) {
     variantTd.textContent = card.variant || "";
     tr.appendChild(variantTd);
 
+    const languageTd = document.createElement("td");
+    languageTd.dataset.col = "language";
+    languageTd.textContent = card.language || "";
+    tr.appendChild(languageTd);
+
+    // Weitere optionale eBay-Item-Specifics (siehe supabase/schema.sql-
+    // Migration vom 2026-09-18) - gleiches einfaches Text-Spalten-Muster
+    // wie oben, daher hier in einer Schleife statt 21x ausgeschrieben.
+    for (const key of EXTRA_ASPECT_FIELD_KEYS) {
+      const td = document.createElement("td");
+      td.dataset.col = key;
+      td.textContent = card[key] || "";
+      tr.appendChild(td);
+    }
+
     const cardNumberTd = document.createElement("td");
     cardNumberTd.dataset.col = "card_number";
     cardNumberTd.textContent = card.card_number || "";
@@ -1650,6 +1751,7 @@ const BULK_EDIT_FIELDS = [
   { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
+  { key: "language", label: "Sprache" },
   { key: "position", label: "Position" },
   { key: "category", label: "Kategorie" },
   { key: "squad_number", label: "Trikotnummer" },
@@ -1658,6 +1760,7 @@ const BULK_EDIT_FIELDS = [
   { key: "is_rookie", label: "Rookie (RC)", type: "boolean" },
   { key: "is_numbered", label: "Nummeriert", type: "boolean" },
   { key: "is_autograph", label: "Autogramm (Auto)", type: "boolean" },
+  ...EXTRA_ASPECT_FIELDS,
 ];
 const bulkEditFieldSelect = document.getElementById("bulk-edit-field");
 for (const f of BULK_EDIT_FIELDS) {
@@ -2153,17 +2256,18 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set / Serie", "Typ", "Variante", "Position",
+    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set / Serie", "Typ", "Variante", "Sprache", "Position",
     "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
     "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Kaufdatum", "Kaufpreis", "Verkaufsdatum", "Verkaufspreis", "Lagerort",
     "Erkennung", "eBay-Status",
     "Versendet", "Abgeholt", "Zugestellt", "Retoure", "Private Sammlung",
     "Nummeriert", "Rookie (RC)", "Autogramm (Auto)", "Importiert", "Neu eingestellt",
     "Lange gelistet (>14 Tage)", "Tags",
+    ...EXTRA_ASPECT_FIELDS.map((f) => f.label),
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
-    c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.position || "",
+    c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.language || "", c.position || "",
     c.category || "", c.squad_number || "", c.club_debut_season || "", c.card_number || "",
     c.serial_number || "", c.print_run || "", c.card_no || "",
     c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "",
@@ -2177,6 +2281,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
     c.ebay_imported ? "Ja" : "Nein", c.last_auto_relisted_at ? "Ja" : "Nein",
     matchesListingHintFilter(c, "long_listed") ? "Ja" : "Nein",
     c.tags || "",
+    ...EXTRA_ASPECT_FIELD_KEYS.map((key) => c[key] || ""),
   ]);
   downloadCsv("karten.csv", headers, rows);
 });
