@@ -571,7 +571,19 @@ if ("serviceWorker" in navigator) {
     (gilt genauso für „👁 Aufrufe laden" unten). „👁 Aufrufe laden" zeigt in der Spalte „Aufrufe" neben der
     Aufrufzahl (bleibt bis zum nächsten Klick sichtbar) zusätzlich, sofern von eBay geliefert, Impressionen und
     Klickrate (CTR) als kleiner Zusatztext – letztere beide nur für die aktuelle Sitzung, nicht dauerhaft
-    gespeichert. Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
+    gespeichert. Genaue Bedeutung der drei Metriken (auch als Tooltip auf der Spaltenüberschrift):</p>
+  <ul>
+    <li><strong>Aufrufe</strong>: wie oft die Angebotsseite selbst aufgerufen wurde.</li>
+    <li><strong>Impressionen</strong>: wie oft das Angebot in Suchergebnissen, im eigenen Shop oder auf sonstigen
+      eBay-Seiten angezeigt wurde – deutlich mehr als die Aufrufe, da nur ein Bruchteil der Anzeigen zu einem
+      tatsächlichen Klick führt.</li>
+    <li><strong>Klickrate (CTR)</strong>: Aufrufe geteilt durch Impressionen, als Prozentsatz. Keine absolute
+      Klickzahl – eine solche liefert eBays API nicht.</li>
+  </ul>
+  <p>Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog) – ebenso wenig wie echte
+    Kampagnen-/Werbemetriken (Promoted Listings: Ausgaben, Klicks, ACoS/ROAS), die eine eigene Anbindung an eBays
+    Marketing API bräuchten (siehe Backlog).</p>
+  <p>Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
     Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
     (einzeln auf der Kartenseite oder per Massenaktion) – unabhängig von „Zuletzt aktualisiert", das sich nur auf

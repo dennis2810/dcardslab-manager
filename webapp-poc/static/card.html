@@ -45,12 +45,11 @@ if ("serviceWorker" in navigator) {
       --info-bg: #1d2c44; --info-fg: #8ab4f8;
       --danger-bg: #3a1f1d; --danger-fg: #f28b82; }
   :root[data-theme="light"] { color-scheme: light; }
-  /* 700px war fuer eine schmale Detailansicht gedacht - mit inzwischen vielen
-     Abschnitten (Felder, eBay-Aspects, Preisrecherche-Verlauf, Statistiken)
-     deutlich breiter, damit weniger gescrollt werden muss und mehrspaltige
-     Bereiche (z.B. .ebay-aspects) besser Platz finden - gleiches Prinzip wie
-     die Verbreiterung von cards.html/pos.html. */
-  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+  /* Gleiche Breite wie cards.html - einheitliche Desktop-Breite ueber alle
+     Hauptseiten hinweg (Klaerung mit dem Nutzer), im Mobil-Modus greift
+     ohnehin die separate @media-Logik unten. Hilft hier zusaetzlich bei
+     mehrspaltigen Bereichen wie den eBay-Aspects. */
+  body { font-family: system-ui, sans-serif; max-width: 1600px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.3rem; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
   .brand-logo { height: 44px; width: auto; border-radius: 6px; }

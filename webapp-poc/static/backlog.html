@@ -264,11 +264,56 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item">
+    <h3>eBay Marketing API (Promoted Listings: Kampagnen &amp; Werbemetriken) <span class="status-tag status-open">offen – konzeptionell geklärt</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p><strong>Was die API hergibt:</strong> eBays Marketing API verwaltet Promoted-Listings-Kampagnen und liefert
+      Werbemetriken – komplett getrennt von der bereits genutzten Sell-Analytics-API (Aufrufe/Impressionen/Klickrate)
+      und der Browse-API (Beobachter). Zwei Kampagnentypen/Abrechnungsmodelle:</p>
+    <ul>
+      <li><strong>General Strategy (Cost-per-Sale/CPS):</strong> Gebühr nur bei tatsächlichem Verkauf über die
+        Promotion, als Prozentsatz vom Verkaufspreis (<code>bidPercentage</code>) – einfacheres Modell, passt zum
+        aktuellen Ein-Personen-Verkäufer-Zuschnitt dieses Tools.</li>
+      <li><strong>Priority Strategy (Cost-per-Click/CPC):</strong> klassisches PPC mit Tagesbudget, Anzeigengruppen
+        und Keywords – deutlich mehr Verwaltungsaufwand, eher für größere Händler gedacht.</li>
+    </ul>
+    <p><strong>Ablauf/Aufwand einer Anbindung:</strong></p>
+    <ul>
+      <li>Neuer OAuth-Scope <code>sell.marketing.readonly</code> (lesend) bzw. <code>sell.marketing</code>
+        (schreibend) – muss wie seinerzeit <code>sell.analytics.readonly</code> bei <code>ebay-oauth-server</code>
+        ergänzt und die eBay-Verbindung einmalig neu autorisiert werden (siehe README.md).</li>
+      <li>Kampagne anlegen (<code>createCampaign</code>), einzelne Angebote per SKU/Inventory-Referenz eintragen
+        (<code>createAdsByInventoryReference</code>/<code>bulkCreateAdsByInventoryReference</code>) – ließe sich an
+        den bestehenden SKU-Mechanismus (<code>ebay_listing.sku_for_card()</code>) anknüpfen, ähnlich wie die
+        vorhandene Best-Offer-Anbindung.</li>
+      <li>Berichte laufen anders als die Sell-Analytics-API NICHT synchron: <code>createReportTask</code>
+        (Dimensionen/Metriken/Zeitraum festlegen) → asynchron per <code>getReportTask</code> pollen, bis Status
+        <code>SUCCESS</code> → Bericht als <code>.tsv.gz</code>-Datei herunterladen. Eigenes Tageslimit (200
+        Aufrufe/Stunde für die Report-Endpunkte). Ein einfacher „Button-Klick lädt sofort"-Ansatz wie beim
+        bestehenden „👁 Aufrufe laden" funktioniert hier nicht direkt – eher ein „Bericht anfordern" +
+        „Bericht abrufen"-Zwei-Schritt-Ablauf oder ein nächtlicher Hintergrund-Abruf über den bestehenden
+        <code>ebay_scheduler.py</code>.</li>
+      <li>Verfügbare Metriken je Angebot/Kampagne: Impressionen, Klicks, Klickrate, durchschnittlicher CPC,
+        Werbekosten, verkaufte Menge (30-Tage-Fenster nach Klick), Umsatz, Conversion-Rate, ACoS
+        (Werbekosten ÷ Umsatz) und ROAS.</li>
+    </ul>
+    <p><strong>Nutzen fürs Tool, konkret:</strong></p>
+    <ul>
+      <li>Echte Werbekosten je Angebot statt der aktuell manuell geschätzten „Werbekosten (%)" im
+        Zielpreis-Rechner (Kartendetail) – ließe sich später automatisch befüllen.</li>
+      <li>ACoS/ROAS als weitere Kennzahl auf der eBay-Übersicht bzw. im Dashboard, um zu sehen, ob sich beworbene
+        Angebote überhaupt lohnen.</li>
+      <li>Direkte Bid-%-Steuerung aus dem Tool heraus, statt im eBay-Verkäufer-Cockpit umzuschalten.</li>
+    </ul>
+    <p><strong>Klärungsbedarf:</strong> lohnt sich der Aufwand angesichts des asynchronen Report-Workflows
+      (deutlich mehr Code als die bisherige, synchrone Sell-Analytics-Anbindung)? Nutzt du Promoted Listings
+      aktuell überhaupt schon manuell auf eBay, oder wäre das der erste Einstieg? General oder Priority Strategy?</p>
+  </div>
+
+  <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
     <p>Aufrufe, Impressionen und Klickrate je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der
-      eBay-Seite, siehe README.md). Echte Kampagnen-/Werbemetriken (Promoted Listings: Ausgaben, ROI) bräuchten
-      zusätzlich eine eigene Anbindung an eBays Marketing API mit einem weiteren OAuth-Scope – ebenfalls noch offen,
-      aber technisch machbar (kein Freigabe-Ticket wie bei den Beobachtern nötig).
+      eBay-Seite, siehe README.md). Echte Kampagnen-/Werbemetriken über die eBay Marketing API sind ein eigener,
+      separater Backlog-Punkt (siehe oben).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
       das <code>watchCount</code>-Feld der Browse-API ist gesperrt und erfordert ein bei eBay einzureichendes
       „App Check"-Ticket, über das eBay nach eigenem Ermessen entscheidet (keine Zusage auf Freigabe, keine
