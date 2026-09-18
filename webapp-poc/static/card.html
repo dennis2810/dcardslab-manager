@@ -4099,7 +4099,15 @@ function renderEbayPublishedView(section, listing, environment, purchase, sale, 
         } else {
           promotedResult.textContent = "Nicht beworben";
         }
-        promotedResult.className = "";
+        // Anzeige stimmt, aber falls main.py den Wert nicht dauerhaft
+        // speichern konnte, waere er nach dem naechsten Neuladen wieder weg -
+        // Bugreport des Nutzers, siehe ebay.html fuer dasselbe Muster.
+        if (data.persist_warning) {
+          promotedResult.textContent += " – " + data.persist_warning;
+          promotedResult.className = "error";
+        } else {
+          promotedResult.className = "";
+        }
       } catch (err) {
         promotedResult.textContent = "Fehler: " + err;
         promotedResult.className = "error";

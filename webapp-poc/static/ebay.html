@@ -2082,8 +2082,17 @@ document.getElementById("load-promoted-btn").addEventListener("click", async () 
     }
     Object.assign(listingPromoted, data.promoted_status);
     const promotedCount = Object.values(data.promoted_status).filter((v) => v).length;
-    promotedStatus.textContent = `Werbestatus für ${ids.length} Angebot(e) geladen - ${promotedCount} davon aktuell beworben.`;
-    promotedStatus.className = "";
+    if (data.persist_warning) {
+      // Anzeige stimmt (listingPromoted ist befuellt), aber main.py konnte
+      // den Wert nicht in der DB speichern - waere sonst unbemerkt nach dem
+      // naechsten Neuladen wieder weg (Bugreport des Nutzers).
+      promotedStatus.textContent = data.persist_warning;
+      promotedStatus.className = "error";
+      showToast(data.persist_warning, true);
+    } else {
+      promotedStatus.textContent = `Werbestatus für ${ids.length} Angebot(e) geladen - ${promotedCount} davon aktuell beworben.`;
+      promotedStatus.className = "";
+    }
     render(sortedListings());
   } catch (err) {
     promotedStatus.textContent = "Fehler: " + err;
