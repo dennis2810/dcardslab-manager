@@ -69,6 +69,11 @@ if ("serviceWorker" in navigator) {
   .nav-search { display: flex; gap: 0.4rem; margin: 0; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   .nav-cross-link { font-weight: 600; white-space: nowrap; }
+  /* Kleines Sprungmarken-Inhaltsverzeichnis fuer Seiten mit mehreren
+     Bereichen (Filter, gespeicherte Ansichten, Liste) - gleiche Klasse wie
+     auf settings.html, damit beide Seiten optisch konsistent bleiben. */
+  .page-toc { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.85rem; margin: 0 0 1rem; }
+  .page-toc a { color: inherit; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -230,7 +235,13 @@ if ("serviceWorker" in navigator) {
     <a class="nav-cross-link" href="ebay.html">Zu eBay &rarr;</a>
   </nav>
 
-  <div class="controls no-print">
+  <nav class="page-toc no-print" aria-label="Bereiche auf dieser Seite">
+    <a href="#filter-section">Filter</a>
+    <a href="#filter-presets-section">Gespeicherte Ansichten</a>
+    <a href="#card-list-section">Kartenliste</a>
+  </nav>
+
+  <div id="filter-section" class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, Team, Set / Serie, Kartennr., SKU, Saison / Jahr, Tags)">
     <select id="status">
       <option value="">Alle OCR-Status</option>
@@ -303,7 +314,7 @@ if ("serviceWorker" in navigator) {
     <label>bis (€) <input type="number" id="price-range-max" step="0.01" min="0" style="width: 5.5rem;"></label>
   </div>
 
-  <div class="controls no-print filter-presets">
+  <div id="filter-presets-section" class="controls no-print filter-presets">
     <select id="preset-select">
       <option value="">Gespeicherte Ansicht wählen…</option>
     </select>
@@ -371,6 +382,7 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <p id="status-msg"></p>
+  <div id="card-list-section">
   <div id="grid" class="grid"></div>
   <div class="pagination no-print">
     <button type="button" id="prev-page-top">&larr; Zurück</button>
@@ -427,6 +439,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="column-toggle-btn" class="no-print">⚙ Spalten</button>
     <button type="button" id="shortcuts-btn" class="no-print">⌨ Kürzel</button>
+  </div>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
   <div id="shortcuts-panel" class="shortcuts-panel no-print" hidden>
