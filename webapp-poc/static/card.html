@@ -1743,8 +1743,10 @@ function renderPurchaseSection(purchase) {
 
 // Zielpreis-Rechner: rein clientseitige Hilfe beim Festlegen eines
 // Verkaufspreises, keine eigenen Backend-Felder - Einstandspreis wird aus
-// dem verknuepften Kauf vorbelegt (falls vorhanden), Marge/Gebuehr-Prozentsatz
-// sind freie Annahmen, die man je nach Plattform anpassen kann. Zusaetzlich
+// dem verknuepften Kauf vorbelegt (falls vorhanden), Marge/Gebuehr-/Werbekosten-
+// Prozentsatz sind freie Annahmen, die man je nach Plattform anpassen kann
+// (Werbekosten z.B. fuer eBays Promoted Listings, die wie die Verkaufsgebuehr
+// prozentual vom Verkaufspreis abgehen). Zusaetzlich
 // die Verkaufsprognose (Team-Durchschnitt Ø Tage bis Verkauf, siehe
 // statistics.html) direkt daneben, da beides bei der Preis-/Verkaufsplanung
 // zusammengehoert.
@@ -1760,6 +1762,7 @@ function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, man
     <label>Versand (€) <input type="number" step="0.01" id="tp-shipping" value="0"></label>
     <label>Zielmarge (%) <input type="number" step="1" id="tp-margin" value="30"></label>
     <label>Geschätzte Verkaufsgebühr (%) <input type="number" step="1" id="tp-fee" value="12"></label>
+    <label>Werbekosten (%) <input type="number" step="1" id="tp-ad" value="0"></label>
     <p id="tp-result"></p>
     <button type="button" id="tp-apply-to-ebay-btn">→ In eBay-Angebotspreis übernehmen</button>
   `;
@@ -1773,9 +1776,10 @@ function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, man
     const shipping = parseFloat(document.getElementById("tp-shipping").value) || 0;
     const marginPct = parseFloat(document.getElementById("tp-margin").value) || 0;
     const feePct = parseFloat(document.getElementById("tp-fee").value) || 0;
-    const denominator = 1 - (marginPct + feePct) / 100;
+    const adPct = parseFloat(document.getElementById("tp-ad").value) || 0;
+    const denominator = 1 - (marginPct + feePct + adPct) / 100;
     if (denominator <= 0) {
-      resultP.textContent = "Marge + Gebühr ergeben zusammen 100% oder mehr - kein sinnvoller Preis berechenbar.";
+      resultP.textContent = "Marge + Gebühr + Werbekosten ergeben zusammen 100% oder mehr - kein sinnvoller Preis berechenbar.";
       resultP.className = "error";
       lastRecommended = null;
       return;
@@ -1784,7 +1788,7 @@ function renderTargetPriceCalculator(purchase, teamAvgHoldingDays, ebaySale, man
     resultP.textContent = `Empfohlener Verkaufspreis: ${fmtEuro(lastRecommended)}`;
     resultP.className = "";
   }
-  for (const id of ["tp-cost", "tp-shipping", "tp-margin", "tp-fee"]) {
+  for (const id of ["tp-cost", "tp-shipping", "tp-margin", "tp-fee", "tp-ad"]) {
     document.getElementById(id).addEventListener("input", recompute);
   }
   recompute();

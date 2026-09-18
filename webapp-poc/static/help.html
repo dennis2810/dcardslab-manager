@@ -61,6 +61,12 @@ if ("serviceWorker" in navigator) {
   .help-search input { width: 100%; max-width: 24rem; padding: 0.5rem 0.75rem; font-size: 1rem;
     box-sizing: border-box; -webkit-appearance: none; appearance: none; }
   .help-search-status { font-size: 0.85rem; color: #777; margin-top: 0.3rem; }
+  .site-structure { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.5rem 1rem; margin: 1rem 0 1.5rem; }
+  .site-structure-group { border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 0.8rem; }
+  .site-structure-group h4 { margin: 0 0 0.35rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: #777; }
+  .site-structure-group ul { margin: 0; padding-left: 1.1rem; }
+  .site-structure-group li { margin: 0.2rem 0; font-size: 0.9rem; }
+  .site-structure-group a { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -104,6 +110,7 @@ if ("serviceWorker" in navigator) {
   <nav class="toc">
     <strong>Inhalt</strong>
     <ul>
+      <li><a href="#seitenstruktur">Seitenstruktur</a></li>
       <li><a href="#scan">Scan – Karten einscannen</a></li>
       <li><a href="#karten-anlegen">Karte manuell anlegen</a></li>
       <li><a href="#karten">Kartenübersicht</a></li>
@@ -123,6 +130,60 @@ if ("serviceWorker" in navigator) {
       <li><a href="#tipps">Kürzel &amp; Tipps</a></li>
     </ul>
   </nav>
+
+  <h2 id="seitenstruktur">Seitenstruktur</h2>
+  <p>Überblick, welche Seite wofür da ist und wie sie im typischen Ablauf – Karte erfassen, ggf. einkaufen,
+    verkaufen, Bestand pflegen, auswerten – zusammenhängen. Jede Seite ist unten im Inhalt zusätzlich ausführlich
+    erklärt.</p>
+  <div class="site-structure">
+    <div class="site-structure-group">
+      <h4>Erfassen</h4>
+      <ul>
+        <li><a href="index.html">Scan</a> – Karten per Foto einscannen, KI erkennt die Felder</li>
+        <li><a href="card-new.html">Karte anlegen</a> – einzelne Karte ohne Scan erfassen</li>
+        <li><a href="cards.html">Karten</a> – Übersicht, Filter, Bearbeiten, Massenaktionen</li>
+      </ul>
+    </div>
+    <div class="site-structure-group">
+      <h4>Einkauf</h4>
+      <ul>
+        <li><a href="purchases.html">Käufe</a> – Einkäufe erfassen, Karten zuordnen</li>
+        <li><a href="wishlist.html">Wunschliste</a> – Sourcing nach Zielpreis</li>
+      </ul>
+    </div>
+    <div class="site-structure-group">
+      <h4>Verkauf</h4>
+      <ul>
+        <li><a href="ebay.html">eBay</a> – Angebote erstellen, veröffentlichen, synchronisieren</li>
+        <li><a href="pos.html">Kassenmodus</a> – Verkauf vor Ort (z. B. Kartenshow)</li>
+        <li><a href="shipping.html">Versand</a> – Versand-Checkliste, Etiketten</li>
+        <li><a href="statistics-sales.html">Alle Verkäufe</a> – Verkaufsliste über alle Kanäle</li>
+      </ul>
+    </div>
+    <div class="site-structure-group">
+      <h4>Bestand</h4>
+      <ul>
+        <li><a href="inventory.html">Inventar</a> – Lagerbestand je Karte</li>
+        <li><a href="inventur.html">Inventur</a> – Bestandsabgleich und -abschluss</li>
+        <li><a href="private-collection.html">Private Sammlung</a> – privat entnommene Karten</li>
+      </ul>
+    </div>
+    <div class="site-structure-group">
+      <h4>Auswertung</h4>
+      <ul>
+        <li><a href="dashboard.html">Dashboard</a> – Kennzahlen, To-dos, Ziel-Fortschritt</li>
+        <li><a href="statistics.html">Statistiken</a> – Trends, Team-/Set-Auswertungen</li>
+        <li><a href="kleinunternehmer.html">Kleinunternehmer</a> – EÜR, Umsatzgrenzen (§19 UStG)</li>
+      </ul>
+    </div>
+    <div class="site-structure-group">
+      <h4>Werkzeuge</h4>
+      <ul>
+        <li><a href="search.html">Suche</a> – seitenübergreifende Volltextsuche</li>
+        <li><a href="settings.html">Einstellungen</a> – Konfiguration, Backup, Login</li>
+      </ul>
+    </div>
+  </div>
 
   <h2 id="scan">Scan – Karten einscannen</h2>
   <p>Auf der Scan-Seite (<code>Scan</code> in der Seitenauswahl) lädt man ein Foto der Vorder- und ein Foto der
@@ -158,6 +219,8 @@ if ("serviceWorker" in navigator) {
     Docker-Volume eingebunden wurde, siehe README).</p>
 
   <h2 id="karten">Kartenübersicht</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis („Filter", „Gespeicherte Ansichten", „Kartenliste") für den
+    schnellen Wechsel zwischen den Bereichen der Seite, ohne scrollen zu müssen.</p>
   <p>Kachel- oder Listenansicht umschaltbar. Suche (auch nach eBay-SKU), Status-Filter (Erkennung), eBay-Status-
     Filter, Versandstatus-Filter (Nicht versendet/Versendet/Abgeholt/Zugestellt/Retoure), Sport-&amp;-Non-Sport-Filter,
     Kategorie-Filter (Franchise bei Non-Sport-Karten, z. B. „Marvel" oder „Pokémon" – Optionen kommen aus den
@@ -242,8 +305,9 @@ if ("serviceWorker" in navigator) {
     bzw. zuletzt neu eingestelltes eBay-Angebot) – ohne erst zum eBay-/Verkaufs-Abschnitt weiter unten scrollen zu
     müssen.</p>
   <p>Direkt unter dem Kauf-Abschnitt hilft ein Zielpreis-Rechner bei der Preisfindung: Einstandspreis (aus einem
-    verknüpften Kauf vorbelegt, sonst frei eintragbar), Versand, Zielmarge und eine geschätzte Verkaufsgebühr
-    ergeben zusammen einen empfohlenen Verkaufspreis – reine Rechenhilfe, wird nirgends gespeichert. Ist die Karte
+    verknüpften Kauf vorbelegt, sonst frei eintragbar), Versand, Zielmarge, eine geschätzte Verkaufsgebühr sowie
+    optionale Werbekosten (z. B. für eBays Promoted Listings, prozentual wie die Verkaufsgebühr) ergeben zusammen
+    einen empfohlenen Verkaufspreis – reine Rechenhilfe, wird nirgends gespeichert. Ist die Karte
     noch nicht verkauft und einem Team zugeordnet, erscheint darunter außerdem eine kurze Verkaufsprognose
     („verkauft sich erfahrungsgemäß in ~X Tagen") basierend auf der Team-Verkaufsgeschwindigkeit aus den
     Statistiken (siehe unten).</p>
@@ -648,7 +712,8 @@ if ("serviceWorker" in navigator) {
     zusätzlich per Button „Jetzt Snapshot erstellen" manuell möglich.</p>
 
   <h2 id="dashboard">Dashboard</h2>
-  <p>Über den Button „⚙ Kacheln" lässt sich festlegen, welche der Kennzahlen-Kacheln angezeigt werden und in
+  <p>Oben führen zwei Direkt-Verknüpfungen („🗂 Karten öffnen", „🛒 eBay öffnen") ohne Umweg über das
+    Seiten-Auswahlfeld zu den beiden meistgenutzten Seiten. Über den Button „⚙ Kacheln" lässt sich festlegen, welche der Kennzahlen-Kacheln angezeigt werden und in
     welcher Reihenfolge (Checkbox zum Ein-/Ausblenden, Pfeile zum Verschieben) – die Auswahl wird je Browser
     gemerkt.</p>
   <p>Schnellüberblick mit den wichtigsten Kennzahlen, einem selbst festlegbaren Jahresziel (Umsatz oder Gewinn) mit
@@ -712,6 +777,8 @@ if ("serviceWorker" in navigator) {
     macht genau diesen einen Verkauf wieder rückgängig.</p>
 
   <h2 id="einstellungen">Einstellungen</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu allen Bereichen dieser Seite – praktisch, da inzwischen
+    recht viele.</p>
   <p>Hier lässt sich die Verbindung zu Google Sheets herstellen (für einen automatischen Datenexport, inklusive
     Wunschliste als eigener Reiter) und ein vollständiges Backup (ZIP mit allen Daten als JSON sowie allen
     Kartenbildern) herunterladen; der Zeitpunkt des letzten Downloads wird angezeigt. Zusätzlich wird automatisch
