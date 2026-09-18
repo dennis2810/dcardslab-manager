@@ -170,15 +170,25 @@ def build_aspects(card, listing_type):
     for label, key in (
         ("Team / Verein", "team"), ("Hersteller", "manufacturer"),
         ("Set / Serie", "set_name"), ("Saison / Jahr", "season_year"),
-        ("Kartennummer", "card_number"),
+        ("Kartennummer", "card_number"), ("Sprache", "language"),
     ):
         value = str(card.get(key) or "").strip()
         if value:
             aspects[label] = [value]
-    # DCardsLab has no per-card autograph field - "Nein" is the correct
-    # default for the ordinary (non-autographed) card and saves the
-    # seller from having to fill it in by hand on every listing.
-    aspects["Mit Autogramm"] = ["Nein"]
+    # Typ (z.B. "Parallel", "Insert") und Variante (z.B. "Blue Prizm") sind
+    # zwei getrennte DCardsLab-Felder, eBays "Parallel/Variante"-Aspect
+    # erwartet dagegen einen einzelnen Wert - beide zusammengefuegt, gleiche
+    # Reihenfolge wie im generierten Titel (siehe generate_title() oben).
+    card_type = str(card.get("card_type") or "").strip()
+    variant = str(card.get("variant") or "").strip()
+    parallel_variant = " ".join(part for part in (card_type, variant) if part)
+    if parallel_variant:
+        aspects["Parallel/Variante"] = [parallel_variant]
+    # is_autograph existiert inzwischen als eigenes Kartenfeld (siehe
+    # supabase/schema.sql-Migration vom 2026-09-17) - "Mit Autogramm" laesst
+    # sich daher direkt daraus ableiten, statt weiterhin fest auf "Nein" zu
+    # stehen (frueherer Stand, bevor es das Feld gab).
+    aspects["Mit Autogramm"] = ["Ja" if card.get("is_autograph") else "Nein"]
     return aspects
 
 

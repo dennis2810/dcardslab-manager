@@ -193,13 +193,22 @@ keine Möglichkeit, sich überhaupt anzumelden.
 Zeigt auf `ebay.html` (Button „👁 Aufrufe laden") die Aufrufzahlen der
 letzten 30 Tage je veröffentlichtem Angebot, über die eBay Sell Analytics
 API (`getTrafficReport`, Metrik `LISTING_VIEWS_TOTAL`, siehe
-`ebay_client.get_listing_views()`). **Beobachter/Watcher-Zahlen sind
-NICHT enthalten** - das dafür nötige `watchCount`-Feld ist in eBays
-REST-APIs gesperrt und erfordert ein separat bei eBay zu stellendes „App
-Check"-Ticket (Freigabe nicht garantiert); die einzige zuverlässige
-Alternative wäre die veraltete Trading-API mit einer komplett anderen,
-in diesem Projekt nirgends genutzten Authentifizierung (Auth'n'Auth statt
-OAuth2) - deshalb bewusst nicht umgesetzt.
+`ebay_client.get_listing_views()`), sowie zusätzlich Impressionen (Metrik
+`LISTING_IMPRESSION_TOTAL`) und Klickrate (Metrik `CLICK_THROUGH_RATE` -
+eBays Definition: Views geteilt durch Impressionen, keine absolute
+Klickzahl, die liefert die API nicht) über
+`ebay_client.get_listing_traffic_extra()` - beide als kleiner Zusatztext
+in derselben Spalte, nur für die aktuelle Sitzung sichtbar (nicht wie die
+Aufrufzahl über einen Seiten-Neuladen hinweg gespeichert). **Beobachter/
+Watcher-Zahlen sind NICHT enthalten** - das dafür nötige `watchCount`-Feld
+ist in eBays REST-APIs gesperrt und erfordert ein separat bei eBay zu
+stellendes „App Check"-Ticket (Freigabe nicht garantiert); die einzige
+zuverlässige Alternative wäre die veraltete Trading-API mit einer
+komplett anderen, in diesem Projekt nirgends genutzten Authentifizierung
+(Auth'n'Auth statt OAuth2) - deshalb bewusst nicht umgesetzt. Echte
+Kampagnen-/Werbemetriken (Promoted Listings: Ausgaben, ROI) bräuchten
+zusätzlich eine eigene Anbindung an eBays Marketing API mit einem
+weiteren OAuth-Scope - ebenfalls (noch) nicht umgesetzt.
 
 Einmalige manuelle Einrichtung, optional:
 

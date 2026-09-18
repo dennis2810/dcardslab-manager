@@ -279,6 +279,9 @@ if ("serviceWorker" in navigator) {
     ausschließlich Versandbezogenes: „Versendet", „Abgeholt" (Selbstabholer), „Zugestellt" und „Retoure".</p>
 
   <h2 id="kartendetail">Kartendetail</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu den Bereichen der Seite (Fotos, Felder, Kauf,
+    Zielpreis-Rechner, Inventar, eBay, Verkauf außerhalb eBay, Preisrecherche, Erinnerungen) – die Seite wurde
+    außerdem verbreitert, damit mehrspaltige Bereiche wie die eBay-Aspects besser Platz finden.</p>
   <p>Auf der Detailseite einer Karte lassen sich Fotos in 90°-Schritten drehen, komplett ersetzen (z. B. bei einem
     unscharfen Bild) oder über „Zuschneiden/Drehen" frei zuschneiden und in beliebigem Winkel (nicht nur 90°)
     gerade ausrichten – etwa bei einer leicht schief gescannten Karte oder um überschüssigen Rand am Zuschnitt
@@ -291,7 +294,13 @@ if ("serviceWorker" in navigator) {
     Kästchen „Nummeriert (Numbered)", „Rookie-Karte (RC)" und „Autogramm (Auto)" lassen sich unabhängig von der
     KI-Erkennung jederzeit von Hand setzen oder korrigieren – sie erscheinen zusätzlich als eigene Kennzeichen
     oben auf der Kartenseite sowie in der Kartenübersicht (Kachel- und Listenansicht), und fließen automatisch
-    sowohl in den eBay-Titel als auch in die Standard-Suchanfrage der Preisrecherche mit ein (siehe unten).
+    sowohl in den eBay-Titel als auch in die Standard-Suchanfrage der Preisrecherche mit ein (siehe unten). Beim
+    Öffnen des eBay-Bearbeiten-Formulars werden zusätzlich eBays kategorieabhängige Pflicht-/optionale
+    Artikelmerkmale („Aspects", z. B. Sportart/Franchise, Team, Hersteller, Set / Serie, Saison / Jahr,
+    Kartennummer, Sprache, Parallel/Variante sowie „Mit Autogramm") automatisch aus den Kartenfeldern
+    vorbefüllt – „Parallel/Variante" kombiniert dabei Typ und Variante, „Mit Autogramm" übernimmt das
+    Autogramm-Kästchen. Fehlende Pflichtfelder (je Kartentyp z. B. Sportart/Franchise) werden vor dem
+    Veröffentlichen markiert; alle vorbefüllten Werte lassen sich vor dem Speichern noch anpassen.
     Ein zusätzliches, unabhängiges Kästchen „Abgeholt" ist für Selbstabholer gedacht (keine Versand-Markierung
     nötig) – beide Status erscheinen auch in der Kartenübersicht und im CSV-Export.
     Zusätzlich zu Vorder-/Rückseite lassen sich beliebig viele weitere Fotos hinzufügen (z. B. Detailaufnahmen bei
@@ -454,6 +463,10 @@ if ("serviceWorker" in navigator) {
       „Gold Refractor" oder „Silver" – wird zusätzlich zum Typ angegeben, wenn beide getrennt aufgedruckt sind
       (z. B. „Parallel" + „Blue Prizm"). Ist nur ein einzelner Begriff aufgedruckt (z. B. nur „Silver" ohne
       separates „Parallel"), landet er im Feld Typ statt hier.</li>
+    <li><strong>Sprache</strong>: die Sprache des gedruckten Karten-/Fließtexts, z. B. „Deutsch", „Englisch" oder
+      „Japanisch" – optional, bei Sport-Karten meist nicht relevant, bei Non-Sport-/TCG-Karten (z. B. Pokémon) aber
+      oft ein spürbarer Preisfaktor. Wird beim eBay-Angebot als Item-Specific „Sprache" übernommen (siehe
+      Abschnitt „eBay" unten).</li>
     <li><strong>Team</strong>: der Verein/die Mannschaft bei Sport-Karten, z. B. „FC Bayern München". Bei
       Non-Sport-Karten meist leer (siehe Kategorie).</li>
     <li><strong>Kartennummer</strong>: die im Set aufgedruckte Katalognummer, z. B. „12" oder „RC-5" – kein
@@ -496,6 +509,8 @@ if ("serviceWorker" in navigator) {
     den Foto-Scan (siehe oben), nicht aus reinen Textdaten.</p>
 
   <h2 id="ebay">eBay</h2>
+  <p>Oben ein kleines Sprungmarken-Inhaltsverzeichnis zu den Bereichen der Seite (Filter, Aktionen, Von eBay
+    importieren, Angebotsliste).</p>
   <p>Übersicht aller Angebote mit Status (Entwurf, Geplant, Veröffentlicht, Verkauft, Beendet, Fehler). Angebote
     lassen sich einzeln oder per Massenauswahl veröffentlichen; Preise können prozentual auf mehrere ausgewählte
     Angebote auf einmal angepasst werden (z. B. „-10" für 10 % günstiger). Veröffentlichte Angebote lassen sich
@@ -519,7 +534,10 @@ if ("serviceWorker" in navigator) {
     sofern für das Angebot aktiviert; da diese Werte nur beim Öffnen/Ändern der Preisvorschläge einer einzelnen
     Karte aktualisiert werden, lädt der Button „💰 Preisvorschläge laden" sie für alle Angebote der aktuellen
     Suche/Filterauswahl nach – nicht nur die auf der gerade sichtbaren Seite, sondern über alle Seiten hinweg
-    (gilt genauso für „👁 Aufrufe laden" unten). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
+    (gilt genauso für „👁 Aufrufe laden" unten). „👁 Aufrufe laden" zeigt in der Spalte „Aufrufe" neben der
+    Aufrufzahl (bleibt bis zum nächsten Klick sichtbar) zusätzlich, sofern von eBay geliefert, Impressionen und
+    Klickrate (CTR) als kleiner Zusatztext – letztere beide nur für die aktuelle Sitzung, nicht dauerhaft
+    gespeichert. Beobachter-/Watcher-Zahlen liefert eBays API nicht (siehe Backlog). Für importierte, nicht selbst verwaltete Angebote (📥) sind keine
     Preisvorschläge abrufbar, weil eBays Best-Offer-API nur Angebote kennt, die über dieses Tool angelegt wurden.
     Die Spalte „Preisvorschläge geändert" zeigt, wann die Preisvorschläge zuletzt tatsächlich geändert wurden
     (einzeln auf der Kartenseite oder per Massenaktion) – unabhängig von „Zuletzt aktualisiert", das sich nur auf

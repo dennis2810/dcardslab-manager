@@ -238,6 +238,50 @@ class GetListingViewsTests(unittest.TestCase):
         self.assertNotIn(f"..{today:%Y%m%d}]", filter_value)
 
 
+class GetListingTrafficExtraTests(unittest.TestCase):
+    """Impressionen/Klickrate - zwei separate Einzel-Metrik-Aufrufe (siehe
+    _traffic_report_metric()'s Docstring), daher hier ueber zwei
+    aufeinanderfolgende Mock-Antworten getestet."""
+
+    def _report(self, listing_id, value):
+        return {
+            "records": [{
+                "dimensionValues": [{"value": listing_id, "applicable": True}],
+                "metricValues": [{"value": str(value), "applicable": True}],
+            }]
+        }
+
+    def test_combines_impressions_and_click_through_rate_per_listing(self):
+        with patch(
+            "ebay_client.httpx.request",
+            side_effect=[
+                _response(200, self._report("111", 500)),
+                _response(200, self._report("111", "0.084")),
+            ],
+        ) as mock_request:
+            result = ebay_client.get_listing_traffic_extra("tok", ["111"])
+        self.assertEqual(result, {"111": {"impressions": 500, "click_through_rate": 0.084}})
+        metrics_requested = [call.kwargs["params"]["metric"] for call in mock_request.call_args_list]
+        self.assertEqual(metrics_requested, ["LISTING_IMPRESSION_TOTAL", "CLICK_THROUGH_RATE"])
+
+    def test_listing_present_in_only_one_report_gets_none_for_the_other(self):
+        with patch(
+            "ebay_client.httpx.request",
+            side_effect=[
+                _response(200, self._report("111", 500)),
+                _response(200, {"records": []}),
+            ],
+        ):
+            result = ebay_client.get_listing_traffic_extra("tok", ["111"])
+        self.assertEqual(result, {"111": {"impressions": 500, "click_through_rate": None}})
+
+    def test_returns_empty_dict_for_no_listing_ids(self):
+        with patch("ebay_client.httpx.request") as mock_request:
+            result = ebay_client.get_listing_traffic_extra("tok", [])
+        self.assertEqual(result, {})
+        mock_request.assert_not_called()
+
+
 class GetListingPoliciesTests(unittest.TestCase):
     def _policy_response(self, list_field, id_field, policy_id):
         return _response(200, {list_field: [{id_field: policy_id}]})

@@ -222,10 +222,32 @@ class BuildAspectsTests(unittest.TestCase):
         self.assertEqual(aspects["Kartennummer"], ["12"])
 
     def test_defaults_mit_autogramm_to_nein(self):
-        # DCardsLab has no per-card autograph field yet - "Nein" is the
-        # correct default for the ordinary (non-autographed) card.
         aspects = ebay_listing.build_aspects(_card(), "sport")
         self.assertEqual(aspects["Mit Autogramm"], ["Nein"])
+
+    def test_is_autograph_sets_mit_autogramm_to_ja(self):
+        aspects = ebay_listing.build_aspects(_card(is_autograph=True), "sport")
+        self.assertEqual(aspects["Mit Autogramm"], ["Ja"])
+
+    def test_includes_language(self):
+        aspects = ebay_listing.build_aspects(_card(language="Deutsch"), "sport")
+        self.assertEqual(aspects["Sprache"], ["Deutsch"])
+
+    def test_missing_language_is_omitted(self):
+        aspects = ebay_listing.build_aspects(_card(language=""), "sport")
+        self.assertNotIn("Sprache", aspects)
+
+    def test_combines_card_type_and_variant_into_parallel_variante(self):
+        aspects = ebay_listing.build_aspects(_card(card_type="Prizm", variant="Blue"), "sport")
+        self.assertEqual(aspects["Parallel/Variante"], ["Prizm Blue"])
+
+    def test_card_type_alone_is_used_as_parallel_variante(self):
+        aspects = ebay_listing.build_aspects(_card(card_type="Base", variant=""), "sport")
+        self.assertEqual(aspects["Parallel/Variante"], ["Base"])
+
+    def test_missing_card_type_and_variant_omits_parallel_variante(self):
+        aspects = ebay_listing.build_aspects(_card(card_type="", variant=""), "sport")
+        self.assertNotIn("Parallel/Variante", aspects)
 
 
 class RequiredAspectsTests(unittest.TestCase):

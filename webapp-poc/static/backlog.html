@@ -99,6 +99,29 @@ if ("serviceWorker" in navigator) {
     einen Termin. Wird von Hand gepflegt, wenn neue Ideen entstehen oder ein Punkt umgesetzt wird.</p>
 
   <div class="item">
+    <h3>Build mit Installationsassistent <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Wunsch des Nutzers: ein „Build" des Tools mit Installationsassistent. Aktuell läuft die Ersteinrichtung
+      komplett manuell anhand von <code>README.md</code>/<code>onboarding.html</code> – Supabase-Projekt anlegen,
+      <code>supabase/schema.sql</code> im SQL-Editor ausführen, diverse Umgebungsvariablen
+      (Supabase-URL/-Key, <code>ANTHROPIC_API_KEY</code>, eBay-Client-ID/-Secret, optional SMTP/Push) setzen und die
+      Docker-Container starten (siehe <code>Dockerfile</code>/<code>docker-compose.webapp-poc.yml</code>).</p>
+    <p>Klärungsbedarf, da „Installationsassistent" zwei sehr unterschiedliche Dinge bedeuten kann:</p>
+    <ul>
+      <li><strong>Self-Hosting-Einrichtungsassistent</strong> (naheliegender, da das Tool ohnehin
+        Docker+Supabase-basiert selbst gehostet wird): ein geführter Ablauf – als Skript (z. B. interaktives
+        Setup-Script, das schema.sql anwendet und eine fertige <code>.env</code> erzeugt) oder als Erstlauf-Seite
+        im Tool selbst –, der durch die obigen Schritte führt, statt README.md von Hand abzuarbeiten.</li>
+      <li><strong>Eigenständiger Installer für eine Desktop-App</strong> (.exe/.dmg mit Klick-Assistent): würde eine
+        komplett andere Architektur voraussetzen (z. B. Electron-Wrapper um die bestehende Webapp), da das Tool
+        aktuell als Server+Browser-Client läuft, nicht als installierbares Desktop-Programm – deutlich größerer,
+        eigenständiger Umbau.</li>
+    </ul>
+    <p>Ohne weitere Angabe wird von der ersten, naheliegenderen Variante ausgegangen – Rückmeldung nötig, welche
+      gemeint ist bzw. wie viel Automatisierung gewünscht ist (reines Hilfsskript vs. geführte UI im Tool selbst).</p>
+  </div>
+
+  <div class="item">
     <h3>UI-Anpassung mit Canva <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Ganz am Anfang des Projekts angedacht: das Look &amp; Feel (Farben, Icons, Layout, evtl. eigenes Branding
@@ -242,7 +265,10 @@ if ("serviceWorker" in navigator) {
 
   <div class="item">
     <h3>eBay-Beobachter (Watcher-Anzahl) <span class="status-tag status-blocked">blockiert – eBay-Freigabe nötig</span></h3>
-    <p>Aufrufe je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der eBay-Seite, siehe README.md).
+    <p>Aufrufe, Impressionen und Klickrate je Angebot sind bereits umgesetzt (Button „👁 Aufrufe laden" auf der
+      eBay-Seite, siehe README.md). Echte Kampagnen-/Werbemetriken (Promoted Listings: Ausgaben, ROI) bräuchten
+      zusätzlich eine eigene Anbindung an eBays Marketing API mit einem weiteren OAuth-Scope – ebenfalls noch offen,
+      aber technisch machbar (kein Freigabe-Ticket wie bei den Beobachtern nötig).
       Die Anzahl der Beobachter („Watcher") ist über eBays moderne REST-APIs jedoch nicht ohne Weiteres zugänglich:
       das <code>watchCount</code>-Feld der Browse-API ist gesperrt und erfordert ein bei eBay einzureichendes
       „App Check"-Ticket, über das eBay nach eigenem Ermessen entscheidet (keine Zusage auf Freigabe, keine

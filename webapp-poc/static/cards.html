@@ -130,6 +130,7 @@ if ("serviceWorker" in navigator) {
   #list.hide-set_name [data-col="set_name"],
   #list.hide-card_type [data-col="card_type"],
   #list.hide-variant [data-col="variant"],
+  #list.hide-language [data-col="language"],
   #list.hide-card_number [data-col="card_number"],
   #list.hide-theme [data-col="theme"],
   #list.hide-manufacturer [data-col="manufacturer"],
@@ -406,6 +407,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="set_name" data-col="set_name">Set / Serie <span class="sort-arrow"></span></th>
             <th data-key="card_type" data-col="card_type">Typ <span class="sort-arrow"></span></th>
             <th data-key="variant" data-col="variant">Variante <span class="sort-arrow"></span></th>
+            <th data-key="language" data-col="language">Sprache <span class="sort-arrow"></span></th>
             <th data-key="card_number" data-col="card_number">Kartennr. <span class="sort-arrow"></span></th>
             <th data-key="theme" data-col="theme">Thema <span class="sort-arrow"></span></th>
             <th data-key="manufacturer" data-col="manufacturer">Hersteller <span class="sort-arrow"></span></th>
@@ -543,6 +545,7 @@ const COLUMN_TOGGLES = [
   { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
+  { key: "language", label: "Sprache" },
   { key: "card_number", label: "Kartennr." },
   { key: "theme", label: "Thema" },
   { key: "manufacturer", label: "Hersteller" },
@@ -574,7 +577,7 @@ const TOGGLEABLE_KEYS = new Set(COLUMN_TOGGLES.map((c) => c.key));
 // Reihenfolge.
 const DEFAULT_COLUMN_ORDER = [
   "card_no", "ebay_sku", "title", "team", "season_year", "recognition_status",
-  "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "card_number",
+  "ebay_status", "shipped", "tags", "set_name", "card_type", "variant", "language", "card_number",
   "theme", "manufacturer", "position", "category", "squad_number", "club_debut_season",
   "serial_number", "print_run", "grading_summary", "purchase_platform", "purchase_seller",
   "purchase_date", "purchase_price", "sale_date", "sale_price",
@@ -1354,6 +1357,11 @@ function renderList(cards) {
     variantTd.textContent = card.variant || "";
     tr.appendChild(variantTd);
 
+    const languageTd = document.createElement("td");
+    languageTd.dataset.col = "language";
+    languageTd.textContent = card.language || "";
+    tr.appendChild(languageTd);
+
     const cardNumberTd = document.createElement("td");
     cardNumberTd.dataset.col = "card_number";
     cardNumberTd.textContent = card.card_number || "";
@@ -1650,6 +1658,7 @@ const BULK_EDIT_FIELDS = [
   { key: "set_name", label: "Set / Serie" },
   { key: "card_type", label: "Typ" },
   { key: "variant", label: "Variante" },
+  { key: "language", label: "Sprache" },
   { key: "position", label: "Position" },
   { key: "category", label: "Kategorie" },
   { key: "squad_number", label: "Trikotnummer" },
@@ -2153,7 +2162,7 @@ function downloadCsv(filename, headers, rows) {
 
 document.getElementById("csv-btn").addEventListener("click", () => {
   const headers = [
-    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set / Serie", "Typ", "Variante", "Position",
+    "SKU", "Titel", "Team", "Saison / Jahr", "Thema", "Hersteller", "Set / Serie", "Typ", "Variante", "Sprache", "Position",
     "Kategorie", "Trikotnummer", "Debütsaison", "Kartennr.", "Seriennr.", "Auflage", "Lfd. Nr.",
     "Grading", "Kauf-Plattform", "Kauf-Verkäufer", "Kaufdatum", "Kaufpreis", "Verkaufsdatum", "Verkaufspreis", "Lagerort",
     "Erkennung", "eBay-Status",
@@ -2163,7 +2172,7 @@ document.getElementById("csv-btn").addEventListener("click", () => {
   ];
   const rows = visibleCards().map((c) => [
     c.ebay_sku || "", c.title || "", c.team || "", c.season_year || "",
-    c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.position || "",
+    c.theme || "", c.manufacturer || "", c.set_name || "", c.card_type || "", c.variant || "", c.language || "", c.position || "",
     c.category || "", c.squad_number || "", c.club_debut_season || "", c.card_number || "",
     c.serial_number || "", c.print_run || "", c.card_no || "",
     c.grading_summary || "", c.purchase_platform || "", c.purchase_seller || "",

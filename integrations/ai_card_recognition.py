@@ -27,8 +27,8 @@ _MAX_EDGE = 1568  # Anthropic's documented vision "sweet spot" - larger images
 EMPTY_FIELDS = {
     "title": "", "category": "", "theme": "", "manufacturer": "",
     "set_name": "", "season_year": "", "card_type": "", "variant": "",
-    "team": "", "position": "", "squad_number": "", "club_debut_season": "",
-    "card_number": "", "serial_number": "", "print_run": "",
+    "language": "", "team": "", "position": "", "squad_number": "",
+    "club_debut_season": "", "card_number": "", "serial_number": "", "print_run": "",
     "is_numbered": 0, "is_rookie": 0, "is_autograph": 0,
     "confidence": 0, "raw": "",
 }
@@ -72,6 +72,10 @@ PROMPT = (
     "\"Prizm\", variant=\"Blue\" fuer eine \"Blue Prizm\"-Parallele). Steht "
     "nur ein einzelner Begriff auf der Karte, lass variant leer statt "
     "denselben Begriff wie card_type einzutragen.\n"
+    "language = die Sprache des gedruckten Karten-/Fliesstexts (z.B. "
+    "\"Deutsch\", \"Englisch\", \"Japanisch\"), NUR falls sich das aus dem "
+    "Text auf der Karte eindeutig ablesen laesst - bei reinen Zahlen/Namen "
+    "ohne erkennbaren Fliesstext leer lassen statt zu raten.\n"
     "team = Team/Verein, so wie er auf der Karte steht (Vereinsname, "
     "Vereinslogo-Beschriftung oder Vereinswappen-Text) - unabhängig davon, "
     "ob eine Liga (theme) erkennbar ist oder nicht.\n"
@@ -107,7 +111,7 @@ PROMPT = (
     "unbekannte Textfelder als leerer String \"\"):\n"
     '{{"title": "", "category": "", "theme": "", "manufacturer": "", '
     '"set_name": "", "season_year": "", "card_type": "", "variant": "", '
-    '"team": "", "position": "", "squad_number": "", '
+    '"language": "", "team": "", "position": "", "squad_number": "", '
     '"club_debut_season": "", "card_number": "", "serial_number": "", '
     '"print_run": "", "is_rookie": false, "is_autograph": false, '
     '"confidence": 0}}'
@@ -198,6 +202,7 @@ def recognize_card(front_path=None, back_path=None):
         season_year: str = ""
         card_type: str = ""
         variant: str = ""
+        language: str = ""
         team: str = ""
         position: str = ""
         squad_number: str = ""

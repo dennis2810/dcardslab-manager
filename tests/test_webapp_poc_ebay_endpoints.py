@@ -264,14 +264,19 @@ class ListEbayListingsEndpointTests(unittest.TestCase):
 class ListEbayListingViewsEndpointTests(unittest.TestCase):
     def test_returns_views_per_listing_id(self):
         listings = [_listing(id="listing-1", ebay_listing_id="111"), _listing(id="listing-2", ebay_listing_id="222")]
+        traffic_extra = {"111": {"impressions": 500, "click_through_rate": 0.084}}
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_views", return_value={"111": 42, "222": 7}) as mock_views, \
+             patch("main.ebay_client.get_listing_traffic_extra", return_value=traffic_extra) as mock_extra, \
              patch("main.db.list_ebay_listings", return_value=listings), \
              patch("main.db.update_ebay_listing") as mock_update:
             response = client.get("/api/ebay/listings/views?listing_ids=111,222")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["views"], {"111": 42, "222": 7})
+        body = response.json()
+        self.assertEqual(body["views"], {"111": 42, "222": 7})
+        self.assertEqual(body["traffic_extra"], traffic_extra)
         mock_views.assert_called_once_with("tok", ["111", "222"])
+        mock_extra.assert_called_once_with("tok", ["111", "222"])
         # Bleibt in der Karten-/eBay-Uebersicht sichtbar, bis das naechste
         # Mal auf "Aufrufe laden" geklickt wird (Klaerung mit dem Nutzer),
         # statt bei jedem Seiten-Neuladen wieder bei "-" zu starten.
@@ -281,6 +286,7 @@ class ListEbayListingViewsEndpointTests(unittest.TestCase):
     def test_ignores_empty_ids_entries(self):
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_views", return_value={}) as mock_views, \
+             patch("main.ebay_client.get_listing_traffic_extra", return_value={}), \
              patch("main.db.list_ebay_listings") as mock_list, \
              patch("main.db.update_ebay_listing") as mock_update:
             client.get("/api/ebay/listings/views?listing_ids=111,,222,")
@@ -293,6 +299,7 @@ class ListEbayListingViewsEndpointTests(unittest.TestCase):
         # eBay noch existiert - darf den Aufrufe-laden-Aufruf nicht crashen.
         with patch("main.ebay_client.get_access_token", return_value="tok"), \
              patch("main.ebay_client.get_listing_views", return_value={"999": 3}), \
+             patch("main.ebay_client.get_listing_traffic_extra", return_value={}), \
              patch("main.db.list_ebay_listings", return_value=[]), \
              patch("main.db.update_ebay_listing") as mock_update:
             response = client.get("/api/ebay/listings/views?listing_ids=999")

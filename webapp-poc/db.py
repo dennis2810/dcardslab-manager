@@ -10,7 +10,7 @@ from supabase_client import get_client
 
 CARD_FIELDS = [
     "title", "category", "theme", "manufacturer", "set_name",
-    "season_year", "card_type", "variant", "team", "position",
+    "season_year", "card_type", "variant", "language", "team", "position",
     "squad_number", "club_debut_season", "card_number",
     "serial_number", "print_run",
 ]

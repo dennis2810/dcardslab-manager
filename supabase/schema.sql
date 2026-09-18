@@ -666,3 +666,12 @@ alter table ebay_listings add column if not exists auto_decline_price text defau
 -- vom eBay-Stand (GET .../best-offer, best-offer-sync) zaehlt nicht als
 -- "geaendert" und schreibt hier bewusst nichts.
 alter table ebay_listings add column if not exists best_offer_updated_at timestamptz;
+
+-- Migration (2026-09-18): Sprache als eigenes Kartenfeld - bisher gab es
+-- dafuer keine Ablage, obwohl eBay in beiden Kategorie-Vorlagen (Sport wie
+-- Non-Sport, siehe templates/ebay/eBay-category-listing-template_*.csv,
+-- Spalte "C:Sprache") ein optionales Item-Specific dafuer anbietet und die
+-- Sprache besonders bei Non-Sport-/TCG-Karten (z.B. Pokemon) ein spuerbarer
+-- Preisfaktor ist. Fuer Sport-Karten weiterhin nur optional/frei, kein
+-- Pflichtfeld.
+alter table cards add column if not exists language text default '';

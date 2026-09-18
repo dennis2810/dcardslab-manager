@@ -69,6 +69,11 @@ if ("serviceWorker" in navigator) {
   .nav-search { display: flex; gap: 0.4rem; margin: 0; }
   .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
   .nav-cross-link { font-weight: 600; white-space: nowrap; }
+  .views-extra { font-size: 0.8rem; color: #777; white-space: nowrap; }
+  /* Kleines Sprungmarken-Inhaltsverzeichnis - gleiche Klasse wie auf
+     cards.html/settings.html, fuer optisch konsistente Seiten. */
+  .page-toc { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.85rem; margin: 0 0 1rem; }
+  .page-toc a { color: inherit; }
   /* Bessere Lesbarkeit/Bedienbarkeit auf Handy-Breite (~360-400px):
      grosszuegigere Touch-Ziele fuer die Seiten-Auswahl/Suche in der Navigation
      sowie fuer Checkboxen/Buttons/Links in Tabellenzeilen, statt nur die
@@ -238,7 +243,14 @@ if ("serviceWorker" in navigator) {
 
   <p class="no-print"><a href="statistics-sales.html">Alle Verkäufe (eBay + außerhalb, mit Filtern &amp; Suche) &rarr;</a></p>
 
-  <div class="controls no-print">
+  <nav class="page-toc no-print" aria-label="Bereiche auf dieser Seite">
+    <a href="#filter-section">Filter</a>
+    <a href="#actions-section">Aktionen</a>
+    <a href="#import-section">Von eBay importieren</a>
+    <a href="#listing-list-section">Angebotsliste</a>
+  </nav>
+
+  <div id="filter-section" class="controls no-print">
     <input type="text" id="q" placeholder="Suche (Titel, SKU)">
     <select id="status">
       <option value="">Alle Status</option>
@@ -256,7 +268,7 @@ if ("serviceWorker" in navigator) {
     </select>
     <button type="button" id="view-toggle" class="no-print">Kachelansicht</button>
   </div>
-  <div class="controls no-print">
+  <div id="actions-section" class="controls no-print">
     <button type="button" id="sync-sales-btn">Verkäufe synchronisieren</button>
     <button type="button" id="load-views-btn">👁 Aufrufe laden</button>
     <button type="button" id="load-best-offer-btn">💰 Preisvorschläge laden</button>
@@ -279,7 +291,7 @@ if ("serviceWorker" in navigator) {
   </div>
   <p id="sync-status"></p>
 
-  <div class="controls no-print">
+  <div id="import-section" class="controls no-print">
     <input type="text" id="import-item-id" placeholder="eBay-Artikelnummer (z. B. 123456789012)">
     <button type="button" id="import-btn">Von eBay importieren</button>
     <span id="import-status"></span>
@@ -304,6 +316,7 @@ if ("serviceWorker" in navigator) {
 
   <p id="status-msg"></p>
   <p id="sums" class="sums-block"></p>
+  <div id="listing-list-section">
   <div id="listings-grid" hidden></div>
   <div class="pagination no-print">
     <button type="button" id="prev-page-top">&larr; Zurück</button>
@@ -326,7 +339,7 @@ if ("serviceWorker" in navigator) {
             <th data-key="sale_date" data-col="sale_date">Verkauft am <span class="sort-arrow"></span></th>
             <th data-key="sale_price" data-col="sale_price">Verkaufspreis <span class="sort-arrow"></span></th>
             <th data-key="published_at" data-col="published_at">Zuletzt aktualisiert <span class="sort-arrow"></span></th>
-            <th data-col="views">Aufrufe</th>
+            <th data-col="views" title="Aufrufe, sowie ggf. Impressionen und Klickrate (CTR) aus dem letzten &quot;Aufrufe laden&quot;">Aufrufe</th>
             <th data-col="ebay_link">eBay</th>
             <th data-key="condition" data-col="condition">Zustand <span class="sort-arrow"></span></th>
             <th data-key="auto_accept_price" data-col="auto_accept_price">Auto-Annahme <span class="sort-arrow"></span></th>
@@ -345,6 +358,7 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="csv-btn">⭳ CSV-Export</button>
     <button type="button" id="column-toggle-btn">⚙ Spalten</button>
     <button type="button" id="shortcuts-btn" class="no-print">⌨ Kürzel</button>
+  </div>
   </div>
   <div id="column-toggle-panel" class="column-toggle-panel no-print" hidden></div>
   <div id="shortcuts-panel" class="shortcuts-panel no-print" hidden>
@@ -524,6 +538,10 @@ let currentListings = [];
 // ueber ein render() hinweg erhalten (nicht Teil von currentListings),
 // damit ein Sortieren/Blaettern die schon geladenen Werte nicht verwirft.
 let listingViews = {};
+// Impressionen/Klickrate - gleiches Prinzip wie listingViews oben (nur
+// fuer die aktuelle Sitzung, per Klick auf "Aufrufe laden" mitgeladen,
+// nicht persistiert - siehe main.py's /api/ebay/listings/views).
+let listingTrafficExtra = {};
 // Zuletzt gerenderte Seite (fuer "Alle auswaehlen" - bezieht sich bewusst
 // nur auf die aktuell sichtbare Seite, nicht alle gefilterten Angebote
 // ueber alle Seiten hinweg). Gleiches Muster wie cards.html.
@@ -1106,6 +1124,19 @@ function render(listings) {
         viewsTd.textContent = listing.last_known_views;
       } else {
         viewsTd.textContent = "–";
+      }
+      // Impressionen/Klickrate nur fuer diese Sitzung verfuegbar (siehe
+      // listingTrafficExtra oben) - anders als bei den Aufrufen gibt es
+      // dafuer keinen ueber einen Seiten-Neuladen hinweg gespeicherten Wert.
+      const extra = listingTrafficExtra[listing.ebay_listing_id];
+      if (extra && (extra.impressions != null || extra.click_through_rate != null)) {
+        const extraSpan = document.createElement("span");
+        extraSpan.className = "views-extra";
+        const parts = [];
+        if (extra.impressions != null) parts.push(`${extra.impressions} Impr.`);
+        if (extra.click_through_rate != null) parts.push(`${(extra.click_through_rate * 100).toLocaleString("de-DE", { maximumFractionDigits: 1 })} % CTR`);
+        extraSpan.textContent = " · " + parts.join(" · ");
+        viewsTd.appendChild(extraSpan);
       }
     }
     tr.appendChild(viewsTd);
@@ -1881,13 +1912,14 @@ document.getElementById("load-views-btn").addEventListener("click", async () => 
       return;
     }
     Object.assign(listingViews, data.views);
+    Object.assign(listingTrafficExtra, data.traffic_extra || {});
     const hitCount = ids.filter((id) => id in data.views).length;
     // eBays Report-API kann fuer aeltere, noch aktive Angebote niedrigere
     // Zahlen liefern als das eBay-eigene Verkaeufer-Cockpit, oder ein
     // Angebot ganz auslassen - eigene API-Einschraenkung, siehe README.md.
     viewsStatus.textContent = hitCount === 0
       ? "Für keines der Angebote in der aktuellen Auswahl liegen Aufrufe vor. Hinweis: eBays Report-API lässt ältere, noch aktive Angebote teils aus (siehe README.md) - das eBay-Verkäufer-Cockpit kann trotzdem Besucher zeigen."
-      : `Aufrufe für ${hitCount} von ${ids.length} Angebot(en) geladen.` + (hitCount < ids.length ? " (fehlende Angebote: siehe Hinweis zu eBays Report-API in README.md)" : "");
+      : `Aufrufe (sowie Impressionen/Klickrate, soweit von eBay geliefert) für ${hitCount} von ${ids.length} Angebot(en) geladen.` + (hitCount < ids.length ? " (fehlende Angebote: siehe Hinweis zu eBays Report-API in README.md)" : "");
     viewsStatus.className = "";
     render(sortedListings());
   } catch (err) {
