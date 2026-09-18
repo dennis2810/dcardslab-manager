@@ -292,9 +292,30 @@ class ListEbayListingViewsEndpointTests(unittest.TestCase):
         mock_extra.assert_called_once_with("tok", ["111", "222"])
         # Bleibt in der Karten-/eBay-Uebersicht sichtbar, bis das naechste
         # Mal auf "Aufrufe laden" geklickt wird (Klaerung mit dem Nutzer),
-        # statt bei jedem Seiten-Neuladen wieder bei "-" zu starten.
-        mock_update.assert_any_call("listing-1", {"last_known_views": 42})
+        # statt bei jedem Seiten-Neuladen wieder bei "-" zu starten - gilt
+        # inzwischen auch fuer Impressionen/Klickrate, nicht nur Aufrufe.
+        mock_update.assert_any_call(
+            "listing-1",
+            {"last_known_views": 42, "last_known_impressions": 500, "last_known_click_through_rate": 0.084},
+        )
         mock_update.assert_any_call("listing-2", {"last_known_views": 7})
+
+    def test_persists_traffic_extra_even_for_a_listing_missing_from_views(self):
+        # LISTING_VIEWS_TOTAL und LISTING_IMPRESSION_TOTAL/CLICK_THROUGH_RATE
+        # sind getrennte eBay-Reports (siehe ebay_client.py) - ein Angebot
+        # kann in einem auftauchen, im anderen aber fehlen.
+        listings = [_listing(id="listing-1", ebay_listing_id="111")]
+        with patch("main.ebay_client.get_access_token", return_value="tok"), \
+             patch("main.ebay_client.get_listing_views", return_value={}), \
+             patch("main.ebay_client.get_listing_traffic_extra",
+                   return_value={"111": {"impressions": 12, "click_through_rate": 0.5}}), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.update_ebay_listing") as mock_update:
+            response = client.get("/api/ebay/listings/views?listing_ids=111")
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_called_once_with(
+            "listing-1", {"last_known_impressions": 12, "last_known_click_through_rate": 0.5}
+        )
 
     def test_ignores_empty_ids_entries(self):
         with patch("main.ebay_client.get_access_token", return_value="tok"), \

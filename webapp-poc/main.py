@@ -2440,22 +2440,29 @@ async def ebay_listing_views(listing_ids: str):
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ebay_client.EbayApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    # In ebay_listings.last_known_views mitspeichern (Klaerung mit dem
-    # Nutzer: soll bis zum naechsten Klick sichtbar bleiben, statt nach
-    # jedem Seiten-Neuladen wieder bei "-" zu starten) - dafuer erst die
-    # eBay-Listing-ID auf unsere interne ID abbilden, gleiches Muster wie
-    # sync_ebay_sales()'s listings_by_item_id oben. Impressionen/Klickrate
-    # werden bewusst NICHT persistiert (kein eigenes DB-Feld) - anders als
-    # bei den Aufrufen gab es dafuer keinen expliziten Wunsch, sie bleiben
-    # wie bisher nur fuer die aktuelle Sitzung sichtbar.
-    if views:
+    # In ebay_listings.last_known_views/-impressions/-click_through_rate
+    # mitspeichern (Klaerung mit dem Nutzer: sollen bis zum naechsten Klick
+    # sichtbar bleiben, statt nach jedem Seiten-Neuladen wieder bei "-" zu
+    # starten) - dafuer erst die eBay-Listing-ID auf unsere interne ID
+    # abbilden, gleiches Muster wie sync_ebay_sales()'s listings_by_item_id
+    # oben.
+    if views or traffic_extra:
         listings_by_item_id = {
             l["ebay_listing_id"]: l for l in db.list_ebay_listings() if l.get("ebay_listing_id")
         }
-        for ebay_id, count in views.items():
+        for ebay_id in set(views) | set(traffic_extra):
             listing = listings_by_item_id.get(ebay_id)
-            if listing:
-                db.update_ebay_listing(listing["id"], {"last_known_views": count})
+            if not listing:
+                continue
+            extra = traffic_extra.get(ebay_id) or {}
+            update = {}
+            if ebay_id in views:
+                update["last_known_views"] = views[ebay_id]
+            if "impressions" in extra:
+                update["last_known_impressions"] = extra["impressions"]
+            if "click_through_rate" in extra:
+                update["last_known_click_through_rate"] = extra["click_through_rate"]
+            db.update_ebay_listing(listing["id"], update)
     return JSONResponse({"views": views, "traffic_extra": traffic_extra})
 
 

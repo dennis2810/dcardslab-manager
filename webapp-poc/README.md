@@ -198,8 +198,9 @@ API (`getTrafficReport`, Metrik `LISTING_VIEWS_TOTAL`, siehe
 eBays Definition: Views geteilt durch Impressionen, keine absolute
 Klickzahl, die liefert die API nicht) über
 `ebay_client.get_listing_traffic_extra()` - beide als kleiner Zusatztext
-in derselben Spalte, nur für die aktuelle Sitzung sichtbar (nicht wie die
-Aufrufzahl über einen Seiten-Neuladen hinweg gespeichert). **Beobachter/
+in derselben Spalte, genau wie die Aufrufzahl in `ebay_listings` gespeichert
+(`last_known_impressions`/`last_known_click_through_rate`) und bleiben daher
+über einen Seiten-Neuladen hinweg sichtbar. **Beobachter/
 Watcher-Zahlen sind NICHT enthalten** - das dafür nötige `watchCount`-Feld
 ist in eBays REST-APIs gesperrt und erfordert ein separat bei eBay zu
 stellendes „App Check"-Ticket (Freigabe nicht garantiert); die einzige
