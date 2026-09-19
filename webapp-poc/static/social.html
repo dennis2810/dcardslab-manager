@@ -66,6 +66,15 @@ if ("serviceWorker" in navigator) {
   .selected-cards-list li button:disabled { opacity: 0.35; cursor: default; }
   #video-status { margin-top: 0.75rem; }
   #video-preview { display: none; margin-top: 1rem; max-width: 320px; width: 100%; border-radius: 8px; }
+  /* Eigener Block je Textkarten-Feld (Intro/Outro) - ohne dieses display:
+     block rutscht das naechste <label> neben das <textarea> davor, da
+     <textarea> ein Inline-Element ist (Bugreport: "die Überschrift ist
+     seitlich"). */
+  .reel-text-field { display: block; margin: 0.75rem 0; }
+  .reel-text-field label { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+  .reel-text-field textarea { display: block; width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem; margin-top: 0.3rem; }
+  .reel-text-field textarea:disabled { opacity: 0.5; }
+  .reel-text-field .char-counter { display: block; max-width: 24rem; text-align: right; font-size: 0.8rem; color: #777; }
 
   /* Instagram-Statistik */
   .ig-stats-grid { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 0.75rem 0; }
@@ -145,10 +154,16 @@ if ("serviceWorker" in navigator) {
   <p>
     <label><input type="checkbox" id="include-back-checkbox"> Auch Rückseite mit einbeziehen (2 Bilder je Karte im Reel)</label>
   </p>
-  <label for="intro-text-input">Introtext (optional, eigene Textkarte am Anfang des Reels)</label><br>
-  <textarea id="intro-text-input" rows="1" style="width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;">🔥 NEW CARDS 🔥</textarea>
-  <label for="outro-text-input">Abschlusstext (optional, eigene Textkarte am Ende des Reels)</label><br>
-  <textarea id="outro-text-input" rows="2" style="width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;">🛒 Karten jetzt auf eBay – Link im Profil</textarea>
+  <div class="reel-text-field">
+    <label><input type="checkbox" id="intro-text-enabled" checked> Introtext (eigene Textkarte am Anfang des Reels)</label>
+    <textarea id="intro-text-input" rows="1" maxlength="200">🔥 NEW CARDS 🔥</textarea>
+    <span class="char-counter" id="intro-text-counter"></span>
+  </div>
+  <div class="reel-text-field">
+    <label><input type="checkbox" id="outro-text-enabled" checked> Abschlusstext (eigene Textkarte am Ende des Reels)</label>
+    <textarea id="outro-text-input" rows="2" maxlength="200">🛒 Karten jetzt auf eBay – Link im Profil</textarea>
+    <span class="char-counter" id="outro-text-counter"></span>
+  </div>
   <p>
     <button type="button" id="generate-video-btn">🎬 Reel erstellen</button>
   </p>
@@ -261,8 +276,27 @@ const selectedCountEl = document.getElementById("selected-count");
 const includeBackCheckbox = document.getElementById("include-back-checkbox");
 const introTextInput = document.getElementById("intro-text-input");
 const outroTextInput = document.getElementById("outro-text-input");
+const introTextEnabled = document.getElementById("intro-text-enabled");
+const outroTextEnabled = document.getElementById("outro-text-enabled");
 const videoStatusEl = document.getElementById("video-status");
 const videoPreviewEl = document.getElementById("video-preview");
+
+const TEXT_CARD_MAX_LENGTH = 200;
+
+function setupReelTextField(textarea, enabledCheckbox, counterEl) {
+  function updateCounter() {
+    counterEl.textContent = `${textarea.value.length}/${TEXT_CARD_MAX_LENGTH}`;
+  }
+  function updateEnabled() {
+    textarea.disabled = !enabledCheckbox.checked;
+  }
+  textarea.addEventListener("input", updateCounter);
+  enabledCheckbox.addEventListener("change", updateEnabled);
+  updateCounter();
+  updateEnabled();
+}
+setupReelTextField(introTextInput, introTextEnabled, document.getElementById("intro-text-counter"));
+setupReelTextField(outroTextInput, outroTextEnabled, document.getElementById("outro-text-counter"));
 
 function orderedSelectedCards() {
   return selectedOrder.map((id) => selectedCards.get(id)).filter(Boolean);
@@ -487,8 +521,8 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
       body: JSON.stringify({
         card_ids: [...selectedOrder],
         include_back: includeBackCheckbox.checked,
-        intro_text: introTextInput.value.trim(),
-        outro_text: outroTextInput.value.trim(),
+        intro_text: introTextEnabled.checked ? introTextInput.value.trim() : "",
+        outro_text: outroTextEnabled.checked ? outroTextInput.value.trim() : "",
       }),
     });
     if (!res.ok) {
