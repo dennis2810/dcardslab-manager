@@ -38,6 +38,7 @@ import sys
 import tempfile
 import time
 import types
+import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -261,6 +262,73 @@ async def _run_reminder_digest_forever():
     while True:
         _send_reminder_digest_if_due()
         await asyncio.sleep(_REMINDER_DIGEST_CHECK_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def _start_weekly_digest_scheduler():
+    asyncio.create_task(_run_weekly_digest_forever())
+
+
+# Gleiches Taktmuster wie portfolio.py's woechentlicher Schnappschuss
+# (stuendlich geprueft, aber nur ausgefuehrt, wenn der letzte Versand
+# laenger als eine Woche her ist) statt eines festen Wochentags/einer festen
+# Uhrzeit (Backlog-Klaerung) - selbstpendelnd statt kalendergebunden, wie
+# jeder andere periodische Hintergrund-Job in diesem Projekt.
+_WEEKLY_DIGEST_CHECK_INTERVAL_SECONDS = 3600
+_WEEKLY_DIGEST_INTERVAL_DAYS = 7
+
+
+def _is_weekly_digest_due():
+    status = db.get_app_status() or {}
+    last = status.get("last_weekly_digest_sent_at")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except ValueError:
+        return True
+    return datetime.now(timezone.utc) - last_dt >= timedelta(days=_WEEKLY_DIGEST_INTERVAL_DAYS)
+
+
+def _send_weekly_digest_if_due():
+    # Zeitstempel wird unabhaengig vom Schalter/Ergebnis gesetzt, gleiches
+    # Prinzip wie _send_reminder_digest_if_due().
+    if not _is_weekly_digest_due():
+        return
+    try:
+        db.record_weekly_digest_sent(datetime.now(timezone.utc).isoformat())
+    except Exception:
+        logger.exception("Zeitstempel des Wochendigests konnte nicht gespeichert werden")
+        return
+    try:
+        settings = db.get_app_status() or {}
+        if not settings.get("notify_weekly_digest"):
+            return
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=_WEEKLY_DIGEST_INTERVAL_DAYS)).date()
+        rows = _compute_statistics()["rows"]
+        sales = []
+        total_revenue = total_profit = 0.0
+        for row in rows:
+            sale_dt = _parse_date_like(row.get("sale_date"))
+            if not sale_dt or sale_dt.date() < cutoff:
+                continue
+            sales.append(row)
+            total_revenue += float(row.get("sale_price") or 0)
+            if row.get("profit") is not None:
+                total_profit += row["profit"]
+        price_alerts = _price_alert_reminders(settings)
+        if not sales and not price_alerts:
+            return
+        subject, body = email_notify.format_weekly_digest(sales, total_revenue, total_profit, price_alerts)
+        email_notify.send_email(settings, subject, body)
+    except Exception:
+        logger.exception("Wochendigest fehlgeschlagen")
+
+
+async def _run_weekly_digest_forever():
+    while True:
+        _send_weekly_digest_if_due()
+        await asyncio.sleep(_WEEKLY_DIGEST_CHECK_INTERVAL_SECONDS)
 
 # JPEG_QUALITY matches the desktop app's default. ROTATE (an extra forced
 # 180deg flip after cropping) is off: it assumed a fixed physical scan
@@ -3996,10 +4064,60 @@ async def generate_social_video(body: dict = Body(...)):
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         data = output_path.read_bytes()
 
+    try:
+        video_id = str(uuid.uuid4())
+        storage_path = storage.upload_video(video_id, data)
+        db.save_social_video(storage_path, frame_format, intro_text, outro_text, [c["id"] for c in ordered_cards])
+    except Exception:
+        # Das erzeugte Reel soll trotzdem heruntergeladen werden koennen,
+        # auch wenn die zusaetzliche Speicherung fuers spaetere Klick-
+        # Tracking (siehe /api/social/videos) fehlschlaegt.
+        logger.exception("Reel konnte nicht in Supabase Storage gespeichert werden")
+
     return Response(
         content=data, media_type="video/mp4",
         headers={"Content-Disposition": 'attachment; filename="dcardslab-reel.mp4"'},
     )
+
+
+@app.get("/api/social/videos")
+async def list_social_videos():
+    videos = db.list_social_videos()
+    storage_paths = [v["storage_path"] for v in videos if v.get("storage_path")]
+    signed_urls = {}
+    for path in storage_paths:
+        try:
+            signed_urls[path] = storage.video_signed_url(path)
+        except Exception:
+            continue
+    result = []
+    for video in videos:
+        result.append({
+            **video,
+            "video_url": signed_urls.get(video.get("storage_path")),
+            "cards": db.list_cards_for_social_video(video["id"]),
+        })
+    return result
+
+
+@app.post("/api/social/videos/{video_id}/instagram-media-id")
+async def set_social_video_instagram_media_id(video_id: str, body: dict = Body(...)):
+    instagram_media_id = (body.get("instagram_media_id") or "").strip()[:100]
+    updated = db.set_social_video_instagram_media_id(video_id, instagram_media_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Reel nicht gefunden.")
+    return updated
+
+
+@app.delete("/api/social/videos/{video_id}")
+async def delete_social_video(video_id: str):
+    storage_path = db.delete_social_video(video_id)
+    if storage_path:
+        try:
+            storage.delete_video(storage_path)
+        except Exception:
+            logger.exception("Reel-Datei konnte nicht aus Supabase Storage entfernt werden")
+    return {"deleted": True}
 
 
 @app.get("/api/backup")

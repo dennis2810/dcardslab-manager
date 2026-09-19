@@ -736,3 +736,43 @@ create table if not exists instagram_settings (
     connected_at    timestamptz,
     last_synced_at  timestamptz
 );
+
+-- Migration (2026-09-19): erzeugte Video-Generator-Reels zusaetzlich in
+-- Supabase Storage ablegen (Bucket "social-videos", siehe README) statt sie
+-- nur als Download an den Browser zu geben und danach serverseitig zu
+-- verwerfen - Grundlage fuer eine spaetere Verknuepfung mit Instagram-
+-- Insights je Reel (instagram_media_id, manuell nachgetragen, da das Tool
+-- nicht automatisch postet). Ein Reel kann mehrere Karten zeigen und eine
+-- Karte kann in mehreren Reels vorkommen (echte n:m-Beziehung, anders als
+-- purchase_items' 1-Karte-pro-Kauf unique(card_id)) - daher eigene
+-- Verknuepfungstabelle statt einer Fremdschluesselspalte an cards.
+create table if not exists social_videos (
+    id                  uuid primary key default gen_random_uuid(),
+    storage_path        text not null,          -- Objektpfad im "social-videos"-Bucket
+    frame_format        text not null default 'reel',  -- social_video.py's FRAME_FORMATS-Schluessel ("reel"/"feed")
+    intro_text          text default '',
+    outro_text          text default '',
+    instagram_media_id  text default '',        -- manuell nachgetragen nach dem Insta-Upload, fuer spaetere Insights-Abfragen
+    created_at          timestamptz not null default now()
+);
+
+create table if not exists social_video_cards (
+    id          uuid primary key default gen_random_uuid(),
+    video_id    uuid not null references social_videos(id) on delete cascade,
+    card_id     uuid not null references cards(id) on delete cascade,
+    created_at  timestamptz not null default now(),
+    unique (video_id, card_id)
+);
+
+create index if not exists social_video_cards_video_id_idx
+    on social_video_cards(video_id);
+create index if not exists social_video_cards_card_id_idx
+    on social_video_cards(card_id);
+
+-- Migration (2026-09-19): woechentlicher E-Mail-Digest (Verkaeufe, Gewinn,
+-- aktuelle Preis-Alarme der letzten 7 Tage) - eigener Schalter/Zeitstempel,
+-- gleiches Muster wie notify_on_reminders/last_reminder_email_sent_at oben,
+-- nur woechentlich statt taeglich geprueft (siehe main.py's
+-- _is_weekly_digest_due()).
+alter table app_status add column if not exists notify_weekly_digest boolean not null default false;
+alter table app_status add column if not exists last_weekly_digest_sent_at timestamptz;

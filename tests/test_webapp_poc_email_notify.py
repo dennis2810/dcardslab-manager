@@ -183,5 +183,42 @@ class FormatReminderDigestTests(unittest.TestCase):
         self.assertNotIn("Preis-Alarm", body)
 
 
+class FormatWeeklyDigestTests(unittest.TestCase):
+    def test_subject_includes_sale_count_and_profit(self):
+        sales = [{"title": "Messi Panini", "sale_price": 12.5, "channel": "eBay"}]
+        subject, body = email_notify.format_weekly_digest(sales, total_revenue=12.5, total_profit=4.0, price_alerts=[])
+        self.assertEqual(subject, "Wochendigest: 1 Verkauf/Verkäufe, 4.00 € Gewinn")
+        self.assertIn("Messi Panini", body)
+        self.assertIn("12.50 €", body)
+        self.assertIn("eBay", body)
+        self.assertIn("Umsatz: 12.50 €", body)
+        self.assertIn("Gewinn (nur Verkäufe mit bekanntem Einstandspreis): 4.00 €", body)
+
+    def test_no_sales_still_produces_a_clean_summary(self):
+        subject, body = email_notify.format_weekly_digest([], total_revenue=0, total_profit=0, price_alerts=[])
+        self.assertEqual(subject, "Wochendigest: 0 Verkauf/Verkäufe, 0.00 € Gewinn")
+        self.assertIn("Verkäufe der letzten 7 Tage: 0", body)
+        self.assertNotIn("Preis-Alarm", body)
+
+    def test_handles_missing_sale_price_and_title(self):
+        sales = [{"channel": "Vinted"}]
+        _, body = email_notify.format_weekly_digest(sales, total_revenue=0, total_profit=0, price_alerts=[])
+        self.assertIn("(ohne Titel)", body)
+        self.assertIn("?", body)
+        self.assertIn("Vinted", body)
+
+    def test_includes_price_alerts_section(self):
+        price_alerts = [{"title": "Messi Panini", "price": 12.0, "price_research_avg": 8.5, "diff_pct": 41.2}]
+        _, body = email_notify.format_weekly_digest([], total_revenue=0, total_profit=0, price_alerts=price_alerts)
+        self.assertIn("Aktuelle Preis-Alarme", body)
+        self.assertIn("Messi Panini", body)
+        self.assertIn("über", body)
+
+    def test_price_alert_below_market_average_says_unter(self):
+        price_alerts = [{"title": "X", "price": 5.0, "price_research_avg": 10.0, "diff_pct": -50.0}]
+        _, body = email_notify.format_weekly_digest([], total_revenue=0, total_profit=0, price_alerts=price_alerts)
+        self.assertIn("unter", body)
+
+
 if __name__ == "__main__":
     unittest.main()

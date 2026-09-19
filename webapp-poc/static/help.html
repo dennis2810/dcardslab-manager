@@ -362,7 +362,11 @@ if ("serviceWorker" in navigator) {
     Einstellungen (Abschnitt „E-Mail-Benachrichtigungen") die Option „Bei fälligen Erinnerungen/Wiedervorlagen
     benachrichtigen" aktiviert, verschickt das Tool einmal täglich eine zusammenfassende E-Mail mit allen fälligen
     Erinnerungen und den drei automatisch erkannten Situationen – der Preis-Alarm war bisher nur eine reine Anzeige
-    auf Kartendetail/eBay-Übersicht/Dashboard, die man erst beim Öffnen der jeweiligen Seite bemerkt hätte.</p>
+    auf Kartendetail/eBay-Übersicht/Dashboard, die man erst beim Öffnen der jeweiligen Seite bemerkt hätte. Zusätzlich
+    gibt es dort die Option „Wochendigest verschicken" – etwa einmal pro Woche (kein fester Wochentag, sondern
+    selbstpendelnd: geprüft wird stündlich, verschickt wird, sobald der letzte Wochendigest mindestens 7 Tage her
+    ist) eine E-Mail mit den Verkäufen, dem Umsatz und dem Gewinn der letzten 7 Tage sowie den aktuell zutreffenden
+    Preis-Alarmen.</p>
   <p>Bei einem veröffentlichten Angebot lassen sich unten im eBay-Bereich die eBay-Preisvorschläge (Best Offer)
     verwalten: Kästchen „Preisvorschläge aktiv" setzen, optional eine Schwelle für automatisches Annehmen/Ablehnen
     eintragen und auf „Preisvorschläge aktualisieren" klicken – die Änderung wird sofort an eBay übertragen, ohne
@@ -880,7 +884,11 @@ if ("serviceWorker" in navigator) {
     plus automatisch zusammengestellte Hashtags aus Marke, Sportart, Hersteller und – als Beispiel – dem
     Spielernamen) – vor dem Posten prüfen und anpassen. Download startet automatisch, danach manuell bei
     Instagram/TikTok hochladen und dort die im Upload-Dialog angebotene lizenzfreie Musik auswählen (bewusst keine
-    selbst eingebettete Tonspur, um die Musiklizenzfrage zu umgehen). <strong>Instagram-Statistik:</strong> nach dem
+    selbst eingebettete Tonspur, um die Musiklizenzfrage zu umgehen). Jedes erstellte Reel wird zusätzlich
+    gespeichert und mit den enthaltenen Karten verknüpft – Abschnitt „Bisherige Reels" darunter zeigt sie mit
+    Download-Link, verknüpften Karten und einem Feld für die Instagram-Media-ID (nach dem manuellen Hochladen
+    einzutragen, damit sich künftig Klicks/Reichweite je Reel den beworbenen Karten zuordnen lassen – die
+    eigentliche Insights-Abfrage folgt später, siehe Backlog). <strong>Instagram-Statistik:</strong> nach dem
     Verbinden (Button „Mit Instagram verbinden") zeigt die Seite Follower, Beitragsanzahl sowie Reichweite/Views
     des letzten Tages für das verknüpfte Instagram-Business-Konto – über „Instagram API with Instagram Login"
     (keine Facebook-Seiten-Verknüpfung nötig). Die Einrichtung dafür (Business-Konto, Meta-Developer-App,

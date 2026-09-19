@@ -1,8 +1,13 @@
-"""Tests for webapp-poc/social_video.py. ffmpeg itself is not available in
-this environment (no local install) - subprocess.run() is mocked throughout,
-same approach as other unverified/external-tool integrations in this repo."""
+"""Tests for webapp-poc/social_video.py. ffmpeg is not guaranteed to be
+available in every environment this runs in (the CI workflow doesn't
+install it, see .github/workflows/tests.yml) - subprocess.run() is mocked
+throughout for that reason. RealFfmpegIntegrationTests at the bottom is the
+exception: it calls real ffmpeg/ffprobe and is skipped where ffmpeg isn't
+installed - added after a bug (framerate mismatch between segment types)
+that only a real build/concat, not a mocked one, could catch."""
 import io
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -216,6 +221,22 @@ class RenderSegmentTests(unittest.TestCase):
         self.assertIn("-vf", args)
         self.assertIn("zoompan", args[args.index("-vf") + 1])
 
+    def test_static_segment_uses_explicit_fps_matching_card_segments(self):
+        # Regression (Nutzer-Bugreport, per ffprobe auf ein real erzeugtes
+        # Reel zurueckgefuehrt): ohne eigenes -vf (das die Karten-Segmente
+        # ueber zoompan's ":fps=30" bekommen) fiel ein geloopptes Standbild
+        # auf ffmpegs Default von 25fps zurueck - der Framerate-Bruch
+        # zwischen den 30fps-Karten- und den 25fps-Text-Segmenten fuehrte
+        # beim concat zu falschen Timestamps, wodurch die Outro-Textkarte im
+        # fertigen Video trotz korrektem Einzel-Segment nie angezeigt wurde.
+        # Statische Segmente muessen daher explizit dieselbe FPS wie die
+        # Karten-Segmente (zoompan-Filter, siehe oben) bekommen.
+        with patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run:
+            social_video._render_segment("frame.jpg", "seg.mp4", duration=2, static=True)
+        args = mock_run.call_args.args[0]
+        self.assertIn("-r", args)
+        self.assertEqual(args[args.index("-r") + 1], str(social_video.FPS))
+
 
 class BuildReelTests(unittest.TestCase):
     def _successful_result(self):
@@ -390,6 +411,60 @@ class BuildReelTests(unittest.TestCase):
              patch("social_video.subprocess.run", return_value=failing_result):
             with self.assertRaises(social_video.VideoGenerationError):
                 social_video.build_reel(cards, "out.mp4")
+
+
+class RealFfmpegIntegrationTests(unittest.TestCase):
+    """Laeuft nur, wenn ffmpeg tatsaechlich installiert ist (z.B. lokal -
+    der CI-Workflow installiert kein ffmpeg, siehe .github/workflows/tests.yml)
+    - ruft echtes ffmpeg auf statt subprocess.run() zu mocken, um Bugs zu
+    fangen, die nur beim echten Zusammenspiel mehrerer Segmente auftreten.
+    Hat genau den Framerate-Bruch zwischen statischen Text- und Ken-Burns-
+    Karten-Segmenten gefangen, den die gemockten Tests oben (korrekterweise:
+    sie pruefen nur die ffmpeg-Kommandozeile, nicht deren tatsaechliche
+    Wirkung) nicht haetten auffangen koennen - erst ein echter Build + ffprobe
+    auf das Ergebnis zeigte, dass die Outro-Textkarte trotz korrekt gebautem
+    Einzel-Segment im fertigen, zusammengefuegten Video nie angezeigt wurde."""
+
+    @unittest.skipUnless(social_video.ffmpeg_available(), "ffmpeg nicht installiert")
+    def test_static_and_zoompan_segments_share_the_same_frame_rate(self):
+        real_tmpdir = tempfile.mkdtemp(prefix="dcardslab_test_real_ffmpeg_fps_")
+        self.addCleanup(shutil.rmtree, real_tmpdir, ignore_errors=True)
+        tmp = Path(real_tmpdir)
+        frame_path = tmp / "frame.jpg"
+        social_video._render_text_frame("Test").save(frame_path, "JPEG", quality=90)
+        static_path = tmp / "static.mp4"
+        zoom_path = tmp / "zoom.mp4"
+        social_video._render_segment(frame_path, static_path, duration=1, static=True)
+        social_video._render_segment(frame_path, zoom_path, duration=1)
+
+        def frame_rate(path):
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", str(path)],
+                capture_output=True, text=True, check=True,
+            )
+            return result.stdout.strip()
+
+        self.assertEqual(frame_rate(static_path), frame_rate(zoom_path))
+
+    @unittest.skipUnless(social_video.ffmpeg_available(), "ffmpeg nicht installiert")
+    def test_final_duration_of_a_real_build_matches_all_segments_combined(self):
+        # End-to-End-Regression fuer den Framerate-Bug oben: mit dem
+        # Framerate-Bruch war das fertige, zusammengefuegte Video laenger
+        # als die Summe aller Einzel-Segmente (verfaelschte Timestamps beim
+        # concat), obwohl jedes Segment fuer sich genommen korrekt war.
+        real_tmpdir = tempfile.mkdtemp(prefix="dcardslab_test_real_ffmpeg_outro_")
+        self.addCleanup(shutil.rmtree, real_tmpdir, ignore_errors=True)
+        cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte", "price_text": ""}]
+        output_path = Path(real_tmpdir) / "reel.mp4"
+        social_video.build_reel(cards, output_path, intro_text="Intro", outro_text="Outro")
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(output_path)],
+            capture_output=True, text=True, check=True,
+        )
+        expected = social_video.INTRO_SECONDS + social_video.SECONDS_PER_CARD + social_video.OUTRO_SECONDS
+        self.assertAlmostEqual(float(result.stdout.strip()), expected, delta=0.1)
 
 
 if __name__ == "__main__":

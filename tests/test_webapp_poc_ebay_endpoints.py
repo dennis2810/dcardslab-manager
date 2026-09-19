@@ -2163,6 +2163,123 @@ class SendReminderDigestIfDueTests(unittest.TestCase):
         mock_send.assert_not_called()
 
 
+class IsWeeklyDigestDueTests(unittest.TestCase):
+    def test_due_when_never_sent(self):
+        with patch("main.db.get_app_status", return_value={}):
+            self.assertTrue(main._is_weekly_digest_due())
+
+    def test_due_when_no_status_row(self):
+        with patch("main.db.get_app_status", return_value=None):
+            self.assertTrue(main._is_weekly_digest_due())
+
+    def test_not_due_when_sent_recently(self):
+        recent = main.datetime.now(main.timezone.utc).isoformat()
+        with patch("main.db.get_app_status", return_value={"last_weekly_digest_sent_at": recent}):
+            self.assertFalse(main._is_weekly_digest_due())
+
+    def test_due_when_sent_over_7_days_ago(self):
+        old = (main.datetime.now(main.timezone.utc) - main.timedelta(days=8)).isoformat()
+        with patch("main.db.get_app_status", return_value={"last_weekly_digest_sent_at": old}):
+            self.assertTrue(main._is_weekly_digest_due())
+
+
+class SendWeeklyDigestIfDueTests(unittest.TestCase):
+    def _stats_row(self, card_id="c1", title="Karte 1", sale_date=None, cost=5.0, sale_price=10.0):
+        return {
+            "card_id": card_id, "title": title, "card_no": None, "team": "", "set_name": "",
+            "category": "", "theme": "", "platform": "", "sku": None, "ebay_listing_id": None,
+            "purchase_date": "2026-01-01", "cost": cost, "channel": "eBay", "sale_date": sale_date,
+            "sale_price": sale_price, "shipping_charged": 0, "shipping_cost": 0, "ebay_fees": 0,
+            "refunded": False, "buyer_username": "buyer1",
+        }
+
+    def test_does_nothing_when_not_due(self):
+        with patch("main._is_weekly_digest_due", return_value=False), \
+             patch("main.db.record_weekly_digest_sent") as mock_record, \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_record.assert_not_called()
+        mock_send.assert_not_called()
+
+    def test_stamps_timestamp_even_when_notifications_disabled(self):
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent") as mock_record, \
+             patch("main.db.get_app_status", return_value={"notify_weekly_digest": False}), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_record.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_does_nothing_when_no_sales_and_no_price_alerts(self):
+        settings = {"notify_weekly_digest": True}
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.statistics_rows", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_send.assert_not_called()
+
+    def test_sends_digest_for_a_sale_within_the_last_7_days(self):
+        settings = {"notify_weekly_digest": True}
+        recent_date = (main.datetime.now(main.timezone.utc) - main.timedelta(days=2)).date().isoformat()
+        rows = [self._stats_row(sale_date=recent_date)]
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.statistics_rows", return_value=rows), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        self.assertEqual(args[0], settings)
+        self.assertIn("Karte 1", args[2])
+
+    def test_excludes_sales_older_than_7_days(self):
+        settings = {"notify_weekly_digest": True}
+        old_date = (main.datetime.now(main.timezone.utc) - main.timedelta(days=10)).date().isoformat()
+        rows = [self._stats_row(sale_date=old_date)]
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.statistics_rows", return_value=rows), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_send.assert_not_called()
+
+    def test_sends_digest_for_a_price_alert_alone(self):
+        settings = {"notify_weekly_digest": True}
+        listings = [{"id": "l1", "card_id": "c1", "price": 20.0, "status": "Veroeffentlicht"}]
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.statistics_rows", return_value=[]), \
+             patch("main.db.list_ebay_listings", return_value=listings), \
+             patch("main.db.price_research_by_card_ids", return_value={"c1": {"avg_price": 10.0, "count": 3}}), \
+             patch("main.db.get_cards_by_ids", return_value=[{"id": "c1", "title": "Karte 1"}]), \
+             patch("main.email_notify.send_email") as mock_send:
+            main._send_weekly_digest_if_due()
+        mock_send.assert_called_once()
+        body = mock_send.call_args[0][2]
+        self.assertIn("Karte 1", body)
+        self.assertIn("Preis-Alarm", body)
+
+    def test_smtp_failure_does_not_raise(self):
+        settings = {"notify_weekly_digest": True}
+        recent_date = (main.datetime.now(main.timezone.utc) - main.timedelta(days=2)).date().isoformat()
+        rows = [self._stats_row(sale_date=recent_date)]
+        with patch("main._is_weekly_digest_due", return_value=True), \
+             patch("main.db.record_weekly_digest_sent"), \
+             patch("main.db.get_app_status", return_value=settings), \
+             patch("main.db.statistics_rows", return_value=rows), \
+             patch("main.db.list_ebay_listings", return_value=[]), \
+             patch("main.email_notify.send_email", side_effect=OSError("boom")):
+            main._send_weekly_digest_if_due()  # must not raise
+
+
 class SyncEbayReturnsOnceTests(unittest.TestCase):
     def test_marks_sale_refunded_when_return_has_refund(self):
         returns = [{"returnId": "R1", "orderId": "O1", "refundInfo": {"refunds": [{"amount": {"value": "9.99"}}]}}]

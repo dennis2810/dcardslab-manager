@@ -243,3 +243,31 @@ def prune_old_backups(keep):
     stale = names[:-keep] if keep > 0 and len(names) > keep else []
     if stale:
         get_client().storage.from_(BACKUPS_BUCKET).remove(stale)
+
+
+SOCIAL_VIDEOS_BUCKET = "social-videos"
+# Privater Bucket (siehe supabase/README.md) - kein externer Dienst braucht
+# eine dauerhafte URL fuers erzeugte Reel, anders als card-images (eBay-
+# Bilduebergabe). Kein automatisches Aufraeumen wie bei BACKUPS_BUCKET
+# (bewusste Entscheidung, siehe Backlog-Eintrag).
+
+
+def upload_video(video_id, data):
+    """Speichert ein per social_video.build_reel() erzeugtes MP4 - Returns
+    den Objektpfad innerhalb SOCIAL_VIDEOS_BUCKET."""
+    object_path = f"{video_id}.mp4"
+    get_client().storage.from_(SOCIAL_VIDEOS_BUCKET).upload(
+        object_path, data, file_options={"content-type": "video/mp4", "upsert": "true"}
+    )
+    return object_path
+
+
+def video_signed_url(object_path, expires_in=3600):
+    response = get_client().storage.from_(SOCIAL_VIDEOS_BUCKET).create_signed_url(object_path, expires_in)
+    return response["signedURL"]
+
+
+def delete_video(object_path):
+    if not object_path:
+        return
+    get_client().storage.from_(SOCIAL_VIDEOS_BUCKET).remove([object_path])
