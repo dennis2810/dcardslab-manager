@@ -142,6 +142,14 @@ if ("serviceWorker" in navigator) {
   <p class="status" id="video-status"></p>
   <video id="video-preview" controls></video>
 
+  <div id="caption-section" hidden>
+    <h3>Beschreibungsvorschlag</h3>
+    <p class="note">Automatisch aus den ausgewählten Karten zusammengestellt (Titel, Set, Team, Sportart, Hersteller)
+      – vor dem Posten prüfen und bei Bedarf anpassen, insbesondere die Hashtags.</p>
+    <textarea id="caption-output" rows="10" readonly style="width: 100%; max-width: 28rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;"></textarea>
+    <p><button type="button" id="copy-caption-btn">📋 In Zwischenablage kopieren</button></p>
+  </div>
+
   <h2 id="instagram-section">Instagram-Statistik</h2>
   <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Views des letzten Tages für das verknüpfte Instagram-
     Business-Konto (über „Instagram API with Instagram Login", siehe Checkliste unten) – erst nutzbar,
@@ -327,6 +335,92 @@ function renderCardResults(cards) {
   }
 }
 
+// ---------- Beschreibungsvorschlag ----------
+const captionSection = document.getElementById("caption-section");
+const captionOutput = document.getElementById("caption-output");
+
+function slugifyHashtag(value) {
+  return (value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // Akzente entfernen (ä->a, é->e, …)
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Kategorie -> Sport-Hashtag - dieselbe feste Sportarten-Liste wie
+// ebay_listing.py's _KNOWN_SPORTS (Sport/Non-Sport-Heuristik), hier auf
+// die jeweils passenden englischen Reichweiten-Hashtags gemappt.
+const SPORT_HASHTAGS = {
+  "Fußball": "soccercards",
+  "American Football": "footballcards",
+  "Basketball": "basketballcards",
+  "Baseball": "baseballcards",
+  "Eishockey": "hockeycards",
+  "Tennis": "tenniscards",
+  "Boxen": "boxingcards",
+  "Golf": "golfcards",
+  "Motorsport": "motorsportcards",
+  "Formel 1": "f1cards",
+  "Wrestling": "wrestlingcards",
+  "Rugby": "rugbycards",
+  "Cricket": "cricketcards",
+};
+
+function buildCaptionSuggestion(cards) {
+  const isSingle = cards.length === 1;
+  const lines = [isSingle ? "🔥 NEW CARD 🔥" : "🔥 NEW CARDS 🔥", ""];
+
+  if (isSingle) {
+    const c = cards[0];
+    lines.push(c.title || "(ohne Titel)");
+    const yearSet = [c.season_year, c.set_name].filter(Boolean).join(" ");
+    if (yearSet) lines.push(yearSet);
+    const parallel = [c.variant, c.card_type].filter(Boolean).join(" ");
+    const numberLine = [
+      c.card_number ? `#${c.card_number}` : "",
+      parallel,
+      c.print_run ? `/${c.print_run}` : "",
+    ].filter(Boolean).join(" ");
+    if (numberLine) lines.push(numberLine);
+  } else {
+    for (const c of cards) {
+      lines.push("• " + (c.title || "(ohne Titel)"));
+    }
+  }
+
+  lines.push("", "📦 Jetzt bei DCardsLab erhältlich.", "", "🖥 Link im Profil", "");
+
+  // Marke (fest) + Kategorie (fest, generisch) + Sport (aus der
+  // Kartenkategorie) + Hersteller + Spieler (Beispiel-Tag aus dem Titel) -
+  // je Gruppe dedupliziert, aber in dieser festen Reihenfolge.
+  const tags = new Set(["dcardslab", "sportscards", "tradingcards", "sportscardcollector"]);
+  for (const c of cards) {
+    const sportTag = SPORT_HASHTAGS[(c.category || "").trim()];
+    if (sportTag) tags.add(sportTag);
+    const manufacturerTag = slugifyHashtag(c.manufacturer);
+    if (manufacturerTag) tags.add(manufacturerTag);
+  }
+  lines.push([...tags].map((t) => "#" + t).join(" "));
+
+  if (isSingle) {
+    // Spielername als Beispiel-Tag (letztes Wort des Titels, meist der
+    // Nachname bei Sportkarten) - nur bei genau einer ausgewählten Karte,
+    // sonst waeren zu viele/uneinheitliche Spieler-Tags die Folge.
+    const words = (cards[0].title || "").trim().split(/\s+/);
+    const playerTag = slugifyHashtag(words[words.length - 1]);
+    if (playerTag) lines.push(`z. B. #${playerTag}`);
+  }
+
+  return lines.join("\n");
+}
+
+document.getElementById("copy-caption-btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(captionOutput.value);
+    showToast("Beschreibung in die Zwischenablage kopiert.");
+  } catch (err) {
+    showToast("Kopieren nicht möglich - bitte Text manuell markieren.", true);
+  }
+});
+
 document.getElementById("generate-video-btn").addEventListener("click", async () => {
   if (selectedCards.size === 0) {
     showToast("Bitte zuerst mindestens eine Karte auswählen.", true);
@@ -363,6 +457,8 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
     a.click();
     videoStatusEl.textContent = "Reel erstellt und heruntergeladen.";
     videoStatusEl.className = "status";
+    captionOutput.value = buildCaptionSuggestion([...selectedCards.values()]);
+    captionSection.hidden = false;
     showToast("Reel erstellt.");
   } catch (err) {
     videoStatusEl.textContent = "Fehler: " + err;
