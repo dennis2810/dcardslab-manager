@@ -103,6 +103,32 @@ class LogoPlateTests(unittest.TestCase):
         self.assertEqual(frame.size, social_video.FRAME_SIZE)
 
 
+class RenderSegmentTests(unittest.TestCase):
+    def _successful_result(self):
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    def test_static_segment_has_no_zoompan_filter(self):
+        # Regression (Nutzer-Bugreport): zoompan zoomt ohne eigene x/y von
+        # der linken oberen Ecke aus - bei Intro/Outro (mittig platzierte
+        # Grafik/Text) wanderte das Motiv dadurch waehrend des Abspielens
+        # aus dem Bild, obwohl der einzelne Frame korrekt aussah. Intro/
+        # Outro-Segmente duerfen daher keinen "-vf"/zoompan-Filter bekommen.
+        with patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run:
+            social_video._render_segment("frame.jpg", "seg.mp4", duration=2, static=True)
+        args = mock_run.call_args.args[0]
+        self.assertNotIn("-vf", args)
+
+    def test_non_static_segment_has_zoompan_filter(self):
+        with patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run:
+            social_video._render_segment("frame.jpg", "seg.mp4", duration=3)
+        args = mock_run.call_args.args[0]
+        self.assertIn("-vf", args)
+        self.assertIn("zoompan", args[args.index("-vf") + 1])
+
+
 class BuildReelTests(unittest.TestCase):
     def _successful_result(self):
         result = MagicMock()
@@ -160,6 +186,9 @@ class BuildReelTests(unittest.TestCase):
         self.assertEqual(mock_run.call_count, 3)
         list_text = (Path(real_tmpdir) / "concat_list.txt").read_text(encoding="utf-8")
         self.assertIn("seg_outro.mp4", list_text)
+        # Outro-Segment (2. ffmpeg-Aufruf, nach dem Karten-Segment) bekommt
+        # keinen zoompan-Filter - siehe RenderSegmentTests.
+        self.assertNotIn("-vf", mock_run.call_args_list[1].args[0])
 
     def test_no_outro_text_means_no_outro_segment(self):
         cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte 1", "price_text": ""}]
@@ -188,6 +217,9 @@ class BuildReelTests(unittest.TestCase):
         self.assertEqual(mock_run.call_count, 3)
         list_text = (Path(real_tmpdir) / "concat_list.txt").read_text(encoding="utf-8")
         self.assertTrue(list_text.startswith("file 'seg_intro.mp4'"))
+        # Intro-Segment (1. ffmpeg-Aufruf) bekommt keinen zoompan-Filter -
+        # siehe RenderSegmentTests.
+        self.assertNotIn("-vf", mock_run.call_args_list[0].args[0])
 
     def test_no_intro_text_means_no_intro_segment(self):
         cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte 1", "price_text": ""}]

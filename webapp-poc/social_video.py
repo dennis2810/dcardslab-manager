@@ -2,9 +2,14 @@
 ausgewaehlter Karte ein Bild mit Titel-/Preis-Overlay (optional Team/Set/
 Zustand-Zeile, Badges wie Rookie/Auto/Numbered/Refractor und die Rueckseite
 als zweites Bild) und haengt die Bilder per ffmpeg (zoompan-Ken-Burns-Effekt
-je Bild, abwechselnd rein-/rauszoomend, dann concat) zu einem stummen,
+je Karten-Bild, abwechselnd rein-/rauszoomend, dann concat) zu einem stummen,
 vertikalen (9:16) MP4 aneinander - optional umrahmt von einer Intro- und
-einer Outro-Textkarte (z.B. "Jetzt auf eBay"). Alle Texte bleiben innerhalb
+einer Outro-Textkarte (z.B. "Jetzt auf eBay"). Intro-/Outro-Textkarten
+bewusst OHNE Zoom (siehe _render_segment(static=True)): zoompan zoomt ohne
+eigene x/y-Angabe von der linken oberen Ecke aus, wodurch eine mittig
+platzierte Grafik/Text waehrend des Zoomens aus dem sichtbaren Ausschnitt
+wandert, obwohl der einzelne gerenderte Frame korrekt aussieht (Nutzer-
+Bugreport). Alle Texte bleiben innerhalb
 einer "Safe Zone" oberhalb des unteren Bildrands, da Instagram/TikTok dort
 beim Abspielen eigene UI-Elemente (Bildunterschrift, Kontoname, Audio-Titel)
 ueberlagern. Statt eines flachen Schwarz-Hintergrunds ein dezenter dunkler
@@ -256,26 +261,32 @@ def _render_text_frame(text):
     return frame
 
 
-def _render_segment(frame_path, segment_path, duration, zoom_out=False):
-    duration_frames = int(duration * FPS)
-    if zoom_out:
-        # Startet bereits gezoomt (1.2x) und zoomt langsam auf 1.0x zurueck -
-        # "on" ist zoompan's laufende Ausgabe-Frame-Nummer, damit der Zoom
-        # nur beim allerersten Frame auf 1.2 gesetzt und danach schrittweise
-        # reduziert wird (Standardmuster aus der ffmpeg-zoompan-Referenz).
-        zoom_expr = "if(eq(on,1),1.2,max(1.0,zoom-0.0015))"
+def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=False):
+    cmd = ["ffmpeg", "-y", "-loop", "1", "-i", str(frame_path)]
+    if static:
+        # Intro-/Outro-Textkarten (Logo + Text) bewusst OHNE Zoom: zoompan
+        # zoomt ohne eigene x/y-Angabe von der linken oberen Ecke aus, d.h.
+        # der sichtbare Ausschnitt wandert beim Zoomen weg von der Mitte -
+        # bei einer mittig platzierten Grafik/Text fuehrte das dazu, dass sie
+        # waehrend des Abspielens aus dem Bild wanderte, obwohl der einzelne
+        # gerenderte Frame korrekt aussah (Nutzer-Bugreport). Karten-Frames
+        # (Fotos) behalten den Zoom-Effekt, da dort nichts am Bildrand klebt.
+        pass
     else:
-        # Ken-Burns-Zoom-in: startet bei 1.0x, steigt minimal bis max. 1.2x.
-        zoom_expr = "min(zoom+0.0015,1.2)"
-    zoompan = f"zoompan=z='{zoom_expr}':d={duration_frames}:s={FRAME_SIZE[0]}x{FRAME_SIZE[1]}:fps={FPS}"
-    result = subprocess.run(
-        [
-            "ffmpeg", "-y", "-loop", "1", "-i", str(frame_path),
-            "-vf", zoompan, "-t", str(duration),
-            "-pix_fmt", "yuv420p", str(segment_path),
-        ],
-        capture_output=True, text=True, timeout=60,
-    )
+        duration_frames = int(duration * FPS)
+        if zoom_out:
+            # Startet bereits gezoomt (1.2x) und zoomt langsam auf 1.0x zurueck -
+            # "on" ist zoompan's laufende Ausgabe-Frame-Nummer, damit der Zoom
+            # nur beim allerersten Frame auf 1.2 gesetzt und danach schrittweise
+            # reduziert wird (Standardmuster aus der ffmpeg-zoompan-Referenz).
+            zoom_expr = "if(eq(on,1),1.2,max(1.0,zoom-0.0015))"
+        else:
+            # Ken-Burns-Zoom-in: startet bei 1.0x, steigt minimal bis max. 1.2x.
+            zoom_expr = "min(zoom+0.0015,1.2)"
+        zoompan = f"zoompan=z='{zoom_expr}':d={duration_frames}:s={FRAME_SIZE[0]}x{FRAME_SIZE[1]}:fps={FPS}"
+        cmd += ["-vf", zoompan]
+    cmd += ["-t", str(duration), "-pix_fmt", "yuv420p", str(segment_path)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         raise VideoGenerationError(f"ffmpeg-Rendern fehlgeschlagen: {result.stderr[-2000:]}")
 
@@ -313,7 +324,7 @@ def build_reel(cards, output_path, outro_text=None, intro_text=None):
             intro_frame_path = tmp / "intro.jpg"
             _render_text_frame(intro_text).save(intro_frame_path, "JPEG", quality=90)
             intro_segment_path = tmp / "seg_intro.mp4"
-            _render_segment(intro_frame_path, intro_segment_path, duration=INTRO_SECONDS)
+            _render_segment(intro_frame_path, intro_segment_path, duration=INTRO_SECONDS, static=True)
             segment_paths.append(intro_segment_path)
 
         for index, card in enumerate(cards):
@@ -330,7 +341,7 @@ def build_reel(cards, output_path, outro_text=None, intro_text=None):
             outro_frame_path = tmp / "outro.jpg"
             _render_text_frame(outro_text).save(outro_frame_path, "JPEG", quality=90)
             outro_segment_path = tmp / "seg_outro.mp4"
-            _render_segment(outro_frame_path, outro_segment_path, duration=OUTRO_SECONDS)
+            _render_segment(outro_frame_path, outro_segment_path, duration=OUTRO_SECONDS, static=True)
             segment_paths.append(outro_segment_path)
 
         list_path = tmp / "concat_list.txt"
