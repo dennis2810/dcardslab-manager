@@ -301,26 +301,47 @@ mitgelieferten Dockerfile bereits enthalten) - läuft ohne weitere
 Einrichtung.
 
 **Instagram-Statistik (optional):** zeigt Follower/Beiträge/Reichweite/
-Profilaufrufe des verknüpften Instagram-Business-Kontos
-(`instagram_client.py`, Meta Graph API). **Unverifiziert** - noch nicht
-gegen ein echtes Meta-Developer-App getestet, Endpunkte/Feldnamen folgen
-der offiziellen Graph-API-Dokumentation. Einmalige manuelle Einrichtung
-(auch als Checkliste auf `social.html` geführt):
+Views des verknüpften Instagram-Business-Kontos (`instagram_client.py`).
+Nutzt **„Instagram API with Instagram Login"** (seit der Abschaltung der
+alten Instagram Basic Display API im Dezember 2024 der von Meta empfohlene
+Weg für ein einzelnes eigenes Konto) - läuft über `api.instagram.com`/
+`graph.instagram.com`, **keine** Facebook-Seiten-Verknüpfung nötig, anders
+als beim älteren „Instagram API with Facebook Login". **Unverifiziert** -
+noch nicht gegen ein echtes Meta-Developer-App getestet, Endpunkte/
+Feldnamen folgen der offiziellen Instagram-Platform-Dokumentation.
+Einmalige manuelle Einrichtung (auch als Checkliste auf `social.html`
+geführt):
 
-1. Instagram-Konto auf ein Business-/Creator-Konto umstellen (kostenlos,
-   in der Instagram-App) und mit einer Facebook-Seite verknüpfen - die
-   Instagram Graph API liest Statistiken nur über diese Verknüpfung aus.
+1. Instagram-Konto auf ein Business-Konto umstellen (kostenlos, in der
+   Instagram-App) und auf öffentlich stellen - Zugriffstoken werden nur
+   für öffentliche Profile ausgestellt.
 2. Auf [developers.facebook.com](https://developers.facebook.com/) eine
-   Meta-Developer-App (Typ „Business") anlegen, das eigene Konto im
-   „Development Mode" als Tester/Rolle hinzufügen - für den Zugriff auf
-   das **eigene** Konto ist damit keine öffentliche App-Review-Freigabe
-   nötig.
-3. App-ID/App-Secret als `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` beim
-   `webapp-poc`-Container setzen.
-4. Als gültige OAuth-Weiterleitungs-URI in der Meta-App eintragen und als
-   `INSTAGRAM_REDIRECT_URI` setzen:
-   `http://<server-adresse>:8000/api/instagram/oauth/callback`.
-5. Auf `social.html` „Mit Instagram verbinden" klicken.
+   App anlegen und dort das Produkt „Instagram API setup with Instagram
+   login" hinzufügen (nicht „Facebook Login for Business").
+3. Im App-Dashboard unter „Instagram" → „API setup with Instagram login" →
+   Rollen/„Instagram Testers" das eigene Konto als Tester hinzufügen, dann
+   in der Instagram-App unter Profil → Bearbeiten → „Apps und Websites" →
+   „Tester-Einladungen" die Einladung annehmen - ohne diesen Schritt
+   bleibt jeder Verbindungsversuch wirkungslos, auch bei korrekten
+   Zugangsdaten.
+4. **Instagram App-ID**/**Instagram App-Secret** genau aus diesem Bereich
+   kopieren (Instagram → API setup with Instagram login → „Business login
+   settings") - nicht die allgemeine Meta-App-ID/-Secret von der
+   App-Startseite, die unterscheiden sich - und als
+   `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` beim `webapp-poc`-Container
+   setzen.
+5. Als OAuth-Weiterleitungs-URI in denselben „Business login settings"
+   eintragen und als `INSTAGRAM_REDIRECT_URI` setzen -
+   **anders als bei Google Sheets oben verlangt Meta hier zwingend
+   `https://` auf einer echten, öffentlich auflösbaren Adresse** (eine
+   reine private IP mit `http://`, z.B. `http://192.168.x.x:8000/...`,
+   lehnt Meta beim Speichern mit einem Fehler ab). Bei Tailscale-Nutzung
+   (siehe unten) reicht dafür `tailscale serve --bg 8000` auf dem NAS -
+   das stellt den Container automatisch mit einem echten Zertifikat unter
+   `https://<nas-tailscale-name>.<tailnet-name>.ts.net` bereit, ohne
+   eigenen Reverse-Proxy. Beispiel:
+   `https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback`.
+6. Auf `social.html` „Mit Instagram verbinden" klicken.
 
 TikTok-Statistiken sind bewusst nicht angebunden (siehe Backlog auf
 `backlog.html` - dort ist selbst für den reinen Eigenzugriff ein
@@ -383,9 +404,9 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e GOOGLE_CLIENT_ID=deine-google-client-id \
   -e GOOGLE_CLIENT_SECRET=dein-google-client-secret \
   -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
-  -e INSTAGRAM_APP_ID=deine-meta-app-id \
-  -e INSTAGRAM_APP_SECRET=dein-meta-app-secret \
-  -e INSTAGRAM_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/instagram/oauth/callback \
+  -e INSTAGRAM_APP_ID=deine-instagram-app-id \
+  -e INSTAGRAM_APP_SECRET=dein-instagram-app-secret \
+  -e INSTAGRAM_REDIRECT_URI=https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback \
   -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
   -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
   -e VAPID_SUBJECT=mailto:du@example.com \

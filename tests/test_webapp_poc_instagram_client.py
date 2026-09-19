@@ -24,19 +24,21 @@ class AuthorizationUrlTests(unittest.TestCase):
         with patch.object(instagram_client, "APP_ID", "app-1"), \
              patch.object(instagram_client, "REDIRECT_URI", "https://x/callback"):
             url = instagram_client.authorization_url("state-123")
+        self.assertTrue(url.startswith(instagram_client.AUTH_BASE))
         self.assertIn("state=state-123", url)
         self.assertIn("client_id=app-1", url)
-        self.assertIn("instagram_basic", url)
+        self.assertIn("instagram_business_basic", url)
 
 
 class ExchangeCodeTests(unittest.TestCase):
-    def test_returns_access_token(self):
-        with patch("instagram_client.httpx.get", return_value=_response(200, {"access_token": "short-lived"})):
-            token = instagram_client.exchange_code("auth-code")
+    def test_returns_access_token_and_ig_user_id(self):
+        with patch("instagram_client.httpx.post", return_value=_response(200, {"access_token": "short-lived", "user_id": 179825768})):
+            token, ig_user_id = instagram_client.exchange_code("auth-code")
         self.assertEqual(token, "short-lived")
+        self.assertEqual(ig_user_id, "179825768")
 
     def test_raises_on_error(self):
-        with patch("instagram_client.httpx.get", return_value=_response(400, {"error": "bad_code"}, text="bad_code")):
+        with patch("instagram_client.httpx.post", return_value=_response(400, {"error": "bad_code"}, text="bad_code")):
             with self.assertRaises(instagram_client.InstagramApiError):
                 instagram_client.exchange_code("bad-code")
 
@@ -51,28 +53,6 @@ class ExchangeForLongLivedTokenTests(unittest.TestCase):
         with patch("instagram_client.httpx.get", return_value=_response(400, {"error": "boom"}, text="boom")):
             with self.assertRaises(instagram_client.InstagramApiError):
                 instagram_client.exchange_for_long_lived_token("tok")
-
-
-class FindInstagramBusinessAccountTests(unittest.TestCase):
-    def test_returns_first_linked_ig_account(self):
-        pages = {"data": [
-            {"name": "Seite ohne Instagram"},
-            {"name": "Seite mit Instagram", "instagram_business_account": {"id": "ig-1"}},
-        ]}
-        with patch("instagram_client.httpx.get", return_value=_response(200, pages)):
-            ig_id = instagram_client.find_instagram_business_account("tok")
-        self.assertEqual(ig_id, "ig-1")
-
-    def test_raises_when_no_page_has_instagram_linked(self):
-        pages = {"data": [{"name": "Seite ohne Instagram"}]}
-        with patch("instagram_client.httpx.get", return_value=_response(200, pages)):
-            with self.assertRaises(instagram_client.NoInstagramAccountError):
-                instagram_client.find_instagram_business_account("tok")
-
-    def test_raises_api_error_on_failure(self):
-        with patch("instagram_client.httpx.get", return_value=_response(500, {"error": "boom"}, text="boom")):
-            with self.assertRaises(instagram_client.InstagramApiError):
-                instagram_client.find_instagram_business_account("tok")
 
 
 class GetAccountSummaryTests(unittest.TestCase):
@@ -99,6 +79,16 @@ class GetInsightsTests(unittest.TestCase):
         with patch("instagram_client.httpx.get", return_value=_response(200, data)):
             insights = instagram_client.get_insights("tok", "ig-1")
         self.assertEqual(insights[0]["name"], "reach")
+
+    def test_uses_views_metric_not_deprecated_profile_views(self):
+        # Graph-API v22.0 hat "profile_views" durch "views" abgeloest -
+        # Regressionstest, damit hier nicht versehentlich das veraltete
+        # Metrik-Feld zurueckkommt (siehe Kommentar in get_insights()).
+        with patch("instagram_client.httpx.get", return_value=_response(200, {"data": []})) as mock_get:
+            instagram_client.get_insights("tok", "ig-1")
+        params = mock_get.call_args.kwargs["params"]
+        self.assertIn("views", params["metric"])
+        self.assertNotIn("profile_views", params["metric"])
 
     def test_raises_on_error(self):
         with patch("instagram_client.httpx.get", return_value=_response(400, {"error": "boom"}, text="boom")):
