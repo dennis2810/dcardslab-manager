@@ -1008,6 +1008,66 @@ def get_app_status():
     return response.data[0] if response.data else None
 
 
+def save_social_video(storage_path, frame_format, intro_text, outro_text, card_ids):
+    # social_videos <-> cards ist eine echte n:m-Beziehung (eine Karte kann
+    # in mehreren Reels vorkommen, ein Reel zeigt i.d.R. mehrere Karten) -
+    # anders als purchase_items' unique(card_id) daher eine eigene
+    # Verknuepfungstabelle statt einer Spalte an cards. Best-effort: schlagen
+    # die card_ids-Inserts fehl, bleibt die video-Zeile trotzdem bestehen
+    # (das Reel selbst wurde bereits erfolgreich gespeichert) - ein Fehler
+    # hier darf die ganze Video-Generierung nicht rueckgaengig machen.
+    row = {
+        "storage_path": storage_path,
+        "frame_format": frame_format,
+        "intro_text": intro_text or "",
+        "outro_text": outro_text or "",
+    }
+    response = get_client().table("social_videos").insert(row).execute()
+    video = response.data[0]
+    if card_ids:
+        links = [{"video_id": video["id"], "card_id": card_id} for card_id in dict.fromkeys(card_ids)]
+        get_client().table("social_video_cards").insert(links).execute()
+    return video
+
+
+def list_social_videos(limit=20):
+    # Neueste zuerst - fuer die "Bisherige Reels"-Liste auf social.html.
+    response = (
+        get_client().table("social_videos").select("*")
+        .order("created_at", desc=True).limit(limit).execute()
+    )
+    return response.data
+
+
+def list_cards_for_social_video(video_id):
+    response = (
+        get_client().table("social_video_cards").select("card_id,cards(id,title,front_image_path)")
+        .eq("video_id", video_id).execute()
+    )
+    return [row["cards"] for row in response.data if row.get("cards")]
+
+
+def set_social_video_instagram_media_id(video_id, instagram_media_id):
+    response = (
+        get_client().table("social_videos").update({"instagram_media_id": instagram_media_id})
+        .eq("id", video_id).execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def delete_social_video(video_id):
+    # on delete cascade raeumt social_video_cards automatisch mit auf. Gibt
+    # den storage_path der geloeschten Zeile zurueck (oder None, falls keine
+    # Zeile mit dieser ID existierte), damit der Aufrufer auch die Datei im
+    # Storage-Bucket entfernen kann.
+    response = get_client().table("social_videos").select("storage_path").eq("id", video_id).execute()
+    if not response.data:
+        return None
+    storage_path = response.data[0]["storage_path"]
+    get_client().table("social_videos").delete().eq("id", video_id).execute()
+    return storage_path
+
+
 def record_backup_downloaded(downloaded_at):
     # Gleiches Singleton-Row-Muster wie save_google_sheets_settings().
     response = get_client().table("app_status").upsert({

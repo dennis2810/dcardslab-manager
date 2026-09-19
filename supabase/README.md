@@ -32,11 +32,17 @@ Einmalige manuelle Einrichtung (kostenloser Free-Tier reicht zum Start:
    **"Public bucket" AUSGESCHALTET lassen** — gleiche Begründung wie
    `purchase-receipts`, nur für hochgeladene Belege zu manuellen Verkäufen
    (card.html, Abschnitt „Verkauf außerhalb eBay").
-7. Unter Project Settings → API: `Project URL` und `service_role`
+7. Unter Storage einen fünften Bucket `social-videos` anlegen, ebenfalls
+   **"Public bucket" AUSGESCHALTET lassen** — hier legt der Video-Generator
+   (social.html) jedes erzeugte Reel zusätzlich ab (siehe `social_videos`-
+   Tabelle in `schema.sql`), kein externer Dienst braucht eine dauerhafte
+   URL dafür. Kein automatisches Aufräumen alter Reels (bewusste
+   Entscheidung, gleiches Muster wie `card-images` — siehe Backlog).
+8. Unter Project Settings → API: `Project URL` und `service_role`
    Secret Key kopieren (NICHT den `anon`-Key – der Service-Role-Key hat
    vollen Server-Zugriff und gehört nur ins Backend-Environment, niemals
    in Frontend-Code).
-8. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
+9. Als Env-Variablen beim Deployment des `webapp-poc`-Containers setzen:
    `SUPABASE_URL` = Project URL, `SUPABASE_SERVICE_KEY` = service_role-Key.
 
 Bekannte Free-Tier-Einschränkung: Projekte pausieren nach 1 Woche ohne

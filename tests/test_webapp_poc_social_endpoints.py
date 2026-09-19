@@ -405,6 +405,103 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
             response = client.post("/api/social/video", json={"card_ids": ["c1"]})
         self.assertEqual(response.status_code, 502)
 
+    def test_saves_video_to_storage_and_db_after_successful_build(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel), \
+             patch("main.storage.upload_video", return_value="vid-1.mp4") as mock_upload, \
+             patch("main.db.save_social_video") as mock_save:
+            response = client.post("/api/social/video", json={
+                "card_ids": ["c1"], "frame_format": "feed", "intro_text": "Hi", "outro_text": "Bye",
+            })
+        self.assertEqual(response.status_code, 200)
+        mock_upload.assert_called_once()
+        self.assertEqual(mock_upload.call_args[0][1], b"fake-mp4-bytes")
+        mock_save.assert_called_once_with("vid-1.mp4", "feed", "Hi", "Bye", ["c1"])
+
+    def test_download_still_succeeds_when_storage_save_fails(self):
+        # Regression: die Zusatzspeicherung fuers spaetere Klick-Tracking
+        # darf den eigentlichen Reel-Download nicht verhindern, wenn sie
+        # fehlschlaegt (z.B. Supabase kurzzeitig nicht erreichbar).
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel), \
+             patch("main.storage.upload_video", side_effect=RuntimeError("storage down")):
+            response = client.post("/api/social/video", json={"card_ids": ["c1"]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"fake-mp4-bytes")
+
+
+class SocialVideosEndpointTests(unittest.TestCase):
+    def test_list_returns_videos_with_signed_url_and_cards(self):
+        videos = [{"id": "vid-1", "storage_path": "vid-1.mp4", "created_at": "2026-09-19T00:00:00+00:00"}]
+        cards = [{"id": "c1", "title": "Karte 1", "front_image_path": "p1"}]
+        with patch("main.db.list_social_videos", return_value=videos), \
+             patch("main.storage.video_signed_url", return_value="https://img.example/vid-1.mp4"), \
+             patch("main.db.list_cards_for_social_video", return_value=cards):
+            response = client.get("/api/social/videos")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body[0]["video_url"], "https://img.example/vid-1.mp4")
+        self.assertEqual(body[0]["cards"], cards)
+
+    def test_list_omits_signed_url_when_it_fails(self):
+        videos = [{"id": "vid-1", "storage_path": "vid-1.mp4", "created_at": "2026-09-19T00:00:00+00:00"}]
+        with patch("main.db.list_social_videos", return_value=videos), \
+             patch("main.storage.video_signed_url", side_effect=RuntimeError("boom")), \
+             patch("main.db.list_cards_for_social_video", return_value=[]):
+            response = client.get("/api/social/videos")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()[0]["video_url"])
+
+    def test_set_instagram_media_id_updates_row(self):
+        with patch("main.db.set_social_video_instagram_media_id", return_value={"id": "vid-1", "instagram_media_id": "media-123"}) as mock_set:
+            response = client.post("/api/social/videos/vid-1/instagram-media-id", json={"instagram_media_id": "media-123"})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("vid-1", "media-123")
+
+    def test_set_instagram_media_id_returns_404_when_video_missing(self):
+        with patch("main.db.set_social_video_instagram_media_id", return_value=None):
+            response = client.post("/api/social/videos/missing/instagram-media-id", json={"instagram_media_id": "media-123"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_delete_removes_db_row_and_storage_file(self):
+        with patch("main.db.delete_social_video", return_value="vid-1.mp4") as mock_delete_db, \
+             patch("main.storage.delete_video") as mock_delete_storage:
+            response = client.delete("/api/social/videos/vid-1")
+        self.assertEqual(response.status_code, 200)
+        mock_delete_db.assert_called_once_with("vid-1")
+        mock_delete_storage.assert_called_once_with("vid-1.mp4")
+
+    def test_delete_skips_storage_removal_when_video_was_not_found(self):
+        with patch("main.db.delete_social_video", return_value=None), \
+             patch("main.storage.delete_video") as mock_delete_storage:
+            response = client.delete("/api/social/videos/missing")
+        self.assertEqual(response.status_code, 200)
+        mock_delete_storage.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

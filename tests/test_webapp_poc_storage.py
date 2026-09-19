@@ -475,5 +475,48 @@ class PruneOldBackupsTests(unittest.TestCase):
         mock_client.storage.from_.return_value.remove.assert_not_called()
 
 
+class UploadVideoTests(unittest.TestCase):
+    def test_uploads_bytes_to_social_videos_bucket(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            object_path = storage.upload_video("vid-1", b"fake-mp4-bytes")
+        self.assertEqual(object_path, "vid-1.mp4")
+        mock_client.storage.from_.assert_called_once_with(storage.SOCIAL_VIDEOS_BUCKET)
+        upload_call = mock_client.storage.from_.return_value.upload
+        args, kwargs = upload_call.call_args
+        self.assertEqual(args[0], "vid-1.mp4")
+        self.assertEqual(args[1], b"fake-mp4-bytes")
+        self.assertEqual(kwargs["file_options"]["content-type"], "video/mp4")
+        self.assertEqual(kwargs["file_options"]["upsert"], "true")
+
+
+class VideoSignedUrlTests(unittest.TestCase):
+    def test_returns_signed_url_from_client_response(self):
+        mock_client = MagicMock()
+        mock_client.storage.from_.return_value.create_signed_url.return_value = {
+            "signedURL": "https://example.supabase.co/signed/vid-1.mp4"
+        }
+        with patch("storage.get_client", return_value=mock_client):
+            url = storage.video_signed_url("vid-1.mp4")
+        self.assertEqual(url, "https://example.supabase.co/signed/vid-1.mp4")
+        mock_client.storage.from_.assert_called_once_with(storage.SOCIAL_VIDEOS_BUCKET)
+        mock_client.storage.from_.return_value.create_signed_url.assert_called_once_with("vid-1.mp4", 3600)
+
+
+class DeleteVideoTests(unittest.TestCase):
+    def test_removes_given_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_video("vid-1.mp4")
+        mock_client.storage.from_.assert_called_once_with(storage.SOCIAL_VIDEOS_BUCKET)
+        mock_client.storage.from_.return_value.remove.assert_called_once_with(["vid-1.mp4"])
+
+    def test_noop_when_no_path(self):
+        mock_client = MagicMock()
+        with patch("storage.get_client", return_value=mock_client):
+            storage.delete_video("")
+        mock_client.storage.from_.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

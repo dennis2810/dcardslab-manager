@@ -137,27 +137,18 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <h2 id="features-section">Features</h2>
-  <div class="item" data-effort="groß">
-    <h3>Erzeugte Reels speichern und mit Karten verknüpfen (für spätere Klick-Auswertung) <span class="status-tag status-open">offen – Klärung nötig</span>
-      <span class="status-tag status-effort">Aufwand: groß</span></h3>
-    <p>Aus dem Chat: aktuell wird ein per Video-Generator (<a href="social.html">social.html</a>) erzeugtes Reel
-      nirgends gespeichert – es entsteht bei jedem Klick auf „Reel erstellen" neu und geht nur als Download an den
-      Browser, danach existiert es serverseitig nicht mehr. Es gibt auch kein Flag/keine Verknüpfung an der Karte,
-      die festhält „diese Karte war in Reel X".</p>
-    <p>Für eine spätere Verknüpfung von Reel-Klicks/-Reichweite mit den beworbenen Karten bräuchte es zwei
-      Bausteine:</p>
-    <ul>
-      <li><strong>Speicherung:</strong> das erzeugte Video zusätzlich in Supabase Storage ablegen sowie eine neue
-        Tabelle (z. B. <code>social_videos</code>) anlegen, die ein Video mit den enthaltenen Karten verknüpft
-        (mehrere Karten pro Reel, also eine n:m-Beziehung analog zu <code>purchase_items</code>).</li>
-      <li><strong>Echte Klick-/Reichweitenzahlen:</strong> dafür reicht die Verknüpfung allein nicht – der Nutzer
-        müsste nach dem manuellen Hochladen bei Instagram das Reel zusätzlich mit der jeweiligen Instagram-Media-ID
-        verknüpfen (das Tool postet nicht automatisch, siehe Instagram-Statistik-Abschnitt), damit sich über die
-        Graph-API Insights je Reel abrufen und den verknüpften Karten zuordnen lassen.</li>
-    </ul>
-    <p>Klärungsbedarf: lohnt sich der Aufwand für Speicherung + Verknüpfung schon, bevor die Instagram-Statistik-
-      Anbindung (Stufe 2) tatsächlich im Alltag genutzt wird? Genaues Datenmodell (welche Metadaten je Video
-      speichern, wie lange aufbewahren, Aufräumen alter Videos) noch offen.</p>
+
+  <div class="item" data-effort="mittel">
+    <h3>Instagram-Insights je gespeichertem Reel abrufen und Karten zuordnen <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>Erzeugte Reels werden jetzt gespeichert und mit ihren Karten verknüpft (<a href="social.html">Social
+      Media</a>, Abschnitt „Bisherige Reels"), inklusive eines Felds für die manuell einzutragende Instagram-
+      Media-ID nach dem Upload. Was noch fehlt: die eigentliche Insights-Abfrage über die Graph-API je Media-ID
+      (Reichweite/Views/Klicks) und deren Aggregation auf die verknüpften Karten – aktuell wird die Media-ID nur
+      gespeichert, aber nicht weiter ausgewertet.</p>
+    <p>Klärungsbedarf: lohnt sich der Aufwand schon, bevor die Instagram-Statistik-Anbindung (Stufe 2) tatsächlich
+      im Alltag genutzt wird? Wo sollen die Zahlen angezeigt werden (je Reel in der Liste, oder zusätzlich je
+      Karte auf deren Detailseite)?</p>
   </div>
 
   <div class="item" data-effort="mittel">

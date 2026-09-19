@@ -76,6 +76,15 @@ if ("serviceWorker" in navigator) {
   .reel-text-field textarea:disabled { opacity: 0.5; }
   .reel-text-field .char-counter { display: block; max-width: 24rem; text-align: right; font-size: 0.8rem; color: #777; }
 
+  /* Video-Generator: Bisherige Reels */
+  .past-videos-list { list-style: none; padding: 0; margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .past-videos-list li { border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 0.8rem; }
+  .past-video-meta { font-size: 0.85rem; color: #777; margin: 0 0 0.3rem; }
+  .past-video-cards { font-size: 0.9rem; margin: 0 0 0.4rem; }
+  .past-video-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+  .past-video-actions input[type="text"] { padding: 0.3rem 0.5rem; font-size: 0.85rem; flex: 1; min-width: 10rem; }
+  .past-video-actions button { font-size: 0.85rem; }
+
   /* Instagram-Statistik */
   .ig-stats-grid { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 0.75rem 0; }
   .ig-stat { background: rgba(127, 127, 127, 0.1); border-radius: 8px; padding: 0.75rem 1.1rem; min-width: 8rem; }
@@ -184,6 +193,13 @@ if ("serviceWorker" in navigator) {
     <textarea id="caption-output" rows="10" readonly style="width: 100%; max-width: 28rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;"></textarea>
     <p><button type="button" id="copy-caption-btn">📋 In Zwischenablage kopieren</button></p>
   </div>
+
+  <h3 id="past-videos-heading">Bisherige Reels</h3>
+  <p class="note">Jedes erstellte Reel wird zusätzlich gespeichert und mit den enthaltenen Karten verknüpft – nach
+    dem manuellen Hochladen bei Instagram kann hier die Instagram-Media-ID eingetragen werden, um später Klicks/
+    Reichweite je Reel den beworbenen Karten zuordnen zu können.</p>
+  <ul class="past-videos-list" id="past-videos-list"></ul>
+  <p class="note" id="past-videos-empty" hidden>Noch keine Reels erstellt.</p>
 
   <h2 id="instagram-section">Instagram-Statistik</h2>
   <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Views des letzten Tages für das verknüpfte Instagram-
@@ -603,12 +619,111 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
     captionOutput.value = buildCaptionSuggestion(orderedSelectedCards());
     captionSection.hidden = false;
     showToast("Reel erstellt.");
+    loadPastVideos();
   } catch (err) {
     videoStatusEl.textContent = "Fehler: " + err;
     videoStatusEl.className = "error";
     showToast("Fehler: " + err, true);
   }
 });
+
+// ---------- Bisherige Reels ----------
+// Jedes ueber generate-video-btn erzeugte Reel wird serverseitig zusaetzlich
+// gespeichert und mit seinen Karten verknuepft (main.py's /api/social/video)
+// - diese Liste zeigt sie an und erlaubt, nach dem manuellen Insta-Upload
+// die Instagram-Media-ID nachzutragen (fuer spaetere Insights-Abfragen).
+const pastVideosList = document.getElementById("past-videos-list");
+const pastVideosEmpty = document.getElementById("past-videos-empty");
+const FRAME_FORMAT_LABELS = { reel: "Reel (9:16)", feed: "Feed-Post (4:5)" };
+
+function formatVideoDate(isoString) {
+  try {
+    return new Date(isoString).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+  } catch (err) {
+    return isoString || "";
+  }
+}
+
+async function loadPastVideos() {
+  try {
+    const res = await fetch("/api/social/videos");
+    if (!res.ok) return;
+    const videos = await res.json();
+    pastVideosList.innerHTML = "";
+    pastVideosEmpty.hidden = videos.length > 0;
+    for (const video of videos) {
+      const li = document.createElement("li");
+
+      const meta = document.createElement("p");
+      meta.className = "past-video-meta";
+      const formatLabel = FRAME_FORMAT_LABELS[video.frame_format] || video.frame_format;
+      meta.textContent = `${formatVideoDate(video.created_at)} · ${formatLabel}`;
+      li.appendChild(meta);
+
+      const cardsP = document.createElement("p");
+      cardsP.className = "past-video-cards";
+      const cardTitles = (video.cards || []).map((c) => c.title || "(ohne Titel)").join(", ");
+      cardsP.textContent = cardTitles ? `Karten: ${cardTitles}` : "Keine Karten verknüpft.";
+      li.appendChild(cardsP);
+
+      const actions = document.createElement("div");
+      actions.className = "past-video-actions";
+
+      if (video.video_url) {
+        const downloadLink = document.createElement("a");
+        downloadLink.href = video.video_url;
+        downloadLink.textContent = "⬇️ Herunterladen";
+        downloadLink.target = "_blank";
+        downloadLink.rel = "noopener";
+        actions.appendChild(downloadLink);
+      }
+
+      const mediaIdInput = document.createElement("input");
+      mediaIdInput.type = "text";
+      mediaIdInput.placeholder = "Instagram-Media-ID (nach dem Upload)";
+      mediaIdInput.value = video.instagram_media_id || "";
+      actions.appendChild(mediaIdInput);
+
+      const saveMediaIdBtn = document.createElement("button");
+      saveMediaIdBtn.type = "button";
+      saveMediaIdBtn.textContent = "Speichern";
+      saveMediaIdBtn.addEventListener("click", async () => {
+        try {
+          await fetch(`/api/social/videos/${video.id}/instagram-media-id`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ instagram_media_id: mediaIdInput.value.trim() }),
+          });
+          showToast("Instagram-Media-ID gespeichert.");
+        } catch (err) {
+          showToast("Fehler: " + err, true);
+        }
+      });
+      actions.appendChild(saveMediaIdBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = "🗑 Löschen";
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm("Dieses gespeicherte Reel wirklich löschen?")) return;
+        try {
+          await fetch(`/api/social/videos/${video.id}`, { method: "DELETE" });
+          loadPastVideos();
+        } catch (err) {
+          showToast("Fehler: " + err, true);
+        }
+      });
+      actions.appendChild(deleteBtn);
+
+      li.appendChild(actions);
+      pastVideosList.appendChild(li);
+    }
+  } catch (err) {
+    // Stiller Fehlschlag - die Liste ist ein Extra, kein Kernfeature des
+    // Video-Generators (Download funktioniert unabhaengig davon).
+  }
+}
+loadPastVideos();
 
 // ---------- Instagram-Statistik ----------
 const igStatusEl = document.getElementById("instagram-status");

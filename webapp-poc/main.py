@@ -38,6 +38,7 @@ import sys
 import tempfile
 import time
 import types
+import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -3996,10 +3997,60 @@ async def generate_social_video(body: dict = Body(...)):
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         data = output_path.read_bytes()
 
+    try:
+        video_id = str(uuid.uuid4())
+        storage_path = storage.upload_video(video_id, data)
+        db.save_social_video(storage_path, frame_format, intro_text, outro_text, [c["id"] for c in ordered_cards])
+    except Exception:
+        # Das erzeugte Reel soll trotzdem heruntergeladen werden koennen,
+        # auch wenn die zusaetzliche Speicherung fuers spaetere Klick-
+        # Tracking (siehe /api/social/videos) fehlschlaegt.
+        logger.exception("Reel konnte nicht in Supabase Storage gespeichert werden")
+
     return Response(
         content=data, media_type="video/mp4",
         headers={"Content-Disposition": 'attachment; filename="dcardslab-reel.mp4"'},
     )
+
+
+@app.get("/api/social/videos")
+async def list_social_videos():
+    videos = db.list_social_videos()
+    storage_paths = [v["storage_path"] for v in videos if v.get("storage_path")]
+    signed_urls = {}
+    for path in storage_paths:
+        try:
+            signed_urls[path] = storage.video_signed_url(path)
+        except Exception:
+            continue
+    result = []
+    for video in videos:
+        result.append({
+            **video,
+            "video_url": signed_urls.get(video.get("storage_path")),
+            "cards": db.list_cards_for_social_video(video["id"]),
+        })
+    return result
+
+
+@app.post("/api/social/videos/{video_id}/instagram-media-id")
+async def set_social_video_instagram_media_id(video_id: str, body: dict = Body(...)):
+    instagram_media_id = (body.get("instagram_media_id") or "").strip()[:100]
+    updated = db.set_social_video_instagram_media_id(video_id, instagram_media_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Reel nicht gefunden.")
+    return updated
+
+
+@app.delete("/api/social/videos/{video_id}")
+async def delete_social_video(video_id: str):
+    storage_path = db.delete_social_video(video_id)
+    if storage_path:
+        try:
+            storage.delete_video(storage_path)
+        except Exception:
+            logger.exception("Reel-Datei konnte nicht aus Supabase Storage entfernt werden")
+    return {"deleted": True}
 
 
 @app.get("/api/backup")

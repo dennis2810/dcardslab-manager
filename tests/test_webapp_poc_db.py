@@ -4088,5 +4088,117 @@ class RecordReminderEmailSentTests(unittest.TestCase):
         self.assertEqual(row, {"id": True, "last_reminder_email_sent_at": "now"})
 
 
+class SaveSocialVideoTests(unittest.TestCase):
+    def test_inserts_video_and_links_cards(self):
+        mock_client = MagicMock()
+        video_response = MagicMock()
+        video_response.data = [{"id": "vid-1", "storage_path": "vid-1.mp4"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = video_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.save_social_video("vid-1.mp4", "reel", "Intro", "Outro", ["c1", "c2"])
+        self.assertEqual(result["id"], "vid-1")
+        insert_calls = mock_client.table.return_value.insert.call_args_list
+        video_row = insert_calls[0][0][0]
+        self.assertEqual(video_row["storage_path"], "vid-1.mp4")
+        self.assertEqual(video_row["frame_format"], "reel")
+        self.assertEqual(video_row["intro_text"], "Intro")
+        links = insert_calls[1][0][0]
+        self.assertEqual([link["card_id"] for link in links], ["c1", "c2"])
+        self.assertTrue(all(link["video_id"] == "vid-1" for link in links))
+
+    def test_skips_card_links_insert_when_no_card_ids(self):
+        mock_client = MagicMock()
+        video_response = MagicMock()
+        video_response.data = [{"id": "vid-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = video_response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_social_video("vid-1.mp4", "reel", "", "", [])
+        self.assertEqual(mock_client.table.return_value.insert.call_count, 1)
+
+    def test_deduplicates_card_ids(self):
+        mock_client = MagicMock()
+        video_response = MagicMock()
+        video_response.data = [{"id": "vid-1"}]
+        mock_client.table.return_value.insert.return_value.execute.return_value = video_response
+        with patch("db.get_client", return_value=mock_client):
+            db.save_social_video("vid-1.mp4", "reel", "", "", ["c1", "c1", "c2"])
+        links = mock_client.table.return_value.insert.call_args_list[1][0][0]
+        self.assertEqual([link["card_id"] for link in links], ["c1", "c2"])
+
+
+class ListSocialVideosTests(unittest.TestCase):
+    def test_orders_by_created_at_desc_and_limits(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "vid-2"}, {"id": "vid-1"}]
+        order_mock = mock_client.table.return_value.select.return_value.order
+        order_mock.return_value.limit.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_social_videos(limit=5)
+        self.assertEqual(result, [{"id": "vid-2"}, {"id": "vid-1"}])
+        order_mock.assert_called_once_with("created_at", desc=True)
+        order_mock.return_value.limit.assert_called_once_with(5)
+
+
+class ListCardsForSocialVideoTests(unittest.TestCase):
+    def test_returns_linked_cards_and_skips_deleted_ones(self):
+        # Eine verknuepfte Karte kann zwischenzeitlich geloescht worden sein
+        # (on delete cascade raeumt dann nur social_video_cards auf, nicht
+        # das Reel selbst) - der Join liefert dafuer cards: None.
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [
+            {"card_id": "c1", "cards": {"id": "c1", "title": "Karte 1"}},
+            {"card_id": "c2", "cards": None},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.list_cards_for_social_video("vid-1")
+        self.assertEqual(result, [{"id": "c1", "title": "Karte 1"}])
+
+
+class SetSocialVideoInstagramMediaIdTests(unittest.TestCase):
+    def test_updates_and_returns_row(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": "vid-1", "instagram_media_id": "media-123"}]
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_social_video_instagram_media_id("vid-1", "media-123")
+        self.assertEqual(result["instagram_media_id"], "media-123")
+        mock_client.table.return_value.update.assert_called_once_with({"instagram_media_id": "media-123"})
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = []
+        mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.set_social_video_instagram_media_id("missing", "media-123")
+        self.assertIsNone(result)
+
+
+class DeleteSocialVideoTests(unittest.TestCase):
+    def test_deletes_and_returns_storage_path(self):
+        mock_client = MagicMock()
+        select_response = MagicMock()
+        select_response.data = [{"storage_path": "vid-1.mp4"}]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = select_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_social_video("vid-1")
+        self.assertEqual(result, "vid-1.mp4")
+        mock_client.table.return_value.delete.return_value.eq.assert_called_once_with("id", "vid-1")
+
+    def test_returns_none_when_not_found(self):
+        mock_client = MagicMock()
+        select_response = MagicMock()
+        select_response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = select_response
+        with patch("db.get_client", return_value=mock_client):
+            result = db.delete_social_video("missing")
+        self.assertIsNone(result)
+        mock_client.table.return_value.delete.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
