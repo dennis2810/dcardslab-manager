@@ -76,9 +76,8 @@ class InstagramOauthCallbackEndpointTests(unittest.TestCase):
         start_response = client.get("/api/instagram/oauth/start")
         state = start_response.headers["location"].split("state=")[1].split("&")[0]
 
-        with patch("main.instagram_client.exchange_code", return_value="short-lived") as mock_exchange, \
+        with patch("main.instagram_client.exchange_code", return_value=("short-lived", "ig-1")) as mock_exchange, \
              patch("main.instagram_client.exchange_for_long_lived_token", return_value="long-lived"), \
-             patch("main.instagram_client.find_instagram_business_account", return_value="ig-1"), \
              patch("main.instagram_client.get_account_summary", return_value={"username": "dcardslab"}), \
              patch("main.db.save_instagram_settings") as mock_save:
             response = client.get(f"/api/instagram/oauth/callback?code=abc&state={state}")
@@ -89,13 +88,11 @@ class InstagramOauthCallbackEndpointTests(unittest.TestCase):
         self.assertEqual(saved["username"], "dcardslab")
         self.assertEqual(response.headers["location"], "/social.html")
 
-    def test_no_instagram_account_error_redirects_with_error(self):
+    def test_api_error_during_exchange_redirects_with_error(self):
         start_response = client.get("/api/instagram/oauth/start")
         state = start_response.headers["location"].split("state=")[1].split("&")[0]
-        with patch("main.instagram_client.exchange_code", return_value="short-lived"), \
-             patch("main.instagram_client.exchange_for_long_lived_token", return_value="long-lived"), \
-             patch("main.instagram_client.find_instagram_business_account",
-                   side_effect=instagram_client.NoInstagramAccountError("keine Seite")):
+        with patch("main.instagram_client.exchange_code",
+                   side_effect=instagram_client.InstagramApiError("boom")):
             response = client.get(f"/api/instagram/oauth/callback?code=abc&state={state}")
         self.assertIn("instagram_error=", response.headers["location"])
 

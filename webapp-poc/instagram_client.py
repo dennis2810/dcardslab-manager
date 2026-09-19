@@ -1,12 +1,19 @@
-"""httpx-based Meta Graph API (Facebook Login + Instagram Graph API) client
-fuer die Instagram-Statistik-Anbindung auf der Social-Media-Seite - gleicher
+"""httpx-based Instagram API with Instagram Login client fuer die
+Instagram-Statistik-Anbindung auf der Social-Media-Seite - gleicher
 schlanke REST-Ansatz wie google_sheets_client.py, kein Meta-SDK.
 
-UNVERIFIZIERT: Die Instagram Graph API laesst sich nur gegen ein Instagram-
-Business-/Creator-Konto verwenden, das mit einer Facebook-Seite verknuepft
-ist (siehe Checkliste auf social.html). Diese Anbindung wurde mangels eines
-vom Nutzer eingerichteten Meta-Developer-Apps noch nicht gegen die echte API
-getestet - Endpunkte/Feldnamen folgen der offiziellen Graph-API-Dokumentation,
+Bewusst NICHT "Instagram API with Facebook Login" (das aeltere Produkt,
+das eine mit einer Facebook-Seite verknuepfte Instagram-Business-/Creator-
+Account braucht und ueber graph.facebook.com laeuft) - "Instagram API with
+Instagram Login" ist seit der Abschaltung der alten Instagram Basic
+Display API (Dezember 2024) der von Meta empfohlene, einfachere Weg fuer
+den Einzelkonto-Anwendungsfall dieses Tools: Authentifizierung direkt ueber
+Instagram, keine Facebook-Seiten-Verknuepfung noetig, laeuft ueber
+api.instagram.com (OAuth)/graph.instagram.com (API-Aufrufe).
+
+UNVERIFIZIERT: noch nicht gegen die echte API getestet (kein
+abgeschlossenes Meta-Developer-App-Setup in dieser Session verfuegbar) -
+Endpunkte/Feldnamen folgen der offiziellen Instagram-Platform-Dokumentation,
 gleiche Konvention wie die als "UNVERIFIZIERT" markierten Teile von
 ebay_client.py (z.B. get_return_requests())."""
 import os
@@ -18,14 +25,15 @@ APP_ID = os.environ.get("INSTAGRAM_APP_ID", "").strip()
 APP_SECRET = os.environ.get("INSTAGRAM_APP_SECRET", "").strip()
 REDIRECT_URI = os.environ.get("INSTAGRAM_REDIRECT_URI", "").strip()
 
-GRAPH_VERSION = "v19.0"
-GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
-AUTH_BASE = f"https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth"
-# instagram_basic/instagram_manage_insights: Lesezugriff auf das verknuepfte
-# Instagram-Konto und seine Insights. pages_show_list/pages_read_engagement:
-# noetig, um ueberhaupt die Facebook-Seite (und damit das daran haengende
-# Instagram-Business-Konto) des Nutzers zu finden.
-SCOPES = "instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement"
+AUTH_BASE = "https://api.instagram.com/oauth/authorize"
+SHORT_LIVED_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
+GRAPH_BASE = "https://graph.instagram.com"
+# instagram_business_basic: Lesezugriff auf das eigene Instagram-Business-/
+# Creator-Konto (Username/Follower/Beitragsanzahl). instagram_business_
+# manage_insights: Zugriff auf die Insights-Endpunkte (Reichweite etc.).
+# Weder Content-Publishing- noch Nachrichten-/Kommentar-Scopes noetig, da
+# diese Seite nur Statistiken anzeigt, nichts automatisch postet.
+SCOPES = "instagram_business_basic,instagram_business_manage_insights"
 
 
 class InstagramNotConnectedError(Exception):
@@ -34,10 +42,6 @@ class InstagramNotConnectedError(Exception):
 
 class InstagramApiError(Exception):
     """Meta hat eine Anfrage abgelehnt; args[0] ist der Rohfehlertext."""
-
-
-class NoInstagramAccountError(Exception):
-    """Keine der verwalteten Facebook-Seiten hat ein verknuepftes Instagram-Business-Konto."""
 
 
 def authorization_url(state):
@@ -52,47 +56,31 @@ def authorization_url(state):
 
 
 def exchange_code(code):
-    response = httpx.get(f"{GRAPH_BASE}/oauth/access_token", params={
+    """Tauscht den Autorisierungs-Code gegen ein kurzlebiges (~1h) Token.
+    Liefert (access_token, ig_user_id) - bei "Instagram API with Instagram
+    Login" kommt die Konto-ID direkt aus dieser Antwort mit, anders als bei
+    "Facebook Login" (dort musste sie erst ueber die verknuepften
+    Facebook-Seiten gesucht werden)."""
+    response = httpx.post(SHORT_LIVED_TOKEN_URL, data={
         "client_id": APP_ID, "client_secret": APP_SECRET,
-        "redirect_uri": REDIRECT_URI, "code": code,
+        "grant_type": "authorization_code", "redirect_uri": REDIRECT_URI, "code": code,
     }, timeout=30)
     if response.status_code >= 400:
         raise InstagramApiError(response.text)
-    return response.json()["access_token"]
+    data = response.json()
+    return data["access_token"], str(data["user_id"])
 
 
 def exchange_for_long_lived_token(short_lived_token):
-    # Kurzlebige Tokens (~1-2h) reichen fuer den OAuth-Callback nicht aus -
+    # Kurzlebige Tokens (~1h) reichen fuer den OAuth-Callback nicht aus -
     # dieser Tausch liefert ein ~60 Tage gueltiges Token, das main.py speichert.
-    response = httpx.get(f"{GRAPH_BASE}/oauth/access_token", params={
-        "grant_type": "fb_exchange_token", "client_id": APP_ID,
-        "client_secret": APP_SECRET, "fb_exchange_token": short_lived_token,
+    response = httpx.get(f"{GRAPH_BASE}/access_token", params={
+        "grant_type": "ig_exchange_token", "client_secret": APP_SECRET,
+        "access_token": short_lived_token,
     }, timeout=30)
     if response.status_code >= 400:
         raise InstagramApiError(response.text)
     return response.json()["access_token"]
-
-
-def find_instagram_business_account(access_token):
-    """Sucht auf allen Facebook-Seiten, die dieses Konto verwaltet, nach der
-    ersten mit einem verknuepften Instagram-Business-Konto - reicht fuer den
-    Ein-Konto-Anwendungsfall dieses Tools (ein Nutzer, eine Seite/ein
-    Instagram-Konto), statt eine Seitenauswahl-UI zu bauen."""
-    response = httpx.get(f"{GRAPH_BASE}/me/accounts", params={
-        "fields": "instagram_business_account,name",
-        "access_token": access_token,
-    }, timeout=30)
-    if response.status_code >= 400:
-        raise InstagramApiError(response.text)
-    for page in response.json().get("data", []):
-        ig_account = page.get("instagram_business_account")
-        if ig_account:
-            return ig_account["id"]
-    raise NoInstagramAccountError(
-        "Keine der verwalteten Facebook-Seiten hat ein verknuepftes Instagram-Business-Konto - "
-        "siehe Checkliste unten (Instagram-Konto muss ein Business-/Creator-Konto sein und mit "
-        "einer Facebook-Seite verknuepft werden)."
-    )
 
 
 def get_account_summary(access_token, ig_user_id):
@@ -109,7 +97,10 @@ def get_account_summary(access_token, ig_user_id):
     return response.json()
 
 
-def get_insights(access_token, ig_user_id, metrics=("reach", "profile_views"), period="day"):
+def get_insights(access_token, ig_user_id, metrics=("reach", "views"), period="day"):
+    # "impressions"/"profile_views" wurden mit Graph-API v22.0 abgeloest
+    # durch "views" (siehe Meta-Changelog) - deshalb hier "views" statt des
+    # frueher ueblichen "profile_views".
     response = httpx.get(f"{GRAPH_BASE}/{ig_user_id}/insights", params={
         "metric": ",".join(metrics), "period": period,
         "access_token": access_token,

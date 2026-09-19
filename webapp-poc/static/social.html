@@ -136,8 +136,9 @@ if ("serviceWorker" in navigator) {
   <video id="video-preview" controls></video>
 
   <h2 id="instagram-section">Instagram-Statistik</h2>
-  <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Profilaufrufe des letzten Tages für das verknüpfte Instagram-
-    Business-Konto. <strong>Noch nicht gegen ein echtes Meta-Developer-App getestet</strong> – erst nutzbar,
+  <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Views des letzten Tages für das verknüpfte Instagram-
+    Business-Konto (über „Instagram API with Instagram Login", siehe Checkliste unten). <strong>Noch nicht gegen
+    ein echtes Meta-Developer-App getestet</strong> – erst nutzbar,
     sobald <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code> und <code>INSTAGRAM_REDIRECT_URI</code>
     beim <code>webapp-poc</code>-Container gesetzt sind (siehe Checkliste unten).</p>
   <p id="instagram-status">Lädt …</p>
@@ -149,7 +150,7 @@ if ("serviceWorker" in navigator) {
       <div class="ig-stat"><div class="ig-stat-value" id="ig-followers">–</div><div class="ig-stat-label">Follower</div></div>
       <div class="ig-stat"><div class="ig-stat-value" id="ig-media-count">–</div><div class="ig-stat-label">Beiträge</div></div>
       <div class="ig-stat"><div class="ig-stat-value" id="ig-reach">–</div><div class="ig-stat-label">Reichweite (gestern)</div></div>
-      <div class="ig-stat"><div class="ig-stat-value" id="ig-profile-views">–</div><div class="ig-stat-label">Profilaufrufe (gestern)</div></div>
+      <div class="ig-stat"><div class="ig-stat-value" id="ig-views">–</div><div class="ig-stat-label">Views (gestern)</div></div>
     </div>
     <p class="status" id="ig-sync-status"></p>
     <button type="button" id="ig-refresh-btn">Aktualisieren</button>
@@ -164,14 +165,17 @@ if ("serviceWorker" in navigator) {
   <div class="progress-text" id="progress-text"></div>
   <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div></div>
   <button type="button" id="reset-progress-btn">Fortschritt zurücksetzen</button>
+  <p class="note">Nutzt „Instagram API with Instagram Login" (seit Ende 2024 der von Meta empfohlene Weg für ein
+    einzelnes eigenes Konto) – <strong>keine</strong> Facebook-Seiten-Verknüpfung nötig, anders als beim älteren
+    „Instagram API with Facebook Login".</p>
   <ul class="checklist" data-section="instagram-setup">
-    <li data-id="ig-personal-account"><input type="checkbox"><span>Falls noch nicht vorhanden: eigenes privates Instagram-Konto anlegen – <strong>eigenes Konto empfohlen</strong>, getrennt vom privaten Alltags-Account, damit Karten-Reichweite/Boosting nicht mit dem privaten Feed vermischt wird.</span></li>
-    <li data-id="ig-switch-business"><input type="checkbox"><span>In der Instagram-App unter Einstellungen → Konto auf <strong>„Business-Konto"</strong> umstellen (kostenlos).</span></li>
-    <li data-id="ig-facebook-page"><input type="checkbox"><span>Eine Facebook-Seite anlegen (falls noch keine vorhanden) und im Business-Konto-Setup mit dem Instagram-Konto verknüpfen – die Instagram Graph API liest Statistiken nur über diese Verknüpfung aus.</span></li>
-    <li data-id="ig-meta-app"><input type="checkbox"><span>Auf <a href="https://developers.facebook.com/" target="_blank" rel="noopener">developers.facebook.com</a> eine Meta-Developer-App anlegen (Typ „Business"), das eigene Konto im „Development Mode" als Tester/Rolle hinzufügen – für den Zugriff auf das <strong>eigene</strong> Konto ist damit keine öffentliche App-Review-Freigabe nötig.</span></li>
-    <li data-id="ig-app-credentials"><input type="checkbox"><span>App-ID und App-Secret aus der Meta-App kopieren und beim <code>webapp-poc</code>-Container als <code>INSTAGRAM_APP_ID</code>/<code>INSTAGRAM_APP_SECRET</code> setzen.</span></li>
-    <li data-id="ig-redirect-uri"><input type="checkbox"><span>Als gültige OAuth-Weiterleitungs-URI in der Meta-App eintragen und als <code>INSTAGRAM_REDIRECT_URI</code> setzen: <code>http://&lt;server-adresse&gt;:8000/api/instagram/oauth/callback</code>.</span></li>
-    <li data-id="ig-connect"><input type="checkbox"><span>Oben auf „Mit Instagram verbinden" klicken und den Meta-Login-Dialog durchlaufen.</span></li>
+    <li data-id="ig-personal-account"><input type="checkbox"><span>Falls noch nicht vorhanden: eigenes Instagram-Konto anlegen – <strong>eigenes Konto empfohlen</strong>, getrennt vom privaten Alltags-Account, damit Karten-Reichweite/Boosting nicht mit dem privaten Feed vermischt wird.</span></li>
+    <li data-id="ig-switch-business"><input type="checkbox"><span>In der Instagram-App unter Einstellungen → Konto auf <strong>„Business-Konto"</strong> umstellen (kostenlos) und das Profil auf <strong>öffentlich</strong> stellen – Zugriffstoken werden nur für öffentliche Profile ausgestellt.</span></li>
+    <li data-id="ig-meta-app"><input type="checkbox"><span>Auf <a href="https://developers.facebook.com/" target="_blank" rel="noopener">developers.facebook.com</a> eine App anlegen und das Produkt <strong>„Instagram API setup with Instagram login"</strong> hinzufügen (nicht „Facebook Login for Business") – eine verknüpfte Facebook-Seite ist für diesen Weg nicht nötig.</span></li>
+    <li data-id="ig-tester"><input type="checkbox"><span>Im App-Dashboard unter „Instagram" → „API setup with Instagram login" → Rollen/„Instagram Testers" das eigene Konto als Tester hinzufügen. Danach in der Instagram-App unter Profil → Bearbeiten → „Apps und Websites" → „Tester-Einladungen" die Einladung annehmen – ohne diesen Schritt bleibt jeder Verbindungsversuch wirkungslos, auch bei korrekt gesetzten Zugangsdaten.</span></li>
+    <li data-id="ig-app-credentials"><input type="checkbox"><span><strong>Instagram App-ID</strong> und <strong>Instagram App-Secret</strong> aus genau diesem Bereich kopieren (Instagram → API setup with Instagram login → „Business login settings") – <strong>nicht</strong> die allgemeine Meta-App-ID/-Secret von der App-Startseite, die unterscheiden sich – und beim <code>webapp-poc</code>-Container als <code>INSTAGRAM_APP_ID</code>/<code>INSTAGRAM_APP_SECRET</code> setzen.</span></li>
+    <li data-id="ig-redirect-uri"><input type="checkbox"><span>Als OAuth-Weiterleitungs-URI in denselben „Business login settings" eintragen und als <code>INSTAGRAM_REDIRECT_URI</code> setzen: <code>http://&lt;server-adresse&gt;:8000/api/instagram/oauth/callback</code>.</span></li>
+    <li data-id="ig-connect"><input type="checkbox"><span>Oben auf „Mit Instagram verbinden" klicken und den Instagram-Login-Dialog durchlaufen.</span></li>
     <li data-id="ig-first-post"><input type="checkbox"><span>Ersten Karten-Reel-Beitrag posten (mit dem Video-Generator oben erzeugt) und im Instagram-Bio-Link auf den eBay-Shop/die Cardmarket-Seite verlinken.</span></li>
   </ul>
 
@@ -398,7 +402,7 @@ async function loadInstagramInsights() {
     document.getElementById("ig-followers").textContent = body.summary.followers_count ?? "–";
     document.getElementById("ig-media-count").textContent = body.summary.media_count ?? "–";
     document.getElementById("ig-reach").textContent = findMetricValue(body.insights, "reach");
-    document.getElementById("ig-profile-views").textContent = findMetricValue(body.insights, "profile_views");
+    document.getElementById("ig-views").textContent = findMetricValue(body.insights, "views");
     igSyncStatusEl.textContent = "Zuletzt aktualisiert: " + formatDateTime(new Date().toISOString());
     igSyncStatusEl.className = "status";
   } catch (err) {

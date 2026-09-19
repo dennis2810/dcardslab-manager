@@ -3818,13 +3818,10 @@ async def instagram_oauth_callback(code: str | None = None, state: str | None = 
     if not code or not state or not _consume_instagram_oauth_state(state):
         return _instagram_error_redirect("ungueltiger_oauth_state")
     try:
-        short_lived_token = instagram_client.exchange_code(code)
+        short_lived_token, ig_user_id = instagram_client.exchange_code(code)
         access_token = instagram_client.exchange_for_long_lived_token(short_lived_token)
-        ig_user_id = instagram_client.find_instagram_business_account(access_token)
         summary = instagram_client.get_account_summary(access_token, ig_user_id)
     except instagram_client.InstagramApiError as exc:
-        return _instagram_error_redirect(str(exc))
-    except instagram_client.NoInstagramAccountError as exc:
         return _instagram_error_redirect(str(exc))
     db.save_instagram_settings({
         "access_token": access_token,
