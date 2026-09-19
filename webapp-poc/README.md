@@ -331,8 +331,16 @@ geführt):
    `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` beim `webapp-poc`-Container
    setzen.
 5. Als OAuth-Weiterleitungs-URI in denselben „Business login settings"
-   eintragen und als `INSTAGRAM_REDIRECT_URI` setzen:
-   `http://<server-adresse>:8000/api/instagram/oauth/callback`.
+   eintragen und als `INSTAGRAM_REDIRECT_URI` setzen -
+   **anders als bei Google Sheets oben verlangt Meta hier zwingend
+   `https://` auf einer echten, öffentlich auflösbaren Adresse** (eine
+   reine private IP mit `http://`, z.B. `http://192.168.x.x:8000/...`,
+   lehnt Meta beim Speichern mit einem Fehler ab). Bei Tailscale-Nutzung
+   (siehe unten) reicht dafür `tailscale serve --bg 8000` auf dem NAS -
+   das stellt den Container automatisch mit einem echten Zertifikat unter
+   `https://<nas-tailscale-name>.<tailnet-name>.ts.net` bereit, ohne
+   eigenen Reverse-Proxy. Beispiel:
+   `https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback`.
 6. Auf `social.html` „Mit Instagram verbinden" klicken.
 
 TikTok-Statistiken sind bewusst nicht angebunden (siehe Backlog auf
@@ -398,7 +406,7 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
   -e INSTAGRAM_APP_ID=deine-instagram-app-id \
   -e INSTAGRAM_APP_SECRET=dein-instagram-app-secret \
-  -e INSTAGRAM_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/instagram/oauth/callback \
+  -e INSTAGRAM_REDIRECT_URI=https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback \
   -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
   -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
   -e VAPID_SUBJECT=mailto:du@example.com \
