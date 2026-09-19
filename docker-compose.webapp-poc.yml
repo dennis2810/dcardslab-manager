@@ -26,6 +26,12 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      # Instagram-Statistik auf der Social-Media-Seite (optional): ohne
+      # diese drei bleibt der Video-Generator weiterhin nutzbar, nur "Mit
+      # Instagram verbinden" scheitert.
+      - INSTAGRAM_APP_ID=${INSTAGRAM_APP_ID:-}
+      - INSTAGRAM_APP_SECRET=${INSTAGRAM_APP_SECRET:-}
+      - INSTAGRAM_REDIRECT_URI=${INSTAGRAM_REDIRECT_URI:-}
       # Web-Push (optional): ohne diese drei bleibt alles andere inkl. der
       # E-Mail-Benachrichtigung nutzbar, nur "Push-Benachrichtigungen
       # aktivieren" in den Einstellungen scheitert.
