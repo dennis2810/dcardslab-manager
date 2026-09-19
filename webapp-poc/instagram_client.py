@@ -9,13 +9,18 @@ Instagram Login" ist seit der Abschaltung der alten Instagram Basic
 Display API (Dezember 2024) der von Meta empfohlene, einfachere Weg fuer
 den Einzelkonto-Anwendungsfall dieses Tools: Authentifizierung direkt ueber
 Instagram, keine Facebook-Seiten-Verknuepfung noetig, laeuft ueber
-api.instagram.com (OAuth)/graph.instagram.com (API-Aufrufe).
+www.instagram.com (Login-/Consent-Seite)/api.instagram.com (Code-gegen-
+Token-Tausch)/graph.instagram.com (eigentliche API-Aufrufe).
 
-UNVERIFIZIERT: noch nicht gegen die echte API getestet (kein
-abgeschlossenes Meta-Developer-App-Setup in dieser Session verfuegbar) -
-Endpunkte/Feldnamen folgen der offiziellen Instagram-Platform-Dokumentation,
-gleiche Konvention wie die als "UNVERIFIZIERT" markierten Teile von
-ebay_client.py (z.B. get_return_requests())."""
+UNVERIFIZIERT: Der erste Versuch (mit AUTH_BASE faelschlich auf
+api.instagram.com statt www.instagram.com) endete beim Nutzer mit Instagrams
+generischer "Seite nicht verfuegbar"-Fehlerseite statt dem Login-Dialog -
+api.instagram.com dient nur dem Token-Tausch, nicht der Anzeige der
+Login-/Consent-Seite. Mit www.instagram.com noch nicht final gegen die
+echte API bestaetigt - Endpunkte/Feldnamen folgen der offiziellen
+Instagram-Platform-Dokumentation, gleiche Konvention wie die als
+"UNVERIFIZIERT" markierten Teile von ebay_client.py (z.B.
+get_return_requests())."""
 import os
 from urllib.parse import urlencode
 
@@ -25,7 +30,7 @@ APP_ID = os.environ.get("INSTAGRAM_APP_ID", "").strip()
 APP_SECRET = os.environ.get("INSTAGRAM_APP_SECRET", "").strip()
 REDIRECT_URI = os.environ.get("INSTAGRAM_REDIRECT_URI", "").strip()
 
-AUTH_BASE = "https://api.instagram.com/oauth/authorize"
+AUTH_BASE = "https://www.instagram.com/oauth/authorize"
 SHORT_LIVED_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 GRAPH_BASE = "https://graph.instagram.com"
 # instagram_business_basic: Lesezugriff auf das eigene Instagram-Business-/

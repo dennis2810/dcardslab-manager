@@ -304,11 +304,15 @@ Einrichtung.
 Views des verknüpften Instagram-Business-Kontos (`instagram_client.py`).
 Nutzt **„Instagram API with Instagram Login"** (seit der Abschaltung der
 alten Instagram Basic Display API im Dezember 2024 der von Meta empfohlene
-Weg für ein einzelnes eigenes Konto) - läuft über `api.instagram.com`/
-`graph.instagram.com`, **keine** Facebook-Seiten-Verknüpfung nötig, anders
-als beim älteren „Instagram API with Facebook Login". **Unverifiziert** -
-noch nicht gegen ein echtes Meta-Developer-App getestet, Endpunkte/
-Feldnamen folgen der offiziellen Instagram-Platform-Dokumentation.
+Weg für ein einzelnes eigenes Konto) - Login-Dialog läuft über
+`www.instagram.com`, Token-Tausch über `api.instagram.com`, eigentliche
+API-Aufrufe über `graph.instagram.com`. **Keine** Facebook-Seiten-
+Verknüpfung nötig, anders als beim älteren „Instagram API with Facebook
+Login". Der Login-Dialog selbst ist gegen die echte API verifiziert
+(vorher fälschlich auf `api.instagram.com` verlinkt, was Instagrams
+generische "Seite nicht verfügbar"-Fehlerseite statt des Login-Dialogs
+zeigte); der weitere Ablauf ab dem Redirect zurück ins Tool (Token-
+Tausch, Insights) ist noch nicht Ende-zu-Ende bestätigt.
 Einmalige manuelle Einrichtung (auch als Checkliste auf `social.html`
 geführt):
 
