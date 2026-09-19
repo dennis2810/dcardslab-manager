@@ -4278,11 +4278,23 @@ async def _require_login(request: Request, call_next):
     # README.md, "Login einrichten"). login.html + die zum Rendern noetigen
     # statischen Assets (Logo/Icons/Manifest/Service-Worker) sowie der
     # Login-Endpoint selbst muessen erreichbar bleiben, sonst gaebe es keine
-    # Moeglichkeit, sich ueberhaupt anzumelden.
+    # Moeglichkeit, sich ueberhaupt anzumelden. Die OAuth-Callbacks (Google
+    # Sheets/Instagram) muessen ebenfalls ohne Session-Cookie erreichbar
+    # bleiben - der Browser landet dort per Redirect von einer fremden
+    # Domain (Google/Instagram), oft sogar auf einem ganz anderen Hostnamen
+    # als dem, auf dem die Sitzung urspruenglich angelegt wurde (z.B. ein
+    # separater Tailscale-Funnel-Hostname fuer den OAuth-Redirect) - das
+    # Session-Cookie ist dort schlicht nie vorhanden, unabhaengig vom
+    # Login-Status im eigentlich genutzten Browser-Tab. Deren Sicherheit
+    # kommt stattdessen vom eigenen, kurzlebigen state-Token (CSRF-Schutz),
+    # nicht vom App-Login.
     if not APP_PASSWORD:
         return await call_next(request)
     path = request.url.path
-    if path in ("/login.html", "/api/login", "/manifest.json", "/sw.js") or path.startswith("/assets/"):
+    if path in (
+        "/login.html", "/api/login", "/manifest.json", "/sw.js",
+        "/api/sheets/oauth/callback", "/api/instagram/oauth/callback",
+    ) or path.startswith("/assets/"):
         return await call_next(request)
     if request.session.get("authenticated"):
         # Sitzung bei jeder authentifizierten Anfrage "anfassen" (mark_modified

@@ -86,6 +86,26 @@ class RequireLoginGateTests(unittest.TestCase):
             response = client.get("/sw.js")
         self.assertEqual(response.status_code, 200)
 
+    def test_google_sheets_oauth_callback_stays_reachable_unauthenticated(self):
+        # Regression: der Browser landet hier per Redirect von Google - ggf.
+        # sogar auf einem anderen Hostnamen als dem, auf dem die Sitzung
+        # angelegt wurde -, das Session-Cookie ist dort nie vorhanden.
+        # Sicherheit kommt vom eigenen state-Token, nicht vom App-Login.
+        client = TestClient(main.app, follow_redirects=False)
+        with patch("main.APP_PASSWORD", "s3cret"):
+            response = client.get("/api/sheets/oauth/callback?error=access_denied")
+        self.assertNotEqual(response.status_code, 401)
+
+    def test_instagram_oauth_callback_stays_reachable_unauthenticated(self):
+        # Gleiche Begruendung wie beim Google-Sheets-Callback oben -
+        # Nutzer-Report: 401 blockierte den Callback komplett, weil der
+        # OAuth-Redirect auf einem separaten Tailscale-Funnel-Hostnamen
+        # ohne das App-Session-Cookie landete.
+        client = TestClient(main.app, follow_redirects=False)
+        with patch("main.APP_PASSWORD", "s3cret"):
+            response = client.get("/api/instagram/oauth/callback?error=access_denied")
+        self.assertNotEqual(response.status_code, 401)
+
 
 class LoginEndpointTests(unittest.TestCase):
     def setUp(self):
