@@ -290,6 +290,25 @@ if ("serviceWorker" in navigator) {
       bis dahin bewusst zurückgestellt, um nicht ins Blaue hinein zu bauen.</p>
   </div>
 
+  <div class="item" data-effort="klein">
+    <h3>Video-Generator: eigener Zusatztext, Rückseite/weitere Fotos je Karte <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: klein</span></h3>
+    <p>Aus dem Chat, zwei Ergänzungen für den Video-Generator auf <a href="social.html">social.html</a>:</p>
+    <ul>
+      <li><strong>Eigener Zusatztext:</strong> aktuell ist der eingeblendete Text pro Karte fest aus Titel +
+        eBay-Preis zusammengesetzt (<code>social_video.py</code>'s <code>_render_frame()</code>). Ein optionales
+        Textfeld vor dem Erstellen (z. B. Call-to-Action wie „Mehr im Bio-Link" oder ein Rabatt-Hinweis) würde als
+        zusätzliche Zeile mit eingeblendet.</li>
+      <li><strong>Mehr als ein Foto je Karte:</strong> aktuell verwendet der Generator nur die Vorderseite
+        (<code>front_image_path</code>) – Rückseite und eventuelle Extra-Fotos fließen nicht mit ein, jede Karte
+        bekommt genau ein Frame. Wahlweise Rückseite (und/oder Extra-Fotos) als zusätzliches(s) Frame je Karte mit
+        aufnehmen, evtl. mit Checkbox pro Karte in der Auswahl.</li>
+    </ul>
+    <p>Klärungsbedarf: laut Nutzer erst nach eigenem Herumexperimentieren mit dem bestehenden Generator final zu
+      entscheiden, welche Variante (z. B. Text global für alle Karten im Reel vs. je Karte einzeln) am meisten
+      Sinn ergibt.</p>
+  </div>
+
   <div class="item" data-effort="groß">
     <h3>TikTok- und YouTube-Statistik-Integration <span class="status-tag status-open">offen – bewusst zurückgestellt</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
