@@ -141,3 +141,39 @@ def format_reminder_digest(due_reminders, stale_listings, stale_wishlist, price_
 
     body = subject + ":\n\n" + "\n".join(lines).strip() + "\n"
     return subject, body
+
+
+def format_weekly_digest(sales, total_revenue, total_profit, price_alerts):
+    """Baut (subject, body) fuer den woechentlichen Digest (main.py's
+    _send_weekly_digest_if_due()) - Verkaeufe/Umsatz/Gewinn der letzten 7
+    Tage (sale_date-gefiltert, siehe db.statistics_rows()) sowie eine
+    Momentaufnahme der aktuell zutreffenden Preis-Alarme. Kein "neu seit
+    letzter Woche"-Filter fuer die Preis-Alarme (dafuer fehlt ein Zeitstempel
+    je Alarm im Datenmodell) - gleiche Quelle wie main.py's
+    _price_alert_reminders(), bereits im taeglichen Digest genutzt."""
+    subject = f"Wochendigest: {len(sales)} Verkauf/Verkäufe, {total_profit:.2f} € Gewinn"
+
+    lines = [f"Verkäufe der letzten 7 Tage: {len(sales)}"]
+    for sale in sales:
+        title = sale.get("title") or "(ohne Titel)"
+        price = sale.get("sale_price")
+        price_text = f"{float(price):.2f} €" if price is not None else "?"
+        channel = sale.get("channel") or "-"
+        lines.append(f"- {title}: {price_text} ({channel})")
+    lines.append("")
+    lines.append(f"Umsatz: {total_revenue:.2f} €")
+    lines.append(f"Gewinn (nur Verkäufe mit bekanntem Einstandspreis): {total_profit:.2f} €")
+
+    if price_alerts:
+        lines.append("")
+        lines.append("Aktuelle Preis-Alarme (eigener Preis weicht stark vom Marktdurchschnitt ab):")
+        for alert in price_alerts:
+            title = alert.get("title") or "(ohne Titel)"
+            richtung = "über" if alert.get("diff_pct", 0) > 0 else "unter"
+            lines.append(
+                f"- {title}: eigener Preis {alert.get('price')} € liegt {abs(alert.get('diff_pct', 0))} % "
+                f"{richtung} dem Marktdurchschnitt ({alert.get('price_research_avg')} €)"
+            )
+
+    body = subject + ":\n\n" + "\n".join(lines).strip() + "\n"
+    return subject, body

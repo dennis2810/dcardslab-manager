@@ -4088,6 +4088,18 @@ class RecordReminderEmailSentTests(unittest.TestCase):
         self.assertEqual(row, {"id": True, "last_reminder_email_sent_at": "now"})
 
 
+class RecordWeeklyDigestSentTests(unittest.TestCase):
+    def test_upserts_with_singleton_id(self):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.data = [{"id": True, "last_weekly_digest_sent_at": "now"}]
+        mock_client.table.return_value.upsert.return_value.execute.return_value = response
+        with patch("db.get_client", return_value=mock_client):
+            db.record_weekly_digest_sent("now")
+        row = mock_client.table.return_value.upsert.call_args[0][0]
+        self.assertEqual(row, {"id": True, "last_weekly_digest_sent_at": "now"})
+
+
 class SaveSocialVideoTests(unittest.TestCase):
     def test_inserts_video_and_links_cards(self):
         mock_client = MagicMock()

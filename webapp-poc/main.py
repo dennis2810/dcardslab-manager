@@ -263,6 +263,73 @@ async def _run_reminder_digest_forever():
         _send_reminder_digest_if_due()
         await asyncio.sleep(_REMINDER_DIGEST_CHECK_INTERVAL_SECONDS)
 
+
+@app.on_event("startup")
+async def _start_weekly_digest_scheduler():
+    asyncio.create_task(_run_weekly_digest_forever())
+
+
+# Gleiches Taktmuster wie portfolio.py's woechentlicher Schnappschuss
+# (stuendlich geprueft, aber nur ausgefuehrt, wenn der letzte Versand
+# laenger als eine Woche her ist) statt eines festen Wochentags/einer festen
+# Uhrzeit (Backlog-Klaerung) - selbstpendelnd statt kalendergebunden, wie
+# jeder andere periodische Hintergrund-Job in diesem Projekt.
+_WEEKLY_DIGEST_CHECK_INTERVAL_SECONDS = 3600
+_WEEKLY_DIGEST_INTERVAL_DAYS = 7
+
+
+def _is_weekly_digest_due():
+    status = db.get_app_status() or {}
+    last = status.get("last_weekly_digest_sent_at")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except ValueError:
+        return True
+    return datetime.now(timezone.utc) - last_dt >= timedelta(days=_WEEKLY_DIGEST_INTERVAL_DAYS)
+
+
+def _send_weekly_digest_if_due():
+    # Zeitstempel wird unabhaengig vom Schalter/Ergebnis gesetzt, gleiches
+    # Prinzip wie _send_reminder_digest_if_due().
+    if not _is_weekly_digest_due():
+        return
+    try:
+        db.record_weekly_digest_sent(datetime.now(timezone.utc).isoformat())
+    except Exception:
+        logger.exception("Zeitstempel des Wochendigests konnte nicht gespeichert werden")
+        return
+    try:
+        settings = db.get_app_status() or {}
+        if not settings.get("notify_weekly_digest"):
+            return
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=_WEEKLY_DIGEST_INTERVAL_DAYS)).date()
+        rows = _compute_statistics()["rows"]
+        sales = []
+        total_revenue = total_profit = 0.0
+        for row in rows:
+            sale_dt = _parse_date_like(row.get("sale_date"))
+            if not sale_dt or sale_dt.date() < cutoff:
+                continue
+            sales.append(row)
+            total_revenue += float(row.get("sale_price") or 0)
+            if row.get("profit") is not None:
+                total_profit += row["profit"]
+        price_alerts = _price_alert_reminders(settings)
+        if not sales and not price_alerts:
+            return
+        subject, body = email_notify.format_weekly_digest(sales, total_revenue, total_profit, price_alerts)
+        email_notify.send_email(settings, subject, body)
+    except Exception:
+        logger.exception("Wochendigest fehlgeschlagen")
+
+
+async def _run_weekly_digest_forever():
+    while True:
+        _send_weekly_digest_if_due()
+        await asyncio.sleep(_WEEKLY_DIGEST_CHECK_INTERVAL_SECONDS)
+
 # JPEG_QUALITY matches the desktop app's default. ROTATE (an extra forced
 # 180deg flip after cropping) is off: it assumed a fixed physical scan
 # orientation left over from the old fixed-template scanner, so a

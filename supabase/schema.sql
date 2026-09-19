@@ -768,3 +768,11 @@ create index if not exists social_video_cards_video_id_idx
     on social_video_cards(video_id);
 create index if not exists social_video_cards_card_id_idx
     on social_video_cards(card_id);
+
+-- Migration (2026-09-19): woechentlicher E-Mail-Digest (Verkaeufe, Gewinn,
+-- aktuelle Preis-Alarme der letzten 7 Tage) - eigener Schalter/Zeitstempel,
+-- gleiches Muster wie notify_on_reminders/last_reminder_email_sent_at oben,
+-- nur woechentlich statt taeglich geprueft (siehe main.py's
+-- _is_weekly_digest_due()).
+alter table app_status add column if not exists notify_weekly_digest boolean not null default false;
+alter table app_status add column if not exists last_weekly_digest_sent_at timestamptz;

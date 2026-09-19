@@ -1224,7 +1224,7 @@ def record_auto_backup(uploaded_at):
 NOTIFICATION_SETTINGS_FIELDS = {
     "smtp_host", "smtp_port", "smtp_username", "smtp_password",
     "smtp_from", "smtp_to", "smtp_use_tls", "notify_on_sale",
-    "notify_on_reminders",
+    "notify_on_reminders", "notify_weekly_digest",
 }
 
 
@@ -2188,5 +2188,14 @@ def record_reminder_email_sent(sent_at):
     # E-Mail-Digest auf einmal pro Tag (main.py's _is_reminder_digest_due()).
     response = get_client().table("app_status").upsert({
         "id": True, "last_reminder_email_sent_at": sent_at,
+    }).execute()
+    return response.data[0]
+
+
+def record_weekly_digest_sent(sent_at):
+    # Gleiches Muster wie record_reminder_email_sent(), nur fuer den
+    # Wochendigest (main.py's _is_weekly_digest_due()).
+    response = get_client().table("app_status").upsert({
+        "id": True, "last_weekly_digest_sent_at": sent_at,
     }).execute()
     return response.data[0]
