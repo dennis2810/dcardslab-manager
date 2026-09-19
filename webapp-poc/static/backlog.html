@@ -225,6 +225,70 @@ if ("serviceWorker" in navigator) {
       (nur Preisrecherche oder auch Angebote verwalten).</p>
   </div>
 
+  <div class="item" data-effort="groß">
+    <h3>Vinted-Anbindung <span class="status-tag status-blocked">blockiert – keine öffentliche API</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Recherche (Stand September 2026): Vinted hat zwar eine offizielle API („Vinted Pro Integrations"), die ist
+      aber hinter einer strikten Zulassungsliste für große Partner versteckt und für einzelne Händler/kleine Tools
+      wie dieses nicht zugänglich – anders als eBays offenes Developer Program. Die einzigen verfügbaren
+      Alternativen sind inoffizielle Wrapper/Scraper (z. B. auf GitHub oder via Apify/ScrapingBee), die
+      undokumentierte interne Endpunkte nutzen: Verstoß gegen Vinteds Nutzungsbedingungen, jederzeit ohne Vorwarnung
+      kaputt gehen können, und eher zum Durchsuchen fremder Angebote taugen als zum verlässlichen automatischen
+      Einstellen/Verwalten eigener Karten.</p>
+    <p>Einschätzung: eine echte Anbindung (Angebote automatisch einstellen/synchronisieren wie bei eBay) ist damit
+      nicht sinnvoll umsetzbar, solange Vinted keinen offenen Zugang bietet. Bliebe offen für eine spätere Prüfung,
+      falls sich das ändert (Rückmeldung von Vinted selbst nötig) – bis dahin eher Cardmarket (echte,
+      dokumentierte Händler-API, siehe oben) als nächster zusätzlicher Verkaufskanal.</p>
+  </div>
+
+  <div class="item" data-effort="groß">
+    <h3>Kleinanzeigen-Anbindung <span class="status-tag status-blocked">blockiert – keine öffentliche API</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Recherche (Stand September 2026): ähnliche Situation wie bei Vinted. Eine eBay-Kleinanzeigen/Classifieds-API
+      existierte früher, brauchte aber schon damals einen gesonderten Partner-Account und ist mittlerweile nicht
+      mehr offiziell dokumentiert/zugänglich. Auch hier gibt es nur inoffizielle Scraper/Wrapper-Projekte
+      (Drittanbieter, ToS-Risiko), keine offizielle, für dieses Tool nutzbare Schnittstelle zum automatischen
+      Einstellen/Verwalten eigener Angebote.</p>
+    <p>Einschätzung: wie bei Vinted aktuell nicht sinnvoll umsetzbar – bliebe offen für eine spätere Prüfung, falls
+      sich die API-Situation bei Kleinanzeigen ändert.</p>
+  </div>
+
+  <div class="item" data-effort="mittel">
+    <h3>COMC (Check Out My Cards) als weiterer Verkaufskanal <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
+    <p>COMC funktioniert grundlegend anders als eBay/Cardmarket und würde daher auch anders in dieses Tool
+      passen: es ist ein <strong>Konsignationshändler</strong>, kein Marktplatz, auf dem man selbst Angebote
+      einstellt. Man schickt die physischen Karten an COMCs Lager, COMC fotografiert/scannt, katalogisiert und
+      listet sie dann selbst (u. a. automatisch auch als eigener „comc_consignment"-Shop auf eBay) – gegen eine
+      Konsignationsgebühr beim Verkauf. Es gibt daher keine „Angebote automatisch einstellen"-API-Anbindung wie bei
+      eBay zu bauen, da COMC diesen Teil komplett selbst übernimmt.</p>
+    <p>Was für dieses Tool trotzdem sinnvoll wäre: das <strong>Nachverfolgen</strong> von an COMC verschickten
+      Karten (Status Einsendung → gelistet → verkauft, ähnlich dem bestehenden Grading-Tracking) sowie das
+      automatische Erfassen von COMC-Verkäufen als weiterer manueller Verkaufskanal (analog zu Kleinanzeigen/Vinted/
+      Sonstiges, siehe bestehende Kanal-Auswertung in den Statistiken) – falls COMC einen CSV-Export oder eine
+      abrufbare Verkaufshistorie anbietet, ließe sich das evtl. sogar automatisieren, sonst bliebe es manuelle
+      Erfassung wie beim jetzigen „Verkauf außerhalb eBay"-Formular.</p>
+    <p>Klärungsbedarf: nutzt du COMC bereits oder wäre das der erste Einstieg? Reicht eine reine
+      Status-/Verkaufs-Nachverfolgung, oder ist auch am Versand-Workflow (Shipping Wizard) etwas interessant?</p>
+  </div>
+
+  <div class="item" data-effort="groß">
+    <h3>Karte gleichzeitig über mehrere Verkaufskanäle anbieten (Cross-Listing) <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Sobald ein zweiter echter API-Kanal (z. B. Cardmarket) dazukommt, liegt die Frage nahe: dieselbe Karte
+      gleichzeitig auf mehreren Kanälen anbieten, um die Reichweite zu erhöhen. Technisch grundsätzlich machbar,
+      aber ein echter Architektur-Einschnitt: die Datenstruktur ist aktuell 1:1 (eine Karte = ein
+      <code>ebay_listings</code>-Eintrag) und müsste auf "eine Karte = mehrere Kanal-Angebote" umgestellt werden.</p>
+    <p><strong>Die eigentliche Herausforderung ist nicht die zusätzliche API-Anbindung, sondern der Doppelverkauf:</strong>
+      eine physische Karte kann nur einmal verkauft werden – verkauft sie sich auf eBay, muss das Cardmarket-Angebot
+      (und umgekehrt) automatisch beendet werden, sonst droht ein Verkauf an zwei Käufer gleichzeitig. Das braucht
+      einen zuverlässigen, schnellen Sync zwischen den Kanälen (idealerweise Minuten, nicht Stunden) sowie eine
+      klare Fehlerbehandlung, falls das Beenden auf dem anderen Kanal fehlschlägt (z. B. sofortige Warnung statt
+      stillem Scheitern).</p>
+    <p>Klärungsbedarf: erst sinnvoll zu planen, sobald ein zweiter echter Kanal (Cardmarket) tatsächlich ansteht -
+      bis dahin bewusst zurückgestellt, um nicht ins Blaue hinein zu bauen.</p>
+  </div>
+
   <div class="item" data-effort="mittel">
     <h3>Automatische Preisverfall-Strategie <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
