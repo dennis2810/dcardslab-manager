@@ -29,6 +29,13 @@ class AuthorizationUrlTests(unittest.TestCase):
         self.assertIn("client_id=app-1", url)
         self.assertIn("instagram_business_basic", url)
 
+    def test_auth_base_is_the_www_instagram_com_login_page_not_api_subdomain(self):
+        # Regression: api.instagram.com does NOT serve the login/consent
+        # page (it's the token-exchange host) - pointing AUTH_BASE there
+        # produced Instagram's generic "page not available" error instead
+        # of the login dialog when the user tried to connect.
+        self.assertEqual(instagram_client.AUTH_BASE, "https://www.instagram.com/oauth/authorize")
+
 
 class ExchangeCodeTests(unittest.TestCase):
     def test_returns_access_token_and_ig_user_id(self):
