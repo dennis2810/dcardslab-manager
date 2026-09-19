@@ -47,6 +47,23 @@ SAFE_BOTTOM = 260
 PHOTO_TOP = 90
 PHOTO_MAX_H = 900
 
+# Zweites Seitenverhaeltnis fuer normale Feed-Posts (statt nur Reels) - 4:5
+# nutzt die Feed-Flaeche staerker aus als 1:1 und ist die von Instagram
+# empfohlene Standardgroesse fuer Feed-Bilder/-Videos. Kein Reels-Player-UI-
+# Overlay bei einem regulaeren Feed-Post/-Video, daher reicht ein kleinerer
+# Sicherheitsabstand als bei SAFE_BOTTOM (Reel-Format).
+FEED_FRAME_SIZE = (1080, 1350)
+FEED_SAFE_BOTTOM = 80
+FEED_PHOTO_MAX_H = 620
+
+# Buendelt Groesse + Format-spezifische Layout-Werte fuer die Render-
+# Funktionen - build_reel(frame_format=...) waehlt einen dieser Eintraege.
+FRAME_FORMATS = {
+    "reel": {"size": FRAME_SIZE, "safe_bottom": SAFE_BOTTOM, "photo_max_h": PHOTO_MAX_H},
+    "feed": {"size": FEED_FRAME_SIZE, "safe_bottom": FEED_SAFE_BOTTOM, "photo_max_h": FEED_PHOTO_MAX_H},
+}
+DEFAULT_FRAME_FORMAT = "reel"
+
 SECONDS_PER_CARD = 3
 MIN_SECONDS_PER_CARD = 1.5
 # Zielwert fuer die Gesamtlaenge der Karten-Segmente (ohne Intro/Outro) -
@@ -227,12 +244,12 @@ def _wrap_text(draw, text, font, max_width):
     return lines or [""]
 
 
-def _draw_badges(draw, badges, center_x, y):
+def _draw_badges(draw, badges, center_x, y, spec):
     # Zeigt so viele Badges wie in eine Zeile passen - lieber wenige gut
     # lesbare Chips als viele winzige/umgebrochene.
     font = _load_font(30)
     padding_x, gap, chip_h = 22, 14, 52
-    max_row_width = FRAME_SIZE[0] - 80
+    max_row_width = spec["size"][0] - 80
 
     shown, total = [], -gap
     for badge in badges:
@@ -256,16 +273,18 @@ def _draw_badges(draw, badges, center_x, y):
     return y + chip_h
 
 
-def _gradient_background():
+def _gradient_background(spec=None):
     """Sanfter vertikaler Verlauf statt Flat-Schwarz als Basis fuer jeden
     Frame - siehe _BG_TOP/_BG_BOTTOM."""
-    frame = Image.new("RGB", FRAME_SIZE)
+    spec = spec or FRAME_FORMATS[DEFAULT_FRAME_FORMAT]
+    size = spec["size"]
+    frame = Image.new("RGB", size)
     draw = ImageDraw.Draw(frame)
-    height = FRAME_SIZE[1]
+    height = size[1]
     for y in range(height):
         t = y / (height - 1)
         color = tuple(int(_BG_TOP[i] + (_BG_BOTTOM[i] - _BG_TOP[i]) * t) for i in range(3))
-        draw.line([(0, y), (FRAME_SIZE[0], y)], fill=color)
+        draw.line([(0, y), (size[0], y)], fill=color)
     return frame
 
 
@@ -292,12 +311,14 @@ def _paste_logo_on_plate(frame, logo, x, y):
     frame.paste(logo, (x, y), logo)
 
 
-def _paste_logo_watermark(frame):
+def _paste_logo_watermark(frame, spec=None):
+    spec = spec or FRAME_FORMATS[DEFAULT_FRAME_FORMAT]
     logo = _load_logo(_LOGO_SIZE)
     if logo is None:
         return
-    x = FRAME_SIZE[0] - logo.width - _LOGO_MARGIN - _LOGO_PLATE_PAD
-    y = FRAME_SIZE[1] - SAFE_BOTTOM - logo.height - _LOGO_MARGIN - _LOGO_PLATE_PAD
+    size = spec["size"]
+    x = size[0] - logo.width - _LOGO_MARGIN - _LOGO_PLATE_PAD
+    y = size[1] - spec["safe_bottom"] - logo.height - _LOGO_MARGIN - _LOGO_PLATE_PAD
     _paste_logo_on_plate(frame, logo, x, y)
 
 
@@ -315,24 +336,26 @@ def _draw_hero_logo(frame, center_x, top_y):
     return top_y + logo.height + 2 * pad
 
 
-def _render_frame(image_bytes, title, price_text, subtitle_text="", badges=None):
+def _render_frame(image_bytes, title, price_text, subtitle_text="", badges=None, spec=None):
+    spec = spec or FRAME_FORMATS[DEFAULT_FRAME_FORMAT]
+    size = spec["size"]
     photo = Image.open(io.BytesIO(image_bytes))
     photo = ImageOps.exif_transpose(photo).convert("RGB")
 
-    frame = _gradient_background()
-    max_w = FRAME_SIZE[0] - 80
-    photo.thumbnail((max_w, PHOTO_MAX_H), Image.LANCZOS)
-    x = (FRAME_SIZE[0] - photo.width) // 2
+    frame = _gradient_background(spec)
+    max_w = size[0] - 80
+    photo.thumbnail((max_w, spec["photo_max_h"]), Image.LANCZOS)
+    x = (size[0] - photo.width) // 2
     y = PHOTO_TOP
     frame.paste(photo, (x, y))
 
     draw = ImageDraw.Draw(frame)
-    center_x = FRAME_SIZE[0] // 2
+    center_x = size[0] // 2
     banner_top = y + photo.height + 40
     # Halbtransparente Abdunkelung statt Flat-Schwarz-Block, damit der
     # Verlauf durchscheint und der Text trotzdem gut lesbar bleibt.
-    overlay = Image.new("RGBA", FRAME_SIZE, (0, 0, 0, 0))
-    ImageDraw.Draw(overlay).rectangle([(0, banner_top - 20), (FRAME_SIZE[0], FRAME_SIZE[1])], fill=(0, 0, 0, 150))
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(overlay).rectangle([(0, banner_top - 20), (size[0], size[1])], fill=(0, 0, 0, 150))
     frame = Image.alpha_composite(frame.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(frame)
 
@@ -341,41 +364,45 @@ def _render_frame(image_bytes, title, price_text, subtitle_text="", badges=None)
     cursor_y += 80
 
     if badges:
-        cursor_y = _draw_badges(draw, badges, center_x, cursor_y) + 24
+        cursor_y = _draw_badges(draw, badges, center_x, cursor_y, spec) + 24
 
     if subtitle_text:
         _draw_centered_text(draw, subtitle_text, _load_font(38), center_x, cursor_y, fill=(200, 200, 200))
         cursor_y += 66
 
     _draw_centered_text(draw, price_text, _load_font(56), center_x, cursor_y, fill=(255, 215, 0))
-    _paste_logo_watermark(frame)
+    _paste_logo_watermark(frame, spec)
     return frame
 
 
-def _render_text_frame(text):
+def _render_text_frame(text, spec=None):
     """Reine Textkarte (Intro/Outro) - z.B. "NEW CARDS" oder ein
     Call-to-Action wie "Jetzt auf eBay" - mit grosser, zentrierter
     Logo-Plakette als klarem Absender oberhalb des Texts."""
-    frame = _gradient_background()
+    spec = spec or FRAME_FORMATS[DEFAULT_FRAME_FORMAT]
+    size = spec["size"]
+    frame = _gradient_background(spec)
     draw = ImageDraw.Draw(frame)
     font = _load_font(64)
     emoji_font = _load_emoji_font()
-    lines = _wrap_text(draw, text, font, FRAME_SIZE[0] - 160)
+    lines = _wrap_text(draw, text, font, size[0] - 160)
     line_height = 84
     logo_block_h = _LOGO_HERO_SIZE + 2 * _LOGO_PLATE_PAD + 40
-    usable_height = FRAME_SIZE[1] - SAFE_BOTTOM
+    usable_height = size[1] - spec["safe_bottom"]
     content_h = logo_block_h + len(lines) * line_height
     start_y = (usable_height - content_h) // 2
-    text_start_y = _draw_hero_logo(frame, FRAME_SIZE[0] // 2, start_y) + 40
+    text_start_y = _draw_hero_logo(frame, size[0] // 2, start_y) + 40
     draw = ImageDraw.Draw(frame)
     for i, line in enumerate(lines):
         _draw_centered_text_with_emoji(
-            frame, draw, line, font, emoji_font, FRAME_SIZE[0] // 2, text_start_y + i * line_height, fill=(255, 255, 255),
+            frame, draw, line, font, emoji_font, size[0] // 2, text_start_y + i * line_height, fill=(255, 255, 255),
         )
     return frame
 
 
-def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=False):
+def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=False, spec=None):
+    spec = spec or FRAME_FORMATS[DEFAULT_FRAME_FORMAT]
+    size = spec["size"]
     cmd = ["ffmpeg", "-y", "-loop", "1", "-i", str(frame_path)]
     if static:
         # Intro-/Outro-Textkarten (Logo + Text) bewusst OHNE Zoom: zoompan
@@ -397,7 +424,7 @@ def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=F
         else:
             # Ken-Burns-Zoom-in: startet bei 1.0x, steigt minimal bis max. 1.2x.
             zoom_expr = "min(zoom+0.0015,1.2)"
-        zoompan = f"zoompan=z='{zoom_expr}':d={duration_frames}:s={FRAME_SIZE[0]}x{FRAME_SIZE[1]}:fps={FPS}"
+        zoompan = f"zoompan=z='{zoom_expr}':d={duration_frames}:s={size[0]}x{size[1]}:fps={FPS}"
         cmd += ["-vf", zoompan]
     cmd += ["-t", str(duration), "-pix_fmt", "yuv420p", str(segment_path)]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -405,14 +432,19 @@ def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=F
         raise VideoGenerationError(f"ffmpeg-Rendern fehlgeschlagen: {result.stderr[-2000:]}")
 
 
-def build_reel(cards, output_path, outro_text=None, intro_text=None):
+def build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format=DEFAULT_FRAME_FORMAT):
     """cards: Liste von Dicts mit 'image_bytes', 'title', 'price_text' und
     optional 'subtitle_text'/'badges' - ein Frame je Listeneintrag (bei
     Vorder-+Rueckseite also zwei Eintraege je Karte). intro_text/outro_text:
     optionale Textkarten vor bzw. nach den Karten-Segmenten (z.B. "NEW
-    CARDS" bzw. ein Call-to-Action wie "Jetzt auf eBay"). Schreibt ein
-    stummes, vertikales (9:16) MP4 nach output_path. Wirft
-    VideoGenerationError, wenn ffmpeg fehlt oder ein Schritt fehlschlaegt."""
+    CARDS" bzw. ein Call-to-Action wie "Jetzt auf eBay"). frame_format:
+    Schluessel in FRAME_FORMATS - "reel" (9:16, Standard) oder "feed" (4:5,
+    fuer normale Feed-Posts statt nur Reels). Schreibt ein stummes MP4 nach
+    output_path. Wirft VideoGenerationError, wenn ffmpeg fehlt, frame_format
+    unbekannt ist, oder ein Schritt fehlschlaegt."""
+    if frame_format not in FRAME_FORMATS:
+        raise VideoGenerationError(f"Unbekanntes Seitenverhaeltnis: {frame_format}")
+    spec = FRAME_FORMATS[frame_format]
     if not ffmpeg_available():
         raise VideoGenerationError(
             "ffmpeg ist auf diesem Server nicht installiert - der Video-Generator ist nicht verfuegbar."
@@ -436,26 +468,28 @@ def build_reel(cards, output_path, outro_text=None, intro_text=None):
 
         if intro_text:
             intro_frame_path = tmp / "intro.jpg"
-            _render_text_frame(intro_text).save(intro_frame_path, "JPEG", quality=90)
+            _render_text_frame(intro_text, spec).save(intro_frame_path, "JPEG", quality=90)
             intro_segment_path = tmp / "seg_intro.mp4"
-            _render_segment(intro_frame_path, intro_segment_path, duration=INTRO_SECONDS, static=True)
+            _render_segment(intro_frame_path, intro_segment_path, duration=INTRO_SECONDS, static=True, spec=spec)
             segment_paths.append(intro_segment_path)
 
         for index, card in enumerate(cards):
             frame_path = tmp / f"frame_{index}.jpg"
             _render_frame(
                 card["image_bytes"], card["title"], card["price_text"],
-                card.get("subtitle_text", ""), card.get("badges"),
+                card.get("subtitle_text", ""), card.get("badges"), spec,
             ).save(frame_path, "JPEG", quality=90)
             segment_path = tmp / f"seg_{index}.mp4"
-            _render_segment(frame_path, segment_path, duration=duration_per_card, zoom_out=(index % 2 == 1))
+            _render_segment(
+                frame_path, segment_path, duration=duration_per_card, zoom_out=(index % 2 == 1), spec=spec,
+            )
             segment_paths.append(segment_path)
 
         if outro_text:
             outro_frame_path = tmp / "outro.jpg"
-            _render_text_frame(outro_text).save(outro_frame_path, "JPEG", quality=90)
+            _render_text_frame(outro_text, spec).save(outro_frame_path, "JPEG", quality=90)
             outro_segment_path = tmp / "seg_outro.mp4"
-            _render_segment(outro_frame_path, outro_segment_path, duration=OUTRO_SECONDS, static=True)
+            _render_segment(outro_frame_path, outro_segment_path, duration=OUTRO_SECONDS, static=True, spec=spec)
             segment_paths.append(outro_segment_path)
 
         list_path = tmp / "concat_list.txt"

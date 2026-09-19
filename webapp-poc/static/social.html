@@ -137,11 +137,11 @@ if ("serviceWorker" in navigator) {
     „🔗 Teilen"-Button auf der jeweiligen <a href="cards.html">Kartenseite</a>.</p>
 
   <h2 id="video-section">Video-Generator</h2>
-  <p>Baut aus 1–10 ausgewählten Karten ein stummes, senkrechtes (9:16) MP4-Reel – jede Karte mit Foto, Titel,
-    Preis (falls ein eBay-Angebot existiert) sowie optional Team/Set/Zustand und Badges (Rookie/Auto/Numbered/…),
-    mit langsamem Zoom-Effekt. <strong>Bewusst ohne Musik</strong>: Instagram/TikTok bieten beim Hochladen eigene
-    lizenzfreie Musikbibliotheken an – die dort im Upload-Dialog ausgewählte Musik umgeht die Lizenzfrage, die eine
-    selbst eingebettete Tonspur aufwerfen würde.</p>
+  <p>Baut aus 1–10 ausgewählten Karten ein stummes MP4 – wahlweise als senkrechtes (9:16) Reel oder als Feed-Post
+    (4:5) – jede Karte mit Foto, Titel, Preis (falls ein eBay-Angebot existiert) sowie optional Team/Set/Zustand und
+    Badges (Rookie/Auto/Numbered/…), mit langsamem Zoom-Effekt. <strong>Bewusst ohne Musik</strong>: Instagram/TikTok
+    bieten beim Hochladen eigene lizenzfreie Musikbibliotheken an – die dort im Upload-Dialog ausgewählte Musik
+    umgeht die Lizenzfrage, die eine selbst eingebettete Tonspur aufwerfen würde.</p>
   <label for="card-search-input">Karten suchen (Titel, Team, Set, …) – oder unten aus den zuletzt erfassten wählen</label><br>
   <input type="search" id="card-search-input" placeholder="z. B. Ronaldo, Topps Chrome …">
   <p class="note" id="card-picker-heading">Zuletzt erfasste Karten:</p>
@@ -151,6 +151,13 @@ if ("serviceWorker" in navigator) {
     <p class="note">Reihenfolge mit ▲/▼ anpassen – so erscheinen die Karten auch im Reel.</p>
     <ol class="selected-cards-list" id="selected-cards-list"></ol>
   </div>
+  <p>
+    <label for="frame-format-select">Format</label><br>
+    <select id="frame-format-select">
+      <option value="reel">Reel (9:16, senkrecht)</option>
+      <option value="feed">Feed-Post (4:5)</option>
+    </select>
+  </p>
   <p>
     <label><input type="checkbox" id="include-back-checkbox"> Auch Rückseite mit einbeziehen (2 Bilder je Karte im Reel)</label>
   </p>
@@ -273,6 +280,7 @@ const pickerHeadingEl = document.getElementById("card-picker-heading");
 const selectedSection = document.getElementById("selected-cards-section");
 const selectedList = document.getElementById("selected-cards-list");
 const selectedCountEl = document.getElementById("selected-count");
+const frameFormatSelect = document.getElementById("frame-format-select");
 const includeBackCheckbox = document.getElementById("include-back-checkbox");
 const introTextInput = document.getElementById("intro-text-input");
 const outroTextInput = document.getElementById("outro-text-input");
@@ -282,6 +290,54 @@ const videoStatusEl = document.getElementById("video-status");
 const videoPreviewEl = document.getElementById("video-preview");
 
 const TEXT_CARD_MAX_LENGTH = 200;
+
+// Zuletzt genutzte Video-Generator-Einstellungen je Browser merken (Texte +
+// An-/Abschalt-Haken + Rueckseite-Checkbox) - gleiches Muster wie der
+// gemerkte Checkliste-Auf/Zu-Zustand weiter unten. Die Kartenauswahl selbst
+// wird bewusst NICHT gemerkt, da sie von den tatsaechlich vorhandenen
+// Karten abhaengt.
+const VIDEO_SETTINGS_KEY = "dcardslab_social_video_settings_v1";
+
+function loadVideoSettings() {
+  try {
+    const raw = localStorage.getItem(VIDEO_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveVideoSettings() {
+  try {
+    localStorage.setItem(VIDEO_SETTINGS_KEY, JSON.stringify({
+      frameFormat: frameFormatSelect.value,
+      includeBack: includeBackCheckbox.checked,
+      introEnabled: introTextEnabled.checked,
+      introText: introTextInput.value,
+      outroEnabled: outroTextEnabled.checked,
+      outroText: outroTextInput.value,
+    }));
+  } catch (err) {
+    // Privater Modus/voller Speicher - Einstellungen leben dann nur fuer die
+    // aktuelle Seitenansicht, kein harter Fehler noetig.
+  }
+}
+
+const savedVideoSettings = loadVideoSettings();
+if (savedVideoSettings) {
+  if (savedVideoSettings.frameFormat === "reel" || savedVideoSettings.frameFormat === "feed") {
+    frameFormatSelect.value = savedVideoSettings.frameFormat;
+  }
+  includeBackCheckbox.checked = !!savedVideoSettings.includeBack;
+  introTextEnabled.checked = savedVideoSettings.introEnabled !== false;
+  if (typeof savedVideoSettings.introText === "string") introTextInput.value = savedVideoSettings.introText;
+  outroTextEnabled.checked = savedVideoSettings.outroEnabled !== false;
+  if (typeof savedVideoSettings.outroText === "string") outroTextInput.value = savedVideoSettings.outroText;
+}
+for (const el of [frameFormatSelect, includeBackCheckbox, introTextEnabled, introTextInput, outroTextEnabled, outroTextInput]) {
+  el.addEventListener("input", saveVideoSettings);
+  el.addEventListener("change", saveVideoSettings);
+}
 
 function setupReelTextField(textarea, enabledCheckbox, counterEl) {
   function updateCounter() {
@@ -520,6 +576,7 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         card_ids: [...selectedOrder],
+        frame_format: frameFormatSelect.value,
         include_back: includeBackCheckbox.checked,
         intro_text: introTextEnabled.checked ? introTextInput.value.trim() : "",
         outro_text: outroTextEnabled.checked ? outroTextInput.value.trim() : "",
