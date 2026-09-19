@@ -118,17 +118,24 @@ if ("serviceWorker" in navigator) {
     „🔗 Teilen"-Button auf der jeweiligen <a href="cards.html">Kartenseite</a>.</p>
 
   <h2 id="video-section">Video-Generator</h2>
-  <p>Baut aus 1–10 ausgewählten Karten ein stummes, senkrechtes (9:16) MP4-Reel – jede Karte mit Foto, Titel und
-    (falls ein eBay-Angebot existiert) Preis, mit langsamem Zoom-Effekt. <strong>Bewusst ohne Musik</strong>:
-    Instagram/TikTok bieten beim Hochladen eigene lizenzfreie Musikbibliotheken an – die dort im Upload-Dialog
-    ausgewählte Musik umgeht die Lizenzfrage, die eine selbst eingebettete Tonspur aufwerfen würde.</p>
-  <label for="card-search-input">Karten suchen (Titel, Team, Set, …)</label><br>
+  <p>Baut aus 1–10 ausgewählten Karten ein stummes, senkrechtes (9:16) MP4-Reel – jede Karte mit Foto, Titel,
+    Preis (falls ein eBay-Angebot existiert) sowie optional Team/Set/Zustand und Badges (Rookie/Auto/Numbered/…),
+    mit langsamem Zoom-Effekt. <strong>Bewusst ohne Musik</strong>: Instagram/TikTok bieten beim Hochladen eigene
+    lizenzfreie Musikbibliotheken an – die dort im Upload-Dialog ausgewählte Musik umgeht die Lizenzfrage, die eine
+    selbst eingebettete Tonspur aufwerfen würde.</p>
+  <label for="card-search-input">Karten suchen (Titel, Team, Set, …) – oder unten aus den zuletzt erfassten wählen</label><br>
   <input type="search" id="card-search-input" placeholder="z. B. Ronaldo, Topps Chrome …">
+  <p class="note" id="card-picker-heading">Zuletzt erfasste Karten:</p>
   <ul class="card-picker-results" id="card-picker-results"></ul>
   <div id="selected-cards-section" hidden>
     <h3>Ausgewählt (<span id="selected-count">0</span>/10)</h3>
     <ol class="selected-cards-list" id="selected-cards-list"></ol>
   </div>
+  <p>
+    <label><input type="checkbox" id="include-back-checkbox"> Auch Rückseite mit einbeziehen (2 Bilder je Karte im Reel)</label>
+  </p>
+  <label for="outro-text-input">Abschlusstext (optional, eigene Textkarte am Ende des Reels)</label><br>
+  <textarea id="outro-text-input" rows="2" style="width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;">🛒 Karten jetzt auf eBay – Link im Profil</textarea>
   <p>
     <button type="button" id="generate-video-btn">🎬 Reel erstellen</button>
   </p>
@@ -137,8 +144,7 @@ if ("serviceWorker" in navigator) {
 
   <h2 id="instagram-section">Instagram-Statistik</h2>
   <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Views des letzten Tages für das verknüpfte Instagram-
-    Business-Konto (über „Instagram API with Instagram Login", siehe Checkliste unten). <strong>Noch nicht gegen
-    ein echtes Meta-Developer-App getestet</strong> – erst nutzbar,
+    Business-Konto (über „Instagram API with Instagram Login", siehe Checkliste unten) – erst nutzbar,
     sobald <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code> und <code>INSTAGRAM_REDIRECT_URI</code>
     beim <code>webapp-poc</code>-Container gesetzt sind (siehe Checkliste unten).</p>
   <p id="instagram-status">Lädt …</p>
@@ -220,12 +226,16 @@ function formatDateTime(value) {
 
 // ---------- Video-Generator ----------
 const MAX_SELECTED_CARDS = 10;
+const DEFAULT_CARD_LIST_LIMIT = 30;
 const selectedCards = new Map(); // id -> {id, title, front_image_url}
 const searchInput = document.getElementById("card-search-input");
 const resultsList = document.getElementById("card-picker-results");
+const pickerHeadingEl = document.getElementById("card-picker-heading");
 const selectedSection = document.getElementById("selected-cards-section");
 const selectedList = document.getElementById("selected-cards-list");
 const selectedCountEl = document.getElementById("selected-count");
+const includeBackCheckbox = document.getElementById("include-back-checkbox");
+const outroTextInput = document.getElementById("outro-text-input");
 const videoStatusEl = document.getElementById("video-status");
 const videoPreviewEl = document.getElementById("video-preview");
 
@@ -245,13 +255,14 @@ searchInput.addEventListener("input", () => {
   clearTimeout(searchDebounceTimer);
   const q = searchInput.value.trim();
   if (!q) {
-    resultsList.innerHTML = "";
+    loadDefaultCardList();
     return;
   }
   searchDebounceTimer = setTimeout(() => runCardSearch(q), 300);
 });
 
 async function runCardSearch(q) {
+  pickerHeadingEl.textContent = "Suchergebnisse:";
   try {
     const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
     const body = await res.json();
@@ -264,6 +275,25 @@ async function runCardSearch(q) {
     showToast("Fehler: " + err, true);
   }
 }
+
+// Ohne Sucheingabe eine Liste zeigen (statt nur ein leeres Feld) - die
+// Server-Antwort ist bereits nach "created_at" absteigend sortiert
+// (db.list_cards()), einfach auf die neuesten begrenzen.
+async function loadDefaultCardList() {
+  pickerHeadingEl.textContent = "Zuletzt erfasste Karten:";
+  try {
+    const res = await fetch("/api/cards");
+    const body = await res.json();
+    if (!res.ok) {
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    renderCardResults((body.cards || []).slice(0, DEFAULT_CARD_LIST_LIMIT));
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  }
+}
+loadDefaultCardList();
 
 function renderCardResults(cards) {
   resultsList.innerHTML = "";
@@ -309,7 +339,11 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
     const res = await fetch("/api/social/video", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ card_ids: [...selectedCards.keys()] }),
+      body: JSON.stringify({
+        card_ids: [...selectedCards.keys()],
+        include_back: includeBackCheckbox.checked,
+        outro_text: outroTextInput.value.trim(),
+      }),
     });
     if (!res.ok) {
       let detail = res.statusText;

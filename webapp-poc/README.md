@@ -308,11 +308,11 @@ Weg für ein einzelnes eigenes Konto) - Login-Dialog läuft über
 `www.instagram.com`, Token-Tausch über `api.instagram.com`, eigentliche
 API-Aufrufe über `graph.instagram.com`. **Keine** Facebook-Seiten-
 Verknüpfung nötig, anders als beim älteren „Instagram API with Facebook
-Login". Der Login-Dialog selbst ist gegen die echte API verifiziert
-(vorher fälschlich auf `api.instagram.com` verlinkt, was Instagrams
-generische "Seite nicht verfügbar"-Fehlerseite statt des Login-Dialogs
-zeigte); der weitere Ablauf ab dem Redirect zurück ins Tool (Token-
-Tausch, Insights) ist noch nicht Ende-zu-Ende bestätigt.
+Login". Erfolgreich Ende-zu-Ende gegen ein echtes Meta-Developer-App
+verifiziert (September 2026): Login-Dialog, Token-Tausch und Kontodaten
+laufen durch. Die Insights-Metrik `views` (siehe `instagram_client.get_insights()`)
+folgt weiterhin nur der offiziellen Dokumentation, noch nicht mit echten
+Insights-Daten gegengeprüft.
 Einmalige manuelle Einrichtung (auch als Checkliste auf `social.html`
 geführt):
 

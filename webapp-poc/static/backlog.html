@@ -137,6 +137,29 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <h2 id="features-section">Features</h2>
+  <div class="item" data-effort="groß">
+    <h3>Erzeugte Reels speichern und mit Karten verknüpfen (für spätere Klick-Auswertung) <span class="status-tag status-open">offen – Klärung nötig</span>
+      <span class="status-tag status-effort">Aufwand: groß</span></h3>
+    <p>Aus dem Chat: aktuell wird ein per Video-Generator (<a href="social.html">social.html</a>) erzeugtes Reel
+      nirgends gespeichert – es entsteht bei jedem Klick auf „Reel erstellen" neu und geht nur als Download an den
+      Browser, danach existiert es serverseitig nicht mehr. Es gibt auch kein Flag/keine Verknüpfung an der Karte,
+      die festhält „diese Karte war in Reel X".</p>
+    <p>Für eine spätere Verknüpfung von Reel-Klicks/-Reichweite mit den beworbenen Karten bräuchte es zwei
+      Bausteine:</p>
+    <ul>
+      <li><strong>Speicherung:</strong> das erzeugte Video zusätzlich in Supabase Storage ablegen sowie eine neue
+        Tabelle (z. B. <code>social_videos</code>) anlegen, die ein Video mit den enthaltenen Karten verknüpft
+        (mehrere Karten pro Reel, also eine n:m-Beziehung analog zu <code>purchase_items</code>).</li>
+      <li><strong>Echte Klick-/Reichweitenzahlen:</strong> dafür reicht die Verknüpfung allein nicht – der Nutzer
+        müsste nach dem manuellen Hochladen bei Instagram das Reel zusätzlich mit der jeweiligen Instagram-Media-ID
+        verknüpfen (das Tool postet nicht automatisch, siehe Instagram-Statistik-Abschnitt), damit sich über die
+        Graph-API Insights je Reel abrufen und den verknüpften Karten zuordnen lassen.</li>
+    </ul>
+    <p>Klärungsbedarf: lohnt sich der Aufwand für Speicherung + Verknüpfung schon, bevor die Instagram-Statistik-
+      Anbindung (Stufe 2) tatsächlich im Alltag genutzt wird? Genaues Datenmodell (welche Metadaten je Video
+      speichern, wie lange aufbewahren, Aufräumen alter Videos) noch offen.</p>
+  </div>
+
   <div class="item" data-effort="mittel">
     <h3>„Gespeicherte Ansichten"/Kategorie-Filter auch auf Käufe, Inventar, Wunschliste, Private Sammlung <span class="status-tag status-open">offen – Klärung nötig</span>
       <span class="status-tag status-effort">Aufwand: mittel</span></h3>
@@ -288,25 +311,6 @@ if ("serviceWorker" in navigator) {
       stillem Scheitern).</p>
     <p>Klärungsbedarf: erst sinnvoll zu planen, sobald ein zweiter echter Kanal (Cardmarket) tatsächlich ansteht -
       bis dahin bewusst zurückgestellt, um nicht ins Blaue hinein zu bauen.</p>
-  </div>
-
-  <div class="item" data-effort="klein">
-    <h3>Video-Generator: eigener Zusatztext, Rückseite/weitere Fotos je Karte <span class="status-tag status-open">offen – Klärung nötig</span>
-      <span class="status-tag status-effort">Aufwand: klein</span></h3>
-    <p>Aus dem Chat, zwei Ergänzungen für den Video-Generator auf <a href="social.html">social.html</a>:</p>
-    <ul>
-      <li><strong>Eigener Zusatztext:</strong> aktuell ist der eingeblendete Text pro Karte fest aus Titel +
-        eBay-Preis zusammengesetzt (<code>social_video.py</code>'s <code>_render_frame()</code>). Ein optionales
-        Textfeld vor dem Erstellen (z. B. Call-to-Action wie „Mehr im Bio-Link" oder ein Rabatt-Hinweis) würde als
-        zusätzliche Zeile mit eingeblendet.</li>
-      <li><strong>Mehr als ein Foto je Karte:</strong> aktuell verwendet der Generator nur die Vorderseite
-        (<code>front_image_path</code>) – Rückseite und eventuelle Extra-Fotos fließen nicht mit ein, jede Karte
-        bekommt genau ein Frame. Wahlweise Rückseite (und/oder Extra-Fotos) als zusätzliches(s) Frame je Karte mit
-        aufnehmen, evtl. mit Checkbox pro Karte in der Auswahl.</li>
-    </ul>
-    <p>Klärungsbedarf: laut Nutzer erst nach eigenem Herumexperimentieren mit dem bestehenden Generator final zu
-      entscheiden, welche Variante (z. B. Text global für alle Karten im Reel vs. je Karte einzeln) am meisten
-      Sinn ergibt.</p>
   </div>
 
   <div class="item" data-effort="groß">

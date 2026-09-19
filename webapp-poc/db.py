@@ -660,6 +660,17 @@ def get_cards_by_ids(card_ids):
     return response.data
 
 
+def get_cards_by_ids_full(card_ids):
+    # Wie get_cards_by_ids(), aber mit allen Spalten - fuer Aufrufer, die
+    # mehr als das schmale Standard-Set brauchen (z.B. social_video.py's
+    # Badges/Untertitel aus is_rookie/is_autograph/is_numbered/card_type/
+    # team/set_name/grading_*/back_image_path).
+    if not card_ids:
+        return []
+    response = get_client().table("cards").select("*").in_("id", card_ids).execute()
+    return response.data
+
+
 EBAY_LISTING_FIELDS = [
     "title", "description", "condition", "condition_id",
     "listing_type", "category_id", "aspects", "price", "quantity",
