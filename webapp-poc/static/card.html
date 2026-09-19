@@ -260,6 +260,7 @@ if ("serviceWorker" in navigator) {
   <p><a id="back-to-cards" href="cards.html">&larr; Zurück zur Kartenübersicht</a>
     <a id="back-to-ebay" href="ebay.html" hidden>&larr; Zurück zu eBay</a>
     <button type="button" id="print-btn" class="no-print">🖨 Drucken</button>
+    <button type="button" id="share-btn" class="no-print">🔗 Teilen</button>
     <span id="sale-status-badges"></span></p>
   <nav class="page-nav">
     <label>Seite
@@ -279,6 +280,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="social.html">Social Media</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
@@ -609,6 +611,30 @@ window.addEventListener("beforeunload", (ev) => {
 });
 
 document.getElementById("print-btn").addEventListener("click", () => window.print());
+
+// Web-Share-API (Handy: teilt an jede installierte App wie WhatsApp/
+// Instagram-Story/Telegram weiter) mit Zwischenablage-Fallback (Desktop-
+// Browser ohne Share-API) - fuer den "Karte teilen/bewerben"-Anwendungsfall
+// aus dem Backlog, kein eigener oeffentlicher Karten-Auftritt.
+document.getElementById("share-btn").addEventListener("click", async () => {
+  const title = currentCard ? (currentCard.title || "Karte") : "Karte";
+  const text = `${title} bei DCardsLab`;
+  const url = window.location.href;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+    } catch (err) {
+      // Nutzer hat den Share-Dialog abgebrochen (AbortError) - kein Fehler.
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} - ${url}`);
+    showToast("Link in die Zwischenablage kopiert.");
+  } catch (err) {
+    showToast("Teilen wird von diesem Browser nicht unterstützt.", true);
+  }
+});
 
 if (!cardId) {
   showError(form, "Keine Karten-ID angegeben.");

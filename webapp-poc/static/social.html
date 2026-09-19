@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCardLabs – Social Media</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="theme-color" content="#ffffff">
+<script>
+// Vor dem ersten Rendern angewendet (blockierendes Script vor <style>), damit
+// eine gespeicherte manuelle Hell/Dunkel-Wahl (siehe Dashboard-Schalter) nicht
+// erst kurz im System-Standard aufblitzt, bevor sie greift.
+try {
+  var _theme = localStorage.getItem("theme");
+  if (_theme === "light" || _theme === "dark") document.documentElement.setAttribute("data-theme", _theme);
+} catch (err) {}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
+</script>
+<style>
+  :root { color-scheme: light dark; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  h3 { font-size: 0.95rem; margin: 1.2rem 0 0.4rem; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .brand-logo { height: 44px; width: auto; border-radius: 6px; }
+  .page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+  .page-nav label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; margin: 0; }
+  .page-nav select { padding: 0.4rem 0.6rem; font-size: 0.9rem; font-weight: normal; height: 2.3rem; box-sizing: border-box; }
+  .nav-search { display: flex; gap: 0.4rem; margin: 0; }
+  .nav-search input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 12rem; height: 2.3rem; box-sizing: border-box; margin: 0; -webkit-appearance: none; appearance: none; }
+  @media (max-width: 480px) {
+    .page-nav select, .nav-search input { min-height: 2.75rem; font-size: 1rem; }
+  }
+  p, li { line-height: 1.5; }
+  code { background: rgba(127, 127, 127, 0.15); border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.9em; }
+  .note { font-size: 0.85rem; color: #777; }
+  .optional-tag { font-size: 0.75rem; font-weight: 600; color: #777; border: 1px solid #999; border-radius: 3px; padding: 0.05rem 0.4rem; margin-left: 0.4rem; }
+  .status { font-style: italic; color: #555; margin-top: 0.5rem; }
+  .error { color: #b00020; font-weight: 600; }
+  .connected { color: #1e4620; font-weight: 600; }
+  .not-connected { color: #7a5c00; font-weight: 600; }
+  #toast-container { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; max-width: min(90vw, 360px); }
+  .toast { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); animation: toast-in 0.15s ease-out; }
+  .toast-error { background: #b00020; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Video-Generator: Karten-Suche/-Auswahl */
+  #card-search-input { padding: 0.4rem 0.6rem; font-size: 0.9rem; width: 100%; max-width: 24rem; box-sizing: border-box; }
+  .card-picker-results { list-style: none; padding: 0; margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.4rem; max-height: 18rem; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+  .card-picker-results:empty { border: none; }
+  .card-picker-results li { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
+  .card-picker-results li:last-child { border-bottom: none; }
+  .card-picker-results img { width: 36px; height: 50px; object-fit: cover; border-radius: 3px; background: #eee; }
+  .card-picker-results label { flex: 1; cursor: pointer; }
+  .selected-cards-list { list-style: decimal; padding-left: 1.4rem; margin: 0.5rem 0; }
+  .selected-cards-list li { margin: 0.2rem 0; }
+  #video-status { margin-top: 0.75rem; }
+  #video-preview { display: none; margin-top: 1rem; max-width: 320px; width: 100%; border-radius: 8px; }
+
+  /* Instagram-Statistik */
+  .ig-stats-grid { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 0.75rem 0; }
+  .ig-stat { background: rgba(127, 127, 127, 0.1); border-radius: 8px; padding: 0.75rem 1.1rem; min-width: 8rem; }
+  .ig-stat-value { font-size: 1.4rem; font-weight: 700; }
+  .ig-stat-label { font-size: 0.8rem; color: #777; }
+
+  /* Checkliste (gleiches Muster wie onboarding.html) */
+  .checklist { list-style: none; padding: 0; margin: 0; }
+  .checklist li { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.5rem 0; }
+  .checklist input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
+  .checklist li.checked > span { color: #888; text-decoration: line-through; }
+  .progress-bar { background: rgba(127, 127, 127, 0.2); border-radius: 4px; height: 0.6rem; overflow: hidden; margin: 0.5rem 0 1rem; }
+  .progress-bar-fill { background: #1e8e3e; height: 100%; transition: width 0.2s; }
+  .progress-text { font-size: 0.85rem; color: #777; }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Social Media</h1>
+    <img class="brand-logo" src="assets/dcardslab-logo.png" alt="DCardsLab">
+  </div>
+  <nav class="page-nav">
+    <label>Seite
+      <select id="page-nav-select">
+        <option value="" disabled selected>Seite wählen…</option>
+        <option value="search.html">Suche</option>
+        <option value="dashboard.html">Dashboard</option>
+        <option value="index.html">Scan</option>
+        <option value="cards.html">Karten</option>
+        <option value="purchases.html">Käufe</option>
+        <option value="ebay.html">eBay</option>
+        <option value="statistics-sales.html">Alle Verkäufe</option>
+        <option value="inventory.html">Inventar</option>
+        <option value="inventur.html">Inventur</option>
+        <option value="shipping.html">Versand</option>
+        <option value="wishlist.html">Wunschliste</option>
+        <option value="private-collection.html">Private Sammlung</option>
+        <option value="statistics.html">Statistiken</option>
+        <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="social.html">Social Media</option>
+        <option value="pos.html">Kassenmodus</option>
+        <option value="settings.html">Einstellungen</option>
+      </select>
+    </label>
+    <form class="nav-search" action="search.html" method="get">
+      <input type="search" name="q" placeholder="Suche…" aria-label="Globale Suche">
+    </form>
+  </nav>
+  <p class="note">Reichweite für die eigenen eBay-/Cardmarket-Angebote über Instagram aufbauen: Reels aus den neusten
+    Karten erstellen, die eigene Instagram-Statistik im Blick behalten und die Ersteinrichtung eines Instagram-
+    Business-Kontos per Checkliste abhaken. Teilen einzelner Karten (WhatsApp, Telegram, …) geht direkt über den
+    „🔗 Teilen"-Button auf der jeweiligen <a href="cards.html">Kartenseite</a>.</p>
+
+  <h2 id="video-section">Video-Generator</h2>
+  <p>Baut aus 1–10 ausgewählten Karten ein stummes, senkrechtes (9:16) MP4-Reel – jede Karte mit Foto, Titel und
+    (falls ein eBay-Angebot existiert) Preis, mit langsamem Zoom-Effekt. <strong>Bewusst ohne Musik</strong>:
+    Instagram/TikTok bieten beim Hochladen eigene lizenzfreie Musikbibliotheken an – die dort im Upload-Dialog
+    ausgewählte Musik umgeht die Lizenzfrage, die eine selbst eingebettete Tonspur aufwerfen würde.</p>
+  <label for="card-search-input">Karten suchen (Titel, Team, Set, …)</label><br>
+  <input type="search" id="card-search-input" placeholder="z. B. Ronaldo, Topps Chrome …">
+  <ul class="card-picker-results" id="card-picker-results"></ul>
+  <div id="selected-cards-section" hidden>
+    <h3>Ausgewählt (<span id="selected-count">0</span>/10)</h3>
+    <ol class="selected-cards-list" id="selected-cards-list"></ol>
+  </div>
+  <p>
+    <button type="button" id="generate-video-btn">🎬 Reel erstellen</button>
+  </p>
+  <p class="status" id="video-status"></p>
+  <video id="video-preview" controls></video>
+
+  <h2 id="instagram-section">Instagram-Statistik</h2>
+  <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Profilaufrufe des letzten Tages für das verknüpfte Instagram-
+    Business-Konto. <strong>Noch nicht gegen ein echtes Meta-Developer-App getestet</strong> – erst nutzbar,
+    sobald <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code> und <code>INSTAGRAM_REDIRECT_URI</code>
+    beim <code>webapp-poc</code>-Container gesetzt sind (siehe Checkliste unten).</p>
+  <p id="instagram-status">Lädt …</p>
+  <div id="instagram-connect">
+    <a href="/api/instagram/oauth/start"><button type="button">Mit Instagram verbinden</button></a>
+  </div>
+  <div id="instagram-configured" style="display:none;">
+    <div class="ig-stats-grid">
+      <div class="ig-stat"><div class="ig-stat-value" id="ig-followers">–</div><div class="ig-stat-label">Follower</div></div>
+      <div class="ig-stat"><div class="ig-stat-value" id="ig-media-count">–</div><div class="ig-stat-label">Beiträge</div></div>
+      <div class="ig-stat"><div class="ig-stat-value" id="ig-reach">–</div><div class="ig-stat-label">Reichweite (gestern)</div></div>
+      <div class="ig-stat"><div class="ig-stat-value" id="ig-profile-views">–</div><div class="ig-stat-label">Profilaufrufe (gestern)</div></div>
+    </div>
+    <p class="status" id="ig-sync-status"></p>
+    <button type="button" id="ig-refresh-btn">Aktualisieren</button>
+    <button type="button" id="ig-disconnect-btn">Verbindung trennen</button>
+  </div>
+
+  <h2 id="checklist-section">Checkliste: Instagram Business einrichten <span class="optional-tag">optional</span></h2>
+  <p class="note">TikTok wird bewusst zunächst zurückgestellt (dortige App-Review-Anforderungen für den
+    Statistik-Zugriff sind aufwändiger als bei Meta) – reine Video-Uploads per Hand funktionieren dort natürlich
+    schon heute ohne jede Anbindung. Umstieg auf Kleinunternehmer/gewerblich (für höheres Verkaufsvolumen über
+    eBay/Cardmarket) ist eine eigene Checkliste auf der <a href="kleinunternehmer.html#checklist-section">Kleinunternehmer-Seite</a>.</p>
+  <div class="progress-text" id="progress-text"></div>
+  <div class="progress-bar"><div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div></div>
+  <button type="button" id="reset-progress-btn">Fortschritt zurücksetzen</button>
+  <ul class="checklist" data-section="instagram-setup">
+    <li data-id="ig-personal-account"><input type="checkbox"><span>Falls noch nicht vorhanden: eigenes privates Instagram-Konto anlegen – <strong>eigenes Konto empfohlen</strong>, getrennt vom privaten Alltags-Account, damit Karten-Reichweite/Boosting nicht mit dem privaten Feed vermischt wird.</span></li>
+    <li data-id="ig-switch-business"><input type="checkbox"><span>In der Instagram-App unter Einstellungen → Konto auf <strong>„Business-Konto"</strong> umstellen (kostenlos).</span></li>
+    <li data-id="ig-facebook-page"><input type="checkbox"><span>Eine Facebook-Seite anlegen (falls noch keine vorhanden) und im Business-Konto-Setup mit dem Instagram-Konto verknüpfen – die Instagram Graph API liest Statistiken nur über diese Verknüpfung aus.</span></li>
+    <li data-id="ig-meta-app"><input type="checkbox"><span>Auf <a href="https://developers.facebook.com/" target="_blank" rel="noopener">developers.facebook.com</a> eine Meta-Developer-App anlegen (Typ „Business"), das eigene Konto im „Development Mode" als Tester/Rolle hinzufügen – für den Zugriff auf das <strong>eigene</strong> Konto ist damit keine öffentliche App-Review-Freigabe nötig.</span></li>
+    <li data-id="ig-app-credentials"><input type="checkbox"><span>App-ID und App-Secret aus der Meta-App kopieren und beim <code>webapp-poc</code>-Container als <code>INSTAGRAM_APP_ID</code>/<code>INSTAGRAM_APP_SECRET</code> setzen.</span></li>
+    <li data-id="ig-redirect-uri"><input type="checkbox"><span>Als gültige OAuth-Weiterleitungs-URI in der Meta-App eintragen und als <code>INSTAGRAM_REDIRECT_URI</code> setzen: <code>http://&lt;server-adresse&gt;:8000/api/instagram/oauth/callback</code>.</span></li>
+    <li data-id="ig-connect"><input type="checkbox"><span>Oben auf „Mit Instagram verbinden" klicken und den Meta-Login-Dialog durchlaufen.</span></li>
+    <li data-id="ig-first-post"><input type="checkbox"><span>Ersten Karten-Reel-Beitrag posten (mit dem Video-Generator oben erzeugt) und im Instagram-Bio-Link auf den eBay-Shop/die Cardmarket-Seite verlinken.</span></li>
+  </ul>
+
+<script>
+// Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
+// von jeder Seite zu jeder anderen; identisches Snippet auf allen Seiten dupliziert.
+(function initPageNav() {
+  const nav = document.getElementById("page-nav-select");
+  if (!nav) return;
+  const current = location.pathname.split("/").pop() || "index.html";
+  for (const opt of nav.options) {
+    if (opt.value === current) opt.selected = true;
+  }
+  nav.addEventListener("change", () => {
+    if (nav.value) location.href = nav.value;
+  });
+})();
+
+function showToast(message, isError) {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (isError ? " toast-error" : "");
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return value;
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+}
+
+// ---------- Video-Generator ----------
+const MAX_SELECTED_CARDS = 10;
+const selectedCards = new Map(); // id -> {id, title, front_image_url}
+const searchInput = document.getElementById("card-search-input");
+const resultsList = document.getElementById("card-picker-results");
+const selectedSection = document.getElementById("selected-cards-section");
+const selectedList = document.getElementById("selected-cards-list");
+const selectedCountEl = document.getElementById("selected-count");
+const videoStatusEl = document.getElementById("video-status");
+const videoPreviewEl = document.getElementById("video-preview");
+
+function renderSelectedCards() {
+  selectedCountEl.textContent = selectedCards.size;
+  selectedSection.hidden = selectedCards.size === 0;
+  selectedList.innerHTML = "";
+  for (const card of selectedCards.values()) {
+    const li = document.createElement("li");
+    li.textContent = card.title || "(ohne Titel)";
+    selectedList.appendChild(li);
+  }
+}
+
+let searchDebounceTimer = null;
+searchInput.addEventListener("input", () => {
+  clearTimeout(searchDebounceTimer);
+  const q = searchInput.value.trim();
+  if (!q) {
+    resultsList.innerHTML = "";
+    return;
+  }
+  searchDebounceTimer = setTimeout(() => runCardSearch(q), 300);
+});
+
+async function runCardSearch(q) {
+  try {
+    const res = await fetch(`/api/cards?q=${encodeURIComponent(q)}`);
+    const body = await res.json();
+    if (!res.ok) {
+      showToast("Fehler: " + (body.detail || res.statusText), true);
+      return;
+    }
+    renderCardResults((body.cards || []).slice(0, 25));
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  }
+}
+
+function renderCardResults(cards) {
+  resultsList.innerHTML = "";
+  for (const card of cards) {
+    const li = document.createElement("li");
+    const img = document.createElement("img");
+    img.src = card.front_image_url || "";
+    img.alt = "";
+    const label = document.createElement("label");
+    label.textContent = card.title || "(ohne Titel)";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedCards.has(card.id);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        if (selectedCards.size >= MAX_SELECTED_CARDS) {
+          checkbox.checked = false;
+          showToast(`Maximal ${MAX_SELECTED_CARDS} Karten je Reel.`, true);
+          return;
+        }
+        selectedCards.set(card.id, card);
+      } else {
+        selectedCards.delete(card.id);
+      }
+      renderSelectedCards();
+    });
+    label.prepend(checkbox);
+    li.appendChild(img);
+    li.appendChild(label);
+    resultsList.appendChild(li);
+  }
+}
+
+document.getElementById("generate-video-btn").addEventListener("click", async () => {
+  if (selectedCards.size === 0) {
+    showToast("Bitte zuerst mindestens eine Karte auswählen.", true);
+    return;
+  }
+  videoStatusEl.textContent = "Reel wird erstellt … (kann je nach Kartenzahl eine Weile dauern)";
+  videoStatusEl.className = "status";
+  videoPreviewEl.style.display = "none";
+  try {
+    const res = await fetch("/api/social/video", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_ids: [...selectedCards.keys()] }),
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (err) {}
+      videoStatusEl.textContent = "Fehler: " + detail;
+      videoStatusEl.className = "error";
+      showToast("Fehler: " + detail, true);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    videoPreviewEl.src = url;
+    videoPreviewEl.style.display = "block";
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dcardslab-reel.mp4";
+    a.click();
+    videoStatusEl.textContent = "Reel erstellt und heruntergeladen.";
+    videoStatusEl.className = "status";
+    showToast("Reel erstellt.");
+  } catch (err) {
+    videoStatusEl.textContent = "Fehler: " + err;
+    videoStatusEl.className = "error";
+    showToast("Fehler: " + err, true);
+  }
+});
+
+// ---------- Instagram-Statistik ----------
+const igStatusEl = document.getElementById("instagram-status");
+const igConnectDiv = document.getElementById("instagram-connect");
+const igConfiguredDiv = document.getElementById("instagram-configured");
+const igSyncStatusEl = document.getElementById("ig-sync-status");
+
+function showInstagramError(message) {
+  igStatusEl.textContent = "Fehler: " + message;
+  igStatusEl.className = "error";
+}
+
+function findMetricValue(insights, name) {
+  const entry = (insights || []).find((m) => m.name === name);
+  const value = entry && entry.values && entry.values[0] ? entry.values[0].value : null;
+  return value === null || value === undefined ? "–" : value;
+}
+
+async function loadInstagramStatus() {
+  const params = new URLSearchParams(window.location.search);
+  const igError = params.get("instagram_error");
+  if (igError) showInstagramError(igError);
+
+  try {
+    const res = await fetch("/api/instagram/status");
+    const body = await res.json();
+    if (!res.ok) {
+      showInstagramError(body.detail || res.statusText);
+      return;
+    }
+    if (body.connected) {
+      if (!igError) {
+        igStatusEl.textContent = "Verbunden als @" + (body.username || "?") + " seit " +
+          (body.connected_at ? formatDateTime(body.connected_at) : "?");
+        igStatusEl.className = "connected";
+      }
+      igConnectDiv.style.display = "none";
+      igConfiguredDiv.style.display = "block";
+      if (body.last_synced_at) {
+        igSyncStatusEl.textContent = "Zuletzt aktualisiert: " + formatDateTime(body.last_synced_at);
+      }
+      loadInstagramInsights();
+    } else {
+      if (!igError) {
+        igStatusEl.textContent = "Nicht verbunden";
+        igStatusEl.className = "not-connected";
+      }
+      igConnectDiv.style.display = "block";
+      igConfiguredDiv.style.display = "none";
+    }
+  } catch (err) {
+    showInstagramError(String(err));
+  }
+}
+
+async function loadInstagramInsights() {
+  try {
+    const res = await fetch("/api/instagram/insights");
+    const body = await res.json();
+    if (!res.ok) {
+      igSyncStatusEl.textContent = "Fehler: " + (body.detail || res.statusText);
+      igSyncStatusEl.className = "error";
+      return;
+    }
+    document.getElementById("ig-followers").textContent = body.summary.followers_count ?? "–";
+    document.getElementById("ig-media-count").textContent = body.summary.media_count ?? "–";
+    document.getElementById("ig-reach").textContent = findMetricValue(body.insights, "reach");
+    document.getElementById("ig-profile-views").textContent = findMetricValue(body.insights, "profile_views");
+    igSyncStatusEl.textContent = "Zuletzt aktualisiert: " + formatDateTime(new Date().toISOString());
+    igSyncStatusEl.className = "status";
+  } catch (err) {
+    igSyncStatusEl.textContent = "Fehler: " + err;
+    igSyncStatusEl.className = "error";
+  }
+}
+
+document.getElementById("ig-refresh-btn").addEventListener("click", loadInstagramInsights);
+
+document.getElementById("ig-disconnect-btn").addEventListener("click", async () => {
+  if (!confirm("Instagram-Verbindung wirklich trennen?")) return;
+  try {
+    await fetch("/api/instagram/disconnect", { method: "POST" });
+    showToast("Instagram-Verbindung getrennt.");
+    loadInstagramStatus();
+  } catch (err) {
+    showToast("Fehler: " + err, true);
+  }
+});
+
+loadInstagramStatus();
+
+// ---------- Checkliste ----------
+// Haken-Status bleibt rein lokal im Browser (kein Server-Feld), gleiches
+// Muster wie onboarding.html - eigener STORAGE_KEY, damit sich die beiden
+// Checklisten nicht gegenseitig ueberschreiben.
+const STORAGE_KEY = "dcardslab_social_instagram_v1";
+
+function loadChecked() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function saveChecked(checkedIds) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...checkedIds]));
+  } catch (err) {
+    // Privater Modus/voller Speicher - Fortschritt lebt dann nur fuer die
+    // aktuelle Seitenansicht, kein harter Fehler noetig.
+  }
+}
+
+const checkedIds = loadChecked();
+const checklistItems = [...document.querySelectorAll(".checklist li[data-id]")];
+
+function updateProgress() {
+  const total = checklistItems.length;
+  const done = checklistItems.filter((li) => checkedIds.has(li.dataset.id)).length;
+  const percent = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById("progress-fill").style.width = percent + "%";
+  document.getElementById("progress-text").textContent = `${done} von ${total} Punkten erledigt (${percent} %)`;
+}
+
+for (const li of checklistItems) {
+  const checkbox = li.querySelector("input[type=checkbox]");
+  const isChecked = checkedIds.has(li.dataset.id);
+  checkbox.checked = isChecked;
+  li.classList.toggle("checked", isChecked);
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) checkedIds.add(li.dataset.id);
+    else checkedIds.delete(li.dataset.id);
+    li.classList.toggle("checked", checkbox.checked);
+    saveChecked(checkedIds);
+    updateProgress();
+  });
+}
+updateProgress();
+
+document.getElementById("reset-progress-btn").addEventListener("click", () => {
+  if (!confirm("Wirklich den gesamten Haken-Fortschritt zurücksetzen?")) return;
+  checkedIds.clear();
+  saveChecked(checkedIds);
+  for (const li of checklistItems) {
+    li.querySelector("input[type=checkbox]").checked = false;
+    li.classList.remove("checked");
+  }
+  updateProgress();
+});
+</script>
+</body>
+</html>

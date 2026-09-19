@@ -976,6 +976,22 @@ def save_google_sheets_settings(fields):
     return response.data[0]
 
 
+INSTAGRAM_SETTINGS_FIELDS = {"access_token", "ig_user_id", "username", "connected_at", "last_synced_at"}
+
+
+def get_instagram_settings():
+    response = get_client().table("instagram_settings").select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def save_instagram_settings(fields):
+    # Gleiches Singleton-Row-Muster wie save_google_sheets_settings().
+    row = {name: value for name, value in fields.items() if name in INSTAGRAM_SETTINGS_FIELDS}
+    row["id"] = True
+    response = get_client().table("instagram_settings").upsert(row).execute()
+    return response.data[0]
+
+
 def get_app_status():
     response = get_client().table("app_status").select("*").execute()
     return response.data[0] if response.data else None
