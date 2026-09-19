@@ -78,6 +78,13 @@ if ("serviceWorker" in navigator) {
   .checklist li { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.5rem 0; }
   .checklist input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
   .checklist li.checked > span { color: #888; text-decoration: line-through; }
+  /* Einklappbar (<details>), da die Checkliste nach der Ersteinrichtung
+     nicht mehr dauerhaft sichtbar sein muss - Rahmen/Abstand wandern vom
+     inneren h2 auf den details-Rahmen, damit die Abtrennung zur vorigen
+     Sektion erhalten bleibt. */
+  .checklist-details { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+  .checklist-details summary { cursor: pointer; }
+  .checklist-details summary h2 { display: inline-block; margin: 0; padding: 0; border: none; }
   .progress-bar { background: rgba(127, 127, 127, 0.2); border-radius: 4px; height: 0.6rem; overflow: hidden; margin: 0.5rem 0 1rem; }
   .progress-bar-fill { background: #1e8e3e; height: 100%; transition: width 0.2s; }
   .progress-text { font-size: 0.85rem; color: #777; }
@@ -177,7 +184,8 @@ if ("serviceWorker" in navigator) {
     <button type="button" id="ig-disconnect-btn">Verbindung trennen</button>
   </div>
 
-  <h2 id="checklist-section">Checkliste: Instagram Business einrichten <span class="optional-tag">optional</span></h2>
+  <details class="checklist-details" id="checklist-details">
+  <summary><h2 id="checklist-section">Checkliste: Instagram Business einrichten <span class="optional-tag">optional</span></h2></summary>
   <p class="note">TikTok wird bewusst zunächst zurückgestellt (dortige App-Review-Anforderungen für den
     Statistik-Zugriff sind aufwändiger als bei Meta) – reine Video-Uploads per Hand funktionieren dort natürlich
     schon heute ohne jede Anbindung. Umstieg auf Kleinunternehmer/gewerblich (für höheres Verkaufsvolumen über
@@ -199,6 +207,7 @@ if ("serviceWorker" in navigator) {
     <li data-id="ig-connect"><input type="checkbox"><span>Oben auf „Mit Instagram verbinden" klicken und den Instagram-Login-Dialog durchlaufen.</span></li>
     <li data-id="ig-first-post"><input type="checkbox"><span>Ersten Karten-Reel-Beitrag posten (mit dem Video-Generator oben erzeugt) und im Instagram-Bio-Link auf den eBay-Shop/die Cardmarket-Seite verlinken.</span></li>
   </ul>
+  </details>
 
 <script>
 // Einheitliches Seiten-Auswahlfeld statt einzelner Links - erlaubt Navigation
@@ -661,6 +670,42 @@ document.getElementById("reset-progress-btn").addEventListener("click", () => {
   }
   updateProgress();
 });
+
+// Auf/zu-Zustand der Checkliste merken (eigener Key, gleiches Muster wie
+// beim Haken-Fortschritt) - Standard ist zugeklappt, da die Checkliste nach
+// der Ersteinrichtung nicht mehr dauerhaft sichtbar sein muss.
+const CHECKLIST_OPEN_KEY = "dcardslab_social_instagram_checklist_open_v1";
+const checklistDetails = document.getElementById("checklist-details");
+if (checklistDetails) {
+  // Direktlink von der Kleinunternehmer-Seite (#checklist-section) soll
+  // immer aufklappen, unabhaengig vom gemerkten Zustand - sonst landet man
+  // auf einer zugeklappten Sektion ohne sichtbares Ziel.
+  let hashTargetsChecklist = false;
+  if (location.hash) {
+    try {
+      const hashTarget = document.querySelector(location.hash);
+      hashTargetsChecklist = !!hashTarget && checklistDetails.contains(hashTarget);
+    } catch (err) {
+      // Ungueltiger Hash-Selektor - ignorieren.
+    }
+  }
+  if (hashTargetsChecklist) {
+    checklistDetails.open = true;
+  } else {
+    try {
+      checklistDetails.open = localStorage.getItem(CHECKLIST_OPEN_KEY) === "1";
+    } catch (err) {
+      // Privater Modus/kein localStorage - bleibt beim HTML-Standard (zu).
+    }
+  }
+  checklistDetails.addEventListener("toggle", () => {
+    try {
+      localStorage.setItem(CHECKLIST_OPEN_KEY, checklistDetails.open ? "1" : "0");
+    } catch (err) {
+      // Kein harter Fehler noetig, siehe oben.
+    }
+  });
+}
 </script>
 </body>
 </html>

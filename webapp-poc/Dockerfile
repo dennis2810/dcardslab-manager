@@ -34,7 +34,12 @@ WORKDIR /app
 # ffmpeg fuer den Social-Media-Video-Generator (social_video.py) - baut aus
 # den Karten-Fotos ein stummes Reel-MP4 zusammen. fonts-dejavu-core liefert
 # die Schriftart fuer die Titel-/Preis-Beschriftung auf den Video-Frames.
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core \
+# fonts-noto-color-emoji liefert echte Farb-Emoji-Glyphen (z.B. fuer die
+# Standard-Intro-/Outro-Texte "🔥 NEW CARDS 🔥"/"🛒 Karten jetzt auf eBay...")
+# - DejaVuSans hat keine Emoji-Glyphen und zeichnet dafuer sonst ein
+# "Tofu"-Rechteck (Nutzer-Bugreport: "wird schwarz dargestellt").
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg fonts-dejavu-core fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 COPY webapp-poc/requirements.txt webapp-poc/requirements.txt
 RUN pip install --no-cache-dir -r webapp-poc/requirements.txt

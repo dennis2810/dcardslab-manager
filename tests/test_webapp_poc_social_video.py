@@ -66,6 +66,73 @@ class RenderTextFrameTests(unittest.TestCase):
         self.assertGreater(len(lines), 1)
 
 
+class EmojiRenderingTests(unittest.TestCase):
+    # Regression (Nutzer-Bugreport): DejaVuSans hat keine Emoji-Glyphen und
+    # zeichnete fuer 🔥/🛒 (Standard-Intro-/Outro-Text) ein "Tofu"-Rechteck
+    # ("wird schwarz dargestellt"). social_video zeichnet Emoji seitdem
+    # separat ueber eine Farb-Emoji-Schrift (siehe _load_emoji_font).
+
+    def test_is_emoji_true_for_known_emoji(self):
+        self.assertTrue(social_video._is_emoji("🔥"))
+        self.assertTrue(social_video._is_emoji("🛒"))
+
+    def test_is_emoji_false_for_regular_characters(self):
+        for ch in ("a", "Z", " ", "-", "€", "5"):
+            self.assertFalse(social_video._is_emoji(ch))
+
+    def test_split_emoji_runs_groups_consecutive_same_kind_characters(self):
+        runs = social_video._split_emoji_runs("🔥 NEW CARDS 🔥")
+        self.assertEqual(runs, [(True, "🔥"), (False, " NEW CARDS "), (True, "🔥")])
+
+    def test_split_emoji_runs_plain_text_is_single_run(self):
+        self.assertEqual(social_video._split_emoji_runs("Karten"), [(False, "Karten")])
+
+    def test_load_emoji_font_returns_none_when_font_file_missing(self):
+        with patch("social_video._EMOJI_FONT_PATH", "/does/not/exist.ttf"):
+            self.assertIsNone(social_video._load_emoji_font())
+
+    def test_draw_centered_text_with_emoji_degrades_gracefully_without_font(self):
+        # Ohne verfuegbare Emoji-Schrift werden Emoji-Zeichen weggelassen
+        # statt als Tofu-Rechteck gezeichnet - darf nicht crashen.
+        frame = social_video.Image.new("RGB", social_video.FRAME_SIZE)
+        draw = social_video.ImageDraw.Draw(frame)
+        font = social_video._load_font(64)
+        social_video._draw_centered_text_with_emoji(
+            frame, draw, "🔥 NEW CARDS 🔥", font, None, social_video.FRAME_SIZE[0] // 2, 100, fill=(255, 255, 255),
+        )  # wirft keine Exception
+
+    def test_draw_centered_text_with_emoji_handles_empty_text(self):
+        frame = social_video.Image.new("RGB", social_video.FRAME_SIZE)
+        draw = social_video.ImageDraw.Draw(frame)
+        font = social_video._load_font(64)
+        social_video._draw_centered_text_with_emoji(
+            frame, draw, "", font, None, social_video.FRAME_SIZE[0] // 2, 100, fill=(255, 255, 255),
+        )  # wirft keine Exception
+
+    @unittest.skipUnless(social_video._load_emoji_font() is not None, "Keine Farb-Emoji-Schrift in dieser Umgebung installiert")
+    def test_render_emoji_glyph_returns_scaled_image_when_font_available(self):
+        emoji_font = social_video._load_emoji_font()
+        glyph = social_video._render_emoji_glyph(emoji_font, "🔥", target_height=84)
+        self.assertIsNotNone(glyph)
+        self.assertEqual(glyph.height, 84)
+
+    @unittest.skipUnless(social_video._load_emoji_font() is not None, "Keine Farb-Emoji-Schrift in dieser Umgebung installiert")
+    def test_draw_centered_text_with_emoji_pastes_glyph_when_font_available(self):
+        frame = social_video.Image.new("RGB", social_video.FRAME_SIZE, color=(10, 10, 10))
+        draw = social_video.ImageDraw.Draw(frame)
+        font = social_video._load_font(64)
+        emoji_font = social_video._load_emoji_font()
+        social_video._draw_centered_text_with_emoji(
+            frame, draw, "🔥", font, emoji_font, social_video.FRAME_SIZE[0] // 2, 100, fill=(255, 255, 255),
+        )
+        # Der eingefaerbte Feuer-Emoji hat u.a. kraeftige Orange-/Rottoene -
+        # auf dem einfarbig dunkelgrauen Hintergrund muss danach mindestens
+        # ein Pixel mit deutlich mehr Rot als Blau im Zielbereich vorkommen.
+        region = frame.crop((social_video.FRAME_SIZE[0] // 2 - 60, 80, social_video.FRAME_SIZE[0] // 2 + 60, 200))
+        colors = region.getcolors(maxcolors=100000)
+        self.assertTrue(any(r > b + 40 for count, (r, g, b) in colors))
+
+
 class GradientBackgroundTests(unittest.TestCase):
     def test_top_and_bottom_rows_differ(self):
         # Verlauf statt Flat-Farbe - oberste und unterste Zeile muessen sich
@@ -101,6 +168,32 @@ class LogoPlateTests(unittest.TestCase):
         # pruefen, dass das Rendern nicht crasht und die Groesse stimmt.
         frame = social_video._render_text_frame("NEW CARDS")
         self.assertEqual(frame.size, social_video.FRAME_SIZE)
+
+
+class RenderSegmentTests(unittest.TestCase):
+    def _successful_result(self):
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    def test_static_segment_has_no_zoompan_filter(self):
+        # Regression (Nutzer-Bugreport): zoompan zoomt ohne eigene x/y von
+        # der linken oberen Ecke aus - bei Intro/Outro (mittig platzierte
+        # Grafik/Text) wanderte das Motiv dadurch waehrend des Abspielens
+        # aus dem Bild, obwohl der einzelne Frame korrekt aussah. Intro/
+        # Outro-Segmente duerfen daher keinen "-vf"/zoompan-Filter bekommen.
+        with patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run:
+            social_video._render_segment("frame.jpg", "seg.mp4", duration=2, static=True)
+        args = mock_run.call_args.args[0]
+        self.assertNotIn("-vf", args)
+
+    def test_non_static_segment_has_zoompan_filter(self):
+        with patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run:
+            social_video._render_segment("frame.jpg", "seg.mp4", duration=3)
+        args = mock_run.call_args.args[0]
+        self.assertIn("-vf", args)
+        self.assertIn("zoompan", args[args.index("-vf") + 1])
 
 
 class BuildReelTests(unittest.TestCase):
@@ -160,6 +253,9 @@ class BuildReelTests(unittest.TestCase):
         self.assertEqual(mock_run.call_count, 3)
         list_text = (Path(real_tmpdir) / "concat_list.txt").read_text(encoding="utf-8")
         self.assertIn("seg_outro.mp4", list_text)
+        # Outro-Segment (2. ffmpeg-Aufruf, nach dem Karten-Segment) bekommt
+        # keinen zoompan-Filter - siehe RenderSegmentTests.
+        self.assertNotIn("-vf", mock_run.call_args_list[1].args[0])
 
     def test_no_outro_text_means_no_outro_segment(self):
         cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte 1", "price_text": ""}]
@@ -188,6 +284,9 @@ class BuildReelTests(unittest.TestCase):
         self.assertEqual(mock_run.call_count, 3)
         list_text = (Path(real_tmpdir) / "concat_list.txt").read_text(encoding="utf-8")
         self.assertTrue(list_text.startswith("file 'seg_intro.mp4'"))
+        # Intro-Segment (1. ffmpeg-Aufruf) bekommt keinen zoompan-Filter -
+        # siehe RenderSegmentTests.
+        self.assertNotIn("-vf", mock_run.call_args_list[0].args[0])
 
     def test_no_intro_text_means_no_intro_segment(self):
         cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte 1", "price_text": ""}]
