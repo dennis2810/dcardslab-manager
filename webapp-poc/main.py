@@ -103,6 +103,22 @@ app = FastAPI(title="DCardLabs Web PoC")
 # weiterlaufen) - siehe README.md, "Login einrichten".
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "").strip()
+
+# Optional: die "echte" oeffentliche Adresse dieser App, z.B.
+# "https://webapp.example.ts.net" (ohne abschliessenden "/"). Nur noetig,
+# wenn ein OAuth-Redirect-URI (Google Sheets/Instagram) ueber eine ANDERE
+# Domain laeuft als die App selbst - z.B. wenn ein bereits bestehender
+# Reverse-Proxy/Tailscale-Funnel-Host, der eigentlich fuer einen anderen
+# Dienst (etwa den eBay-OAuth-Server) da ist, nur fuer den einen
+# Callback-Pfad mitgenutzt wird. Ohne diese Variable wird nach einem
+# erfolgreichen/fehlgeschlagenen OAuth-Callback relativ weitergeleitet
+# (funktioniert nur, wenn Redirect-URI und App-Domain identisch sind -
+# der bisherige Normalfall).
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+
+
+def _app_url(path):
+    return f"{APP_BASE_URL}{path}" if APP_BASE_URL else path
 if APP_PASSWORD and not SESSION_SECRET_KEY:
     # Ohne einen stabilen Schluessel signiert jeder Neustart mit einem neuen
     # Zufallswert (secrets.token_hex() unten) - alle Sitzungen werden dann bei
@@ -3597,7 +3613,7 @@ def _sheets_error_redirect(message):
     # it into the query string instead of raw f-string interpolation, which
     # would let a "&"/"#" corrupt the query string or CRLF get rejected by
     # uvicorn as an invalid header value.
-    return RedirectResponse(f"/settings.html?{urlencode({'sheets_error': message})}")
+    return RedirectResponse(_app_url(f"/settings.html?{urlencode({'sheets_error': message})}"))
 
 
 @app.get("/api/sheets/oauth/callback")
@@ -3614,7 +3630,7 @@ async def sheets_oauth_callback(code: str | None = None, state: str | None = Non
         "refresh_token": token.get("refresh_token", ""),
         "connected_at": datetime.now(timezone.utc).isoformat(),
     })
-    return RedirectResponse("/settings.html")
+    return RedirectResponse(_app_url("/settings.html"))
 
 
 @app.post("/api/sheets/settings")
@@ -3808,7 +3824,7 @@ def _instagram_error_redirect(message):
     # message kann externer Text sein (Metas eigene Fehlermeldung) -
     # urlencode() statt roher f-String-Interpolation, gleiche Begruendung
     # wie bei _sheets_error_redirect().
-    return RedirectResponse(f"/social.html?{urlencode({'instagram_error': message})}")
+    return RedirectResponse(_app_url(f"/social.html?{urlencode({'instagram_error': message})}"))
 
 
 @app.get("/api/instagram/oauth/callback")
@@ -3829,7 +3845,7 @@ async def instagram_oauth_callback(code: str | None = None, state: str | None = 
         "username": summary.get("username", ""),
         "connected_at": datetime.now(timezone.utc).isoformat(),
     })
-    return RedirectResponse("/social.html")
+    return RedirectResponse(_app_url("/social.html"))
 
 
 @app.post("/api/instagram/disconnect")

@@ -32,6 +32,11 @@ services:
       - INSTAGRAM_APP_ID=${INSTAGRAM_APP_ID:-}
       - INSTAGRAM_APP_SECRET=${INSTAGRAM_APP_SECRET:-}
       - INSTAGRAM_REDIRECT_URI=${INSTAGRAM_REDIRECT_URI:-}
+      # Nur noetig, falls GOOGLE_REDIRECT_URI/INSTAGRAM_REDIRECT_URI ueber
+      # eine andere Domain laufen als diese App selbst (z.B. ein bereits
+      # bestehender Tailscale-Funnel-Host, der nur fuer den einen
+      # Callback-Pfad mitgenutzt wird) - siehe README.md.
+      - APP_BASE_URL=${APP_BASE_URL:-}
       # Web-Push (optional): ohne diese drei bleibt alles andere inkl. der
       # E-Mail-Benachrichtigung nutzbar, nur "Push-Benachrichtigungen
       # aktivieren" in den Einstellungen scheitert.

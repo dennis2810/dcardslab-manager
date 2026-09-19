@@ -88,6 +88,23 @@ class InstagramOauthCallbackEndpointTests(unittest.TestCase):
         self.assertEqual(saved["username"], "dcardslab")
         self.assertEqual(response.headers["location"], "/social.html")
 
+    def test_redirects_to_app_base_url_when_configured(self):
+        # Regression (Nutzer-Report): der Instagram-Redirect-URI lief ueber
+        # einen mitgenutzten Tailscale-Funnel-Host, der nur diesen einen
+        # Callback-Pfad proxied - eine relative Weiterleitung auf /social.html
+        # landete dort auf einem 404, weil der Rest der App auf dieser Domain
+        # nicht erreichbar ist. Mit APP_BASE_URL gesetzt muss die
+        # Weiterleitung stattdessen absolut auf die echte App-Domain zeigen.
+        start_response = client.get("/api/instagram/oauth/start")
+        state = start_response.headers["location"].split("state=")[1].split("&")[0]
+        with patch("main.APP_BASE_URL", "https://app.example.ts.net"), \
+             patch("main.instagram_client.exchange_code", return_value=("short-lived", "ig-1")), \
+             patch("main.instagram_client.exchange_for_long_lived_token", return_value="long-lived"), \
+             patch("main.instagram_client.get_account_summary", return_value={"username": "dcardslab"}), \
+             patch("main.db.save_instagram_settings"):
+            response = client.get(f"/api/instagram/oauth/callback?code=abc&state={state}")
+        self.assertEqual(response.headers["location"], "https://app.example.ts.net/social.html")
+
     def test_api_error_during_exchange_redirects_with_error(self):
         start_response = client.get("/api/instagram/oauth/start")
         state = start_response.headers["location"].split("state=")[1].split("&")[0]
