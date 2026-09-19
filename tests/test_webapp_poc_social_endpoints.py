@@ -239,7 +239,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -259,6 +259,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         self.assertEqual(payload[0]["subtitle_text"], "FC Bayern")
         self.assertEqual(payload[0]["badges"], ["Rookie"])
         self.assertIsNone(mock_build.call_args.kwargs.get("outro_text"))
+        self.assertIsNone(mock_build.call_args.kwargs.get("intro_text"))
 
     def test_price_is_formatted_with_two_decimal_places(self):
         # Regression (Nutzer-Report): ein glatter Preis wie 10 zeigte vorher
@@ -269,7 +270,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -289,7 +290,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -311,7 +312,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -325,6 +326,27 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_build.call_args.kwargs.get("outro_text"), "🛒 Jetzt auf eBay")
+
+    def test_intro_text_is_passed_through_to_build_reel(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={
+                "card_ids": ["c1"], "intro_text": "🔥 NEW CARDS 🔥",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_build.call_args.kwargs.get("intro_text"), "🔥 NEW CARDS 🔥")
 
     def test_returns_502_on_video_generation_error(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}

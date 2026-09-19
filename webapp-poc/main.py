@@ -3933,6 +3933,7 @@ async def _fetch_social_video_frame(url, title, price_text, subtitle_text, badge
 async def generate_social_video(body: dict = Body(...)):
     card_ids = body.get("card_ids") or []
     include_back = bool(body.get("include_back"))
+    intro_text = (body.get("intro_text") or "").strip()[:200]
     outro_text = (body.get("outro_text") or "").strip()[:200]
     if not isinstance(card_ids, list) or not card_ids:
         raise HTTPException(status_code=400, detail="Bitte mindestens eine Karte auswählen.")
@@ -3984,7 +3985,9 @@ async def generate_social_video(body: dict = Body(...)):
     with tempfile.TemporaryDirectory(prefix="dcardslab_reel_out_") as tmp_str:
         output_path = Path(tmp_str) / "reel.mp4"
         try:
-            social_video.build_reel(payload, output_path, outro_text=outro_text or None)
+            social_video.build_reel(
+                payload, output_path, outro_text=outro_text or None, intro_text=intro_text or None,
+            )
         except social_video.VideoGenerationError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         data = output_path.read_bytes()
