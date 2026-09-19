@@ -241,12 +241,23 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item" data-effort="groß">
-    <h3>Cardmarket-API-Anbindung <span class="status-tag status-open">offen – Klärung nötig</span>
+    <h3>Cardmarket-API-Anbindung <span class="status-tag status-blocked">blockiert – Cardmarket nimmt aktuell keine neuen API-Anträge an</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
     <p>Analog zur bestehenden eBay-Integration (Angebote anlegen/synchronisieren, Preisrecherche) eine eigene
       Anbindung an Cardmarket. Eigenständige Neuintegration mit eigener Authentifizierung/API, unabhängig vom
-      bestehenden eBay-Code. Klärungsbedarf: Cardmarket-Händlerkonto samt API-Zugang vorhanden, welcher Funktionsumfang
-      (nur Preisrecherche oder auch Angebote verwalten).</p>
+      bestehenden eBay-Code – gewünschter Funktionsumfang: volle Angebots-Verwaltung (wie bei eBay Angebote
+      automatisch anlegen/synchronisieren/beenden), nicht nur Preisrecherche.</p>
+    <p>Recherche (Stand September 2026): die „MKM API" (Cardmarket, OAuth-1.0a-Authentifizierung über App-Token/
+      App-Secret/Access-Token/Access-Token-Secret, selbst erzeugbar in den eigenen Kontoeinstellungen – anders als
+      bei Instagram/Meta ist dafür keine gesonderte Freischaltung durch den Anbieter nötig) ist technisch
+      dokumentiert und bietet passende Endpunkte (u. a. <code>stock</code> für den eigenen Bestand/Angebote,
+      <code>products/find</code> für Preisrecherche). <strong>Cardmarket nimmt aktuell aber keine neuen Anträge für
+      API-Zugang mehr an</strong> – ohne App-Token lässt sich weder gegen die echte API noch gegen eine Sandbox
+      etwas bauen oder testen. Damit ist die Integration momentan nicht umsetzbar, unabhängig vom
+      Implementierungsaufwand.</p>
+    <p>Nächster Schritt liegt extern: regelmäßig prüfen, ob Cardmarket neue API-Anträge wieder annimmt (z. B. über
+      die <a href="https://help.cardmarket.com/en/cardmarket-api" target="_blank" rel="noopener">Cardmarket-API-Hilfeseite</a>),
+      dann Zugang beantragen. Erst danach lässt sich diese Integration sinnvoll starten.</p>
   </div>
 
   <div class="item" data-effort="groß">
