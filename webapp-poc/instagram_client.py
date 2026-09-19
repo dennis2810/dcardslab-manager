@@ -12,15 +12,11 @@ Instagram, keine Facebook-Seiten-Verknuepfung noetig, laeuft ueber
 www.instagram.com (Login-/Consent-Seite)/api.instagram.com (Code-gegen-
 Token-Tausch)/graph.instagram.com (eigentliche API-Aufrufe).
 
-UNVERIFIZIERT: Der erste Versuch (mit AUTH_BASE faelschlich auf
-api.instagram.com statt www.instagram.com) endete beim Nutzer mit Instagrams
-generischer "Seite nicht verfuegbar"-Fehlerseite statt dem Login-Dialog -
-api.instagram.com dient nur dem Token-Tausch, nicht der Anzeige der
-Login-/Consent-Seite. Mit www.instagram.com noch nicht final gegen die
-echte API bestaetigt - Endpunkte/Feldnamen folgen der offiziellen
-Instagram-Platform-Dokumentation, gleiche Konvention wie die als
-"UNVERIFIZIERT" markierten Teile von ebay_client.py (z.B.
-get_return_requests())."""
+Erfolgreich gegen ein echtes Meta-Developer-App verifiziert (September
+2026): Login-Dialog, Code-gegen-Token-Tausch und get_account_summary()
+laufen durch. get_insights() (Reichweite/Views) folgt weiterhin der
+offiziellen Instagram-Platform-Dokumentation, aber ohne bislang genutzte
+Insights-Daten des Nutzers noch nicht Feld-fuer-Feld gegenverifiziert."""
 import os
 from urllib.parse import urlencode
 

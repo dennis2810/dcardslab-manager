@@ -88,6 +88,23 @@ class InstagramOauthCallbackEndpointTests(unittest.TestCase):
         self.assertEqual(saved["username"], "dcardslab")
         self.assertEqual(response.headers["location"], "/social.html")
 
+    def test_redirects_to_app_base_url_when_configured(self):
+        # Regression (Nutzer-Report): der Instagram-Redirect-URI lief ueber
+        # einen mitgenutzten Tailscale-Funnel-Host, der nur diesen einen
+        # Callback-Pfad proxied - eine relative Weiterleitung auf /social.html
+        # landete dort auf einem 404, weil der Rest der App auf dieser Domain
+        # nicht erreichbar ist. Mit APP_BASE_URL gesetzt muss die
+        # Weiterleitung stattdessen absolut auf die echte App-Domain zeigen.
+        start_response = client.get("/api/instagram/oauth/start")
+        state = start_response.headers["location"].split("state=")[1].split("&")[0]
+        with patch("main.APP_BASE_URL", "https://app.example.ts.net"), \
+             patch("main.instagram_client.exchange_code", return_value=("short-lived", "ig-1")), \
+             patch("main.instagram_client.exchange_for_long_lived_token", return_value="long-lived"), \
+             patch("main.instagram_client.get_account_summary", return_value={"username": "dcardslab"}), \
+             patch("main.db.save_instagram_settings"):
+            response = client.get(f"/api/instagram/oauth/callback?code=abc&state={state}")
+        self.assertEqual(response.headers["location"], "https://app.example.ts.net/social.html")
+
     def test_api_error_during_exchange_redirects_with_error(self):
         start_response = client.get("/api/instagram/oauth/start")
         state = start_response.headers["location"].split("state=")[1].split("&")[0]
@@ -149,6 +166,27 @@ def _fake_jpeg_bytes():
     return buf.getvalue()
 
 
+class SocialVideoBadgesAndSubtitleTests(unittest.TestCase):
+    def test_badges_include_known_boolean_flags_and_card_type(self):
+        card = {"is_rookie": True, "is_autograph": True, "is_numbered": False, "card_type": "Refractor"}
+        self.assertEqual(main._social_video_badges(card), ["Rookie", "Auto", "Refractor"])
+
+    def test_badges_empty_when_nothing_set(self):
+        self.assertEqual(main._social_video_badges({}), [])
+
+    def test_subtitle_combines_team_set_and_listing_condition(self):
+        card = {"team": "FC Bayern", "set_name": "Topps Chrome"}
+        listing = {"condition": "NM"}
+        self.assertEqual(main._social_video_subtitle(card, listing), "FC Bayern · Topps Chrome · NM")
+
+    def test_subtitle_falls_back_to_grading_when_no_listing_condition(self):
+        card = {"team": "FC Bayern", "grading_company": "PSA", "grading_grade": "9"}
+        self.assertEqual(main._social_video_subtitle(card, None), "FC Bayern · PSA 9")
+
+    def test_subtitle_empty_when_nothing_available(self):
+        self.assertEqual(main._social_video_subtitle({}, None), "")
+
+
 class GenerateSocialVideoEndpointTests(unittest.TestCase):
     def test_returns_400_when_no_card_ids(self):
         response = client.post("/api/social/video", json={"card_ids": []})
@@ -165,30 +203,30 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
 
     def test_returns_404_when_no_cards_found(self):
         with patch("main.social_video.ffmpeg_available", return_value=True), \
-             patch("main.db.get_cards_by_ids", return_value=[]):
+             patch("main.db.get_cards_by_ids_full", return_value=[]):
             response = client.post("/api/social/video", json={"card_ids": ["c1"]})
         self.assertEqual(response.status_code, 404)
 
     def test_returns_422_when_no_photo_could_be_loaded(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
         with patch("main.social_video.ffmpeg_available", return_value=True), \
-             patch("main.db.get_cards_by_ids", return_value=[card]), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
              patch("main.storage.signed_urls", return_value={}):
             response = client.post("/api/social/video", json={"card_ids": ["c1"]})
         self.assertEqual(response.status_code, 422)
 
     def test_builds_reel_and_returns_video(self):
-        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1", "team": "FC Bayern", "is_rookie": True}
         listing = {"price": 9.99}
         fake_photo_response = MagicMock()
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path):
+        def fake_build_reel(cards, output_path, outro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
-             patch("main.db.get_cards_by_ids", return_value=[card]), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
              patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
              patch("main.httpx.get", return_value=fake_photo_response), \
              patch("main.db.get_ebay_listing_for_card", return_value=listing), \
@@ -201,6 +239,52 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         payload = mock_build.call_args[0][0]
         self.assertEqual(payload[0]["title"], "Karte 1")
         self.assertIn("9.99", payload[0]["price_text"])
+        self.assertEqual(payload[0]["subtitle_text"], "FC Bayern")
+        self.assertEqual(payload[0]["badges"], ["Rookie"])
+        self.assertIsNone(mock_build.call_args.kwargs.get("outro_text"))
+
+    def test_include_back_adds_a_second_frame_per_card(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "front1", "back_image_path": "back1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={
+                 "front1": "https://img.example/front1.jpg", "back1": "https://img.example/back1.jpg",
+             }), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={"card_ids": ["c1"], "include_back": True})
+        self.assertEqual(response.status_code, 200)
+        payload = mock_build.call_args[0][0]
+        self.assertEqual(len(payload), 2)
+
+    def test_outro_text_is_passed_through_to_build_reel(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={
+                "card_ids": ["c1"], "outro_text": "🛒 Jetzt auf eBay",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_build.call_args.kwargs.get("outro_text"), "🛒 Jetzt auf eBay")
 
     def test_returns_502_on_video_generation_error(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
@@ -209,7 +293,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.raise_for_status = MagicMock()
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
-             patch("main.db.get_cards_by_ids", return_value=[card]), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
              patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
              patch("main.httpx.get", return_value=fake_photo_response), \
              patch("main.db.get_ebay_listing_for_card", return_value=None), \

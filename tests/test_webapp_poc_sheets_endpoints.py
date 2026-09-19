@@ -94,6 +94,20 @@ class SheetsOauthCallbackEndpointTests(unittest.TestCase):
         self.assertEqual(mock_save.call_args[0][0]["refresh_token"], "r1")
         self.assertEqual(response.headers["location"], "/settings.html")
 
+    def test_redirects_to_app_base_url_when_configured(self):
+        # Regression: faellt der OAuth-Redirect-URI auf eine andere Domain
+        # als die App selbst (z.B. ein mitgenutzter Reverse-Proxy-Host fuer
+        # nur diesen einen Callback-Pfad), muss die Weiterleitung nach dem
+        # Callback absolut auf die echte App-Domain zeigen statt relativ auf
+        # der Proxy-Domain zu landen, wo der Rest der App nicht erreichbar ist.
+        start_response = client.get("/api/sheets/oauth/start")
+        state = start_response.headers["location"].split("state=")[1].split("&")[0]
+        with patch("main.APP_BASE_URL", "https://app.example.ts.net"), \
+             patch("main.google_sheets_client.exchange_code", return_value={"refresh_token": "r1"}), \
+             patch("main.db.save_google_sheets_settings"):
+            response = client.get(f"/api/sheets/oauth/callback?code=abc&state={state}")
+        self.assertEqual(response.headers["location"], "https://app.example.ts.net/settings.html")
+
 
 class UpdateSheetsSettingsEndpointTests(unittest.TestCase):
     def test_saves_spreadsheet_id(self):

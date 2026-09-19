@@ -103,6 +103,22 @@ app = FastAPI(title="DCardLabs Web PoC")
 # weiterlaufen) - siehe README.md, "Login einrichten".
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "").strip()
+
+# Optional: die "echte" oeffentliche Adresse dieser App, z.B.
+# "https://webapp.example.ts.net" (ohne abschliessenden "/"). Nur noetig,
+# wenn ein OAuth-Redirect-URI (Google Sheets/Instagram) ueber eine ANDERE
+# Domain laeuft als die App selbst - z.B. wenn ein bereits bestehender
+# Reverse-Proxy/Tailscale-Funnel-Host, der eigentlich fuer einen anderen
+# Dienst (etwa den eBay-OAuth-Server) da ist, nur fuer den einen
+# Callback-Pfad mitgenutzt wird. Ohne diese Variable wird nach einem
+# erfolgreichen/fehlgeschlagenen OAuth-Callback relativ weitergeleitet
+# (funktioniert nur, wenn Redirect-URI und App-Domain identisch sind -
+# der bisherige Normalfall).
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+
+
+def _app_url(path):
+    return f"{APP_BASE_URL}{path}" if APP_BASE_URL else path
 if APP_PASSWORD and not SESSION_SECRET_KEY:
     # Ohne einen stabilen Schluessel signiert jeder Neustart mit einem neuen
     # Zufallswert (secrets.token_hex() unten) - alle Sitzungen werden dann bei
@@ -3597,7 +3613,7 @@ def _sheets_error_redirect(message):
     # it into the query string instead of raw f-string interpolation, which
     # would let a "&"/"#" corrupt the query string or CRLF get rejected by
     # uvicorn as an invalid header value.
-    return RedirectResponse(f"/settings.html?{urlencode({'sheets_error': message})}")
+    return RedirectResponse(_app_url(f"/settings.html?{urlencode({'sheets_error': message})}"))
 
 
 @app.get("/api/sheets/oauth/callback")
@@ -3614,7 +3630,7 @@ async def sheets_oauth_callback(code: str | None = None, state: str | None = Non
         "refresh_token": token.get("refresh_token", ""),
         "connected_at": datetime.now(timezone.utc).isoformat(),
     })
-    return RedirectResponse("/settings.html")
+    return RedirectResponse(_app_url("/settings.html"))
 
 
 @app.post("/api/sheets/settings")
@@ -3808,7 +3824,7 @@ def _instagram_error_redirect(message):
     # message kann externer Text sein (Metas eigene Fehlermeldung) -
     # urlencode() statt roher f-String-Interpolation, gleiche Begruendung
     # wie bei _sheets_error_redirect().
-    return RedirectResponse(f"/social.html?{urlencode({'instagram_error': message})}")
+    return RedirectResponse(_app_url(f"/social.html?{urlencode({'instagram_error': message})}"))
 
 
 @app.get("/api/instagram/oauth/callback")
@@ -3829,7 +3845,7 @@ async def instagram_oauth_callback(code: str | None = None, state: str | None = 
         "username": summary.get("username", ""),
         "connected_at": datetime.now(timezone.utc).isoformat(),
     })
-    return RedirectResponse("/social.html")
+    return RedirectResponse(_app_url("/social.html"))
 
 
 @app.post("/api/instagram/disconnect")
@@ -3857,9 +3873,59 @@ async def instagram_insights():
     return JSONResponse({"summary": summary, "insights": insights})
 
 
+def _social_video_badges(card):
+    # Kurze Chips ueber dem Preis - Rookie/Auto/Numbered als bekannte
+    # boolsche Merkmale, card_type (z.B. "Refractor") als freies Feld
+    # dahinter, falls gesetzt.
+    badges = []
+    if card.get("is_rookie"):
+        badges.append("Rookie")
+    if card.get("is_autograph"):
+        badges.append("Auto")
+    if card.get("is_numbered"):
+        badges.append("Numbered")
+    card_type = (card.get("card_type") or "").strip()
+    if card_type:
+        badges.append(card_type)
+    return badges
+
+
+def _social_video_subtitle(card, listing):
+    # Team/Set als eine Zeile, dahinter Zustand - aus dem eBay-Angebot
+    # (falls veroeffentlicht) oder sonst aus einem vorhandenen Grading.
+    parts = [p for p in (card.get("team"), card.get("set_name")) if p]
+    condition = ""
+    if listing and listing.get("condition"):
+        condition = listing["condition"]
+    elif card.get("grading_company") and card.get("grading_grade"):
+        condition = f"{card['grading_company']} {card['grading_grade']}"
+    elif card.get("grading_status"):
+        condition = card["grading_status"]
+    if condition:
+        parts.append(condition)
+    return " · ".join(parts)
+
+
+async def _fetch_social_video_frame(url, title, price_text, subtitle_text, badges):
+    try:
+        photo_response = httpx.get(url, timeout=30)
+        photo_response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    return {
+        "image_bytes": photo_response.content,
+        "title": title,
+        "price_text": price_text,
+        "subtitle_text": subtitle_text,
+        "badges": badges,
+    }
+
+
 @app.post("/api/social/video")
 async def generate_social_video(body: dict = Body(...)):
     card_ids = body.get("card_ids") or []
+    include_back = bool(body.get("include_back"))
+    outro_text = (body.get("outro_text") or "").strip()[:200]
     if not isinstance(card_ids, list) or not card_ids:
         raise HTTPException(status_code=400, detail="Bitte mindestens eine Karte auswählen.")
     if len(card_ids) > social_video.MAX_CARDS:
@@ -3870,29 +3936,38 @@ async def generate_social_video(body: dict = Body(...)):
             detail="ffmpeg ist auf diesem Server nicht installiert - der Video-Generator ist nicht verfügbar.",
         )
 
-    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids_full(card_ids)}
     ordered_cards = [cards_by_id[cid] for cid in card_ids if cid in cards_by_id]
     if not ordered_cards:
         raise HTTPException(status_code=404, detail="Keine der ausgewählten Karten gefunden.")
 
-    front_urls = storage.signed_urls([c.get("front_image_path") for c in ordered_cards])
+    image_paths = [c.get("front_image_path") for c in ordered_cards]
+    if include_back:
+        image_paths += [c.get("back_image_path") for c in ordered_cards]
+    image_urls = storage.signed_urls(image_paths)
+
     payload = []
     for card in ordered_cards:
-        url = front_urls.get(card.get("front_image_path"))
-        if not url:
+        front_url = image_urls.get(card.get("front_image_path"))
+        back_url = image_urls.get(card.get("back_image_path")) if include_back else None
+        if not front_url and not back_url:
             continue
-        try:
-            photo_response = httpx.get(url, timeout=30)
-            photo_response.raise_for_status()
-        except httpx.HTTPError:
-            continue
+
         listing = db.get_ebay_listing_for_card(card["id"])
         price_text = f"{listing['price']} €" if listing and listing.get("price") else ""
-        payload.append({
-            "image_bytes": photo_response.content,
-            "title": card.get("title") or "Karte",
-            "price_text": price_text,
-        })
+        title = card.get("title") or "Karte"
+        subtitle_text = _social_video_subtitle(card, listing)
+        badges = _social_video_badges(card)
+
+        if front_url:
+            frame = await _fetch_social_video_frame(front_url, title, price_text, subtitle_text, badges)
+            if frame:
+                payload.append(frame)
+
+        if back_url:
+            frame = await _fetch_social_video_frame(back_url, title, price_text, subtitle_text, badges)
+            if frame:
+                payload.append(frame)
     if not payload:
         raise HTTPException(
             status_code=422, detail="Für keine der ausgewählten Karten konnte ein Foto geladen werden."
@@ -3901,7 +3976,7 @@ async def generate_social_video(body: dict = Body(...)):
     with tempfile.TemporaryDirectory(prefix="dcardslab_reel_out_") as tmp_str:
         output_path = Path(tmp_str) / "reel.mp4"
         try:
-            social_video.build_reel(payload, output_path)
+            social_video.build_reel(payload, output_path, outro_text=outro_text or None)
         except social_video.VideoGenerationError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         data = output_path.read_bytes()

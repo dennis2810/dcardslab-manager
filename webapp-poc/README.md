@@ -308,11 +308,11 @@ Weg für ein einzelnes eigenes Konto) - Login-Dialog läuft über
 `www.instagram.com`, Token-Tausch über `api.instagram.com`, eigentliche
 API-Aufrufe über `graph.instagram.com`. **Keine** Facebook-Seiten-
 Verknüpfung nötig, anders als beim älteren „Instagram API with Facebook
-Login". Der Login-Dialog selbst ist gegen die echte API verifiziert
-(vorher fälschlich auf `api.instagram.com` verlinkt, was Instagrams
-generische "Seite nicht verfügbar"-Fehlerseite statt des Login-Dialogs
-zeigte); der weitere Ablauf ab dem Redirect zurück ins Tool (Token-
-Tausch, Insights) ist noch nicht Ende-zu-Ende bestätigt.
+Login". Erfolgreich Ende-zu-Ende gegen ein echtes Meta-Developer-App
+verifiziert (September 2026): Login-Dialog, Token-Tausch und Kontodaten
+laufen durch. Die Insights-Metrik `views` (siehe `instagram_client.get_insights()`)
+folgt weiterhin nur der offiziellen Dokumentation, noch nicht mit echten
+Insights-Daten gegengeprüft.
 Einmalige manuelle Einrichtung (auch als Checkliste auf `social.html`
 geführt):
 
@@ -340,11 +340,24 @@ geführt):
    `https://` auf einer echten, öffentlich auflösbaren Adresse** (eine
    reine private IP mit `http://`, z.B. `http://192.168.x.x:8000/...`,
    lehnt Meta beim Speichern mit einem Fehler ab). Bei Tailscale-Nutzung
-   (siehe unten) reicht dafür `tailscale serve --bg 8000` auf dem NAS -
+   (siehe unten) reicht dafür `tailscale funnel --bg 8000` auf dem NAS -
    das stellt den Container automatisch mit einem echten Zertifikat unter
    `https://<nas-tailscale-name>.<tailnet-name>.ts.net` bereit, ohne
-   eigenen Reverse-Proxy. Beispiel:
-   `https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback`.
+   eigenen Reverse-Proxy (`tailscale serve` allein reicht NICHT - das
+   macht den Host nur innerhalb des eigenen Tailnets erreichbar, nicht
+   für Metas Redirect vom offenen Internet aus; `--set-path` erlaubt,
+   mehrere Pfade auf demselben Tailscale-Host verschiedenen Backends
+   zuzuweisen, falls der Host schon für einen anderen Dienst - z.B. den
+   eBay-OAuth-Server - genutzt wird, siehe `tailscale funnel --help`).
+   Beispiel: `https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback`.
+   **Falls diese Adresse auf einer anderen Domain liegt als die App
+   selbst** (z.B. weil ein bereits bestehender Tailscale-Funnel-Host für
+   einen anderen Dienst nur für diesen einen Pfad mitgenutzt wird):
+   zusätzlich `APP_BASE_URL` auf die echte, normal genutzte Adresse dieser
+   App setzen (ohne abschließenden `/`) - sonst landet die Weiterleitung
+   nach dem Verbinden auf einem 404, weil der Rest der App über die
+   Callback-Domain nicht erreichbar ist. Bei identischer Domain (Normalfall)
+   bleibt `APP_BASE_URL` leer.
 6. Auf `social.html` „Mit Instagram verbinden" klicken.
 
 TikTok-Statistiken sind bewusst nicht angebunden (siehe Backlog auf
@@ -411,6 +424,7 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e INSTAGRAM_APP_ID=deine-instagram-app-id \
   -e INSTAGRAM_APP_SECRET=dein-instagram-app-secret \
   -e INSTAGRAM_REDIRECT_URI=https://<nas-tailscale-name>.<tailnet-name>.ts.net/api/instagram/oauth/callback \
+  -e APP_BASE_URL=https://<echte-app-domain> \
   -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
   -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
   -e VAPID_SUBJECT=mailto:du@example.com \
@@ -430,7 +444,9 @@ nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.),
 `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET`/`INSTAGRAM_REDIRECT_URI` nur,
 falls die Instagram-Statistik auf der Social-Media-Seite genutzt werden
 soll (s. o. - der Video-Generator dort funktioniert ohne diese
-Variablen), und
+Variablen), `APP_BASE_URL` nur in dem seltenen Fall, dass
+`INSTAGRAM_REDIRECT_URI`/`GOOGLE_REDIRECT_URI` über eine andere Domain
+laufen als die App selbst (s. o.), und
 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` nur, falls
 Web-Push-Benachrichtigungen genutzt werden sollen (s. o.), und
 `APP_PASSWORD`/`SESSION_SECRET_KEY` nur, falls ein Login genutzt werden

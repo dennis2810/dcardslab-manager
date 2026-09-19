@@ -93,6 +93,19 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Video-Generator: Kartenliste statt nur Suche, Rückseite, Badges, Abschlusstext
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Unter der Suche auf <a href="social.html">Social Media</a> steht jetzt zusätzlich eine durchklickbare Liste
+      der zuletzt erfassten Karten – Karten müssen nicht mehr zwingend über die Suche gefunden werden.</li>
+    <li>Neue Checkbox „Auch Rückseite mit einbeziehen": nimmt zusätzlich zur Vorderseite ein zweites Frame mit der
+      Kartenrückseite je ausgewählter Karte ins Reel auf.</li>
+    <li>Auf den Karten-Frames werden jetzt optional Team/Set/Zustand sowie Badges (Rookie, Auto, Numbered,
+      Kartentyp z. B. „Refractor") mit eingeblendet, sofern bei der jeweiligen Karte vorhanden.</li>
+    <li>Neues, editierbares Textfeld für einen Abschlusstext (Standard: „🛒 Karten jetzt auf eBay – Link im
+      Profil") – wird als eigene Textkarte am Ende des Reels angehängt.</li>
+  </ul>
+
   <h2>Neue Social-Media-Seite: Video-Generator, Instagram-Statistik, Teilen-Button
     <span class="date">September 2026</span></h2>
   <ul>
@@ -101,9 +114,8 @@ if ("serviceWorker" in navigator) {
       manuellen Hochladen bei Instagram/TikTok, dort dann mit der jeweils eigenen lizenzfreien Musik aus dem
       Upload-Dialog.</li>
     <li>Instagram-Statistik (Follower, Beiträge, Reichweite/Views des letzten Tages) direkt auf der neuen Seite –
-      nutzt „Instagram API with Instagram Login" (keine Facebook-Seiten-Verknüpfung nötig).
-      <strong>Noch nicht gegen ein echtes Meta-Developer-App getestet</strong>, benötigt eine eigene Einrichtung
-      (siehe Checkliste auf derselben Seite sowie README.md).</li>
+      nutzt „Instagram API with Instagram Login" (keine Facebook-Seiten-Verknüpfung nötig) und wurde erfolgreich
+      gegen ein echtes Meta-Developer-App verbunden.</li>
     <li>Neuer „🔗 Teilen"-Button auf der Kartendetailseite (Web-Share-API mit Zwischenablage-Fallback) – teilt
       Titel und Link der Karte an jede installierte App (WhatsApp, Telegram, …).</li>
     <li>Checkliste „Umstieg von privat auf Kleinunternehmer/gewerblich" auf der Kleinunternehmer-Seite (gleiches
