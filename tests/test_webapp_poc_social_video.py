@@ -53,6 +53,12 @@ class RenderFrameTests(unittest.TestCase):
         frame = social_video._render_frame(_fake_jpeg_bytes(), "Test Karte", "9,99 €", badges=[])
         self.assertEqual(frame.size, social_video.FRAME_SIZE)
 
+    def test_feed_format_returns_feed_frame_size(self):
+        frame = social_video._render_frame(
+            _fake_jpeg_bytes(), "Test Karte", "9,99 €", spec=social_video.FRAME_FORMATS["feed"],
+        )
+        self.assertEqual(frame.size, social_video.FEED_FRAME_SIZE)
+
 
 class RenderTextFrameTests(unittest.TestCase):
     def test_returns_frame_of_expected_size(self):
@@ -64,6 +70,21 @@ class RenderTextFrameTests(unittest.TestCase):
         long_text = "Ein sehr langer Abschlusstext der garantiert nicht in eine einzige Zeile passt"
         lines = social_video._wrap_text(draw, long_text, social_video._load_font(64), social_video.FRAME_SIZE[0] - 160)
         self.assertGreater(len(lines), 1)
+
+    def test_feed_format_returns_feed_frame_size(self):
+        frame = social_video._render_text_frame("🔥 NEW CARDS 🔥", social_video.FRAME_FORMATS["feed"])
+        self.assertEqual(frame.size, social_video.FEED_FRAME_SIZE)
+
+
+class FrameFormatsTests(unittest.TestCase):
+    def test_reel_and_feed_have_distinct_aspect_ratios(self):
+        reel_w, reel_h = social_video.FRAME_FORMATS["reel"]["size"]
+        feed_w, feed_h = social_video.FRAME_FORMATS["feed"]["size"]
+        self.assertLess(reel_w / reel_h, feed_w / feed_h)
+
+    def test_default_format_is_reel(self):
+        self.assertEqual(social_video.DEFAULT_FRAME_FORMAT, "reel")
+        self.assertEqual(social_video.FRAME_FORMATS["reel"]["size"], social_video.FRAME_SIZE)
 
 
 class EmojiRenderingTests(unittest.TestCase):
@@ -220,6 +241,27 @@ class BuildReelTests(unittest.TestCase):
         with patch("social_video.ffmpeg_available", return_value=True):
             with self.assertRaises(social_video.VideoGenerationError):
                 social_video.build_reel(cards, "out.mp4")
+
+    def test_raises_when_frame_format_unknown(self):
+        cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "A", "price_text": ""}]
+        with patch("social_video.ffmpeg_available", return_value=True):
+            with self.assertRaises(social_video.VideoGenerationError):
+                social_video.build_reel(cards, "out.mp4", frame_format="square")
+
+    def test_feed_frame_format_uses_feed_frame_size_for_zoompan(self):
+        cards = [{"image_bytes": _fake_jpeg_bytes(), "title": "Karte 1", "price_text": ""}]
+        real_tmpdir = tempfile.mkdtemp(prefix="dcardslab_test_reel_feed_")
+        self.addCleanup(shutil.rmtree, real_tmpdir, ignore_errors=True)
+        with patch("social_video.ffmpeg_available", return_value=True), \
+             patch("social_video.subprocess.run", return_value=self._successful_result()) as mock_run, \
+             patch("tempfile.TemporaryDirectory") as mock_tmpdir:
+            mock_tmpdir.return_value.__enter__.return_value = real_tmpdir
+            output_path = Path(real_tmpdir) / "reel.mp4"
+            social_video.build_reel(cards, output_path, frame_format="feed")
+        segment_args = mock_run.call_args_list[0].args[0]
+        vf = segment_args[segment_args.index("-vf") + 1]
+        feed_w, feed_h = social_video.FEED_FRAME_SIZE
+        self.assertIn(f"s={feed_w}x{feed_h}", vf)
 
     def test_runs_ffmpeg_per_segment_then_concat(self):
         cards = [

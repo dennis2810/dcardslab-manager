@@ -213,6 +213,10 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         response = client.post("/api/social/video", json={"card_ids": ["c"] * (social_video.MAX_CARDS + 1)})
         self.assertEqual(response.status_code, 400)
 
+    def test_returns_400_for_unknown_frame_format(self):
+        response = client.post("/api/social/video", json={"card_ids": ["c1"], "frame_format": "square"})
+        self.assertEqual(response.status_code, 400)
+
     def test_returns_503_when_ffmpeg_unavailable(self):
         with patch("main.social_video.ffmpeg_available", return_value=False):
             response = client.post("/api/social/video", json={"card_ids": ["c1"]})
@@ -239,7 +243,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -270,7 +274,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -290,7 +294,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -312,7 +316,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -333,7 +337,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -347,6 +351,44 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_build.call_args.kwargs.get("intro_text"), "🔥 NEW CARDS 🔥")
+
+    def test_frame_format_is_passed_through_to_build_reel(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={"card_ids": ["c1"], "frame_format": "feed"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_build.call_args.kwargs.get("frame_format"), "feed")
+
+    def test_frame_format_defaults_to_reel_when_omitted(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None, frame_format="reel"):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={"card_ids": ["c1"]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_build.call_args.kwargs.get("frame_format"), "reel")
 
     def test_returns_502_on_video_generation_error(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
