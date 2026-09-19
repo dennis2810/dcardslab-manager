@@ -75,8 +75,10 @@ import ebay_scheduler  # noqa: E402
 import email_notify  # noqa: E402
 import google_sheets_client  # noqa: E402
 import image_hash  # noqa: E402
+import instagram_client  # noqa: E402
 import portfolio  # noqa: E402
 import push_notify  # noqa: E402
+import social_video  # noqa: E402
 import storage  # noqa: E402
 
 logger = logging.getLogger("ebay_publish")
@@ -3763,6 +3765,154 @@ async def sync_to_sheets():
     synced_at = datetime.now(timezone.utc).isoformat()
     db.save_google_sheets_settings({"last_synced_at": synced_at})
     return JSONResponse({"synced_at": synced_at})
+
+
+_instagram_oauth_states = {}
+_INSTAGRAM_STATE_TTL_SECONDS = 600
+
+
+def _new_instagram_oauth_state():
+    # Gleiches Kurzlebig-State-Muster wie _new_sheets_oauth_state().
+    now = time.time()
+    for key, created in list(_instagram_oauth_states.items()):
+        if created < now - _INSTAGRAM_STATE_TTL_SECONDS:
+            _instagram_oauth_states.pop(key, None)
+    state = secrets.token_urlsafe(32)
+    _instagram_oauth_states[state] = now
+    return state
+
+
+def _consume_instagram_oauth_state(state):
+    created = _instagram_oauth_states.pop(state, None)
+    return created is not None and created >= time.time() - _INSTAGRAM_STATE_TTL_SECONDS
+
+
+@app.get("/api/instagram/status")
+async def instagram_status():
+    settings = db.get_instagram_settings() or {}
+    return JSONResponse({
+        "connected": bool(settings.get("access_token") and settings.get("ig_user_id")),
+        "username": settings.get("username", ""),
+        "connected_at": settings.get("connected_at"),
+        "last_synced_at": settings.get("last_synced_at"),
+    })
+
+
+@app.get("/api/instagram/oauth/start")
+async def instagram_oauth_start():
+    state = _new_instagram_oauth_state()
+    return RedirectResponse(instagram_client.authorization_url(state))
+
+
+def _instagram_error_redirect(message):
+    # message kann externer Text sein (Metas eigene Fehlermeldung) -
+    # urlencode() statt roher f-String-Interpolation, gleiche Begruendung
+    # wie bei _sheets_error_redirect().
+    return RedirectResponse(f"/social.html?{urlencode({'instagram_error': message})}")
+
+
+@app.get("/api/instagram/oauth/callback")
+async def instagram_oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    if error:
+        return _instagram_error_redirect(error)
+    if not code or not state or not _consume_instagram_oauth_state(state):
+        return _instagram_error_redirect("ungueltiger_oauth_state")
+    try:
+        short_lived_token = instagram_client.exchange_code(code)
+        access_token = instagram_client.exchange_for_long_lived_token(short_lived_token)
+        ig_user_id = instagram_client.find_instagram_business_account(access_token)
+        summary = instagram_client.get_account_summary(access_token, ig_user_id)
+    except instagram_client.InstagramApiError as exc:
+        return _instagram_error_redirect(str(exc))
+    except instagram_client.NoInstagramAccountError as exc:
+        return _instagram_error_redirect(str(exc))
+    db.save_instagram_settings({
+        "access_token": access_token,
+        "ig_user_id": ig_user_id,
+        "username": summary.get("username", ""),
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return RedirectResponse("/social.html")
+
+
+@app.post("/api/instagram/disconnect")
+async def instagram_disconnect():
+    db.save_instagram_settings({"access_token": "", "ig_user_id": "", "username": ""})
+    return JSONResponse({"connected": False})
+
+
+@app.get("/api/instagram/insights")
+async def instagram_insights():
+    settings = db.get_instagram_settings() or {}
+    if not settings.get("access_token") or not settings.get("ig_user_id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Instagram ist nicht verbunden — bitte zuerst auf der Social-Media-Seite verbinden.",
+        )
+    try:
+        summary = instagram_client.get_account_summary(settings["access_token"], settings["ig_user_id"])
+        insights = instagram_client.get_insights(settings["access_token"], settings["ig_user_id"])
+    except instagram_client.InstagramNotConnectedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except instagram_client.InstagramApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    db.save_instagram_settings({"last_synced_at": datetime.now(timezone.utc).isoformat()})
+    return JSONResponse({"summary": summary, "insights": insights})
+
+
+@app.post("/api/social/video")
+async def generate_social_video(body: dict = Body(...)):
+    card_ids = body.get("card_ids") or []
+    if not isinstance(card_ids, list) or not card_ids:
+        raise HTTPException(status_code=400, detail="Bitte mindestens eine Karte auswählen.")
+    if len(card_ids) > social_video.MAX_CARDS:
+        raise HTTPException(status_code=400, detail=f"Maximal {social_video.MAX_CARDS} Karten je Reel.")
+    if not social_video.ffmpeg_available():
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg ist auf diesem Server nicht installiert - der Video-Generator ist nicht verfügbar.",
+        )
+
+    cards_by_id = {c["id"]: c for c in db.get_cards_by_ids(card_ids)}
+    ordered_cards = [cards_by_id[cid] for cid in card_ids if cid in cards_by_id]
+    if not ordered_cards:
+        raise HTTPException(status_code=404, detail="Keine der ausgewählten Karten gefunden.")
+
+    front_urls = storage.signed_urls([c.get("front_image_path") for c in ordered_cards])
+    payload = []
+    for card in ordered_cards:
+        url = front_urls.get(card.get("front_image_path"))
+        if not url:
+            continue
+        try:
+            photo_response = httpx.get(url, timeout=30)
+            photo_response.raise_for_status()
+        except httpx.HTTPError:
+            continue
+        listing = db.get_ebay_listing_for_card(card["id"])
+        price_text = f"{listing['price']} €" if listing and listing.get("price") else ""
+        payload.append({
+            "image_bytes": photo_response.content,
+            "title": card.get("title") or "Karte",
+            "price_text": price_text,
+        })
+    if not payload:
+        raise HTTPException(
+            status_code=422, detail="Für keine der ausgewählten Karten konnte ein Foto geladen werden."
+        )
+
+    with tempfile.TemporaryDirectory(prefix="dcardslab_reel_out_") as tmp_str:
+        output_path = Path(tmp_str) / "reel.mp4"
+        try:
+            social_video.build_reel(payload, output_path)
+        except social_video.VideoGenerationError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        data = output_path.read_bytes()
+
+    return Response(
+        content=data, media_type="video/mp4",
+        headers={"Content-Disposition": 'attachment; filename="dcardslab-reel.mp4"'},
+    )
 
 
 @app.get("/api/backup")

@@ -99,6 +99,14 @@ if ("serviceWorker" in navigator) {
   #expenses-table th .sort-arrow, #invoices-table th .sort-arrow { color: #888; font-size: 0.8em; }
   .expenses-pagination { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
   [hidden] { display: none !important; }
+  /* Checkliste "Umstieg auf Kleinunternehmer" - gleiches Muster wie onboarding.html/social.html. */
+  .checklist { list-style: none; padding: 0; margin: 0; }
+  .checklist li { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.5rem 0; }
+  .checklist input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
+  .checklist li.checked > span { color: #888; text-decoration: line-through; }
+  .progress-bar { background: rgba(127, 127, 127, 0.2); border-radius: 4px; height: 0.6rem; overflow: hidden; margin: 0.5rem 0 1rem; }
+  .progress-bar-fill { background: #1e8e3e; height: 100%; transition: width 0.2s; }
+  .progress-text { font-size: 0.85rem; color: #777; }
 </style>
 </head>
 <body>
@@ -124,6 +132,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="social.html">Social Media</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
@@ -159,6 +168,27 @@ if ("serviceWorker" in navigator) {
   </div>
   <p class="note">Die beiden Schwellenwerte lassen sich in den <a href="settings.html">Einstellungen</a>
     anpassen, falls sich die gesetzlichen Grenzen künftig ändern.</p>
+
+  <h2 id="checklist-section">Checkliste: Umstieg von privat auf Kleinunternehmer/gewerblich <span class="optional-tag">optional</span></h2>
+  <p class="note">Sinnvoll, sobald sich abzeichnet, dass der Umsatz die obigen Grenzen bald übersteigt, oder wenn
+    aus dem gelegentlichen Verkauf ein regelmäßiges Gewerbe wird. <strong>Ersetzt keine steuerliche/rechtliche
+    Beratung</strong> – die konkrete Reihenfolge und Fristen hängen vom Einzelfall ab, im Zweifel vorher mit
+    Finanzamt/Steuerberater klären. Instagram-Business-Einrichtung für die eigene Reichweite gibt es als eigene
+    Checkliste auf der <a href="social.html#checklist-section">Social-Media-Seite</a>.</p>
+  <div class="progress-text" id="ku-progress-text"></div>
+  <div class="progress-bar"><div class="progress-bar-fill" id="ku-progress-fill" style="width: 0%"></div></div>
+  <button type="button" id="ku-reset-progress-btn">Fortschritt zurücksetzen</button>
+  <ul class="checklist" data-section="umstieg">
+    <li data-id="ku-gewerbeanmeldung"><input type="checkbox"><span>Gewerbe beim zuständigen Gewerbeamt anmelden (Gewerbeanmeldung, meist online oder vor Ort möglich, geringe einmalige Gebühr).</span></li>
+    <li data-id="ku-finanzamt-fragebogen"><input type="checkbox"><span>Vom Finanzamt zugeschickten „Fragebogen zur steuerlichen Erfassung" ausfüllen (u. a. erwartete Umsätze/Gewinne, Wahl Kleinunternehmerregelung oder Regelbesteuerung) – meist über <a href="https://www.elster.de/" target="_blank" rel="noopener">ELSTER</a>.</span></li>
+    <li data-id="ku-steuernummer"><input type="checkbox"><span>Neue Steuernummer für den Gewerbebetrieb vom Finanzamt abwarten und notieren – wird für Rechnungen/eBay/Cardmarket-Ummeldung benötigt.</span></li>
+    <li data-id="ku-ebay-umstellung"><input type="checkbox"><span>eBay-Konto von privat auf gewerblich umstellen (Konto-Einstellungen → Kontotyp) und die Pflichtangaben (Firmenname/-anschrift, Steuernummer, Widerrufsbelehrung) hinterlegen.</span></li>
+    <li data-id="ku-cardmarket-umstellung"><input type="checkbox"><span>Cardmarket-Konto von „Privater Verkäufer" auf „Gewerblicher Verkäufer" umstellen (Konto-Einstellungen) und dieselben Pflichtangaben dort hinterlegen.</span></li>
+    <li data-id="ku-impressum"><input type="checkbox"><span>Impressum erstellen (Pflicht ab gewerblichem Verkauf, z. B. für eBay-Shop-Seite/eigene Auftritte) mit Name, Anschrift, Kontaktmöglichkeit und Steuernummer/USt-IdNr.</span></li>
+    <li data-id="ku-widerrufsbelehrung"><input type="checkbox"><span>Widerrufsbelehrung für Verbraucher einrichten (eBay/Cardmarket bieten dafür eigene Vorlagen in den Kontoeinstellungen an).</span></li>
+    <li data-id="ku-versicherung"><input type="checkbox"><span>Prüfen, ob eine Betriebshaftpflicht- oder Rechtsschutzversicherung für den Gewerbebetrieb sinnvoll ist.</span></li>
+    <li data-id="ku-euer-umstellung"><input type="checkbox"><span>Ab dem Umstellungszeitpunkt: EÜR oben auf dieser Seite konsequent führen (Betriebsausgaben/Rechnungen), spätestens zur ersten Steuererklärung als Gewerbetreibender.</span></li>
+  </ul>
 
   <h2 id="euer">Einnahmen-Überschuss-Rechnung (EÜR)</h2>
   <p>Fasst Einnahmen und Ausgaben eines Jahres nach dem Zufluss-Abfluss-Prinzip zusammen (Paragraph 4 Abs. 3
@@ -275,6 +305,69 @@ if ("serviceWorker" in navigator) {
   }
   nav.addEventListener("change", () => {
     if (nav.value) location.href = nav.value;
+  });
+})();
+
+// Checkliste "Umstieg auf Kleinunternehmer" - Haken-Status bleibt rein lokal
+// im Browser (kein Server-Feld), gleiches Muster wie onboarding.html/
+// social.html, eigener STORAGE_KEY.
+(function initUmstiegChecklist() {
+  const STORAGE_KEY = "dcardslab_kleinunternehmer_umstieg_v1";
+
+  function loadChecked() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch (err) {
+      return new Set();
+    }
+  }
+
+  function saveChecked(checkedIds) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...checkedIds]));
+    } catch (err) {
+      // Privater Modus/voller Speicher - Fortschritt lebt dann nur fuer die
+      // aktuelle Seitenansicht, kein harter Fehler noetig.
+    }
+  }
+
+  const checkedIds = loadChecked();
+  const items = [...document.querySelectorAll('.checklist[data-section="umstieg"] li[data-id]')];
+
+  function updateProgress() {
+    const total = items.length;
+    const done = items.filter((li) => checkedIds.has(li.dataset.id)).length;
+    const percent = total ? Math.round((done / total) * 100) : 0;
+    document.getElementById("ku-progress-fill").style.width = percent + "%";
+    document.getElementById("ku-progress-text").textContent = `${done} von ${total} Punkten erledigt (${percent} %)`;
+  }
+
+  for (const li of items) {
+    const checkbox = li.querySelector("input[type=checkbox]");
+    const isChecked = checkedIds.has(li.dataset.id);
+    checkbox.checked = isChecked;
+    li.classList.toggle("checked", isChecked);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) checkedIds.add(li.dataset.id);
+      else checkedIds.delete(li.dataset.id);
+      li.classList.toggle("checked", checkbox.checked);
+      saveChecked(checkedIds);
+      updateProgress();
+    });
+  }
+  updateProgress();
+
+  document.getElementById("ku-reset-progress-btn").addEventListener("click", () => {
+    if (!confirm("Wirklich den gesamten Haken-Fortschritt zurücksetzen?")) return;
+    checkedIds.clear();
+    saveChecked(checkedIds);
+    for (const li of items) {
+      li.querySelector("input[type=checkbox]").checked = false;
+      li.classList.remove("checked");
+    }
+    updateProgress();
   });
 })();
 

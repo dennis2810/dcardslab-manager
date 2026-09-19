@@ -283,6 +283,49 @@ Ohne diesen zusätzlichen Scope liefert „Werbestatus laden" einen Fehler
 mit eBays Meldung (`insufficient_scope` o. ä.) - alles andere im Tool
 bleibt davon unberührt.
 
+### Social-Media-Seite (Video-Generator/Instagram-Statistik) einrichten
+
+Neue Seite `social.html`: Video-Generator (funktioniert ohne weitere
+Einrichtung, sobald ffmpeg im Container vorhanden ist - siehe Dockerfile),
+Instagram-Statistik (optionale Einrichtung, siehe unten) sowie eine
+Checkliste für die Instagram-Business-Ersteinrichtung.
+
+**Video-Generator:** baut aus 1-10 ausgewählten Karten ein stummes,
+senkrechtes (9:16) MP4-Reel (`social_video.py`, Endpunkt
+`POST /api/social/video`) - Pillow rendert je Karte ein Foto+Text-Overlay-
+Bild, ffmpeg (`zoompan`-Filter je Karte, dann `concat`) setzt daraus das
+Video zusammen. **Bewusst ohne Tonspur** - Instagram/TikTok bieten beim
+Hochladen eigene lizenzfreie Musikbibliotheken an, das umgeht die
+Musiklizenzfrage. Braucht `ffmpeg` als Systempaket im Container (im
+mitgelieferten Dockerfile bereits enthalten) - läuft ohne weitere
+Einrichtung.
+
+**Instagram-Statistik (optional):** zeigt Follower/Beiträge/Reichweite/
+Profilaufrufe des verknüpften Instagram-Business-Kontos
+(`instagram_client.py`, Meta Graph API). **Unverifiziert** - noch nicht
+gegen ein echtes Meta-Developer-App getestet, Endpunkte/Feldnamen folgen
+der offiziellen Graph-API-Dokumentation. Einmalige manuelle Einrichtung
+(auch als Checkliste auf `social.html` geführt):
+
+1. Instagram-Konto auf ein Business-/Creator-Konto umstellen (kostenlos,
+   in der Instagram-App) und mit einer Facebook-Seite verknüpfen - die
+   Instagram Graph API liest Statistiken nur über diese Verknüpfung aus.
+2. Auf [developers.facebook.com](https://developers.facebook.com/) eine
+   Meta-Developer-App (Typ „Business") anlegen, das eigene Konto im
+   „Development Mode" als Tester/Rolle hinzufügen - für den Zugriff auf
+   das **eigene** Konto ist damit keine öffentliche App-Review-Freigabe
+   nötig.
+3. App-ID/App-Secret als `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` beim
+   `webapp-poc`-Container setzen.
+4. Als gültige OAuth-Weiterleitungs-URI in der Meta-App eintragen und als
+   `INSTAGRAM_REDIRECT_URI` setzen:
+   `http://<server-adresse>:8000/api/instagram/oauth/callback`.
+5. Auf `social.html` „Mit Instagram verbinden" klicken.
+
+TikTok-Statistiken sind bewusst nicht angebunden (siehe Backlog auf
+`backlog.html` - dort ist selbst für den reinen Eigenzugriff ein
+Entwickler-App-Review nötig, anders als bei Instagram).
+
 ### Bekannte Einschränkung: eBay-Sandbox kann `publishOffer` mit generischem Systemfehler blockieren
 
 Live gegen die echte eBay-Sandbox getestet (27.08.2026): `POST .../offer/{id}/publish`
@@ -340,6 +383,9 @@ docker run -d --name dcardslab-webapp-poc -p 8000:8000 \
   -e GOOGLE_CLIENT_ID=deine-google-client-id \
   -e GOOGLE_CLIENT_SECRET=dein-google-client-secret \
   -e GOOGLE_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/sheets/oauth/callback \
+  -e INSTAGRAM_APP_ID=deine-meta-app-id \
+  -e INSTAGRAM_APP_SECRET=dein-meta-app-secret \
+  -e INSTAGRAM_REDIRECT_URI=http://<nas-tailscale-name>:8000/api/instagram/oauth/callback \
   -e VAPID_PUBLIC_KEY=dein-vapid-public-key \
   -e VAPID_PRIVATE_KEY=dein-vapid-private-key \
   -e VAPID_SUBJECT=mailto:du@example.com \
@@ -355,7 +401,11 @@ oauth-server unter einer anderen Adresse läuft oder bereits auf
 Produktion umgestellt wurde. `EBAY_ENVIRONMENT` muss mit dem Wert
 übereinstimmen, den `ebay-oauth-server` selbst gesetzt hat.
 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` sind
-nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.), und
+nur nötig, falls Google-Sheets-Sync genutzt werden soll (s. o.),
+`INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET`/`INSTAGRAM_REDIRECT_URI` nur,
+falls die Instagram-Statistik auf der Social-Media-Seite genutzt werden
+soll (s. o. - der Video-Generator dort funktioniert ohne diese
+Variablen), und
 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` nur, falls
 Web-Push-Benachrichtigungen genutzt werden sollen (s. o.), und
 `APP_PASSWORD`/`SESSION_SECRET_KEY` nur, falls ein Login genutzt werden

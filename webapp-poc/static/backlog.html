@@ -90,6 +90,7 @@ if ("serviceWorker" in navigator) {
         <option value="private-collection.html">Private Sammlung</option>
         <option value="statistics.html">Statistiken</option>
         <option value="kleinunternehmer.html">Kleinunternehmer</option>
+        <option value="social.html">Social Media</option>
         <option value="pos.html">Kassenmodus</option>
         <option value="settings.html">Einstellungen</option>
       </select>
@@ -290,60 +291,18 @@ if ("serviceWorker" in navigator) {
   </div>
 
   <div class="item" data-effort="groß">
-    <h3>Neue Social-Media-Seite: Video-Generator, Share-Button, Instagram-Statistik <span class="status-tag status-open">offen – Klärung nötig</span>
+    <h3>TikTok- und YouTube-Statistik-Integration <span class="status-tag status-open">offen – bewusst zurückgestellt</span>
       <span class="status-tag status-effort">Aufwand: groß</span></h3>
-    <p><strong>Eigene neue Seite</strong> (z. B. <code>social.html</code>) statt die Bausteine auf
-      card.html/cards.html zu verteilen – ein eigenständiger Arbeitsbereich (Karten auswählen, Video erzeugen,
-      Statistiken einsehen), ähnlich wie statistics.html schon ein eigener Bereich ist. Bausteine darauf:</p>
-    <ul>
-      <li><strong>Einfacher Share-Button auf der Kartenseite:</strong> Kartenfoto + vorformatierter Text
-        (Titel/Preis/Link) über die Web-Share-API bzw. „In Zwischenablage kopieren" bereitstellen – kein
-        Login-Umweg nötig, da nur Bild/Text geteilt werden, nicht eine Tool-interne Seite verlinkt wird (die liegt
-        hinter dem Login).</li>
-      <li><strong>Automatischer Video-Generator („Reel-Vorlage"):</strong> mehrere Karten zu einem fertigen,
-        vertikalen Video (9:16) zusammensetzen – Foto je Karte mit sanftem Zoom, Titel-/Preis-Einblendung,
-        wiederkehrendes Intro/Outro. Karten entweder manuell auswählen oder – wie im Chat besprochen – automatisch
-        aus den zuletzt veröffentlichten Angeboten speisen lassen („immer die neuesten Karten im Reel"). Ergebnis
-        ist eine fertige <code>.mp4</code>-Datei zum Download – dieselbe Datei lässt sich unverändert als
-        Instagram-Reel, TikTok-Video und YouTube-Short hochladen (alle drei nutzen dasselbe Hochformat), das
-        Hochladen selbst bleibt aber ein manueller Klick in der jeweiligen App.</li>
-      <li><strong>Instagram-Statistik-Integration</strong> (Stufe 2, analog zum Vorgehen bei der eBay Marketing
-        API): Reichweite/Impressionen/Profilbesuche/Kennzahlen je Video über die kostenlose Instagram Graph API
-        auf der neuen Seite anzeigen. Da es das eigene Konto ist (nicht fremde Konten, die verwaltet werden),
-        reicht dafür vermutlich eine Meta-Entwickler-App im „Development Mode" mit dem eigenen Account als
-        Test-Rolle – ohne den vollen, öffentlichen App-Review-Prozess, den eine Mehrbenutzer-App bräuchte
-        (unverifiziert bis zur tatsächlichen Einrichtung, siehe Klärungsbedarf unten).</li>
-    </ul>
-    <p><strong>TikTok bewusst zurückgestellt:</strong> die generierte Videodatei funktioniert zwar schon jetzt
-      genauso für TikTok, aber eine TikTok-Statistik-Anbindung kommt später dazu – dort ist selbst für den reinen
-      Eigenzugriff auf die eigenen Konto-Statistiken ein Entwickler-App-Review nötig (kostenlos, aber mit
-      Wartezeit/Prüfungsaufwand), anders als bei Instagram.</p>
-    <p><strong>YouTube (Shorts) als kostenloser Bonus-Kanal, aber zweitrangig:</strong> dieselbe generierte Datei
-      liefe auch als YouTube-Short. Eine YouTube-Statistik-Anbindung wäre technisch sogar günstiger als Instagram/
-      TikTok, weil dieses Tool bereits eine funktionierende Google-OAuth-Anbindung für den Google-Sheets-/Drive-
-      Sync hat (<code>google_sheets_client.py</code>) – dieselbe Infrastruktur ließe sich um den YouTube-Scope
-      erweitern statt komplett neu aufzubauen. Inhaltlich aber eher zweitrangig: YouTubes Publikum ist stärker auf
-      längere Formate/Box-Breaks ausgerichtet als auf kurze Verkaufsclips – am ehesten interessant als kostenloser
-      Zusatzkanal für dieselbe ohnehin erzeugte Datei, nicht als eigener Entwicklungsschwerpunkt.</p>
-    <p><strong>Reichweite zusätzlich per Werbung erhöhen:</strong> geht direkt in Instagram/TikTok selbst, nicht
-      über dieses Tool – der einfachste Weg ist der „Beitrag bewerben"/„Promote"-Button unter dem eigenen
-      veröffentlichten Beitrag (Budget/Zielgruppe einstellen, keine Entwickler-Freigabe nötig). Das
-      <strong>automatische Erstellen/Auslösen</strong> von Werbeanzeigen per API (Meta Marketing API/TikTok Ads
-      API) wäre dagegen ein eigenes, deutlich größeres Vorhaben mit Entwickler-Freigabeprozess – für eine Sammlung
-      in dieser Größenordnung vermutlich nicht lohnend, daher bewusst nicht mit eingeplant.</p>
-    <p><strong>Einrichtungs-Checkliste Instagram Business:</strong> als Teil der neuen Seite (bzw. verlinkt von
-      dort) eine geführte Checkliste nach dem bestehenden Muster von <code>onboarding.html</code> (Checkbox-Liste,
-      je Browser gemerkt via <code>localStorage</code>) – z. B.: Konto auf Business/Creator umstellen → ggf. mit
-      einer Facebook-Seite verknüpfen (falls für den Graph-API-Zugriff nötig) → Meta-Entwickler-App anlegen →
-      eigenes Konto als Test-Rolle hinzufügen → Zugriffstoken holen. TikTok-Pendant folgt erst, wenn TikTok
-      tatsächlich angegangen wird.</p>
-    <p>Klärungsbedarf: Der Video-Generator braucht technisch FFmpeg im Docker-Image (aktuell nicht enthalten,
-      siehe <code>webapp-poc/Dockerfile</code>/<code>requirements.txt</code> – nur OpenCV/Pillow für
-      Bildbearbeitung, kein Video-Rendering) sowie eine Entscheidung, wie viel Gestaltungsspielraum die „Vorlage"
-      bieten soll (feste Vorlage vs. einstellbare Musik/Farben/Übergänge), ob eine Hintergrundmusik-Option
-      lizenzrechtlich unkompliziert sein soll (z. B. nur lizenzfreie/eigene Musikdateien), sowie die genauen
-      Berechtigungs-Scopes/Schritte für die Instagram-Graph-API-Anbindung – erst beim tatsächlichen Einrichten
-      eines Meta-Entwickler-Kontos endgültig zu verifizieren.</p>
+    <p>Die neue <a href="social.html">Social-Media-Seite</a> deckt bereits Video-Generator, Share-Button und
+      Instagram-Statistik (Stufe 2) ab – die mit demselben Video erzeugte Datei lässt sich schon heute unverändert
+      auch manuell bei TikTok/YouTube hochladen, nur die Statistik-Anzeige im Tool fehlt für diese beiden Kanäle
+      noch. <strong>TikTok:</strong> anders als bei Instagram ist selbst für den reinen Eigenzugriff auf die
+      eigenen Konto-Statistiken ein Entwickler-App-Review nötig (kostenlos, aber mit Wartezeit/Prüfungsaufwand) -
+      daher bewusst zurückgestellt. <strong>YouTube (Shorts):</strong> technisch günstiger umzusetzen, da dieses
+      Tool bereits eine funktionierende Google-OAuth-Anbindung für den Google-Sheets-Sync hat
+      (<code>google_sheets_client.py</code>), die sich um den YouTube-Scope erweitern ließe – inhaltlich aber
+      zweitrangig, da YouTubes Publikum stärker auf längere Formate/Box-Breaks als auf kurze Verkaufsclips
+      ausgerichtet ist.</p>
   </div>
 
   <div class="item" data-effort="mittel">
@@ -433,29 +392,6 @@ if ("serviceWorker" in navigator) {
       Kleinunternehmer-Schwellenwerte konfigurierbar statt fest einprogrammiert sein; außerdem müsste geklärt werden,
       ob nur gewarnt oder die Berechnung auch in einen Steuer-Report übernommen werden soll – beides ersetzt keine
       steuerliche Beratung im Einzelfall.</p>
-  </div>
-
-  <div class="item" data-effort="mittel">
-    <h3>Checkliste: Umstieg von privat auf Kleinunternehmer/gewerblich <span class="status-tag status-open">offen – Klärung nötig</span>
-      <span class="status-tag status-effort">Aufwand: mittel</span></h3>
-    <p>Aus dem Chat: eine geführte Checkliste für den Moment, an dem der Umstieg von privatem auf gewerbliches
-      Verkaufen ansteht – nach dem bereits vorhandenen Muster von <code>onboarding.html</code> (Checkbox-Liste,
-      je Browser gemerkt via <code>localStorage</code>), am ehesten als neuer Abschnitt in
-      <code>kleinunternehmer.html</code>, da der Kleinunternehmer-/EÜR-Bereich dort schon existiert. Grobe
-      Schritte, die rein sollten:</p>
-    <ul>
-      <li>Gewerbe beim zuständigen Gewerbeamt anmelden.</li>
-      <li>„Fragebogen zur steuerlichen Erfassung" beim Finanzamt einreichen (Steuernummer, ggf.
-        Kleinunternehmerregelung nach §19 UStG beantragen).</li>
-      <li>eBay-Konto von privat auf gewerblich umstellen (Impressumspflicht beachten).</li>
-      <li>Cardmarket-Konto von privat auf gewerblich umstellen lassen (läuft über den Cardmarket-Support, siehe
-        Klärung im Chat) – bzw. jeden weiteren später genutzten Verkaufskanal.</li>
-      <li>Impressum/Widerrufsbelehrung für die eigenen Angebote vorbereiten, sobald gewerblich verkauft wird.</li>
-    </ul>
-    <p>Klärungsbedarf: die genaue Reihenfolge/Fristen variieren je nach Bundesland und persönlicher Situation
-      (z. B. ob nebenberuflich oder hauptberuflich) – die Checkliste wäre eine allgemeine Orientierung, ersetzt
-      aber ausdrücklich keine steuerliche/rechtliche Beratung im Einzelfall. Sollen einzelne Punkte verlinkt sein
-      (z. B. direkt zum Fragebogen-Portal ELSTER), oder reicht eine reine Text-Checkliste?</p>
   </div>
 
   <div class="item" data-effort="groß">

@@ -723,3 +723,16 @@ alter table ebay_listings add column if not exists last_known_click_through_rate
 alter table ebay_listings add column if not exists promoted_listing_campaign_id text default '';
 alter table ebay_listings add column if not exists promoted_listing_status text default '';
 alter table ebay_listings add column if not exists promoted_listing_bid_percentage numeric;
+
+-- Migration (2026-09-19): Instagram-Anbindung auf der neuen Social-Media-Seite
+-- (social.html) - Zugangsdaten/Insights-Zeitpunkt fuers verknuepfte Instagram-
+-- Business-Konto, gleiches Singleton-Row-Muster wie google_sheets_settings.
+-- Siehe instagram_client.py (bislang unverifiziert - siehe dortiger Hinweis).
+create table if not exists instagram_settings (
+    id              boolean primary key default true check (id),
+    access_token    text default '',
+    ig_user_id      text default '',
+    username        text default '',
+    connected_at    timestamptz,
+    last_synced_at  timestamptz
+);
