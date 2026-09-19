@@ -174,6 +174,23 @@ class SocialVideoBadgesAndSubtitleTests(unittest.TestCase):
     def test_badges_empty_when_nothing_set(self):
         self.assertEqual(main._social_video_badges({}), [])
 
+    def test_combines_variant_and_card_type_into_one_badge(self):
+        card = {"card_type": "Prizm", "variant": "Blue"}
+        self.assertEqual(main._social_video_badges(card), ["Blue Prizm"])
+
+    def test_skips_redundant_rc_card_type_when_rookie_badge_already_shown(self):
+        # Regression (Nutzer-Report): "RC" steht wörtlich auf manchen Karten
+        # und wird vom Scan als card_type erkannt - zusammen mit dem
+        # is_rookie-Flag zeigte das vorher "Rookie" UND "RC" redundant an.
+        card = {"is_rookie": True, "card_type": "RC"}
+        self.assertEqual(main._social_video_badges(card), ["Rookie"])
+
+    def test_keeps_card_type_when_not_rookie(self):
+        # "RC" bleibt sichtbar, wenn is_rookie (aus welchem Grund auch
+        # immer) nicht gesetzt ist - sonst ginge die Information verloren.
+        card = {"is_rookie": False, "card_type": "RC"}
+        self.assertEqual(main._social_video_badges(card), ["RC"])
+
     def test_subtitle_combines_team_set_and_listing_condition(self):
         card = {"team": "FC Bayern", "set_name": "Topps Chrome"}
         listing = {"condition": "NM"}
@@ -222,7 +239,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -242,6 +259,30 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         self.assertEqual(payload[0]["subtitle_text"], "FC Bayern")
         self.assertEqual(payload[0]["badges"], ["Rookie"])
         self.assertIsNone(mock_build.call_args.kwargs.get("outro_text"))
+        self.assertIsNone(mock_build.call_args.kwargs.get("intro_text"))
+
+    def test_price_is_formatted_with_two_decimal_places(self):
+        # Regression (Nutzer-Report): ein glatter Preis wie 10 zeigte vorher
+        # "10 €" statt "10.00 €", da der Wert nur roh interpoliert wurde.
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        listing = {"price": 10}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=listing), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={"card_ids": ["c1"]})
+        self.assertEqual(response.status_code, 200)
+        payload = mock_build.call_args[0][0]
+        self.assertEqual(payload[0]["price_text"], "10.00 €")
 
     def test_include_back_adds_a_second_frame_per_card(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "front1", "back_image_path": "back1"}
@@ -249,7 +290,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -271,7 +312,7 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
         fake_photo_response.content = _fake_jpeg_bytes()
         fake_photo_response.raise_for_status = MagicMock()
 
-        def fake_build_reel(cards, output_path, outro_text=None):
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
             Path(output_path).write_bytes(b"fake-mp4-bytes")
 
         with patch("main.social_video.ffmpeg_available", return_value=True), \
@@ -285,6 +326,27 @@ class GenerateSocialVideoEndpointTests(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_build.call_args.kwargs.get("outro_text"), "🛒 Jetzt auf eBay")
+
+    def test_intro_text_is_passed_through_to_build_reel(self):
+        card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}
+        fake_photo_response = MagicMock()
+        fake_photo_response.content = _fake_jpeg_bytes()
+        fake_photo_response.raise_for_status = MagicMock()
+
+        def fake_build_reel(cards, output_path, outro_text=None, intro_text=None):
+            Path(output_path).write_bytes(b"fake-mp4-bytes")
+
+        with patch("main.social_video.ffmpeg_available", return_value=True), \
+             patch("main.db.get_cards_by_ids_full", return_value=[card]), \
+             patch("main.storage.signed_urls", return_value={"p1": "https://img.example/p1.jpg"}), \
+             patch("main.httpx.get", return_value=fake_photo_response), \
+             patch("main.db.get_ebay_listing_for_card", return_value=None), \
+             patch("main.social_video.build_reel", side_effect=fake_build_reel) as mock_build:
+            response = client.post("/api/social/video", json={
+                "card_ids": ["c1"], "intro_text": "🔥 NEW CARDS 🔥",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_build.call_args.kwargs.get("intro_text"), "🔥 NEW CARDS 🔥")
 
     def test_returns_502_on_video_generation_error(self):
         card = {"id": "c1", "title": "Karte 1", "front_image_path": "p1"}

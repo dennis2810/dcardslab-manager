@@ -3875,18 +3875,26 @@ async def instagram_insights():
 
 def _social_video_badges(card):
     # Kurze Chips ueber dem Preis - Rookie/Auto/Numbered als bekannte
-    # boolsche Merkmale, card_type (z.B. "Refractor") als freies Feld
-    # dahinter, falls gesetzt.
+    # boolsche Merkmale. card_type/variant sind die vom Scan abgelesene
+    # Parallel-/Variantenbezeichnung (siehe ai_card_recognition.py, z.B.
+    # card_type="Prizm"+variant="Blue" fuer eine "Blue Prizm"-Parallele) -
+    # beide zu einem Badge kombiniert statt zwei getrennten. "RC"/"Rookie
+    # Card" als card_type ausgelassen, wenn is_rookie schon einen eigenen
+    # Badge liefert - sonst zeigt die Karte "Rookie" UND "RC" redundant
+    # nebeneinander (Nutzer-Report).
     badges = []
-    if card.get("is_rookie"):
+    is_rookie = bool(card.get("is_rookie"))
+    if is_rookie:
         badges.append("Rookie")
     if card.get("is_autograph"):
         badges.append("Auto")
     if card.get("is_numbered"):
         badges.append("Numbered")
     card_type = (card.get("card_type") or "").strip()
-    if card_type:
-        badges.append(card_type)
+    variant = (card.get("variant") or "").strip()
+    parallel = f"{variant} {card_type}".strip() if variant else card_type
+    if parallel and not (is_rookie and parallel.lower() in ("rc", "rookie card")):
+        badges.append(parallel)
     return badges
 
 
@@ -3925,6 +3933,7 @@ async def _fetch_social_video_frame(url, title, price_text, subtitle_text, badge
 async def generate_social_video(body: dict = Body(...)):
     card_ids = body.get("card_ids") or []
     include_back = bool(body.get("include_back"))
+    intro_text = (body.get("intro_text") or "").strip()[:200]
     outro_text = (body.get("outro_text") or "").strip()[:200]
     if not isinstance(card_ids, list) or not card_ids:
         raise HTTPException(status_code=400, detail="Bitte mindestens eine Karte auswählen.")
@@ -3954,7 +3963,7 @@ async def generate_social_video(body: dict = Body(...)):
             continue
 
         listing = db.get_ebay_listing_for_card(card["id"])
-        price_text = f"{listing['price']} €" if listing and listing.get("price") else ""
+        price_text = f"{float(listing['price']):.2f} €" if listing and listing.get("price") else ""
         title = card.get("title") or "Karte"
         subtitle_text = _social_video_subtitle(card, listing)
         badges = _social_video_badges(card)
@@ -3976,7 +3985,9 @@ async def generate_social_video(body: dict = Body(...)):
     with tempfile.TemporaryDirectory(prefix="dcardslab_reel_out_") as tmp_str:
         output_path = Path(tmp_str) / "reel.mp4"
         try:
-            social_video.build_reel(payload, output_path, outro_text=outro_text or None)
+            social_video.build_reel(
+                payload, output_path, outro_text=outro_text or None, intro_text=intro_text or None,
+            )
         except social_video.VideoGenerationError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         data = output_path.read_bytes()

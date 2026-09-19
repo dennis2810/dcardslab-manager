@@ -60,7 +60,10 @@ if ("serviceWorker" in navigator) {
   .card-picker-results img { width: 36px; height: 50px; object-fit: cover; border-radius: 3px; background: #eee; }
   .card-picker-results label { flex: 1; cursor: pointer; }
   .selected-cards-list { list-style: decimal; padding-left: 1.4rem; margin: 0.5rem 0; }
-  .selected-cards-list li { margin: 0.2rem 0; }
+  .selected-cards-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.2rem 0; }
+  .selected-cards-list li span { flex: 1; }
+  .selected-cards-list li button { padding: 0.15rem 0.5rem; font-size: 0.85rem; line-height: 1.2; cursor: pointer; }
+  .selected-cards-list li button:disabled { opacity: 0.35; cursor: default; }
   #video-status { margin-top: 0.75rem; }
   #video-preview { display: none; margin-top: 1rem; max-width: 320px; width: 100%; border-radius: 8px; }
 
@@ -129,11 +132,14 @@ if ("serviceWorker" in navigator) {
   <ul class="card-picker-results" id="card-picker-results"></ul>
   <div id="selected-cards-section" hidden>
     <h3>Ausgewählt (<span id="selected-count">0</span>/10)</h3>
+    <p class="note">Reihenfolge mit ▲/▼ anpassen – so erscheinen die Karten auch im Reel.</p>
     <ol class="selected-cards-list" id="selected-cards-list"></ol>
   </div>
   <p>
     <label><input type="checkbox" id="include-back-checkbox"> Auch Rückseite mit einbeziehen (2 Bilder je Karte im Reel)</label>
   </p>
+  <label for="intro-text-input">Introtext (optional, eigene Textkarte am Anfang des Reels)</label><br>
+  <textarea id="intro-text-input" rows="1" style="width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;">🔥 NEW CARDS 🔥</textarea>
   <label for="outro-text-input">Abschlusstext (optional, eigene Textkarte am Ende des Reels)</label><br>
   <textarea id="outro-text-input" rows="2" style="width: 100%; max-width: 24rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;">🛒 Karten jetzt auf eBay – Link im Profil</textarea>
   <p>
@@ -141,6 +147,14 @@ if ("serviceWorker" in navigator) {
   </p>
   <p class="status" id="video-status"></p>
   <video id="video-preview" controls></video>
+
+  <div id="caption-section" hidden>
+    <h3>Beschreibungsvorschlag</h3>
+    <p class="note">Automatisch aus den ausgewählten Karten zusammengestellt (Titel, Set, Team, Sportart, Hersteller)
+      – vor dem Posten prüfen und bei Bedarf anpassen, insbesondere die Hashtags.</p>
+    <textarea id="caption-output" rows="10" readonly style="width: 100%; max-width: 28rem; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;"></textarea>
+    <p><button type="button" id="copy-caption-btn">📋 In Zwischenablage kopieren</button></p>
+  </div>
 
   <h2 id="instagram-section">Instagram-Statistik</h2>
   <p>Zeigt Follower, Beitragsanzahl sowie Reichweite/Views des letzten Tages für das verknüpfte Instagram-
@@ -227,7 +241,8 @@ function formatDateTime(value) {
 // ---------- Video-Generator ----------
 const MAX_SELECTED_CARDS = 10;
 const DEFAULT_CARD_LIST_LIMIT = 30;
-const selectedCards = new Map(); // id -> {id, title, front_image_url}
+const selectedCards = new Map(); // id -> {id, title, front_image_url, …}
+const selectedOrder = []; // Reihenfolge der ids, in der das Reel gebaut wird - per ▲/▼ aenderbar
 const searchInput = document.getElementById("card-search-input");
 const resultsList = document.getElementById("card-picker-results");
 const pickerHeadingEl = document.getElementById("card-picker-heading");
@@ -235,19 +250,51 @@ const selectedSection = document.getElementById("selected-cards-section");
 const selectedList = document.getElementById("selected-cards-list");
 const selectedCountEl = document.getElementById("selected-count");
 const includeBackCheckbox = document.getElementById("include-back-checkbox");
+const introTextInput = document.getElementById("intro-text-input");
 const outroTextInput = document.getElementById("outro-text-input");
 const videoStatusEl = document.getElementById("video-status");
 const videoPreviewEl = document.getElementById("video-preview");
+
+function orderedSelectedCards() {
+  return selectedOrder.map((id) => selectedCards.get(id)).filter(Boolean);
+}
 
 function renderSelectedCards() {
   selectedCountEl.textContent = selectedCards.size;
   selectedSection.hidden = selectedCards.size === 0;
   selectedList.innerHTML = "";
-  for (const card of selectedCards.values()) {
+  selectedOrder.forEach((id, index) => {
+    const card = selectedCards.get(id);
+    if (!card) return;
     const li = document.createElement("li");
-    li.textContent = card.title || "(ohne Titel)";
+    const label = document.createElement("span");
+    label.textContent = card.title || "(ohne Titel)";
+    li.appendChild(label);
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.textContent = "▲";
+    upBtn.disabled = index === 0;
+    upBtn.setAttribute("aria-label", "Nach oben");
+    upBtn.addEventListener("click", () => {
+      [selectedOrder[index - 1], selectedOrder[index]] = [selectedOrder[index], selectedOrder[index - 1]];
+      renderSelectedCards();
+    });
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.textContent = "▼";
+    downBtn.disabled = index === selectedOrder.length - 1;
+    downBtn.setAttribute("aria-label", "Nach unten");
+    downBtn.addEventListener("click", () => {
+      [selectedOrder[index], selectedOrder[index + 1]] = [selectedOrder[index + 1], selectedOrder[index]];
+      renderSelectedCards();
+    });
+
+    li.appendChild(upBtn);
+    li.appendChild(downBtn);
     selectedList.appendChild(li);
-  }
+  });
 }
 
 let searchDebounceTimer = null;
@@ -315,8 +362,11 @@ function renderCardResults(cards) {
           return;
         }
         selectedCards.set(card.id, card);
+        selectedOrder.push(card.id);
       } else {
         selectedCards.delete(card.id);
+        const pos = selectedOrder.indexOf(card.id);
+        if (pos !== -1) selectedOrder.splice(pos, 1);
       }
       renderSelectedCards();
     });
@@ -326,6 +376,92 @@ function renderCardResults(cards) {
     resultsList.appendChild(li);
   }
 }
+
+// ---------- Beschreibungsvorschlag ----------
+const captionSection = document.getElementById("caption-section");
+const captionOutput = document.getElementById("caption-output");
+
+function slugifyHashtag(value) {
+  return (value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // Akzente entfernen (ä->a, é->e, …)
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Kategorie -> Sport-Hashtag - dieselbe feste Sportarten-Liste wie
+// ebay_listing.py's _KNOWN_SPORTS (Sport/Non-Sport-Heuristik), hier auf
+// die jeweils passenden englischen Reichweiten-Hashtags gemappt.
+const SPORT_HASHTAGS = {
+  "Fußball": "soccercards",
+  "American Football": "footballcards",
+  "Basketball": "basketballcards",
+  "Baseball": "baseballcards",
+  "Eishockey": "hockeycards",
+  "Tennis": "tenniscards",
+  "Boxen": "boxingcards",
+  "Golf": "golfcards",
+  "Motorsport": "motorsportcards",
+  "Formel 1": "f1cards",
+  "Wrestling": "wrestlingcards",
+  "Rugby": "rugbycards",
+  "Cricket": "cricketcards",
+};
+
+function buildCaptionSuggestion(cards) {
+  const isSingle = cards.length === 1;
+  const lines = [isSingle ? "🔥 NEW CARD 🔥" : "🔥 NEW CARDS 🔥", ""];
+
+  if (isSingle) {
+    const c = cards[0];
+    lines.push(c.title || "(ohne Titel)");
+    const yearSet = [c.season_year, c.set_name].filter(Boolean).join(" ");
+    if (yearSet) lines.push(yearSet);
+    const parallel = [c.variant, c.card_type].filter(Boolean).join(" ");
+    const numberLine = [
+      c.card_number ? `#${c.card_number}` : "",
+      parallel,
+      c.print_run ? `/${c.print_run}` : "",
+    ].filter(Boolean).join(" ");
+    if (numberLine) lines.push(numberLine);
+  } else {
+    for (const c of cards) {
+      lines.push("• " + (c.title || "(ohne Titel)"));
+    }
+  }
+
+  lines.push("", "📦 Jetzt bei DCardsLab erhältlich.", "", "🖥 Link im Profil", "");
+
+  // Marke (fest) + Kategorie (fest, generisch) + Sport (aus der
+  // Kartenkategorie) + Hersteller + Spieler (Beispiel-Tag aus dem Titel) -
+  // je Gruppe dedupliziert, aber in dieser festen Reihenfolge.
+  const tags = new Set(["dcardslab", "sportscards", "tradingcards", "sportscardcollector"]);
+  for (const c of cards) {
+    const sportTag = SPORT_HASHTAGS[(c.category || "").trim()];
+    if (sportTag) tags.add(sportTag);
+    const manufacturerTag = slugifyHashtag(c.manufacturer);
+    if (manufacturerTag) tags.add(manufacturerTag);
+  }
+  lines.push([...tags].map((t) => "#" + t).join(" "));
+
+  if (isSingle) {
+    // Spielername als Beispiel-Tag (letztes Wort des Titels, meist der
+    // Nachname bei Sportkarten) - nur bei genau einer ausgewählten Karte,
+    // sonst waeren zu viele/uneinheitliche Spieler-Tags die Folge.
+    const words = (cards[0].title || "").trim().split(/\s+/);
+    const playerTag = slugifyHashtag(words[words.length - 1]);
+    if (playerTag) lines.push(`z. B. #${playerTag}`);
+  }
+
+  return lines.join("\n");
+}
+
+document.getElementById("copy-caption-btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(captionOutput.value);
+    showToast("Beschreibung in die Zwischenablage kopiert.");
+  } catch (err) {
+    showToast("Kopieren nicht möglich - bitte Text manuell markieren.", true);
+  }
+});
 
 document.getElementById("generate-video-btn").addEventListener("click", async () => {
   if (selectedCards.size === 0) {
@@ -340,8 +476,9 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        card_ids: [...selectedCards.keys()],
+        card_ids: [...selectedOrder],
         include_back: includeBackCheckbox.checked,
+        intro_text: introTextInput.value.trim(),
         outro_text: outroTextInput.value.trim(),
       }),
     });
@@ -363,6 +500,8 @@ document.getElementById("generate-video-btn").addEventListener("click", async ()
     a.click();
     videoStatusEl.textContent = "Reel erstellt und heruntergeladen.";
     videoStatusEl.className = "status";
+    captionOutput.value = buildCaptionSuggestion(orderedSelectedCards());
+    captionSection.hidden = false;
     showToast("Reel erstellt.");
   } catch (err) {
     videoStatusEl.textContent = "Fehler: " + err;
