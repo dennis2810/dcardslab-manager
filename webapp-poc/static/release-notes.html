@@ -93,6 +93,17 @@ if ("serviceWorker" in navigator) {
   <p class="note">Kurzer Überblick, was sich am Tool getan hat – gruppiert nach Themen, nicht jede kleine Änderung
     einzeln aufgeführt.</p>
 
+  <h2>Video-Generator: Abschlusstext wurde im fertigen Video nicht angezeigt
+    <span class="date">September 2026</span></h2>
+  <ul>
+    <li>Bugfix: die Intro-/Abschluss-Textkarte fehlte trotz aktivierter Checkbox und korrektem Text teils im fertig
+      zusammengefügten Reel, obwohl sie für sich allein betrachtet korrekt gerendert wurde. Ursache: eine
+      Standbild-Textkarte lief ohne eigene Framerate-Angabe auf ffmpegs Standard von 25fps, während die
+      Karten-Fotos mit dem Zoom-Effekt explizit auf 30fps laufen – dieser Framerate-Bruch zwischen den Segmenten
+      brachte beim Zusammenfügen die internen Zeitstempel durcheinander, wodurch die Textkarte beim Abspielen
+      faktisch nie erreicht wurde. Alle Segmente laufen jetzt einheitlich mit derselben Framerate.</li>
+  </ul>
+
   <h2>Video-Generator: Intro-/Outro-Checkbox, Zeichenzähler, Layout-Fix
     <span class="date">September 2026</span></h2>
   <ul>

@@ -412,7 +412,19 @@ def _render_segment(frame_path, segment_path, duration, zoom_out=False, static=F
         # waehrend des Abspielens aus dem Bild wanderte, obwohl der einzelne
         # gerenderte Frame korrekt aussah (Nutzer-Bugreport). Karten-Frames
         # (Fotos) behalten den Zoom-Effekt, da dort nichts am Bildrand klebt.
-        pass
+        #
+        # -r explizit auf FPS setzen: ohne eigenes -vf (das die Karten-
+        # Segmente ueber zoompan's ":fps=30" bekommen) faellt ein einzelnes
+        # geloopptes Standbild sonst auf ffmpegs Default von 25fps zurueck -
+        # dieser Framerate-Bruch zwischen den 30fps-Karten-Segmenten und den
+        # 25fps-Textkarten fuehrte beim anschliessenden concat (per Demuxer,
+        # bei -c copy wie beim finalen Re-Encode gleichermassen) zu falschen
+        # Timestamps: die Textkarte wurde dadurch beim Abspielen faktisch nie
+        # erreicht/angezeigt, obwohl ihr Segment fuer sich allein betrachtet
+        # korrekt war (Nutzer-Bugreport: Abschlusstext fehlte im fertigen
+        # Video trotz aktivierter Checkbox - per ffprobe/Frame-Extraktion auf
+        # ein real gerendertes Reel zurueckgefuehrt).
+        cmd += ["-r", str(FPS)]
     else:
         duration_frames = int(duration * FPS)
         if zoom_out:
