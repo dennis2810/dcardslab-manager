@@ -16,7 +16,11 @@ ueberlagern. Statt eines flachen Schwarz-Hintergrunds ein dezenter dunkler
 Verlauf. Auf Karten-Frames ein kleines Logo-Wasserzeichen unten rechts, auf
 Intro-/Outro-Textkarten eine grosse, zentrierte Logo-Plakette - jeweils auf
 einer hellen "Sticker"-Plakette, da das Logo selbst einen fast schwarzen
-Hintergrund hat und sonst auf dunklem Grund untergehen wuerde.
+Hintergrund hat und sonst auf dunklem Grund untergehen wuerde. Emoji im
+Intro-/Outro-Text (z.B. "🔥 NEW CARDS 🔥") werden separat ueber eine Farb-
+Emoji-Schrift gezeichnet statt ueber die normale Textschrift (die keine
+Emoji-Glyphen hat und sie sonst als "Tofu"-Rechteck darstellt) - siehe
+_load_emoji_font/_draw_centered_text_with_emoji.
 
 Bewusst OHNE Tonspur: Instagram/TikTok bieten beim Hochladen eigene
 lizenzfreie Musikbibliotheken an - das umgeht die Musiklizenzfrage
@@ -92,12 +96,119 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
+# DejaVuSans hat keine Emoji-Glyphen - ohne eigene Behandlung zeichnet
+# Pillow dafuer ein "Tofu"-Rechteck (Nutzer-Bugreport: "wird schwarz
+# dargestellt"), z.B. fuer die Standard-Intro-/Outro-Texte ("🔥 NEW CARDS
+# 🔥", "🛒 Karten jetzt auf eBay..."). NotoColorEmoji.ttf ist eine reine
+# Bitmap-Schrift mit genau EINER eingebetteten Strike-Groesse (auf Debian/
+# Ubuntu 109px) - ImageFont.truetype() akzeptiert bei ihr ausschliesslich
+# exakt diese Groesse ("invalid pixel size" bei jeder anderen Zahl), daher
+# wird immer bei der nativen Strike-Groesse gerendert und das Ergebnis
+# danach per Image.resize() auf die im Layout benoetigte Groesse skaliert
+# (siehe _render_emoji_glyph).
+_EMOJI_FONT_PATH = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+_EMOJI_FONT_STRIKE_SIZES = (109, 136, 128, 96, 72, 64, 32)
+_EMOJI_RANGES = (
+    (0x1F300, 0x1FAFF),  # Symbole/Piktogramme (u.a. 🔥, 🛒)
+    (0x2600, 0x27BF),  # Verschiedene Symbole/Dingbats
+    (0x2B00, 0x2BFF),  # Weitere Symbole/Pfeile (u.a. Sterne)
+    (0x1F1E6, 0x1F1FF),  # Regional Indicators (Flaggen-Buchstaben)
+)
+
+
+def _load_emoji_font():
+    for size in _EMOJI_FONT_STRIKE_SIZES:
+        try:
+            return ImageFont.truetype(_EMOJI_FONT_PATH, size)
+        except OSError:
+            continue
+    return None
+
+
+def _is_emoji(ch):
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _EMOJI_RANGES)
+
+
+def _split_emoji_runs(text):
+    """Zerlegt text in (ist_emoji, teiltext)-Paare - aufeinanderfolgende
+    Zeichen derselben Art werden zusammengefasst."""
+    runs = []
+    current_is_emoji = None
+    current = ""
+    for ch in text:
+        is_emoji = _is_emoji(ch)
+        if is_emoji != current_is_emoji and current:
+            runs.append((current_is_emoji, current))
+            current = ""
+        current += ch
+        current_is_emoji = is_emoji
+    if current:
+        runs.append((current_is_emoji, current))
+    return runs
+
+
+def _render_emoji_glyph(emoji_font, char, target_height):
+    """Rendert ein einzelnes Emoji-Zeichen ueber die feste Bitmap-Strike-
+    Groesse der Schrift und skaliert danach auf target_height - siehe
+    _load_emoji_font. Gibt None zurueck, falls die Schrift fuer dieses
+    Zeichen keine Glyphe hat."""
+    native = emoji_font.size
+    pad = max(8, native // 4)
+    canvas_size = native + 2 * pad
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+    ImageDraw.Draw(canvas).text((pad, pad), char, font=emoji_font, embedded_color=True)
+    bbox = canvas.getbbox()
+    if bbox is None:
+        return None
+    glyph = canvas.crop(bbox)
+    scale = target_height / glyph.height
+    new_size = (max(1, round(glyph.width * scale)), max(1, round(glyph.height * scale)))
+    return glyph.resize(new_size, Image.LANCZOS)
+
+
 def _draw_centered_text(draw, text, font, center_x, y, fill):
     if not text:
         return
     bbox = draw.textbbox((0, 0), text, font=font)
     width = bbox[2] - bbox[0]
     draw.text((center_x - width / 2, y), text, font=font, fill=fill)
+
+
+def _draw_centered_text_with_emoji(frame, draw, text, font, emoji_font, center_x, y, fill):
+    """Wie _draw_centered_text, zeichnet Emoji-Zeichen aber ueber die
+    separate Farb-Emoji-Schrift statt ueber font (das keine Emoji-Glyphen
+    hat) - siehe _load_emoji_font. Ohne verfuegbare Emoji-Schrift werden
+    Emoji-Zeichen weggelassen statt als "Tofu"-Rechteck gezeichnet."""
+    if not text:
+        return
+    line_height = font.size
+    parts = []
+    total_width = 0.0
+    for is_emoji, chunk in _split_emoji_runs(text):
+        if is_emoji:
+            if emoji_font is None:
+                continue
+            for ch in chunk:
+                glyph = _render_emoji_glyph(emoji_font, ch, line_height)
+                if glyph is None:
+                    continue
+                parts.append(("emoji", glyph, glyph.width))
+                total_width += glyph.width
+        else:
+            bbox = draw.textbbox((0, 0), chunk, font=font)
+            width = bbox[2] - bbox[0]
+            parts.append(("text", chunk, width))
+            total_width += width
+
+    cursor_x = center_x - total_width / 2
+    for kind, content, width in parts:
+        if kind == "emoji":
+            paste_y = y + (line_height - content.height) // 2
+            frame.paste(content, (round(cursor_x), round(paste_y)), content)
+        else:
+            draw.text((cursor_x, y), content, font=font, fill=fill)
+        cursor_x += width
 
 
 def _wrap_text(draw, text, font, max_width):
@@ -248,6 +359,7 @@ def _render_text_frame(text):
     frame = _gradient_background()
     draw = ImageDraw.Draw(frame)
     font = _load_font(64)
+    emoji_font = _load_emoji_font()
     lines = _wrap_text(draw, text, font, FRAME_SIZE[0] - 160)
     line_height = 84
     logo_block_h = _LOGO_HERO_SIZE + 2 * _LOGO_PLATE_PAD + 40
@@ -257,7 +369,9 @@ def _render_text_frame(text):
     text_start_y = _draw_hero_logo(frame, FRAME_SIZE[0] // 2, start_y) + 40
     draw = ImageDraw.Draw(frame)
     for i, line in enumerate(lines):
-        _draw_centered_text(draw, line, font, FRAME_SIZE[0] // 2, text_start_y + i * line_height, fill=(255, 255, 255))
+        _draw_centered_text_with_emoji(
+            frame, draw, line, font, emoji_font, FRAME_SIZE[0] // 2, text_start_y + i * line_height, fill=(255, 255, 255),
+        )
     return frame
 
 
